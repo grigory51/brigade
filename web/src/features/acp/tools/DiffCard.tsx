@@ -14,7 +14,9 @@ export function DiffCard({ blocks }: { blocks: DiffBlock[] }) {
   );
 }
 
-function FileDiffBlock({ block }: { block: DiffBlock }) {
+// FileDiffBlock экспортируется отдельно: A2UI-каталог (a2ui/catalog.tsx) реализует
+// компонент DiffView этим же рендером — одна реализация на оба пути доставки.
+export function FileDiffBlock({ block }: { block: DiffBlock }) {
   const lines = lineDiff(block.oldText, block.newText);
   const sep = block.path.lastIndexOf("/");
   const dir = sep > 0 ? block.path.slice(0, sep + 1) : "";

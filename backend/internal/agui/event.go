@@ -78,6 +78,11 @@ const CustomUsageName = "usage"
 // доступных команд нет, поэтому передаём его как CUSTOM с Value=AvailableCommands.
 const CustomCommandsName = "available_commands"
 
+// CustomA2UIName — значение поля Name события EventCustom, несущего поставку A2UI-
+// сообщений (generative UI поверх AG-UI-транспорта). Value — {"messages": [...]},
+// где элементы — server→client сообщения A2UI v0.9 (см. internal/a2ui).
+const CustomA2UIName = "a2ui"
+
 // Event — обобщённое событие AG-UI. Незаполненные поля опускаются при сериализации,
 // поэтому одна структура покрывает все варианты без отдельных типов на каждый. Имена
 // полей в JSON соответствуют каноническим *EventSchema из @ag-ui/core.

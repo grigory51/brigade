@@ -1,15 +1,23 @@
+import { createContext, useContext } from "react";
 import { Loader2, Wrench, ChevronRight } from "lucide-react";
 import { type ToolCallMessagePartComponent } from "@assistant-ui/react";
+import { A2uiSurface } from "@a2ui/react/v0_9";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Thread } from "@/components/assistant-ui/thread";
 import { FRONTEND_TOOL_NAMES } from "./frontendTools";
-import type { AvailableCommand } from "./useAcpRuntime";
+import type { AvailableCommand, A2uiState } from "./useAcpRuntime";
 import { parseDiffResult } from "./tools/diff";
 import { DiffCard } from "./tools/DiffCard";
 import { TerminalCard } from "./tools/TerminalCard";
 import { FileCard } from "./tools/FileCard";
 import { PlanPanel, type PlanEntry } from "./PlanPanel";
+
+// A2uiContext доносит процессор A2UI-поверхностей до ToolFallback внутри Thread:
+// карточка с готовой поверхностью (surfaceId = toolCallId) рендерится A2UI-рендерером,
+// version в значении контекста заставляет потребителей ре-рендериться при появлении
+// новых поверхностей.
+const A2uiContext = createContext<A2uiState | null>(null);
 
 // AcpThread — лента ACP-чата на готовом компоненте Thread из assistant-ui registry
 // (src/components/assistant-ui/thread.tsx). Здесь — только подключение наших
@@ -19,16 +27,20 @@ import { PlanPanel, type PlanEntry } from "./PlanPanel";
 export function AcpThread({
   commands,
   plan,
+  a2ui,
 }: {
   commands: AvailableCommand[];
   plan: PlanEntry[];
+  a2ui: A2uiState;
 }) {
   return (
-    <Thread
-      commands={commands}
-      components={{ ToolFallback }}
-      footer={<PlanPanel plan={plan} />}
-    />
+    <A2uiContext.Provider value={a2ui}>
+      <Thread
+        commands={commands}
+        components={{ ToolFallback }}
+        footer={<PlanPanel plan={plan} />}
+      />
+    </A2uiContext.Provider>
   );
 }
 
@@ -37,6 +49,15 @@ export function AcpThread({
 // ACP-адаптера («Terminal», «Read File»); всё прочее — generic-блок с раскрывающимися
 // аргументами и результатом.
 const ToolFallback: ToolCallMessagePartComponent = (props) => {
+  // A2UI-поверхность карточки (бэкенд синтезирует её из ACP-событий, surfaceId =
+  // toolCallId) имеет приоритет: один серверный формат описания рендерится нативным
+  // каталогом платформы. Без поверхности — фолбэк на локальные React-карточки.
+  const a2ui = useContext(A2uiContext);
+  const surface = a2ui?.processor.model.surfacesMap.get(props.toolCallId);
+  if (surface) {
+    return <A2uiSurface surface={surface} />;
+  }
+
   if (FRONTEND_TOOL_NAMES.has(props.toolName)) {
     return <SnippetCard {...props} />;
   }

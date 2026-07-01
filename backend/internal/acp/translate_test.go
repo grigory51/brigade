@@ -6,6 +6,7 @@ import (
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
+	"github.com/grigory51/brigade/backend/internal/a2ui"
 	"github.com/grigory51/brigade/backend/internal/agui"
 )
 
@@ -340,8 +341,9 @@ func TestTranslateToolCallUpdateStickyDiff(t *testing.T) {
 		acpsdk.WithUpdateRawOutput("file updated successfully"),
 		acpsdk.WithUpdateStatus(done),
 	))
-	if len(got) != 2 {
-		t.Fatalf("терминальный update: %d событий, want 2", len(got))
+	// Закрытие diff-вызова: END + RESULT + поставка A2UI-поверхности карточки.
+	if len(got) != 3 {
+		t.Fatalf("терминальный update: %d событий, want 3", len(got))
 	}
 	if got[1].Content == `"file updated successfully"` {
 		t.Fatalf("статусная строка затёрла diff-результат")
@@ -350,6 +352,24 @@ func TestTranslateToolCallUpdateStickyDiff(t *testing.T) {
 		if !strings.Contains(got[1].Content, want) {
 			t.Errorf("Content не содержит %s: %q", want, got[1].Content)
 		}
+	}
+
+	if got[2].Type != agui.EventCustom || got[2].Name != agui.CustomA2UIName {
+		t.Fatalf("событие[2] = {%s %s}, want {CUSTOM a2ui}", got[2].Type, got[2].Name)
+	}
+	payload, ok := got[2].Value.(map[string]any)
+	if !ok {
+		t.Fatalf("Value имеет тип %T, want map", got[2].Value)
+	}
+	msgs, ok := payload["messages"].([]a2ui.Message)
+	if !ok || len(msgs) != 3 {
+		t.Fatalf("messages = %T len %v, want []a2ui.Message из 3", payload["messages"], msgs)
+	}
+	if msgs[0].CreateSurface == nil || msgs[0].CreateSurface.SurfaceID != "tc-d" {
+		t.Errorf("createSurface = %+v, want surfaceId tc-d", msgs[0].CreateSurface)
+	}
+	if msgs[2].UpdateDataModel == nil {
+		t.Errorf("третье сообщение не updateDataModel: %+v", msgs[2])
 	}
 }
 

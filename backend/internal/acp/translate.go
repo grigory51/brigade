@@ -5,6 +5,7 @@ import (
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
+	"github.com/grigory51/brigade/backend/internal/a2ui"
 	"github.com/grigory51/brigade/backend/internal/agui"
 )
 
@@ -31,6 +32,9 @@ type toolCallState struct {
 	// isDiff — result несёт структурный diff: он важнее статусных строк и не
 	// затирается ими («липкий diff»).
 	isDiff bool
+	// diffs — структурные diff-блоки вызова для генерации A2UI-поверхности при
+	// закрытии (см. closeToolCallEvents).
+	diffs []a2ui.DiffData
 }
 
 // translateUpdate преобразует одно ACP-обновление сессии (SessionUpdate) в ноль или
@@ -109,6 +113,7 @@ func (c *Client) translateUpdate(u acpsdk.SessionUpdate) []agui.Event {
 			content := toolResultText(tu)
 			if hasDiffContent(tu) {
 				st.result, st.isDiff = content, true
+				st.diffs = diffData(tu)
 			} else if !st.isDiff {
 				st.result = content
 			}
@@ -120,7 +125,7 @@ func (c *Client) translateUpdate(u acpsdk.SessionUpdate) []agui.Event {
 			return nil
 		}
 		st.open = false
-		return closeToolCallEvents(id, st.result)
+		return closeToolCallEvents(id, st)
 
 	case u.Plan != nil:
 		// План агента отдаётся снимком состояния целиком: ACP-контракт требует, чтобы
@@ -273,18 +278,28 @@ func (c *Client) closeReasoning() []agui.Event {
 	}
 }
 
-// closeToolCallEvents формирует закрытие tool call'а: TOOL_CALL_END и, при непустом
-// результате, TOOL_CALL_RESULT (messageId результата равен toolCallId — ответ
-// инструмента самостоятельного messageId не имеет).
-func closeToolCallEvents(id, result string) []agui.Event {
+// closeToolCallEvents формирует закрытие tool call'а: TOOL_CALL_END, при непустом
+// результате — TOOL_CALL_RESULT (messageId результата равен toolCallId — ответ
+// инструмента самостоятельного messageId не имеет), а при накопленных diff-блоках —
+// поставку A2UI-поверхности карточки (CUSTOM a2ui с surfaceId=toolCallId). Клиент с
+// A2UI-каталогом рендерит поверхность; клиент без него игнорирует CUSTOM и падает
+// обратно на RESULT с diff-JSON.
+func closeToolCallEvents(id string, st *toolCallState) []agui.Event {
 	evts := []agui.Event{{Type: agui.EventToolCallEnd, ToolCallID: id}}
-	if result != "" {
+	if st.result != "" {
 		evts = append(evts, agui.Event{
 			Type:       agui.EventToolCallResult,
 			ToolCallID: id,
 			MessageID:  id,
 			Role:       "tool",
-			Content:    result,
+			Content:    st.result,
+		})
+	}
+	if len(st.diffs) > 0 {
+		evts = append(evts, agui.Event{
+			Type:  agui.EventCustom,
+			Name:  agui.CustomA2UIName,
+			Value: map[string]any{"messages": a2ui.DiffSurface(id, st.diffs)},
 		})
 	}
 	return evts
@@ -301,9 +316,26 @@ func (c *Client) closeOpenToolCalls() []agui.Event {
 			continue
 		}
 		st.open = false
-		evts = append(evts, closeToolCallEvents(id, st.result)...)
+		evts = append(evts, closeToolCallEvents(id, st)...)
 	}
 	return evts
+}
+
+// diffData извлекает структурные diff-блоки обновления tool call'а в модель данных
+// A2UI-карточки.
+func diffData(tu *acpsdk.SessionToolCallUpdate) []a2ui.DiffData {
+	var out []a2ui.DiffData
+	for _, block := range tu.Content {
+		if block.Diff == nil {
+			continue
+		}
+		d := a2ui.DiffData{Path: block.Diff.Path, NewText: block.Diff.NewText}
+		if block.Diff.OldText != nil {
+			d.OldText = *block.Diff.OldText
+		}
+		out = append(out, d)
+	}
+	return out
 }
 
 // hasDiffContent сообщает, несёт ли обновление tool call структурный diff-контент

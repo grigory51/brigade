@@ -5,10 +5,13 @@ import {
   ExportedMessageRepository,
   type ThreadHistoryAdapter,
 } from "@assistant-ui/react";
+import { MessageProcessor } from "@a2ui/web_core/v0_9";
+import type { ReactComponentImplementation } from "@a2ui/react/v0_9";
 import { useAuth } from "@/features/auth/AuthContext";
 import { refreshSession } from "@/api/client";
 import { DEMO_FRONTEND_TOOLS } from "./frontendTools";
 import type { PlanEntry } from "./PlanPanel";
+import { cardsCatalog } from "./a2ui/catalog";
 
 // Эндпоинты канонического AG-UI на бэкенде (тот же origin, что и SPA).
 const RUN_URL = "/api/ag-ui/run";
@@ -42,14 +45,23 @@ export type AvailableCommand = {
   hint?: string;
 };
 
+// A2uiState — процессор A2UI-поверхностей сессии и счётчик их изменений (version
+// растёт при создании/удалении поверхности — потребители ре-рендерятся).
+export type A2uiState = {
+  processor: MessageProcessor<ReactComponentImplementation>;
+  version: number;
+};
+
 // AcpRuntime — связка ассистент-рантайма AG-UI и побочных каналов (permission/commands/
-// plan), которые идут вне основного потока сообщений: CUSTOM-событиями и STATE_SNAPSHOT.
+// plan/a2ui), которые идут вне основного потока сообщений: CUSTOM-событиями и
+// STATE_SNAPSHOT.
 export type AcpRuntime = {
   runtime: ReturnType<typeof useAgUiRuntime>;
   permission: PendingPermission | null;
   resolvePermission: (id: string, decision: string) => void;
   commands: AvailableCommand[];
   plan: PlanEntry[];
+  a2ui: A2uiState;
 };
 
 // CustomEventValue — нетипизированная полезная нагрузка CUSTOM-события AG-UI.
@@ -60,6 +72,27 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
   const [permission, setPermission] = useState<PendingPermission | null>(null);
   const [commands, setCommands] = useState<AvailableCommand[]>([]);
   const [plan, setPlan] = useState<PlanEntry[]>([]);
+  const [a2uiVersion, setA2uiVersion] = useState(0);
+
+  // Процессор A2UI-поверхностей живёт вместе с сессией: бэкенд шлёт поставки
+  // server→client сообщений CUSTOM-событием a2ui, процессор интерпретирует их и держит
+  // модели поверхностей (surfaceId = toolCallId карточки).
+  const a2uiProcessor = useMemo(
+    () => new MessageProcessor<ReactComponentImplementation>([cardsCatalog]),
+    // Новая сессия — новый процессор с чистыми поверхностями.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sessionId],
+  );
+
+  useEffect(() => {
+    const bump = () => setA2uiVersion((v) => v + 1);
+    const created = a2uiProcessor.onSurfaceCreated(bump);
+    const deleted = a2uiProcessor.onSurfaceDeleted(bump);
+    return () => {
+      created.unsubscribe();
+      deleted.unsubscribe();
+    };
+  }, [a2uiProcessor]);
 
   // getAccessToken стабилен (useCallback в AuthContext), но фиксируем в ref, чтобы не
   // пересоздавать агента: HttpAgent читает свежий токен на каждый запрос через fetch.
@@ -105,6 +138,11 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
           setPermission(toPermission(event.value as CustomEventValue));
         } else if (event.name === "available_commands") {
           setCommands(toCommands(event.value as CustomEventValue));
+        } else if (event.name === "a2ui") {
+          const messages = (event.value as CustomEventValue)?.messages;
+          if (Array.isArray(messages)) {
+            a2uiProcessor.processMessages(messages);
+          }
         }
       },
       onStateSnapshotEvent: ({ event }) => {
@@ -112,7 +150,7 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
       },
     });
     return () => sub.unsubscribe();
-  }, [agent]);
+  }, [agent, a2uiProcessor]);
 
   // history-адаптер восстанавливает прошлые turn'ы при открытии треда. load() забирает
   // историю чата массивом сообщений (GET /api/ag-ui/history) и отдаёт её рантайму с
@@ -169,7 +207,14 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
     setPermission((cur) => (cur && cur.id === id ? null : cur));
   }).current;
 
-  return { runtime, permission, resolvePermission, commands, plan };
+  return {
+    runtime,
+    permission,
+    resolvePermission,
+    commands,
+    plan,
+    a2ui: { processor: a2uiProcessor, version: a2uiVersion },
+  };
 }
 
 // DEMO_FRONTEND_TOOLS реэкспортируем как контракт инструментов RunAgentInput.tools[]:
