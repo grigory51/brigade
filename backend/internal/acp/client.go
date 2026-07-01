@@ -230,6 +230,11 @@ func (c *Client) handshake(ctx context.Context) error {
 			log.Printf("acp: load session %s failed (%v), starting fresh session", c.opts.ResumeSessionID, err)
 		} else {
 			c.sessionID = acpsdk.SessionId(c.opts.ResumeSessionID)
+			// Реплей session/load не закрывает потоковые сообщения — последний текст
+			// остаётся «открытым» в stream-состоянии. Без закрытия первый Bind нового
+			// run'а переоткрыл бы старый messageId, и клиентский агрегатор принял бы его
+			// за id текущего ответа (стрим уезжает в старое сообщение — сбой порядка).
+			c.FinishStreams()
 			return nil
 		}
 	} else if c.opts.ResumeSessionID != "" {
@@ -355,8 +360,11 @@ func (c *Client) Bind(sink EventSink, resolver PermissionResolver) (unbind func(
 		_ = sink(*lastUsage)
 	}
 	// Переоткрываем незакрытые потоки и tool call'ы в новом sink (их START уже был в
-	// прежнем потоке).
+	// прежнем потоке). Лог оставлен намеренно: переоткрытие текстового потока в run с
+	// НОВЫМ промптом — кандидат в причины сбоя порядка сообщений на клиенте
+	// (агрегатор принимает первый messageId за id ответа текущего turn'а).
 	if openText != "" {
+		log.Printf("acp: bind reopens open text stream %s", openText)
 		_ = sink(agui.Event{Type: agui.EventTextMessageStart, MessageID: openText, Role: "assistant"})
 	}
 	if openThought != "" {

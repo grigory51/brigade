@@ -161,11 +161,23 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
   const history = useMemo<ThreadHistoryAdapter>(
     () => ({
       load: async () => {
-        const token = tokenRef.current();
-        const res = await fetch(
-          `${HISTORY_URL}?threadId=${encodeURIComponent(sessionId)}`,
-          { credentials: "include", headers: authHeaders(token) },
-        );
+        const get = () =>
+          fetch(`${HISTORY_URL}?threadId=${encodeURIComponent(sessionId)}`, {
+            credentials: "include",
+            headers: authHeaders(tokenRef.current()),
+          });
+        let res = await get();
+        // 401 — истёкший access-токен (например, вкладка открыта после долгого
+        // простоя). Обновляем сессию и повторяем: молчаливый возврат пустой истории
+        // выглядел бы как потеря ленты.
+        if (res.status === 401) {
+          try {
+            await refreshSession();
+            res = await get();
+          } catch {
+            // refresh не удался — вернём пустую историю, роутер уведёт на /login.
+          }
+        }
         if (!res.ok) return { messages: [] };
         const data = (await res.json()) as {
           messages?: HistoryMessage[];

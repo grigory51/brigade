@@ -245,6 +245,11 @@ const ThreadSuggestionItem: FC = () => {
 };
 
 const Composer: FC = () => {
+  // Ввод заблокирован, пока грузится история треда: отправка первого сообщения до
+  // завершения load() попадала бы под перезапись applyExternalMessages (загруженная
+  // история затирает живую пару user/ответ, и стрим уезжает в чужое сообщение).
+  const historyLoading = useAuiState((s) => s.thread.isLoading);
+
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
       <ComposerPrimitive.AttachmentDropzone asChild>
@@ -255,8 +260,13 @@ const Composer: FC = () => {
           <SlashMenu />
           <ComposerAttachments />
           <ComposerPrimitive.Input
-            placeholder="Сообщение агенту…  (/ — команды)"
-            className="aui-composer-input placeholder:text-muted-foreground/80 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none"
+            placeholder={
+              historyLoading
+                ? "Загрузка истории…"
+                : "Сообщение агенту…  (/ — команды)"
+            }
+            disabled={historyLoading}
+            className="aui-composer-input placeholder:text-muted-foreground/80 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none disabled:opacity-60"
             rows={1}
             autoFocus
             aria-label="Message input"
