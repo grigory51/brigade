@@ -5,27 +5,64 @@ import { cn } from "@/lib/utils";
 import { Thread } from "@/components/assistant-ui/thread";
 import { FRONTEND_TOOL_NAMES } from "./frontendTools";
 import type { AvailableCommand } from "./useAcpRuntime";
+import { parseDiffResult } from "./tools/diff";
+import { DiffCard } from "./tools/DiffCard";
+import { TerminalCard } from "./tools/TerminalCard";
+import { FileCard } from "./tools/FileCard";
+import { PlanPanel, type PlanEntry } from "./PlanPanel";
 
 // AcpThread — лента ACP-чата на готовом компоненте Thread из assistant-ui registry
 // (src/components/assistant-ui/thread.tsx). Здесь — только подключение наших
-// расширений: рендер frontend-сниппета show_choice (ToolFallback) и проброс
-// slash-команд агента в composer. Разметка/стили сообщений, размышлений, action-bar и
-// composer'а живут в registry-компоненте.
-export function AcpThread({ commands }: { commands: AvailableCommand[] }) {
-  return <Thread commands={commands} components={{ ToolFallback }} />;
+// расширений: семантические карточки инструментов кодинг-агента (diff/терминал/файл),
+// frontend-сниппет show_choice и проброс slash-команд агента в composer. Разметка
+// сообщений, размышлений, action-bar и composer'а живут в registry-компоненте.
+export function AcpThread({
+  commands,
+  plan,
+}: {
+  commands: AvailableCommand[];
+  plan: PlanEntry[];
+}) {
+  return (
+    <Thread
+      commands={commands}
+      components={{ ToolFallback }}
+      footer={<PlanPanel plan={plan} />}
+    />
+  );
 }
 
-// ToolFallback — рендер tool-call'а без специального UI. Кастомный frontend-сниппет
-// show_choice отрисовывается отдельной карточкой; прочие инструменты — компактным
-// блоком с раскрывающимися аргументами и результатом.
+// ToolFallback — диспетчер рендера tool-call'ов. Семантические карточки выбираются по
+// содержимому результата (структурный diff) и человекочитаемому имени инструмента от
+// ACP-адаптера («Terminal», «Read File»); всё прочее — generic-блок с раскрывающимися
+// аргументами и результатом.
 const ToolFallback: ToolCallMessagePartComponent = (props) => {
   if (FRONTEND_TOOL_NAMES.has(props.toolName)) {
     return <SnippetCard {...props} />;
   }
 
-  const args = prettyArgs(props.argsText);
-  const result = formatResult(props.result);
   const done = props.status.type === "complete" || props.result !== undefined;
+  const running = !done;
+
+  // Diff определяется по контенту, а не имени: Edit/Write оба несут структурный
+  // diff-результат, а «липкий diff» бэкенда гарантирует, что статусная строка его
+  // не затёрла.
+  const diffs = parseDiffResult(props.result);
+  if (diffs) {
+    return <DiffCard blocks={diffs} />;
+  }
+
+  const resultText =
+    props.result === undefined ? null : formatResult(props.result);
+  switch (props.toolName) {
+    case "Terminal":
+      return <TerminalCard output={resultText} running={running} />;
+    case "Read File":
+      return <FileCard content={resultText} running={running} />;
+  }
+
+  const args = prettyArgs(props.argsText);
+  const result = resultText;
 
   return (
     <div className="space-y-2 rounded-lg border border-dashed border-border bg-card/40 p-3">

@@ -124,6 +124,11 @@ type Client struct {
 	// stream отслеживает открытые потоковые сообщения (текст/размышление) для
 	// расстановки START/END вокруг чанков по смене messageId. Доступ — под mu.
 	stream streamState
+	// toolCalls — состояние tool call'ов по toolCallId: агент шлёт несколько
+	// tool_call_update на один вызов, а клиент требует ровно один TOOL_CALL_END и хранит
+	// один результат. Здесь копится содержательный результат (diff «липнет» — статусная
+	// строка его не затирает) и отслеживается, закрыт ли вызов. Доступ — под mu.
+	toolCalls map[string]*toolCallState
 }
 
 // убеждаемся, что Client удовлетворяет интерфейсу acp.Client на этапе компиляции.
@@ -297,11 +302,18 @@ func (c *Client) Bind(sink EventSink, resolver PermissionResolver) (unbind func(
 	c.resolver = resolver
 	lastUsage := c.lastUsage
 	lastCommands := c.lastCommands
-	// Снимок открытых потоковых сообщений: если turn ещё идёт, их START ушёл в прежний
-	// sink. Новому потоку нужно переоткрыть контекст, иначе последующий CONTENT/END
-	// прилетит без START и клиент @ag-ui отвергнет событие.
+	// Снимок открытых потоковых сообщений и tool call'ов: если turn ещё идёт, их START
+	// ушёл в прежний sink. Новому потоку нужно переоткрыть контекст, иначе последующий
+	// CONTENT/END прилетит без START и клиент @ag-ui отвергнет событие.
 	openText := c.stream.textID
 	openThought := c.stream.thoughtID
+	type openTool struct{ id, name string }
+	var openTools []openTool
+	for id, st := range c.toolCalls {
+		if st.open {
+			openTools = append(openTools, openTool{id: id, name: st.name})
+		}
+	}
 	c.mu.Unlock()
 
 	// Историю чата в SSE-поток НЕ проигрываем: лента восстанавливается отдельным запросом
@@ -318,13 +330,17 @@ func (c *Client) Bind(sink EventSink, resolver PermissionResolver) (unbind func(
 	if lastUsage != nil {
 		_ = sink(*lastUsage)
 	}
-	// Переоткрываем незакрытые потоки в новом sink (START уже был в прежнем потоке).
+	// Переоткрываем незакрытые потоки и tool call'ы в новом sink (их START уже был в
+	// прежнем потоке).
 	if openText != "" {
 		_ = sink(agui.Event{Type: agui.EventTextMessageStart, MessageID: openText, Role: "assistant"})
 	}
 	if openThought != "" {
 		_ = sink(agui.Event{Type: agui.EventReasoningStart, MessageID: openThought})
 		_ = sink(agui.Event{Type: agui.EventReasoningMessageStart, MessageID: openThought, Role: "reasoning"})
+	}
+	for _, tc := range openTools {
+		_ = sink(agui.Event{Type: agui.EventToolCallStart, ToolCallID: tc.id, ToolCallName: tc.name})
 	}
 
 	return func() {
@@ -447,11 +463,12 @@ func (c *Client) Prompt(ctx context.Context, text string) (stopReason string, er
 
 	resp, err := c.conn.Prompt(ctx, req)
 
-	// Закрываем потоковые сообщения, оставшиеся открытыми к концу turn'а (текст/
-	// размышление без встречного tool call), чтобы клиент снял индикатор стриминга.
+	// Закрываем потоковые сообщения и tool call'ы, оставшиеся открытыми к концу turn'а
+	// (без терминального статуса от агента), чтобы клиент снял индикаторы выполнения.
 	c.mu.Lock()
 	c.promptActive = false
 	closing := c.finishStreams()
+	closing = append(closing, c.closeOpenToolCalls()...)
 	c.mu.Unlock()
 	for _, evt := range closing {
 		c.emit(evt)
@@ -473,6 +490,7 @@ func (c *Client) Prompt(ctx context.Context, text string) (stopReason string, er
 func (c *Client) FinishStreams() {
 	c.mu.Lock()
 	closing := c.finishStreams()
+	closing = append(closing, c.closeOpenToolCalls()...)
 	c.mu.Unlock()
 	// emit берёт c.mu внутри — вызываем строго после Unlock, иначе deadlock.
 	for _, evt := range closing {

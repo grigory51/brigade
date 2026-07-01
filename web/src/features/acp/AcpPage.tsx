@@ -16,7 +16,7 @@ import { useAcpRuntime, type PendingPermission } from "./useAcpRuntime";
 // AG-UI-рантайм поднял бы соединение в никуда ещё до показа 404. Внешней шапки нет:
 // идентификатор сессии доступен из URL, а тред показывает диалог сразу под навигацией.
 export function AcpSession({ sessionId }: { sessionId: string }) {
-  const { runtime, permission, resolvePermission, commands } =
+  const { runtime, permission, resolvePermission, commands, plan } =
     useAcpRuntime(sessionId);
 
   return (
@@ -27,7 +27,7 @@ export function AcpSession({ sessionId }: { sessionId: string }) {
 
       <div className="flex h-full flex-col">
         <div className="min-h-0 flex-1">
-          <AcpThread commands={commands} />
+          <AcpThread commands={commands} plan={plan} />
         </div>
       </div>
 

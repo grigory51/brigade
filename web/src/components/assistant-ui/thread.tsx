@@ -58,6 +58,7 @@ import {
   type ComponentType,
   type FC,
   type PropsWithChildren,
+  type ReactNode,
 } from "react";
 import type { AvailableCommand } from "@/features/acp/useAcpRuntime";
 
@@ -86,6 +87,8 @@ export type ThreadProps = {
   components?: ThreadComponents | undefined;
   // commands — slash-команды агента для автокомплита в composer'е (см. SlashMenu).
   commands?: AvailableCommand[] | undefined;
+  // footer — дополнительный блок над composer'ом (например, план агента).
+  footer?: ReactNode | undefined;
 };
 
 const EMPTY_COMPONENTS: ThreadComponents = {};
@@ -106,19 +109,23 @@ const isNewChatView = (s: AssistantState) =>
 export const Thread: FC<ThreadProps> = ({
   components = EMPTY_COMPONENTS,
   commands = [],
+  footer,
 }) => {
   const isEmpty = useAuiState(isNewChatView);
 
   return (
     <ThreadComponentsContext.Provider value={components}>
       <CommandsContext.Provider value={commands}>
-        <ThreadRoot isEmpty={isEmpty} />
+        <ThreadRoot isEmpty={isEmpty} footer={footer} />
       </CommandsContext.Provider>
     </ThreadComponentsContext.Provider>
   );
 };
 
-const ThreadRoot: FC<{ isEmpty: boolean }> = ({ isEmpty }) => {
+const ThreadRoot: FC<{ isEmpty: boolean; footer?: ReactNode }> = ({
+  isEmpty,
+  footer,
+}) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
 
   return (
@@ -164,6 +171,7 @@ const ThreadRoot: FC<{ isEmpty: boolean }> = ({ isEmpty }) => {
             )}
           >
             <ThreadScrollToBottom />
+            {footer}
             <Composer />
             <AuiIf condition={(s) => isNewChatView(s) && s.composer.isEmpty}>
               <ThreadSuggestions />

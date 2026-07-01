@@ -8,6 +8,7 @@ import {
 import { useAuth } from "@/features/auth/AuthContext";
 import { refreshSession } from "@/api/client";
 import { DEMO_FRONTEND_TOOLS } from "./frontendTools";
+import type { PlanEntry } from "./PlanPanel";
 
 // Эндпоинты канонического AG-UI на бэкенде (тот же origin, что и SPA).
 const RUN_URL = "/api/ag-ui/run";
@@ -41,13 +42,14 @@ export type AvailableCommand = {
   hint?: string;
 };
 
-// AcpRuntime — связка ассистент-рантайма AG-UI и побочных каналов (permission/commands),
-// которые в нашем контракте идут CUSTOM-событиями вне основного потока сообщений.
+// AcpRuntime — связка ассистент-рантайма AG-UI и побочных каналов (permission/commands/
+// plan), которые идут вне основного потока сообщений: CUSTOM-событиями и STATE_SNAPSHOT.
 export type AcpRuntime = {
   runtime: ReturnType<typeof useAgUiRuntime>;
   permission: PendingPermission | null;
   resolvePermission: (id: string, decision: string) => void;
   commands: AvailableCommand[];
+  plan: PlanEntry[];
 };
 
 // CustomEventValue — нетипизированная полезная нагрузка CUSTOM-события AG-UI.
@@ -57,6 +59,7 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
   const { getAccessToken } = useAuth();
   const [permission, setPermission] = useState<PendingPermission | null>(null);
   const [commands, setCommands] = useState<AvailableCommand[]>([]);
+  const [plan, setPlan] = useState<PlanEntry[]>([]);
 
   // getAccessToken стабилен (useCallback в AuthContext), но фиксируем в ref, чтобы не
   // пересоздавать агента: HttpAgent читает свежий токен на каждый запрос через fetch.
@@ -92,8 +95,9 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
     return new HttpAgent({ url: RUN_URL, threadId: sessionId, fetch: fetchWithAuth });
   }, [sessionId]);
 
-  // Подписка на CUSTOM-события агента: permission_request и usage идут вне основного
-  // потока сообщений рантайма, поэтому ловим их напрямую у агента.
+  // Подписка на события агента вне основного потока сообщений: permission_request и
+  // available_commands идут CUSTOM-событиями, план агента — STATE_SNAPSHOT {plan: [...]}
+  // (снимок целиком при каждом изменении, по ACP-контракту).
   useEffect(() => {
     const sub = agent.subscribe({
       onCustomEvent: ({ event }) => {
@@ -102,6 +106,9 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
         } else if (event.name === "available_commands") {
           setCommands(toCommands(event.value as CustomEventValue));
         }
+      },
+      onStateSnapshotEvent: ({ event }) => {
+        setPlan(toPlan(event.snapshot as CustomEventValue));
       },
     });
     return () => sub.unsubscribe();
@@ -162,7 +169,7 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
     setPermission((cur) => (cur && cur.id === id ? null : cur));
   }).current;
 
-  return { runtime, permission, resolvePermission, commands };
+  return { runtime, permission, resolvePermission, commands, plan };
 }
 
 // DEMO_FRONTEND_TOOLS реэкспортируем как контракт инструментов RunAgentInput.tools[]:
@@ -204,6 +211,20 @@ function toPermission(value: CustomEventValue): PendingPermission {
 }
 
 // toCommands нормализует value события available_commands в список slash-команд.
+// toPlan нормализует снимок состояния STATE_SNAPSHOT в план агента. Пустой/чужой
+// снимок даёт пустой план (панель скрывается).
+function toPlan(snapshot: CustomEventValue): PlanEntry[] {
+  const raw = Array.isArray(snapshot?.plan) ? snapshot.plan : [];
+  return raw
+    .map((e) => e as Record<string, unknown>)
+    .filter((e) => typeof e.content === "string")
+    .map((e) => ({
+      content: e.content as string,
+      status: typeof e.status === "string" ? e.status : "pending",
+      priority: typeof e.priority === "string" ? e.priority : undefined,
+    }));
+}
+
 function toCommands(value: CustomEventValue): AvailableCommand[] {
   const raw = Array.isArray(value?.commands) ? value.commands : [];
   return raw

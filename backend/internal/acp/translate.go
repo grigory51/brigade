@@ -20,6 +20,19 @@ type streamState struct {
 	thoughtID string
 }
 
+// toolCallState — накопленное состояние одного tool call'а (см. Client.toolCalls).
+type toolCallState struct {
+	// open — TOOL_CALL_START отправлен, TOOL_CALL_END ещё нет.
+	open bool
+	// name — заголовок вызова; нужен для переоткрытия START при reconnect (Bind).
+	name string
+	// result — последний содержательный результат вызова.
+	result string
+	// isDiff — result несёт структурный diff: он важнее статусных строк и не
+	// затирается ими («липкий diff»).
+	isDiff bool
+}
+
 // translateUpdate преобразует одно ACP-обновление сессии (SessionUpdate) в ноль или
 // более канонических событий AG-UI. Возврат среза, а не одного события, нужен потому,
 // что часть ACP-обновлений разворачивается в несколько AG-UI-событий (START + CONTENT,
@@ -46,10 +59,16 @@ func (c *Client) translateUpdate(u acpsdk.SessionUpdate) []agui.Event {
 
 	case u.ToolCall != nil:
 		tc := u.ToolCall
+		id := string(tc.ToolCallId)
+		if c.toolCalls == nil {
+			c.toolCalls = make(map[string]*toolCallState)
+		}
+		c.toolCalls[id] = &toolCallState{open: true, name: tc.Title}
+
 		evts := c.finishStreams()
 		evts = append(evts, agui.Event{
 			Type:         agui.EventToolCallStart,
-			ToolCallID:   string(tc.ToolCallId),
+			ToolCallID:   id,
 			ToolCallName: tc.Title,
 		})
 		// Аргументы tool call отдаются строкой-фрагментом JSON (TOOL_CALL_ARGS.delta):
@@ -58,33 +77,50 @@ func (c *Client) translateUpdate(u acpsdk.SessionUpdate) []agui.Event {
 		if tc.RawInput != nil {
 			evts = append(evts, agui.Event{
 				Type:       agui.EventToolCallArgs,
-				ToolCallID: string(tc.ToolCallId),
+				ToolCallID: id,
 				Delta:      rawJSON(tc.RawInput),
 			})
 		}
 		return evts
 
 	case u.ToolCallUpdate != nil:
+		// Агент шлёт несколько tool_call_update на один вызов (промежуточный контент,
+		// смена статуса, финальный вывод), а клиент требует РОВНО ОДИН TOOL_CALL_END —
+		// повторный END роняет прогон на стороне @ag-ui/client. Поэтому промежуточные
+		// обновления только копят результат в toolCalls, а END+RESULT эмитятся один раз —
+		// на терминальном статусе (completed/failed). Вызовы, не получившие терминального
+		// статуса к концу turn'а, закрывает closeOpenToolCalls.
 		tu := u.ToolCallUpdate
-		evt := agui.Event{
-			Type:       agui.EventToolCallEnd,
-			ToolCallID: string(tu.ToolCallId),
-		}
-		// Результат tool call (контент/сырой вывод) отдаётся отдельным событием строкой
-		// (TOOL_CALL_RESULT.content), чтобы клиент мог обновить уже отрисованный компонент.
-		// messageId результата равен toolCallId: ответ инструмента самостоятельного
-		// messageId не имеет.
-		if tu.RawOutput != nil || len(tu.Content) > 0 {
-			res := agui.Event{
-				Type:       agui.EventToolCallResult,
-				ToolCallID: string(tu.ToolCallId),
-				MessageID:  string(tu.ToolCallId),
-				Role:       "tool",
-				Content:    toolResultText(tu),
+		id := string(tu.ToolCallId)
+		st := c.toolCalls[id]
+		if st == nil {
+			// Update для неизвестного вызова (например, START был до рестарта) —
+			// заводим состояние, но START не эмитим: клиент отверг бы END без START.
+			st = &toolCallState{}
+			if c.toolCalls == nil {
+				c.toolCalls = make(map[string]*toolCallState)
 			}
-			return []agui.Event{evt, res}
+			c.toolCalls[id] = st
 		}
-		return []agui.Event{evt}
+
+		// Копим содержательный результат. Diff «липнет»: статусная строка
+		// («file updated successfully») его не затирает — diff нужен карточке рендера.
+		if tu.RawOutput != nil || len(tu.Content) > 0 {
+			content := toolResultText(tu)
+			if hasDiffContent(tu) {
+				st.result, st.isDiff = content, true
+			} else if !st.isDiff {
+				st.result = content
+			}
+		}
+
+		terminal := tu.Status != nil &&
+			(*tu.Status == acpsdk.ToolCallStatusCompleted || *tu.Status == acpsdk.ToolCallStatusFailed)
+		if !terminal || !st.open {
+			return nil
+		}
+		st.open = false
+		return closeToolCallEvents(id, st.result)
 
 	case u.Plan != nil:
 		// План агента отдаётся снимком состояния целиком: ACP-контракт требует, чтобы
@@ -235,6 +271,51 @@ func (c *Client) closeReasoning() []agui.Event {
 		{Type: agui.EventReasoningMessageEnd, MessageID: id},
 		{Type: agui.EventReasoningEnd, MessageID: id},
 	}
+}
+
+// closeToolCallEvents формирует закрытие tool call'а: TOOL_CALL_END и, при непустом
+// результате, TOOL_CALL_RESULT (messageId результата равен toolCallId — ответ
+// инструмента самостоятельного messageId не имеет).
+func closeToolCallEvents(id, result string) []agui.Event {
+	evts := []agui.Event{{Type: agui.EventToolCallEnd, ToolCallID: id}}
+	if result != "" {
+		evts = append(evts, agui.Event{
+			Type:       agui.EventToolCallResult,
+			ToolCallID: id,
+			MessageID:  id,
+			Role:       "tool",
+			Content:    result,
+		})
+	}
+	return evts
+}
+
+// closeOpenToolCalls закрывает tool call'ы, не получившие терминального статуса
+// (агент/адаптер не всегда его шлёт): без закрытия клиент навсегда показывал бы
+// «крутилку», а RUN_FINISHED поверх открытого вызова был бы отвергнут. Вызывается под
+// c.mu в конце turn'а и перед завершением replay-прогона.
+func (c *Client) closeOpenToolCalls() []agui.Event {
+	var evts []agui.Event
+	for id, st := range c.toolCalls {
+		if !st.open {
+			continue
+		}
+		st.open = false
+		evts = append(evts, closeToolCallEvents(id, st.result)...)
+	}
+	return evts
+}
+
+// hasDiffContent сообщает, несёт ли обновление tool call структурный diff-контент
+// (ACP ToolCallContent с полем Diff). Такой результат содержательнее статусных строк —
+// см. «липкий diff» в translateUpdate.
+func hasDiffContent(tu *acpsdk.SessionToolCallUpdate) bool {
+	for _, block := range tu.Content {
+		if block.Diff != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // toolResultText извлекает текстовую полезную нагрузку результата tool call: предпочитает

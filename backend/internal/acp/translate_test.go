@@ -1,6 +1,7 @@
 package acp
 
 import (
+	"strings"
 	"testing"
 
 	acpsdk "github.com/coder/acp-go-sdk"
@@ -285,14 +286,27 @@ func TestTranslateToolCallNoInput(t *testing.T) {
 	})
 }
 
-// TestTranslateToolCallUpdate проверяет tool_call_update с RawOutput: END + RESULT, где
-// результат несёт messageId=toolCallId, role=tool и сериализованный вывод.
+// TestTranslateToolCallUpdate проверяет жизненный цикл tool call'а: промежуточные
+// обновления копят результат и НЕ эмитят событий (клиент требует ровно один END),
+// терминальный статус даёт END + RESULT с последним содержательным выводом, повторный
+// терминальный update для закрытого вызова событий не даёт.
 func TestTranslateToolCallUpdate(t *testing.T) {
 	c := &Client{}
+	// START регистрирует вызов как открытый.
+	_ = c.translateUpdate(acpsdk.StartToolCall("tc-1", "Edit"))
+
+	// Промежуточный update (без терминального статуса) копится молча.
 	got := c.translateUpdate(acpsdk.UpdateToolCall(
 		"tc-1",
 		acpsdk.WithUpdateRawOutput(map[string]any{"ok": true}),
 	))
+	if len(got) != 0 {
+		t.Fatalf("промежуточный update: %d событий, want 0", len(got))
+	}
+
+	// Терминальный статус закрывает вызов: END + RESULT с накопленным выводом.
+	done := acpsdk.ToolCallStatusCompleted
+	got = c.translateUpdate(acpsdk.UpdateToolCall("tc-1", acpsdk.WithUpdateStatus(done)))
 	assertShapes(t, got, []eventShape{
 		{Type: agui.EventToolCallEnd, ToolCallID: "tc-1"},
 		{Type: agui.EventToolCallResult, MessageID: "tc-1", Role: "tool", ToolCallID: "tc-1"},
@@ -300,15 +314,63 @@ func TestTranslateToolCallUpdate(t *testing.T) {
 	if got[1].Content != `{"ok":true}` {
 		t.Errorf("Content = %q, want %q", got[1].Content, `{"ok":true}`)
 	}
+
+	// Повторный терминальный update закрытого вызова — ничего.
+	got = c.translateUpdate(acpsdk.UpdateToolCall("tc-1", acpsdk.WithUpdateStatus(done)))
+	if len(got) != 0 {
+		t.Fatalf("повторный терминальный update: %d событий, want 0", len(got))
+	}
 }
 
-// TestTranslateToolCallUpdateNoResult проверяет tool_call_update без вывода: только END.
-func TestTranslateToolCallUpdateNoResult(t *testing.T) {
+// TestTranslateToolCallUpdateStickyDiff проверяет «липкий diff»: статусная строка после
+// diff-контента не затирает его — RESULT терминального закрытия несёт diff.
+func TestTranslateToolCallUpdateStickyDiff(t *testing.T) {
 	c := &Client{}
-	got := c.translateUpdate(acpsdk.UpdateToolCall("tc-3"))
+	_ = c.translateUpdate(acpsdk.StartToolCall("tc-d", "Edit"))
+
+	_ = c.translateUpdate(acpsdk.UpdateToolCall(
+		"tc-d",
+		acpsdk.WithUpdateContent([]acpsdk.ToolCallContent{
+			acpsdk.ToolDiffContent("/tmp/f.txt", "new", "old"),
+		}),
+	))
+	done := acpsdk.ToolCallStatusCompleted
+	got := c.translateUpdate(acpsdk.UpdateToolCall(
+		"tc-d",
+		acpsdk.WithUpdateRawOutput("file updated successfully"),
+		acpsdk.WithUpdateStatus(done),
+	))
+	if len(got) != 2 {
+		t.Fatalf("терминальный update: %d событий, want 2", len(got))
+	}
+	if got[1].Content == `"file updated successfully"` {
+		t.Fatalf("статусная строка затёрла diff-результат")
+	}
+	for _, want := range []string{`"type":"diff"`, `"oldText":"old"`, `"newText":"new"`} {
+		if !strings.Contains(got[1].Content, want) {
+			t.Errorf("Content не содержит %s: %q", want, got[1].Content)
+		}
+	}
+}
+
+// TestCloseOpenToolCalls проверяет закрытие вызовов без терминального статуса в конце
+// turn'а: END (+RESULT при накопленном выводе) один раз; повторное закрытие пусто.
+func TestCloseOpenToolCalls(t *testing.T) {
+	c := &Client{}
+	_ = c.translateUpdate(acpsdk.StartToolCall("tc-3", "Terminal"))
+	_ = c.translateUpdate(acpsdk.UpdateToolCall(
+		"tc-3",
+		acpsdk.WithUpdateRawOutput("partial output"),
+	))
+
+	got := c.closeOpenToolCalls()
 	assertShapes(t, got, []eventShape{
 		{Type: agui.EventToolCallEnd, ToolCallID: "tc-3"},
+		{Type: agui.EventToolCallResult, MessageID: "tc-3", Role: "tool", ToolCallID: "tc-3"},
 	})
+	if got := c.closeOpenToolCalls(); len(got) != 0 {
+		t.Fatalf("повторное закрытие: %d событий, want 0", len(got))
+	}
 }
 
 // TestTranslateUnknownUpdate проверяет, что нетранслируемое обновление (смена режима)
