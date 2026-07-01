@@ -1,0 +1,33 @@
+# Сборочные артефакты единого бинаря.
+/bin/
+
+# Локальные конфиги и базы.
+backend/config.yaml
+*.db
+*.db-shm
+*.db-wal
+
+# Зависимости и сборки web.
+web/node_modules/
+web/dist/
+
+# Артефакты инструментов в корне репозитория (не часть проекта): node_modules —
+# остатки npx-запусков, data — служебное хранилище memoir, .playwright-mcp —
+# скриншоты браузерных проверок.
+/node_modules/
+/data/
+.playwright-mcp/
+
+# Встроенный фронтенд: в git хранится только placeholder index.html,
+# реальная сборка кладётся сюда Makefile перед go build.
+backend/internal/web/dist/assets/
+
+# Mobile (Gradle).
+mobile/.gradle/
+mobile/build/
+mobile/**/build/
+mobile/local.properties
+
+# IDE / OS.
+.DS_Store
+.idea/

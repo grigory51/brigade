@@ -1,0 +1,118 @@
+syntax = "proto3";
+
+package brigade.v1;
+
+import "brigade/v1/auth.proto";
+
+// Режим запуска агента: локальный процесс на хосте или отдельный Docker-контейнер.
+enum SessionMode {
+  SESSION_MODE_UNSPECIFIED = 0;
+  SESSION_MODE_LOCAL = 1;
+  SESSION_MODE_DOCKER = 2;
+}
+
+// Тип взаимодействия: CLI (pty + xterm) или ACP (структурированные события AG-UI).
+enum SessionKind {
+  SESSION_KIND_UNSPECIFIED = 0;
+  SESSION_KIND_CLI = 1;
+  SESSION_KIND_ACP = 2;
+}
+
+// Жизненный цикл сессии. Используется и для восстановления после рестарта бэкенда.
+enum SessionStatus {
+  SESSION_STATUS_UNSPECIFIED = 0;
+  SESSION_STATUS_RUNNING = 1;
+  SESSION_STATUS_STOPPED = 2;
+  SESSION_STATUS_FAILED = 3;
+}
+
+// Session — единица работы агента. Поля resume (agent_session_id, container_label)
+// позволяют восстановить живую сессию при старте бэкенда.
+message Session {
+  string id = 1;
+  string user_id = 2;
+  SessionMode mode = 3;
+  SessionKind kind = 4;
+  string agent_type = 5;
+  // agent_session_id — идентификатор сессии агента для `claude --resume <id>`.
+  string agent_session_id = 6;
+  // container_label — метка Docker-контейнера сессии (только для docker-режима).
+  string container_label = 7;
+  SessionStatus status = 8;
+  string cwd = 9;
+  // created_at — Unix-время в секундах.
+  int64 created_at = 10;
+  // name — пользовательское имя сессии для отображения в списке. Пустое — клиент
+  // показывает производную подпись (тип агента + вид). Назначается автоматически при
+  // создании и меняется через Update.
+  string name = 11;
+}
+
+message CreateSessionRequest {
+  string agent_type = 1;
+  SessionMode mode = 2;
+  SessionKind kind = 3;
+  // prompt — необязательный стартовый промпт (актуален для ACP).
+  string prompt = 4;
+  // cwd — рабочая директория; пустое значение означает дефолт из конфига.
+  string cwd = 5;
+}
+
+message CreateSessionResponse {
+  Session session = 1;
+}
+
+message ListSessionsRequest {}
+
+message ListSessionsResponse {
+  repeated Session sessions = 1;
+}
+
+message GetSessionRequest {
+  string session_id = 1;
+}
+
+message GetSessionResponse {
+  Session session = 1;
+}
+
+message UpdateSessionRequest {
+  string session_id = 1;
+  // name — новое отображаемое имя сессии.
+  string name = 2;
+}
+
+message UpdateSessionResponse {
+  Session session = 1;
+}
+
+message StopSessionRequest {
+  string session_id = 1;
+}
+
+message DeleteSessionRequest {
+  string session_id = 1;
+}
+
+// Тикет — короткоживущий одноразовый токен для авторизации WebSocket-подключения
+// (браузер не отправляет кастомные заголовки при апгрейде).
+message IssueStreamTicketRequest {
+  string session_id = 1;
+}
+
+message IssueStreamTicketResponse {
+  string ticket = 1;
+  // expires_at — Unix-время в секундах, после которого тикет недействителен.
+  int64 expires_at = 2;
+}
+
+// SessionService — CRUD над сессиями и выдача WS-тикетов.
+service SessionService {
+  rpc Create(CreateSessionRequest) returns (CreateSessionResponse) {}
+  rpc List(ListSessionsRequest) returns (ListSessionsResponse) {}
+  rpc Get(GetSessionRequest) returns (GetSessionResponse) {}
+  rpc Update(UpdateSessionRequest) returns (UpdateSessionResponse) {}
+  rpc Stop(StopSessionRequest) returns (Empty) {}
+  rpc Delete(DeleteSessionRequest) returns (Empty) {}
+  rpc IssueStreamTicket(IssueStreamTicketRequest) returns (IssueStreamTicketResponse) {}
+}

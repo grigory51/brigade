@@ -1,0 +1,16 @@
+version: v1
+# Контракт API brigade. Единый источник истины для всех клиентов (Go-бэкенд, web, mobile).
+breaking:
+  use:
+    - FILE
+lint:
+  use:
+    - DEFAULT
+  except:
+    # Намеренно используем общий Empty и доменные имена запросов/ответов
+    # (CreateSessionRequest и т.п.) вместо навязываемых buf'ом ServiceMethodRequest.
+    - RPC_REQUEST_STANDARD_NAME
+    - RPC_RESPONSE_STANDARD_NAME
+    - RPC_REQUEST_RESPONSE_UNIQUE
+  # Все сервисы/сообщения лежат в одном пакете brigade.v1, файлы названы по домену,
+  # поэтому FILE_LAYOUT/PACKAGE_DIRECTORY_MATCH соблюдается каталогом proto/brigade/v1.

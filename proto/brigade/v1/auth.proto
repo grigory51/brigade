@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package brigade.v1;
+
+// Пустой ответ для методов без полезной нагрузки (например, Logout).
+message Empty {}
+
+// Пользователь системы. Пароль не передаётся клиенту.
+message User {
+  string id = 1;
+  string username = 2;
+}
+
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+}
+
+// access_token — короткоживущий JWT; refresh_token — для обновления без повторного логина.
+// Для web access-токен также выставляется httpOnly-cookie, mobile использует Bearer.
+message LoginResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  User user = 3;
+}
+
+message RefreshRequest {
+  string refresh_token = 1;
+}
+
+message RefreshResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+}
+
+// AuthService — логин/пароль с JWT (TTL) и refresh-токеном.
+service AuthService {
+  rpc Login(LoginRequest) returns (LoginResponse) {}
+  rpc Refresh(RefreshRequest) returns (RefreshResponse) {}
+  // Me возвращает текущего пользователя по access-токену (из cookie или Bearer).
+  rpc Me(Empty) returns (User) {}
+  rpc Logout(Empty) returns (Empty) {}
+}

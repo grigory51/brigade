@@ -1,0 +1,34 @@
+# Пример конфигурации brigade. Скопируйте в config.yaml и поправьте значения.
+# Любое поле перекрывается переменной окружения с префиксом BRIGADE_ и разделителем
+# уровней через двойное подчёркивание: например BRIGADE_JWT__SECRET, BRIGADE_ADDR.
+
+# Режим спавна агентов: local — процесс на хосте; docker — отдельный контейнер на сессию.
+mode: local
+
+# Адрес HTTP-сервера (ConnectRPC + WebSocket + встроенный фронтенд).
+addr: ":8080"
+
+# Путь к файлу SQLite. Создаётся при первом запуске, миграции прогоняются автоматически.
+sqlite_path: "./brigade.db"
+
+jwt:
+  # Ключ подписи JWT. В проде задавайте через env (BRIGADE_JWT__SECRET), не храните в yaml.
+  secret: "change-me-in-production"
+  # TTL access-токена держим коротким; обновление — по refresh-токену.
+  access_ttl: "15m"
+  refresh_ttl: "720h"
+
+# Сид-пользователь создаётся при первом запуске, если таблица users пуста.
+seed:
+  username: "admin"
+  password: "admin"
+
+# Корневая рабочая директория агентов. В docker-режиме её подпапки bind-mount'ятся
+# в контейнеры сессий.
+work_dir: "./workspace"
+
+# Подписочный токен Claude Code (формат sk-ant-oat01-..., создаётся командой
+# `claude setup-token`; требует подписки Claude). Пробрасывается агенту как
+# CLAUDE_CODE_OAUTH_TOKEN. Можно задать здесь или через env
+# BRIGADE_CLAUDE_CODE_OAUTH_TOKEN.
+claude_code_oauth_token: ""

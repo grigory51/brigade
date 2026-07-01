@@ -1,0 +1,34 @@
+version: v1
+# Кодген локальными плагинами (без protoc — это Go/Node-плагины protoc-gen-*).
+#
+# Go-плагины ставятся в $GOPATH/bin:
+#   go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.6
+#   go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.18.1
+# TS-плагины ставятся как npm-зависимости web/ (web/node_modules/.bin):
+#   @bufbuild/protoc-gen-es, @connectrpc/protoc-gen-connect-es
+# и доступны buf'у при запуске `buf generate` после `npm install` в web/.
+#
+# Remote-плагины buf.build (managed) не используются: BSR-эндпоинт исполнения
+# в текущем окружении отдаёт 403. Локальные плагины самодостаточны.
+managed:
+  enabled: true
+  go_package_prefix:
+    # Базовый импорт-префикс для сгенерированного Go-кода. Совпадает с module из go.mod.
+    default: github.com/grigory51/brigade/backend/gen/go
+plugins:
+  # --- Go ---
+  - plugin: go
+    out: ../backend/gen/go
+    opt: paths=source_relative
+  - plugin: connect-go
+    out: ../backend/gen/go
+    opt: paths=source_relative
+  # --- TypeScript (web) ---
+  # Требуют установленных npm-плагинов в web/node_modules/.bin (protoc-gen-es,
+  # protoc-gen-connect-es). При отсутствии — закомментируйте или установите зависимости web/.
+  - plugin: es
+    out: ../web/src/api/gen
+    opt: target=ts
+  - plugin: connect-es
+    out: ../web/src/api/gen
+    opt: target=ts

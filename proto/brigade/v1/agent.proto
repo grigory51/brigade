@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package brigade.v1;
+
+// AgentType — доступный тип кодинг-агента. Режим взаимодействия (CLI-терминал
+// или ACP) задаётся отдельно через SessionKind при создании сессии и не зависит
+// от агента: один агент поддерживает оба режима.
+message AgentType {
+  // id — стабильный идентификатор, например claude-code.
+  string id = 1;
+  string name = 2;
+}
+
+message ListAgentTypesRequest {}
+
+message ListAgentTypesResponse {
+  repeated AgentType agent_types = 1;
+}
+
+// AgentService — справочник доступных типов агентов.
+service AgentService {
+  rpc ListAgentTypes(ListAgentTypesRequest) returns (ListAgentTypesResponse) {}
+}
