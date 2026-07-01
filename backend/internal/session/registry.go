@@ -204,14 +204,23 @@ func (r *Registry) agentEnv() []string {
 // иначе гонка с Stop/повторным спавном могла бы удалить чужой живой объект.
 func (r *Registry) watchExit(sessionID string, handle spawn.Handle) {
 	_ = handle.Wait()
-	log.Printf("session: agent exited %s (exit_code=%d), marking stopped", sessionID, handle.ExitCode())
 
 	r.mu.Lock()
+	owned := false
 	if lv, ok := r.live[sessionID]; ok && lv.handle == handle {
 		delete(r.live, sessionID)
+		owned = true
 	}
 	r.mu.Unlock()
 
+	// Статус пишем только если живой объект сняли именно мы. Иначе жизненным циклом
+	// уже распорядился Stop/Delete (записал stopped или удалил запись из store) —
+	// повторная запись создала бы гонку двух писателей (перезапись статуса, запись по
+	// удалённой сессии).
+	if !owned {
+		return
+	}
+	log.Printf("session: agent exited %s (exit_code=%d), marking stopped", sessionID, handle.ExitCode())
 	if err := r.store.UpdateSessionStatus(context.Background(), sessionID, store.SessionStatusStopped); err != nil {
 		log.Printf("session: mark stopped %s failed: %v", sessionID, err)
 	}
@@ -440,6 +449,10 @@ func (l *live) close() error {
 // CLI — Handle.Terminate (завершает процесс/удаляет контейнер, реапит без зомби),
 // ACP — Client.Close (graceful session/close → EOF → SIGTERM → SIGKILL → reap).
 // Вызывается при Stop/Delete сессии.
+//
+// ctx ограничивает только CLI-путь: Client.Close сигнатуры с контекстом не имеет
+// (io.Closer), но самоограничен по времени внутренним бюджетом (~6s суммарно, см.
+// gracefulCloseTimeout) — заведомо короче дедлайна terminateCtx.
 func (l *live) terminate(ctx context.Context) error {
 	if l.handle != nil {
 		return l.handle.Terminate(ctx)

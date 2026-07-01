@@ -92,11 +92,12 @@ type Client struct {
 	// sink/resolver — текущая привязка к WS-сеансу. nil вне сеанса (см. emit/resolve).
 	sink     EventSink
 	resolver PermissionResolver
-	// history — лента ранее отправленных AG-UI событий сессии. При новом Bind она
-	// проигрывается в sink перед живым потоком, благодаря чему рефреш/reconnect
-	// восстанавливает чат (turn агента доходит до конца независимо от подключения
-	// клиента — см. emit/SessionUpdate). Permission-запросы в историю не пишутся:
-	// их повторный показ после ответа некорректен (см. emit).
+	// history — лента ранее отправленных AG-UI событий сессии. В SSE-поток при Bind
+	// НЕ реплеится (это ломало агрегатор клиента) — служит источником для Messages(),
+	// по которому GET /api/ag-ui/history восстанавливает ленту массивом сообщений.
+	// Turn агента доходит до конца и копится здесь независимо от подключения клиента
+	// (см. emit/SessionUpdate). Permission-запросы в историю не пишутся: их повторный
+	// показ после ответа некорректен (см. emit).
 	history []agui.Event
 	// lastUsage — последнее событие расхода контекста. Хранится отдельно от history,
 	// потому что usage_update приходит высокочастотно (на каждый прирост токенов): в
@@ -424,6 +425,14 @@ func (c *Client) Prompt(ctx context.Context, text string) (stopReason string, er
 	// рестарте, и при reload в рамках живого процесса лента теряла бы реплики пользователя.
 	c.recordUserMessage(text)
 	c.mu.Unlock()
+	// Страховка от паники в conn.Prompt: залипший promptActive подавлял бы трансляцию
+	// user-сообщений всех последующих turn'ов. Штатный сброс ниже остаётся (повторный
+	// сброс безвреден), defer покрывает только аварийный выход.
+	defer func() {
+		c.mu.Lock()
+		c.promptActive = false
+		c.mu.Unlock()
+	}()
 
 	req := acpsdk.PromptRequest{
 		SessionId: c.sessionID,
