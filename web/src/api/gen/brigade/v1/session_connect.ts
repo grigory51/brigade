@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListSessionsRequest, ListSessionsResponse, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse } from "./session_pb.js";
+import { CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, ForkSessionRequest, ForkSessionResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListSessionsRequest, ListSessionsResponse, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse } from "./session_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { Empty } from "./auth_pb.js";
 
@@ -49,6 +49,15 @@ export const SessionService = {
       name: "Update",
       I: UpdateSessionRequest,
       O: UpdateSessionResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.SessionService.Fork
+     */
+    fork: {
+      name: "Fork",
+      I: ForkSessionRequest,
+      O: ForkSessionResponse,
       kind: MethodKind.Unary,
     },
     /**

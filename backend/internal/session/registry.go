@@ -268,6 +268,70 @@ func (r *Registry) Get(ctx context.Context, sessionID, userID string) (store.Ses
 	return sess, nil
 }
 
+// Fork создаёт ветку ACP-сессии: агент клонирует исходную сессию с историей
+// (session/fork), brigade регистрирует новую запись с parent_id и живым клиентом.
+// Ветка продолжается независимо от родителя. Только ACP-сессии: CLI (pty) ветвлению не
+// подлежит. Чужая сессия трактуется как ненайденная (см. Get).
+func (r *Registry) Fork(ctx context.Context, sessionID, userID string) (store.Session, error) {
+	src, err := r.Get(ctx, sessionID, userID)
+	if err != nil {
+		return store.Session{}, err
+	}
+	if src.Kind != store.SessionKindACP {
+		return store.Session{}, fmt.Errorf("session: fork поддержан только для acp-сессий")
+	}
+	if src.AgentSessionID == "" {
+		return store.Session{}, fmt.Errorf("session: исходная сессия не имеет agent_session_id")
+	}
+
+	name := src.Name
+	if name == "" {
+		name = src.AgentType
+	}
+	sess := store.Session{
+		ID:        uuid.NewString(),
+		UserID:    userID,
+		Mode:      src.Mode,
+		Kind:      store.SessionKindACP,
+		AgentType: src.AgentType,
+		Status:    store.SessionStatusRunning,
+		Cwd:       src.Cwd,
+		CreatedAt: time.Now(),
+		Name:      name + " · ветка",
+		ParentID:  src.ID,
+	}
+	if err := r.store.CreateSession(ctx, sess); err != nil {
+		return store.Session{}, err
+	}
+
+	// Как и в Create: жизнь агента равна жизни сессии, спавн отвязывается от ctx запроса.
+	client, err := acp.New(context.WithoutCancel(ctx), acp.Options{
+		Cwd:               sess.Cwd,
+		OAuthToken:        r.oauthToken,
+		ForkFromSessionID: src.AgentSessionID,
+	})
+	if err != nil {
+		// Ветка не создалась — запись убираем целиком, полусозданное состояние хуже ошибки.
+		_ = r.store.DeleteSession(ctx, sess.ID)
+		return store.Session{}, fmt.Errorf("session: fork acp: %w", err)
+	}
+
+	if err := r.store.UpdateSessionResume(ctx, sess.ID, client.SessionID(), ""); err != nil {
+		_ = client.Close()
+		_ = r.store.DeleteSession(ctx, sess.ID)
+		return store.Session{}, err
+	}
+	sess.AgentSessionID = client.SessionID()
+
+	r.mu.Lock()
+	r.live[sess.ID] = &live{owner: userID, kind: sess.Kind, client: client}
+	r.mu.Unlock()
+
+	log.Printf("session: forked %s -> %s (agent %s -> %s)",
+		src.ID, sess.ID, src.AgentSessionID, sess.AgentSessionID)
+	return sess, nil
+}
+
 // Rename меняет отображаемое имя сессии пользователя и возвращает обновлённую запись.
 // Чужая сессия трактуется как ненайденная (см. Get).
 func (r *Registry) Rename(ctx context.Context, sessionID, userID, name string) (store.Session, error) {

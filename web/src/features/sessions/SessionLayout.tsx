@@ -3,12 +3,14 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import { Link, Outlet, useNavigate, useParams } from "react-router-dom";
 import { ConnectError } from "@connectrpc/connect";
 import {
+  GitBranch,
   LogOut,
   MessagesSquare,
   Pencil,
@@ -160,7 +162,57 @@ export function SessionLayout() {
     [sessions],
   );
 
+  const onFork = useCallback(
+    async (id: string) => {
+      setBusyId(id);
+      try {
+        const res = await sessionClient.fork({ sessionId: id });
+        const branch = res.session;
+        if (branch) {
+          // Ветка добавляется в список и открывается сразу — как при создании сессии.
+          setSessions((prev) => [branch, ...prev.filter((p) => p.id !== branch.id)]);
+          navigate(sessionRoute(branch.id));
+        }
+      } catch (err) {
+        toast.error(
+          err instanceof ConnectError
+            ? err.rawMessage
+            : "Не удалось создать ветку",
+        );
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [navigate],
+  );
+
   const openCreate = useCallback(() => setCreateOpen(true), []);
+
+  // Дерево веток в сайдбаре: корневые сессии в исходном порядке (новые сверху), после
+  // каждой — её ветки с отступом. Ветка с удалённым родителем показывается как корневая.
+  const ordered = useMemo(() => {
+    const byParent = new Map<string, Session[]>();
+    const ids = new Set(sessions.map((s) => s.id));
+    const roots: Session[] = [];
+    for (const s of sessions) {
+      if (s.parentId && ids.has(s.parentId)) {
+        const list = byParent.get(s.parentId) ?? [];
+        list.push(s);
+        byParent.set(s.parentId, list);
+      } else {
+        roots.push(s);
+      }
+    }
+    const out: { session: Session; depth: number }[] = [];
+    const walk = (s: Session, depth: number) => {
+      out.push({ session: s, depth });
+      for (const child of byParent.get(s.id) ?? []) {
+        walk(child, depth + 1);
+      }
+    };
+    roots.forEach((s) => walk(s, 0));
+    return out;
+  }, [sessions]);
 
   return (
     <SessionShellContext.Provider value={{ openCreate }}>
@@ -243,14 +295,16 @@ export function SessionLayout() {
                     )}
 
                     {state === "ready" &&
-                      sessions.map((s) => (
+                      ordered.map(({ session: s, depth }) => (
                         <SessionItem
                           key={s.id}
                           session={s}
+                          depth={depth}
                           busy={busyId === s.id}
                           onOpen={() => navigate(sessionRoute(s.id))}
                           onDelete={() => void onDelete(s.id)}
                           onRename={(name) => void onRename(s.id, name)}
+                          onFork={() => void onFork(s.id)}
                         />
                       ))}
                   </SidebarMenu>
@@ -301,16 +355,20 @@ function withName(s: Session, id: string, name: string): Session {
 
 function SessionItem({
   session,
+  depth = 0,
   busy,
   onOpen,
   onDelete,
   onRename,
+  onFork,
 }: {
   session: Session;
+  depth?: number;
   busy: boolean;
   onOpen: () => void;
   onDelete: () => void;
   onRename: (name: string) => void;
+  onFork: () => void;
 }) {
   const { sessionId } = useParams<{ sessionId: string }>();
   const active = sessionId === session.id;
@@ -378,14 +436,34 @@ function SessionItem({
           startEdit();
         }}
         tooltip={label}
-        className="pr-14"
+        className="pr-20"
+        // Ветки визуально вкладываются под родителя (см. ordered в SessionLayout).
+        style={depth > 0 ? { paddingLeft: `${8 + depth * 16}px` } : undefined}
       >
         <span className="relative shrink-0">
-          <KindIcon className="size-4" />
+          {depth > 0 ? (
+            <GitBranch className="size-4" />
+          ) : (
+            <KindIcon className="size-4" />
+          )}
           <StatusDot status={session.status} />
         </span>
         <span className="truncate">{label}</span>
       </SidebarMenuButton>
+      {session.kind === SessionKind.ACP && (
+        <SidebarMenuAction
+          showOnHover
+          disabled={busy}
+          onClick={(e) => {
+            e.stopPropagation();
+            onFork();
+          }}
+          aria-label="Создать ветку"
+          className="right-14 text-sidebar-foreground/60 hover:text-sidebar-foreground"
+        >
+          <GitBranch className="size-4" />
+        </SidebarMenuAction>
+      )}
       <SidebarMenuAction
         showOnHover
         onClick={(e) => {

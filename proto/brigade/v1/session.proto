@@ -46,6 +46,8 @@ message Session {
   // показывает производную подпись (тип агента + вид). Назначается автоматически при
   // создании и меняется через Update.
   string name = 11;
+  // parent_id — сессия-родитель для веток (Fork). Пустое — корневая сессия.
+  string parent_id = 12;
 }
 
 message CreateSessionRequest {
@@ -73,6 +75,16 @@ message GetSessionRequest {
 }
 
 message GetSessionResponse {
+  Session session = 1;
+}
+
+// Fork создаёт ветку сессии: агент клонирует свою сессию (ACP session/fork), brigade
+// заводит новую запись с parent_id = исходная. Ветка продолжается независимо.
+message ForkSessionRequest {
+  string session_id = 1;
+}
+
+message ForkSessionResponse {
   Session session = 1;
 }
 
@@ -112,6 +124,7 @@ service SessionService {
   rpc List(ListSessionsRequest) returns (ListSessionsResponse) {}
   rpc Get(GetSessionRequest) returns (GetSessionResponse) {}
   rpc Update(UpdateSessionRequest) returns (UpdateSessionResponse) {}
+  rpc Fork(ForkSessionRequest) returns (ForkSessionResponse) {}
   rpc Stop(StopSessionRequest) returns (Empty) {}
   rpc Delete(DeleteSessionRequest) returns (Empty) {}
   rpc IssueStreamTicket(IssueStreamTicketRequest) returns (IssueStreamTicketResponse) {}

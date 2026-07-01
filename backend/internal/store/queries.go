@@ -71,10 +71,10 @@ func (s *Store) scanUser(row *sql.Row) (User, error) {
 func (s *Store) CreateSession(ctx context.Context, sess Session) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO sessions
-		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name, parent_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		sess.ID, sess.UserID, string(sess.Mode), string(sess.Kind), sess.AgentType,
-		sess.AgentSessionID, sess.ContainerLabel, string(sess.Status), sess.Cwd, toUnix(sess.CreatedAt), sess.Name,
+		sess.AgentSessionID, sess.ContainerLabel, string(sess.Status), sess.Cwd, toUnix(sess.CreatedAt), sess.Name, sess.ParentID,
 	)
 	if err != nil {
 		return fmt.Errorf("store: create session: %w", err)
@@ -140,7 +140,7 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 }
 
 const sessionSelect = `SELECT id, user_id, mode, kind, agent_type, agent_session_id,
-	container_label, status, cwd, created_at, name FROM sessions`
+	container_label, status, cwd, created_at, name, parent_id FROM sessions`
 
 func (s *Store) querySessions(ctx context.Context, query string, args ...any) ([]Session, error) {
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -182,7 +182,7 @@ func scanSessionRow(r rowScanner) (Session, error) {
 	var mode, kind, status string
 	var createdAt int64
 	err := r.Scan(&sess.ID, &sess.UserID, &mode, &kind, &sess.AgentType,
-		&sess.AgentSessionID, &sess.ContainerLabel, &status, &sess.Cwd, &createdAt, &sess.Name)
+		&sess.AgentSessionID, &sess.ContainerLabel, &status, &sess.Cwd, &createdAt, &sess.Name, &sess.ParentID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Session{}, err

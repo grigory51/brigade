@@ -56,6 +56,11 @@ type Options struct {
 	// thread нотификациями session/update и история чата восстанавливается. Используется
 	// при восстановлении сессий после рестарта бэкенда.
 	ResumeSessionID string
+	// ForkFromSessionID — идентификатор ACP-сессии, от которой создаётся ветка
+	// (session/fork): агент клонирует сессию с её историей в новую, независимую.
+	// Взаимоисключим с ResumeSessionID; при отсутствии у агента capability fork —
+	// ошибка (тихий откат в пустую сессию обманул бы пользователя).
+	ForkFromSessionID string
 }
 
 // Client управляет одной ACP-сессией: владеет subprocess'ом adapter'а, реализует
@@ -191,6 +196,25 @@ func (c *Client) handshake(ctx context.Context) error {
 	}
 	// Сохраняем возможности агента: по ним при остановке решаем, слать ли session/close.
 	c.agentCaps = initResp.AgentCapabilities
+
+	// Ветка сессии: session/fork клонирует исходную сессию агента (с историей) в новую
+	// независимую. Ошибка не маскируется — вызывающий (registry.Fork) откатывает
+	// создание ветки целиком.
+	if c.opts.ForkFromSessionID != "" {
+		if initResp.AgentCapabilities.SessionCapabilities.Fork == nil {
+			return fmt.Errorf("acp: agent does not support session/fork")
+		}
+		forkResp, err := c.conn.UnstableForkSession(ctx, acpsdk.UnstableForkSessionRequest{
+			SessionId:  acpsdk.SessionId(c.opts.ForkFromSessionID),
+			Cwd:        c.opts.Cwd,
+			McpServers: []acpsdk.UnstableMcpServer{},
+		})
+		if err != nil {
+			return fmt.Errorf("acp: fork session %s: %w", c.opts.ForkFromSessionID, err)
+		}
+		c.sessionID = forkResp.SessionId
+		return nil
+	}
 
 	// Resume через session/load: агент реплеит прошлый thread нотификациями
 	// session/update, которые наполняют историю для воспроизведения в Bind. Id при

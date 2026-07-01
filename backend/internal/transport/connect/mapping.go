@@ -77,5 +77,6 @@ func sessionToProto(s store.Session) *v1.Session {
 		Cwd:            s.Cwd,
 		CreatedAt:      s.CreatedAt.Unix(),
 		Name:           s.Name,
+		ParentId:       s.ParentID,
 	}
 }
