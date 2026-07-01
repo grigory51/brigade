@@ -1,5 +1,6 @@
 # Сборочные артефакты единого бинаря.
 /bin/
+backend/bin/
 
 # Локальные конфиги и базы.
 backend/config.yaml
@@ -18,9 +19,11 @@ web/dist/
 /data/
 .playwright-mcp/
 
-# Встроенный фронтенд: в git хранится только placeholder index.html,
-# реальная сборка кладётся сюда Makefile перед go build.
-backend/internal/web/dist/assets/
+# Встроенный фронтенд: содержимое dist кладёт Makefile перед go build (сборка web).
+# В git хранится только .gitkeep — go:embed требует непустую директорию для компиляции
+# чистого чекаута.
+backend/internal/web/dist/*
+!backend/internal/web/dist/.gitkeep
 
 # Mobile (Gradle).
 mobile/.gradle/
