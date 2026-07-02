@@ -1,0 +1,12 @@
+.git
+node_modules
+web/node_modules
+web/dist
+backend/bin
+backend/internal/web/dist
+backend/config.yaml
+backend/brigade.db*
+backend/workspace
+mobile
+.playwright-mcp
+.claude
