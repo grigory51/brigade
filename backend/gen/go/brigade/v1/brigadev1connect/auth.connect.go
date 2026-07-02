@@ -41,6 +41,12 @@ const (
 	AuthServiceMeProcedure = "/brigade.v1.AuthService/Me"
 	// AuthServiceLogoutProcedure is the fully-qualified name of the AuthService's Logout RPC.
 	AuthServiceLogoutProcedure = "/brigade.v1.AuthService/Logout"
+	// AuthServiceGetClaudeSettingsProcedure is the fully-qualified name of the AuthService's
+	// GetClaudeSettings RPC.
+	AuthServiceGetClaudeSettingsProcedure = "/brigade.v1.AuthService/GetClaudeSettings"
+	// AuthServiceSetClaudeTokenProcedure is the fully-qualified name of the AuthService's
+	// SetClaudeToken RPC.
+	AuthServiceSetClaudeTokenProcedure = "/brigade.v1.AuthService/SetClaudeToken"
 )
 
 // AuthServiceClient is a client for the brigade.v1.AuthService service.
@@ -50,6 +56,12 @@ type AuthServiceClient interface {
 	// Me возвращает текущего пользователя по access-токену (из cookie или Bearer).
 	Me(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.User], error)
 	Logout(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.Empty], error)
+	// GetClaudeSettings возвращает состояние Claude-настроек пользователя (только флаг
+	// token_set — значение токена не раскрывается).
+	GetClaudeSettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.ClaudeSettings], error)
+	// SetClaudeToken задаёт (или очищает пустым значением) подписочный токен Claude
+	// пользователя. Возвращает обновлённое состояние (token_set).
+	SetClaudeToken(context.Context, *connect.Request[v1.SetClaudeTokenRequest]) (*connect.Response[v1.ClaudeSettings], error)
 }
 
 // NewAuthServiceClient constructs a client for the brigade.v1.AuthService service. By default, it
@@ -87,15 +99,29 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("Logout")),
 			connect.WithClientOptions(opts...),
 		),
+		getClaudeSettings: connect.NewClient[v1.Empty, v1.ClaudeSettings](
+			httpClient,
+			baseURL+AuthServiceGetClaudeSettingsProcedure,
+			connect.WithSchema(authServiceMethods.ByName("GetClaudeSettings")),
+			connect.WithClientOptions(opts...),
+		),
+		setClaudeToken: connect.NewClient[v1.SetClaudeTokenRequest, v1.ClaudeSettings](
+			httpClient,
+			baseURL+AuthServiceSetClaudeTokenProcedure,
+			connect.WithSchema(authServiceMethods.ByName("SetClaudeToken")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // authServiceClient implements AuthServiceClient.
 type authServiceClient struct {
-	login   *connect.Client[v1.LoginRequest, v1.LoginResponse]
-	refresh *connect.Client[v1.RefreshRequest, v1.RefreshResponse]
-	me      *connect.Client[v1.Empty, v1.User]
-	logout  *connect.Client[v1.Empty, v1.Empty]
+	login             *connect.Client[v1.LoginRequest, v1.LoginResponse]
+	refresh           *connect.Client[v1.RefreshRequest, v1.RefreshResponse]
+	me                *connect.Client[v1.Empty, v1.User]
+	logout            *connect.Client[v1.Empty, v1.Empty]
+	getClaudeSettings *connect.Client[v1.Empty, v1.ClaudeSettings]
+	setClaudeToken    *connect.Client[v1.SetClaudeTokenRequest, v1.ClaudeSettings]
 }
 
 // Login calls brigade.v1.AuthService.Login.
@@ -118,6 +144,16 @@ func (c *authServiceClient) Logout(ctx context.Context, req *connect.Request[v1.
 	return c.logout.CallUnary(ctx, req)
 }
 
+// GetClaudeSettings calls brigade.v1.AuthService.GetClaudeSettings.
+func (c *authServiceClient) GetClaudeSettings(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.ClaudeSettings], error) {
+	return c.getClaudeSettings.CallUnary(ctx, req)
+}
+
+// SetClaudeToken calls brigade.v1.AuthService.SetClaudeToken.
+func (c *authServiceClient) SetClaudeToken(ctx context.Context, req *connect.Request[v1.SetClaudeTokenRequest]) (*connect.Response[v1.ClaudeSettings], error) {
+	return c.setClaudeToken.CallUnary(ctx, req)
+}
+
 // AuthServiceHandler is an implementation of the brigade.v1.AuthService service.
 type AuthServiceHandler interface {
 	Login(context.Context, *connect.Request[v1.LoginRequest]) (*connect.Response[v1.LoginResponse], error)
@@ -125,6 +161,12 @@ type AuthServiceHandler interface {
 	// Me возвращает текущего пользователя по access-токену (из cookie или Bearer).
 	Me(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.User], error)
 	Logout(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.Empty], error)
+	// GetClaudeSettings возвращает состояние Claude-настроек пользователя (только флаг
+	// token_set — значение токена не раскрывается).
+	GetClaudeSettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.ClaudeSettings], error)
+	// SetClaudeToken задаёт (или очищает пустым значением) подписочный токен Claude
+	// пользователя. Возвращает обновлённое состояние (token_set).
+	SetClaudeToken(context.Context, *connect.Request[v1.SetClaudeTokenRequest]) (*connect.Response[v1.ClaudeSettings], error)
 }
 
 // NewAuthServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -158,6 +200,18 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("Logout")),
 		connect.WithHandlerOptions(opts...),
 	)
+	authServiceGetClaudeSettingsHandler := connect.NewUnaryHandler(
+		AuthServiceGetClaudeSettingsProcedure,
+		svc.GetClaudeSettings,
+		connect.WithSchema(authServiceMethods.ByName("GetClaudeSettings")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceSetClaudeTokenHandler := connect.NewUnaryHandler(
+		AuthServiceSetClaudeTokenProcedure,
+		svc.SetClaudeToken,
+		connect.WithSchema(authServiceMethods.ByName("SetClaudeToken")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/brigade.v1.AuthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AuthServiceLoginProcedure:
@@ -168,6 +222,10 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceMeHandler.ServeHTTP(w, r)
 		case AuthServiceLogoutProcedure:
 			authServiceLogoutHandler.ServeHTTP(w, r)
+		case AuthServiceGetClaudeSettingsProcedure:
+			authServiceGetClaudeSettingsHandler.ServeHTTP(w, r)
+		case AuthServiceSetClaudeTokenProcedure:
+			authServiceSetClaudeTokenHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -191,4 +249,12 @@ func (UnimplementedAuthServiceHandler) Me(context.Context, *connect.Request[v1.E
 
 func (UnimplementedAuthServiceHandler) Logout(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.Empty], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.Logout is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) GetClaudeSettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.ClaudeSettings], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.GetClaudeSettings is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) SetClaudeToken(context.Context, *connect.Request[v1.SetClaudeTokenRequest]) (*connect.Response[v1.ClaudeSettings], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.SetClaudeToken is not implemented"))
 }

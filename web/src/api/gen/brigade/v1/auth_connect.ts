@@ -3,11 +3,11 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { Empty, LoginRequest, LoginResponse, RefreshRequest, RefreshResponse, User } from "./auth_pb.js";
+import { ClaudeSettings, Empty, LoginRequest, LoginResponse, RefreshRequest, RefreshResponse, SetClaudeTokenRequest, User } from "./auth_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
- * AuthService — логин/пароль с JWT (TTL) и refresh-токеном.
+ * AuthService — логин/пароль с JWT (TTL), refresh-токеном и per-user настройками Claude.
  *
  * @generated from service brigade.v1.AuthService
  */
@@ -50,6 +50,30 @@ export const AuthService = {
       name: "Logout",
       I: Empty,
       O: Empty,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * GetClaudeSettings возвращает состояние Claude-настроек пользователя (только флаг
+     * token_set — значение токена не раскрывается).
+     *
+     * @generated from rpc brigade.v1.AuthService.GetClaudeSettings
+     */
+    getClaudeSettings: {
+      name: "GetClaudeSettings",
+      I: Empty,
+      O: ClaudeSettings,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * SetClaudeToken задаёт (или очищает пустым значением) подписочный токен Claude
+     * пользователя. Возвращает обновлённое состояние (token_set).
+     *
+     * @generated from rpc brigade.v1.AuthService.SetClaudeToken
+     */
+    setClaudeToken: {
+      name: "SetClaudeToken",
+      I: SetClaudeTokenRequest,
+      O: ClaudeSettings,
       kind: MethodKind.Unary,
     },
   }

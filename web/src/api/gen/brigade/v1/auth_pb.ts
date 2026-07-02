@@ -259,3 +259,83 @@ export class RefreshResponse extends Message<RefreshResponse> {
   }
 }
 
+/**
+ * ClaudeSettings — состояние Claude-настроек пользователя. Само значение токена
+ * наружу НЕ отдаётся никогда: только флаг «задан ли токен».
+ *
+ * @generated from message brigade.v1.ClaudeSettings
+ */
+export class ClaudeSettings extends Message<ClaudeSettings> {
+  /**
+   * @generated from field: bool token_set = 1;
+   */
+  tokenSet = false;
+
+  constructor(data?: PartialMessage<ClaudeSettings>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.ClaudeSettings";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "token_set", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ClaudeSettings {
+    return new ClaudeSettings().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ClaudeSettings {
+    return new ClaudeSettings().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ClaudeSettings {
+    return new ClaudeSettings().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: ClaudeSettings | PlainMessage<ClaudeSettings> | undefined, b: ClaudeSettings | PlainMessage<ClaudeSettings> | undefined): boolean {
+    return proto3.util.equals(ClaudeSettings, a, b);
+  }
+}
+
+/**
+ * SetClaudeTokenRequest — установка/очистка подписочного токена Claude Code
+ * пользователя. Пустой token очищает настройку.
+ *
+ * @generated from message brigade.v1.SetClaudeTokenRequest
+ */
+export class SetClaudeTokenRequest extends Message<SetClaudeTokenRequest> {
+  /**
+   * @generated from field: string token = 1;
+   */
+  token = "";
+
+  constructor(data?: PartialMessage<SetClaudeTokenRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.SetClaudeTokenRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "token", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SetClaudeTokenRequest {
+    return new SetClaudeTokenRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SetClaudeTokenRequest {
+    return new SetClaudeTokenRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SetClaudeTokenRequest {
+    return new SetClaudeTokenRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SetClaudeTokenRequest | PlainMessage<SetClaudeTokenRequest> | undefined, b: SetClaudeTokenRequest | PlainMessage<SetClaudeTokenRequest> | undefined): boolean {
+    return proto3.util.equals(SetClaudeTokenRequest, a, b);
+  }
+}
+

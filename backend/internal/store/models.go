@@ -39,6 +39,14 @@ type User struct {
 	CreatedAt    time.Time
 }
 
+// UserSettings — персональные настройки пользователя. ClaudeToken — подписочный
+// токен Claude Code; хранится как секрет и наружу (в API) не отдаётся.
+type UserSettings struct {
+	UserID      string
+	ClaudeToken string
+	UpdatedAt   time.Time
+}
+
 // Session — сессия агента. Поля agent_session_id и container_label несут
 // данные для восстановления (resume) после рестарта бэкенда.
 type Session struct {

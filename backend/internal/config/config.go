@@ -41,13 +41,12 @@ type Config struct {
 	// bind-mount'ятся в контейнеры.
 	WorkDir string `koanf:"work_dir"`
 
-	// ClaudeCodeOAuthToken — долгоживущий подписочный токен Claude Code
-	// (формат sk-ant-oat01-..., создаётся командой `claude setup-token`).
-	// Пробрасывается агенту через переменную окружения CLAUDE_CODE_OAUTH_TOKEN.
-	// Целевая модель аутентификации — подписка Claude, а не API-ключ с оплатой
-	// по токенам. По соображениям безопасности задаётся через env
-	// (BRIGADE_CLAUDE_CODE_OAUTH_TOKEN), но допустимо и значение из yaml.
-	ClaudeCodeOAuthToken string `koanf:"claude_code_oauth_token"`
+	// ClaudeHomeDir — базовый каталог на хосте для персональных ~/.claude
+	// пользователей (docker-режим). brigade создаёт подкаталог <ClaudeHomeDir>/<userID>
+	// и bind-mount'ит его в /home/agent/.claude во все контейнеры пользователя, чтобы
+	// авторизация Claude (`/login`) была общей между его CLI- и ACP-сессиями. Пусто —
+	// фича выключена (используется прежний named volume состояния по дереву сессий).
+	ClaudeHomeDir string `koanf:"claude_home_dir"`
 
 	Preview PreviewConfig `koanf:"preview"`
 	TLS     TLSConfig     `koanf:"tls"`
@@ -156,6 +155,16 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("config: resolve work_dir %q: %w", c.WorkDir, err)
 	} else {
 		c.WorkDir = abs
+	}
+
+	// claude_home_dir (если задан) — абсолютный путь: это источник для bind-mount на
+	// хост-демон docker, относительный путь некорректен.
+	if c.ClaudeHomeDir != "" {
+		abs, err := filepath.Abs(c.ClaudeHomeDir)
+		if err != nil {
+			return fmt.Errorf("config: resolve claude_home_dir %q: %w", c.ClaudeHomeDir, err)
+		}
+		c.ClaudeHomeDir = abs
 	}
 
 	if c.JWT.Secret == "" {

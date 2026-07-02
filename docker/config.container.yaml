@@ -23,7 +23,9 @@ seed:
 # снаружи контейнера и перекройте BRIGADE_WORK_DIR этим путём.
 work_dir: "/data/workspace"
 
-claude_code_oauth_token: ""
+# Базовый каталог per-user ~/.claude (docker-режим). Смонтируйте его по одинаковому
+# пути внутри и снаружи контейнера (как workspace) и перекройте BRIGADE_CLAUDE_HOME_DIR.
+claude_home_dir: "/data/claude"
 
 preview:
   enabled: true

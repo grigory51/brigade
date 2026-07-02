@@ -33,11 +33,29 @@ message RefreshResponse {
   string refresh_token = 2;
 }
 
-// AuthService — логин/пароль с JWT (TTL) и refresh-токеном.
+// ClaudeSettings — состояние Claude-настроек пользователя. Само значение токена
+// наружу НЕ отдаётся никогда: только флаг «задан ли токен».
+message ClaudeSettings {
+  bool token_set = 1;
+}
+
+// SetClaudeTokenRequest — установка/очистка подписочного токена Claude Code
+// пользователя. Пустой token очищает настройку.
+message SetClaudeTokenRequest {
+  string token = 1;
+}
+
+// AuthService — логин/пароль с JWT (TTL), refresh-токеном и per-user настройками Claude.
 service AuthService {
   rpc Login(LoginRequest) returns (LoginResponse) {}
   rpc Refresh(RefreshRequest) returns (RefreshResponse) {}
   // Me возвращает текущего пользователя по access-токену (из cookie или Bearer).
   rpc Me(Empty) returns (User) {}
   rpc Logout(Empty) returns (Empty) {}
+  // GetClaudeSettings возвращает состояние Claude-настроек пользователя (только флаг
+  // token_set — значение токена не раскрывается).
+  rpc GetClaudeSettings(Empty) returns (ClaudeSettings) {}
+  // SetClaudeToken задаёт (или очищает пустым значением) подписочный токен Claude
+  // пользователя. Возвращает обновлённое состояние (token_set).
+  rpc SetClaudeToken(SetClaudeTokenRequest) returns (ClaudeSettings) {}
 }

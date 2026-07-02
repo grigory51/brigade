@@ -163,6 +163,34 @@ func (s *Service) Me(ctx context.Context, userID string) (User, error) {
 	return User{ID: userID, Username: username}, nil
 }
 
+// ClaudeTokenSet сообщает, задан ли у пользователя подписочный токен Claude. Само
+// значение наружу не отдаётся.
+func (s *Service) ClaudeTokenSet(ctx context.Context, userID string) (bool, error) {
+	var token string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT claude_token FROM user_settings WHERE user_id = ?`, userID).Scan(&token)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("auth: query claude token: %w", err)
+	}
+	return token != "", nil
+}
+
+// SetClaudeToken задаёт (или очищает пустым значением) подписочный токен Claude
+// пользователя.
+func (s *Service) SetClaudeToken(ctx context.Context, userID, token string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO user_settings (user_id, claude_token, updated_at) VALUES (?, ?, ?)
+		 ON CONFLICT(user_id) DO UPDATE SET claude_token = excluded.claude_token, updated_at = excluded.updated_at`,
+		userID, token, s.now().Unix())
+	if err != nil {
+		return fmt.Errorf("auth: set claude token: %w", err)
+	}
+	return nil
+}
+
 // issuePair выпускает access-JWT и сохраняет новый refresh-токен в store.
 func (s *Service) issuePair(ctx context.Context, u User) (TokenPair, error) {
 	access, accessExp, err := s.jwt.Issue(u.ID, u.Username, s.now())

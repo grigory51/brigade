@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -94,6 +95,32 @@ func (s *AuthService) Logout(ctx context.Context, _ *connect.Request[v1.Empty]) 
 	clearAccessCookie(resp.Header())
 	clearRefreshCookie(resp.Header())
 	return resp, nil
+}
+
+// GetClaudeSettings возвращает состояние Claude-настроек текущего пользователя
+// (только флаг token_set — значение токена не раскрывается).
+func (s *AuthService) GetClaudeSettings(ctx context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.ClaudeSettings], error) {
+	u, ok := auth.UserFromContext(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
+	}
+	set, err := s.svc.ClaudeTokenSet(ctx, u.ID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&v1.ClaudeSettings{TokenSet: set}), nil
+}
+
+// SetClaudeToken задаёт (или очищает) подписочный токен Claude текущего пользователя.
+func (s *AuthService) SetClaudeToken(ctx context.Context, req *connect.Request[v1.SetClaudeTokenRequest]) (*connect.Response[v1.ClaudeSettings], error) {
+	u, ok := auth.UserFromContext(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
+	}
+	if err := s.svc.SetClaudeToken(ctx, u.ID, strings.TrimSpace(req.Msg.Token)); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&v1.ClaudeSettings{TokenSet: strings.TrimSpace(req.Msg.Token) != ""}), nil
 }
 
 // userToProto переводит доменного пользователя auth в proto-сообщение.

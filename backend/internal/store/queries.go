@@ -65,6 +65,36 @@ func (s *Store) scanUser(row *sql.Row) (User, error) {
 	return u, nil
 }
 
+// GetUserSettings возвращает настройки пользователя. Отсутствие строки — не ошибка:
+// возвращаются дефолтные настройки (пустой токен).
+func (s *Store) GetUserSettings(ctx context.Context, userID string) (UserSettings, error) {
+	settings := UserSettings{UserID: userID}
+	var updatedAt int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT claude_token, updated_at FROM user_settings WHERE user_id = ?`, userID).
+		Scan(&settings.ClaudeToken, &updatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return settings, nil
+	}
+	if err != nil {
+		return UserSettings{}, fmt.Errorf("store: get user settings: %w", err)
+	}
+	settings.UpdatedAt = fromUnix(updatedAt)
+	return settings, nil
+}
+
+// UpsertUserClaudeToken задаёт подписочный токен Claude пользователя (пустой очищает).
+func (s *Store) UpsertUserClaudeToken(ctx context.Context, userID, token string, now time.Time) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO user_settings (user_id, claude_token, updated_at) VALUES (?, ?, ?)
+		 ON CONFLICT(user_id) DO UPDATE SET claude_token = excluded.claude_token, updated_at = excluded.updated_at`,
+		userID, token, toUnix(now))
+	if err != nil {
+		return fmt.Errorf("store: upsert user claude token: %w", err)
+	}
+	return nil
+}
+
 // --- sessions ---
 
 // CreateSession вставляет новую сессию.

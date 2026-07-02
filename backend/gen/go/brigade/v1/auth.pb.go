@@ -321,6 +321,98 @@ func (x *RefreshResponse) GetRefreshToken() string {
 	return ""
 }
 
+// ClaudeSettings — состояние Claude-настроек пользователя. Само значение токена
+// наружу НЕ отдаётся никогда: только флаг «задан ли токен».
+type ClaudeSettings struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TokenSet      bool                   `protobuf:"varint,1,opt,name=token_set,json=tokenSet,proto3" json:"token_set,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClaudeSettings) Reset() {
+	*x = ClaudeSettings{}
+	mi := &file_brigade_v1_auth_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClaudeSettings) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClaudeSettings) ProtoMessage() {}
+
+func (x *ClaudeSettings) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_auth_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClaudeSettings.ProtoReflect.Descriptor instead.
+func (*ClaudeSettings) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ClaudeSettings) GetTokenSet() bool {
+	if x != nil {
+		return x.TokenSet
+	}
+	return false
+}
+
+// SetClaudeTokenRequest — установка/очистка подписочного токена Claude Code
+// пользователя. Пустой token очищает настройку.
+type SetClaudeTokenRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetClaudeTokenRequest) Reset() {
+	*x = SetClaudeTokenRequest{}
+	mi := &file_brigade_v1_auth_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetClaudeTokenRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetClaudeTokenRequest) ProtoMessage() {}
+
+func (x *SetClaudeTokenRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_auth_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetClaudeTokenRequest.ProtoReflect.Descriptor instead.
+func (*SetClaudeTokenRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *SetClaudeTokenRequest) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
 var File_brigade_v1_auth_proto protoreflect.FileDescriptor
 
 const file_brigade_v1_auth_proto_rawDesc = "" +
@@ -342,12 +434,18 @@ const file_brigade_v1_auth_proto_rawDesc = "" +
 	"\rrefresh_token\x18\x01 \x01(\tR\frefreshToken\"Y\n" +
 	"\x0fRefreshResponse\x12!\n" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12#\n" +
-	"\rrefresh_token\x18\x02 \x01(\tR\frefreshToken2\xf2\x01\n" +
+	"\rrefresh_token\x18\x02 \x01(\tR\frefreshToken\"-\n" +
+	"\x0eClaudeSettings\x12\x1b\n" +
+	"\ttoken_set\x18\x01 \x01(\bR\btokenSet\"-\n" +
+	"\x15SetClaudeTokenRequest\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token2\x8b\x03\n" +
 	"\vAuthService\x12>\n" +
 	"\x05Login\x12\x18.brigade.v1.LoginRequest\x1a\x19.brigade.v1.LoginResponse\"\x00\x12D\n" +
 	"\aRefresh\x12\x1a.brigade.v1.RefreshRequest\x1a\x1b.brigade.v1.RefreshResponse\"\x00\x12+\n" +
 	"\x02Me\x12\x11.brigade.v1.Empty\x1a\x10.brigade.v1.User\"\x00\x120\n" +
-	"\x06Logout\x12\x11.brigade.v1.Empty\x1a\x11.brigade.v1.Empty\"\x00B\xa6\x01\n" +
+	"\x06Logout\x12\x11.brigade.v1.Empty\x1a\x11.brigade.v1.Empty\"\x00\x12D\n" +
+	"\x11GetClaudeSettings\x12\x11.brigade.v1.Empty\x1a\x1a.brigade.v1.ClaudeSettings\"\x00\x12Q\n" +
+	"\x0eSetClaudeToken\x12!.brigade.v1.SetClaudeTokenRequest\x1a\x1a.brigade.v1.ClaudeSettings\"\x00B\xa6\x01\n" +
 	"\x0ecom.brigade.v1B\tAuthProtoP\x01Z@github.com/grigory51/brigade/backend/gen/go/brigade/v1;brigadev1\xa2\x02\x03BXX\xaa\x02\n" +
 	"Brigade.V1\xca\x02\n" +
 	"Brigade\\V1\xe2\x02\x16Brigade\\V1\\GPBMetadata\xea\x02\vBrigade::V1b\x06proto3"
@@ -364,14 +462,16 @@ func file_brigade_v1_auth_proto_rawDescGZIP() []byte {
 	return file_brigade_v1_auth_proto_rawDescData
 }
 
-var file_brigade_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_brigade_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_brigade_v1_auth_proto_goTypes = []any{
-	(*Empty)(nil),           // 0: brigade.v1.Empty
-	(*User)(nil),            // 1: brigade.v1.User
-	(*LoginRequest)(nil),    // 2: brigade.v1.LoginRequest
-	(*LoginResponse)(nil),   // 3: brigade.v1.LoginResponse
-	(*RefreshRequest)(nil),  // 4: brigade.v1.RefreshRequest
-	(*RefreshResponse)(nil), // 5: brigade.v1.RefreshResponse
+	(*Empty)(nil),                 // 0: brigade.v1.Empty
+	(*User)(nil),                  // 1: brigade.v1.User
+	(*LoginRequest)(nil),          // 2: brigade.v1.LoginRequest
+	(*LoginResponse)(nil),         // 3: brigade.v1.LoginResponse
+	(*RefreshRequest)(nil),        // 4: brigade.v1.RefreshRequest
+	(*RefreshResponse)(nil),       // 5: brigade.v1.RefreshResponse
+	(*ClaudeSettings)(nil),        // 6: brigade.v1.ClaudeSettings
+	(*SetClaudeTokenRequest)(nil), // 7: brigade.v1.SetClaudeTokenRequest
 }
 var file_brigade_v1_auth_proto_depIdxs = []int32{
 	1, // 0: brigade.v1.LoginResponse.user:type_name -> brigade.v1.User
@@ -379,12 +479,16 @@ var file_brigade_v1_auth_proto_depIdxs = []int32{
 	4, // 2: brigade.v1.AuthService.Refresh:input_type -> brigade.v1.RefreshRequest
 	0, // 3: brigade.v1.AuthService.Me:input_type -> brigade.v1.Empty
 	0, // 4: brigade.v1.AuthService.Logout:input_type -> brigade.v1.Empty
-	3, // 5: brigade.v1.AuthService.Login:output_type -> brigade.v1.LoginResponse
-	5, // 6: brigade.v1.AuthService.Refresh:output_type -> brigade.v1.RefreshResponse
-	1, // 7: brigade.v1.AuthService.Me:output_type -> brigade.v1.User
-	0, // 8: brigade.v1.AuthService.Logout:output_type -> brigade.v1.Empty
-	5, // [5:9] is the sub-list for method output_type
-	1, // [1:5] is the sub-list for method input_type
+	0, // 5: brigade.v1.AuthService.GetClaudeSettings:input_type -> brigade.v1.Empty
+	7, // 6: brigade.v1.AuthService.SetClaudeToken:input_type -> brigade.v1.SetClaudeTokenRequest
+	3, // 7: brigade.v1.AuthService.Login:output_type -> brigade.v1.LoginResponse
+	5, // 8: brigade.v1.AuthService.Refresh:output_type -> brigade.v1.RefreshResponse
+	1, // 9: brigade.v1.AuthService.Me:output_type -> brigade.v1.User
+	0, // 10: brigade.v1.AuthService.Logout:output_type -> brigade.v1.Empty
+	6, // 11: brigade.v1.AuthService.GetClaudeSettings:output_type -> brigade.v1.ClaudeSettings
+	6, // 12: brigade.v1.AuthService.SetClaudeToken:output_type -> brigade.v1.ClaudeSettings
+	7, // [7:13] is the sub-list for method output_type
+	1, // [1:7] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
 	1, // [1:1] is the sub-list for extension extendee
 	0, // [0:1] is the sub-list for field type_name
@@ -401,7 +505,7 @@ func file_brigade_v1_auth_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_brigade_v1_auth_proto_rawDesc), len(file_brigade_v1_auth_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

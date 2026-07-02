@@ -136,6 +136,18 @@ func (s *DockerSpawner) Ping(ctx context.Context) error {
 	return err
 }
 
+// claudeHomeBind добавляет bind-mount персонального ~/.claude пользователя
+// (spec.ClaudeHomeHost → agentStateDir) к hostCfg.Binds, если путь задан. Общий для
+// всех контейнеров пользователя: авторизация Claude делается один раз. Каталог на
+// хосте создаётся заранее (см. registry.claudeHomeHost), здесь только монтируется.
+func claudeHomeBind(hostCfg *container.HostConfig, spec Spec) {
+	if spec.ClaudeHomeHost == "" {
+		return
+	}
+	hostCfg.Binds = append(hostCfg.Binds,
+		fmt.Sprintf("%s:%s", spec.ClaudeHomeHost, agentStateDir))
+}
+
 // Spawn создаёт контейнер сессии, запускает его и подключается (attach) к его TTY.
 //
 // Контейнер помечается label brigade.session.id=<SessionID>. Рабочая директория
@@ -175,6 +187,10 @@ func (s *DockerSpawner) Spawn(ctx context.Context, spec Spec) (Handle, error) {
 		// bind-mount подпапки рабочей директории внутрь контейнера.
 		hostCfg.Binds = []string{fmt.Sprintf("%s:%s", spec.Cwd, containerWorkdir)}
 	}
+	// Персональный ~/.claude пользователя: общая авторизация Claude между его
+	// сессиями. CLI-режим опирается именно на него (интерактивный claude не берёт
+	// CLAUDE_CODE_OAUTH_TOKEN из env).
+	claudeHomeBind(hostCfg, spec)
 
 	created, err := s.cli.ContainerCreate(ctx, cfg, hostCfg, s.networkingConfig(), nil, "brigade-"+spec.SessionID)
 	if err != nil {

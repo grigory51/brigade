@@ -48,18 +48,19 @@ or with Docker:
 
 ```sh
 # BRIGADE_MODE=docker runs each session in its own container; it needs the host
-# docker socket, and the workspace must be mounted at the SAME path inside and
-# outside the container (brigade passes workspace paths to the host Docker daemon
-# for session bind-mounts).
+# docker socket, and the workspace + claude-home dirs must be mounted at the SAME
+# path inside and outside the container (brigade passes these paths to the host
+# Docker daemon for session bind-mounts).
 docker run -d --name brigade \
   -p 8080:8080 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v brigade-data:/data \
   -v /srv/brigade/workspace:/srv/brigade/workspace \
+  -v /srv/brigade/claude:/srv/brigade/claude \
   -e BRIGADE_MODE=docker \
   -e BRIGADE_WORK_DIR=/srv/brigade/workspace \
+  -e BRIGADE_CLAUDE_HOME_DIR=/srv/brigade/claude \
   -e BRIGADE_JWT__SECRET=change-me \
-  -e BRIGADE_CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-... \
   ghcr.io/grigory51/brigade:latest
 ```
 
@@ -71,11 +72,17 @@ docker build -t brigade/claude-agent:latest docker/claude-agent
 # or: docker pull ghcr.io/grigory51/brigade-agent:latest
 ```
 
+**Claude auth.** The Claude subscription token is no longer a global env var — each
+brigade user sets their own in the UI (**Settings → Claude**, `claude setup-token`).
+In docker mode, `BRIGADE_CLAUDE_HOME_DIR` gives each user a personal `~/.claude`
+(`<dir>/<userID>`) bind-mounted into all their containers, so a one-time `/login` in a
+CLI session is shared across their CLI and ACP sessions.
+
 ## Configuration
 
 YAML file plus env overrides (`BRIGADE_` prefix, `__` as the nesting separator):
-`BRIGADE_MODE`, `BRIGADE_JWT__SECRET`, `BRIGADE_CLAUDE_CODE_OAUTH_TOKEN`,
-`BRIGADE_WORK_DIR`, `BRIGADE_PREVIEW__DOMAIN`, … See
+`BRIGADE_MODE`, `BRIGADE_JWT__SECRET`, `BRIGADE_WORK_DIR`, `BRIGADE_CLAUDE_HOME_DIR`,
+`BRIGADE_PREVIEW__DOMAIN`, … See
 [`backend/config.example.yaml`](backend/config.example.yaml)
 for the full annotated list and [`docs/preview.md`](docs/preview.md) for exposing
 dev servers behind a wildcard domain with built-in TLS.

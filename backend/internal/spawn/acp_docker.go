@@ -56,10 +56,20 @@ func (d *DockerACPSpawner) start(ctx context.Context, spec Spec, stateID string)
 		image = defaultImage
 	}
 
-	// Named volume состояния агента: VolumeCreate идемпотентен по имени.
-	volName := ACPVolumeName(stateID)
-	if _, err := cli.VolumeCreate(ctx, volume.CreateOptions{Name: volName}); err != nil {
-		return nil, fmt.Errorf("spawn: acp volume create: %w", err)
+	// Состояние агента ~/.claude:
+	//  - если задан персональный claude-home пользователя (spec.ClaudeHomeHost) —
+	//    bind-mount с хоста, общий для всех его сессий (CLI и ACP): авторизация Claude
+	//    делается один раз;
+	//  - иначе fallback на named volume по дереву сессий (stateID) — прежнее поведение.
+	var stateMount mount.Mount
+	if spec.ClaudeHomeHost != "" {
+		stateMount = mount.Mount{Type: mount.TypeBind, Source: spec.ClaudeHomeHost, Target: agentStateDir}
+	} else {
+		volName := ACPVolumeName(stateID)
+		if _, err := cli.VolumeCreate(ctx, volume.CreateOptions{Name: volName}); err != nil {
+			return nil, fmt.Errorf("spawn: acp volume create: %w", err)
+		}
+		stateMount = mount.Mount{Type: mount.TypeVolume, Source: volName, Target: agentStateDir}
 	}
 
 	cfg := &container.Config{
@@ -88,11 +98,7 @@ func (d *DockerACPSpawner) start(ctx context.Context, spec Spec, stateID string)
 		// используется, когда brigade — процесс на хосте (нет своей docker-сети).
 		ExtraHosts:  []string{"host.docker.internal:host-gateway"},
 		NetworkMode: d.spawner.netMode(),
-		Mounts: []mount.Mount{{
-			Type:   mount.TypeVolume,
-			Source: volName,
-			Target: agentStateDir,
-		}},
+		Mounts:      []mount.Mount{stateMount},
 	}
 	if spec.Cwd != "" {
 		hostCfg.Binds = []string{fmt.Sprintf("%s:%s", spec.Cwd, containerWorkdir)}

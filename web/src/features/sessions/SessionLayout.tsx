@@ -17,6 +17,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Settings,
   Terminal,
   Trash2,
 } from "lucide-react";
@@ -561,6 +562,7 @@ function StatusDot({ status }: { status: SessionStatus }) {
 // перенесена из прежнего Layout без изменений (useAuth → logout).
 function UserMenu() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const initial = user?.username?.[0]?.toUpperCase() ?? "?";
 
   return (
@@ -583,6 +585,10 @@ function UserMenu() {
               {user?.username ?? "—"}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => navigate("/settings")}>
+              <Settings className="size-4" />
+              Настройки
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => void logout()}>
               <LogOut className="size-4" />
               Выйти

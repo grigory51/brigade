@@ -29,11 +29,14 @@ seed:
 # в контейнеры сессий.
 work_dir: "./workspace"
 
-# Подписочный токен Claude Code (формат sk-ant-oat01-..., создаётся командой
-# `claude setup-token`; требует подписки Claude). Пробрасывается агенту как
-# CLAUDE_CODE_OAUTH_TOKEN. Можно задать здесь или через env
-# BRIGADE_CLAUDE_CODE_OAUTH_TOKEN.
-claude_code_oauth_token: ""
+# Базовый каталог per-user ~/.claude на хосте (только docker-режим). brigade создаёт
+# подкаталог <claude_home_dir>/<userID> и bind-mount'ит его в /home/agent/.claude во
+# все контейнеры пользователя — авторизация Claude (`/login` в CLI-сессии либо токен в
+# настройках) делается один раз и общая между CLI- и ACP-сессиями пользователя. Пусто
+# — фича выключена (состояние ACP хранится в named volume по дереву сессий).
+# Подписочный токен Claude больше НЕ глобальный: задаётся каждым пользователем в UI
+# (Настройки → Claude).
+claude_home_dir: ""
 
 # Публикация dev-серверов сессий через встроенный L7-прокси: запрос на
 # {sessionId}-{port}.{domain} проксируется к порту сессии (local — 127.0.0.1,

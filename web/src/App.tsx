@@ -10,6 +10,7 @@ import { LoginPage } from "./features/auth/LoginPage";
 import { SessionLayout } from "./features/sessions/SessionLayout";
 import { SessionEmpty } from "./features/sessions/SessionEmpty";
 import { SessionPage } from "./features/sessions/SessionPage";
+import { SettingsPage } from "./features/settings/SettingsPage";
 import { RouteSpinner } from "./lib/RouteSpinner";
 
 // Гейт для защищённых маршрутов. Пока идёт первичная проверка сессии (ready ===
@@ -63,6 +64,7 @@ export function App() {
           >
             <Route path="/sessions" element={<SessionEmpty />} />
             <Route path="/s/:sessionId" element={<SessionPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/sessions" replace />} />
         </Routes>
