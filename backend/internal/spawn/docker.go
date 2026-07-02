@@ -24,9 +24,11 @@ const dockerStopTimeoutSeconds = 5
 // defaultImage — образ контейнера агента по умолчанию (если Spec.Image пуст).
 const defaultImage = "brigade/claude-agent:latest"
 
-// containerWorkdir — точка монтирования рабочей директории сессии внутри контейнера.
-// Подпапка из WorkDir хоста (Spec.Cwd) bind-mount'ится сюда.
-const containerWorkdir = "/workspace"
+// ContainerWorkdir — точка монтирования рабочей директории сессии внутри контейнера.
+// Подпапка из WorkDir хоста (Spec.Cwd) bind-mount'ится сюда. Экспортирована: в
+// docker-режиме ACP-агенту передаётся именно этот путь (хостовый живёт только в bind).
+const ContainerWorkdir = "/workspace"
+const containerWorkdir = ContainerWorkdir
 
 // DockerSpawner запускает каждого агента в отдельном контейнере (контейнер на сессию).
 type DockerSpawner struct {

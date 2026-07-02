@@ -3,12 +3,8 @@ package acp
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
-	"os"
-	"os/exec"
 	"sync"
-	"syscall"
 	"time"
 
 	acpsdk "github.com/coder/acp-go-sdk"
@@ -61,6 +57,10 @@ type Options struct {
 	// Взаимоисключим с ResumeSessionID; при отсутствии у агента capability fork —
 	// ошибка (тихий откат в пустую сессию обманул бы пользователя).
 	ForkFromSessionID string
+	// SpawnProc порождает процесс adapter'а. nil — локальный subprocess
+	// claude-agent-acp; docker-режим передаёт сюда фабрику контейнерного процесса
+	// (см. spawn.DockerACPSpawner).
+	SpawnProc ProcSpawner
 }
 
 // Client управляет одной ACP-сессией: владеет subprocess'ом adapter'а, реализует
@@ -74,11 +74,10 @@ type Options struct {
 type Client struct {
 	opts Options
 
-	cmd  *exec.Cmd
+	// proc — процесс adapter'а (локальный subprocess либо контейнер), абстрагированный
+	// AgentProc: Client общается с ним только через stdio и сигналы.
+	proc AgentProc
 	conn *acpsdk.ClientSideConnection
-	// stdin — канал ввода adapter'а. Сохраняется, чтобы при остановке закрыть его
-	// (adapter получает EOF и завершается штатно — см. Close).
-	stdin io.WriteCloser
 	// agentCaps — возможности агента, заявленные при Initialize. Используются для
 	// решения, поддерживает ли агент session/close при graceful-остановке.
 	agentCaps acpsdk.AgentCapabilities
@@ -139,42 +138,35 @@ type Client struct {
 // убеждаемся, что Client удовлетворяет интерфейсу acp.Client на этапе компиляции.
 var _ acpsdk.Client = (*Client)(nil)
 
-// New спавнит adapter-субпроцесс, устанавливает ACP-соединение, выполняет Initialize и
-// NewSession. Возвращает готовый к Prompt клиент. При ошибке субпроцесс убивается.
+// New спавнит процесс adapter'а (локальный subprocess либо контейнер — по
+// opts.SpawnProc), устанавливает ACP-соединение, выполняет Initialize и заводит сессию.
+// Возвращает готовый к Prompt клиент. При ошибке процесс завершается.
 func New(ctx context.Context, opts Options) (*Client, error) {
 	if opts.Cwd == "" {
 		return nil, fmt.Errorf("acp: cwd не задан")
 	}
 
-	// Субпроцесс не привязываем к ctx команды New: его жизнь равна жизни сессии,
-	// а не вызову конструктора. Остановка — через Close.
-	cmd := exec.Command(adapterBinary)
-	cmd.Dir = opts.Cwd
-	cmd.Stderr = os.Stderr
-	cmd.Env = append(os.Environ(), "CLAUDE_CODE_OAUTH_TOKEN="+opts.OAuthToken)
-
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return nil, fmt.Errorf("acp: stdin pipe: %w", err)
+	var proc AgentProc
+	var err error
+	if opts.SpawnProc != nil {
+		proc, err = opts.SpawnProc(ctx)
+	} else {
+		proc, err = spawnLocalProc(opts)
 	}
-	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, fmt.Errorf("acp: stdout pipe: %w", err)
-	}
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("acp: запуск %q: %w", adapterBinary, err)
+		return nil, err
 	}
 
-	c := &Client{opts: opts, cmd: cmd, stdin: stdin}
+	c := &Client{opts: opts, proc: proc}
 	// peerInput — куда пишем запросы агенту (его stdin); peerOutput — откуда читаем его
 	// ответы и нотификации (его stdout).
-	c.conn = acpsdk.NewClientSideConnection(c, stdin, stdout)
+	c.conn = acpsdk.NewClientSideConnection(c, proc.Stdin(), proc.Stdout())
 
 	if err := c.handshake(ctx); err != nil {
-		// Handshake не удался — корректно сворачиваем subprocess: убиваем и реапим, чтобы
+		// Handshake не удался — корректно сворачиваем процесс: убиваем и реапим, чтобы
 		// не оставить зомби и не утечь pipes.
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
+		_ = proc.Kill()
+		_ = proc.Wait()
 		return nil, err
 	}
 	return c, nil
@@ -530,13 +522,13 @@ func (c *Client) FinishStreams() {
 	}
 }
 
-// Close штатно завершает ACP-сессию и subprocess adapter'а. Последовательность
+// Close штатно завершает ACP-сессию и процесс adapter'а. Последовательность
 // (по нарастанию жёсткости): session/close агенту (если он это поддерживает) → закрытие
 // stdin (adapter получает EOF и выходит сам) → ожидание выхода в пределах бюджета →
-// SIGTERM → SIGKILL. В конце обязателен Wait для reap процесса (иначе остаётся зомби) и
-// освобождения pipe'ов. Идемпотентна: повторный вызов безопасен (closeOnce).
+// Signal (SIGTERM/graceful stop) → Kill. В конце обязателен Wait для reap процесса
+// (иначе остаётся зомби) и освобождения ресурсов. Идемпотентна (closeOnce).
 func (c *Client) Close() error {
-	if c.cmd == nil || c.cmd.Process == nil {
+	if c.proc == nil {
 		return nil
 	}
 
@@ -552,15 +544,13 @@ func (c *Client) Close() error {
 		}
 
 		// 2. Закрываем stdin: adapter получает EOF на управляющем канале и завершается сам.
-		if c.stdin != nil {
-			_ = c.stdin.Close()
-		}
+		_ = c.proc.Stdin().Close()
 
 		// 3. Реапим процесс в фоне и ждём завершения в пределах бюджета. exited
-		//    закрывается, как только cmd.Wait вернулся — независимо от причины выхода.
+		//    закрывается, как только Wait вернулся — независимо от причины выхода.
 		exited := make(chan struct{})
 		go func() {
-			_ = c.cmd.Wait()
+			_ = c.proc.Wait()
 			close(exited)
 		}()
 
@@ -570,16 +560,16 @@ func (c *Client) Close() error {
 		case <-time.After(gracefulCloseTimeout):
 		}
 
-		// 4. Не вышел сам — просим завершиться (SIGTERM) и ждём ещё короткий интервал.
-		_ = c.cmd.Process.Signal(syscall.SIGTERM)
+		// 4. Не вышел сам — просим завершиться и ждём ещё короткий интервал.
+		_ = c.proc.Signal()
 		select {
 		case <-exited:
 			return
 		case <-time.After(2 * time.Second):
 		}
 
-		// 5. Последняя мера — SIGKILL. Wait из горутины выше реапит процесс после убийства.
-		_ = c.cmd.Process.Kill()
+		// 5. Последняя мера — жёсткое убийство. Wait из горутины выше реапит процесс.
+		_ = c.proc.Kill()
 		<-exited
 	})
 	return nil

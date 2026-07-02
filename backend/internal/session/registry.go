@@ -164,12 +164,13 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 		return lv, handle.AgentSessionID(), handle.ContainerLabel(), nil
 
 	case store.SessionKindACP:
-		// ACP-клиент сам поднимает adapter-subprocess локально. В docker-режиме adapter
-		// должен запускаться внутри контейнера сессии — это требует отдельной реализации
-		// спавна.
-		// TODO(docker+acp): спавнить claude-agent-acp внутри контейнера сессии и
-		// связывать с ним ACP-соединение (по аналогии с DockerSpawner для CLI).
-		client, err := acp.New(ctx, acp.Options{Cwd: sess.Cwd, OAuthToken: r.oauthToken})
+		// local: acp.New сам поднимает adapter-subprocess; docker: adapter живёт в
+		// контейнере сессии, состояние агента — в named volume дерева сессий.
+		opts := acp.Options{Cwd: sess.Cwd, OAuthToken: r.oauthToken}
+		if err := r.applyACPSpawnMode(ctx, &opts, sess); err != nil {
+			return nil, "", "", err
+		}
+		client, err := acp.New(ctx, opts)
 		if err != nil {
 			return nil, "", "", fmt.Errorf("session: spawn acp: %w", err)
 		}
@@ -193,6 +194,51 @@ func (r *Registry) agentEnv() []string {
 		return nil
 	}
 	return []string{"CLAUDE_CODE_OAUTH_TOKEN=" + r.oauthToken}
+}
+
+// applyACPSpawnMode настраивает способ запуска adapter'а под режим сервиса: в
+// docker-режиме подставляет фабрику контейнерного процесса (adapter внутри контейнера
+// сессии), в local ничего не меняет (acp.New поднимет локальный subprocess).
+func (r *Registry) applyACPSpawnMode(ctx context.Context, opts *acp.Options, sess store.Session) error {
+	// Режим берётся у СЕССИИ, не у сервиса: рестарт в docker-режиме не должен
+	// пытаться контейнеризировать сессии, созданные локальными (и наоборот).
+	if sess.Mode != store.SessionModeDocker {
+		return nil
+	}
+	ds, ok := r.spawner.(*spawn.DockerSpawner)
+	if !ok {
+		return fmt.Errorf("session: docker-режим без DockerSpawner")
+	}
+	stateID, err := r.rootID(ctx, sess)
+	if err != nil {
+		return err
+	}
+	opts.SpawnProc = ds.ACP().SpawnProc(spawn.Spec{
+		SessionID: sess.ID,
+		AgentType: sess.AgentType,
+		Cwd:       sess.Cwd,
+		Env:       r.agentEnv(),
+	}, stateID)
+	// Агент живёт внутри контейнера: его cwd — точка монтирования рабочей директории,
+	// а не путь хоста (хостовый путь существует только в bind-mount).
+	opts.Cwd = spawn.ContainerWorkdir
+	return nil
+}
+
+// rootID возвращает идентификатор корневой сессии дерева (подъём по parent_id).
+// Ветки монтируют volume состояния корня: форкнутый агент читает исходную сессию из
+// общего хранилища. Родитель, удалённый из store, обрывает подъём — корнем считается
+// последняя достижимая сессия.
+func (r *Registry) rootID(ctx context.Context, sess store.Session) (string, error) {
+	cur := sess
+	for cur.ParentID != "" {
+		parent, err := r.store.GetSession(ctx, cur.ParentID)
+		if err != nil {
+			break
+		}
+		cur = parent
+	}
+	return cur.ID, nil
 }
 
 // watchExit блокируется до завершения процесса агента CLI-сессии и затем
@@ -305,11 +351,16 @@ func (r *Registry) Fork(ctx context.Context, sessionID, userID string) (store.Se
 	}
 
 	// Как и в Create: жизнь агента равна жизни сессии, спавн отвязывается от ctx запроса.
-	client, err := acp.New(context.WithoutCancel(ctx), acp.Options{
+	forkOpts := acp.Options{
 		Cwd:               sess.Cwd,
 		OAuthToken:        r.oauthToken,
 		ForkFromSessionID: src.AgentSessionID,
-	})
+	}
+	if err := r.applyACPSpawnMode(ctx, &forkOpts, sess); err != nil {
+		_ = r.store.DeleteSession(ctx, sess.ID)
+		return store.Session{}, err
+	}
+	client, err := acp.New(context.WithoutCancel(ctx), forkOpts)
 	if err != nil {
 		// Ветка не создалась — запись убираем целиком, полусозданное состояние хуже ошибки.
 		_ = r.store.DeleteSession(ctx, sess.ID)
@@ -445,9 +496,14 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 		return nil
 
 	case store.SessionKindACP:
-		// TODO(docker+acp): в docker-режиме adapter живёт внутри контейнера сессии —
-		// восстановление должно переподключаться к нему, а не поднимать новый процесс.
-		client, err := acp.New(ctx, acp.Options{Cwd: sess.Cwd, OAuthToken: r.oauthToken, ResumeSessionID: sess.AgentSessionID})
+		// Восстановление ACP: новый процесс adapter'а (local subprocess или контейнер) +
+		// session/load. В docker-режиме состояние агента живёт в named volume дерева
+		// сессий и переживает контейнеры — история восстанавливается так же, как в local.
+		restoreOpts := acp.Options{Cwd: sess.Cwd, OAuthToken: r.oauthToken, ResumeSessionID: sess.AgentSessionID}
+		if err := r.applyACPSpawnMode(ctx, &restoreOpts, sess); err != nil {
+			return err
+		}
+		client, err := acp.New(ctx, restoreOpts)
 		if err != nil {
 			return fmt.Errorf("reattach acp: %w", err)
 		}
