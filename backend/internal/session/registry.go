@@ -52,15 +52,18 @@ type live struct {
 	client *acp.Client  // ACP-режим
 }
 
-// Registry — реестр живых сессий поверх store и spawn.Spawner.
+// Registry — реестр живых сессий поверх store и спавнеров.
+//
+// Режим спавна (local|docker) — свойство каждой сессии, а не сервиса: реестр держит
+// оба спавнера и выбирает нужный по sess.Mode. localSpawner доступен всегда;
+// dockerSpawner nil, если docker-демон недоступен — тогда docker-сессии не поднять
+// (понятная ошибка), а local работают.
 type Registry struct {
-	store   *store.Store
-	spawner spawn.Spawner
-	// mode — режим спавна сервиса (local|docker). Влияет на путь восстановления ACP
-	// (см. restoreOne) и фиксируется в сессии при создании.
-	mode       store.SessionMode
-	workDir    string
-	oauthToken string
+	store         *store.Store
+	localSpawner  *spawn.LocalSpawner
+	dockerSpawner *spawn.DockerSpawner // nil, если docker недоступен
+	workDir       string
+	oauthToken    string
 	// previews — сервис публикации dev-серверов: окружение агента (env), скилл в
 	// cwd, реестр зарегистрированных preview. Всегда не-nil; при выключенном preview
 	// его методы деградируют до no-op.
@@ -74,22 +77,33 @@ type Registry struct {
 	tearingDown map[string]struct{}
 }
 
-// NewRegistry собирает реестр. spawner используется для CLI-режима; ACP-клиент
-// спавнит adapter самостоятельно. mode — режим сервиса (store.SessionModeLocal|Docker);
-// workDir — корневая рабочая директория (дефолт Cwd сессии); oauthToken —
-// подписочный токен Claude Code, пробрасывается агентам; previews — сервис
-// публикации dev-серверов сессий.
-func NewRegistry(st *store.Store, spawner spawn.Spawner, mode store.SessionMode, workDir, oauthToken string, previews *preview.Service) *Registry {
+// NewRegistry собирает реестр. localSpawner используется для local-сессий (всегда
+// доступен); dockerSpawner — для docker-сессий, nil если docker недоступен. workDir —
+// корневая рабочая директория (дефолт Cwd сессии); oauthToken — подписочный токен
+// Claude Code, пробрасывается агентам; previews — сервис публикации dev-серверов.
+func NewRegistry(st *store.Store, localSpawner *spawn.LocalSpawner, dockerSpawner *spawn.DockerSpawner, workDir, oauthToken string, previews *preview.Service) *Registry {
 	return &Registry{
-		store:       st,
-		spawner:     spawner,
-		mode:        mode,
-		workDir:     workDir,
-		oauthToken:  oauthToken,
-		previews:    previews,
-		live:        make(map[string]*live),
-		tearingDown: make(map[string]struct{}),
+		store:         st,
+		localSpawner:  localSpawner,
+		dockerSpawner: dockerSpawner,
+		workDir:       workDir,
+		oauthToken:    oauthToken,
+		previews:      previews,
+		live:          make(map[string]*live),
+		tearingDown:   make(map[string]struct{}),
 	}
+}
+
+// spawnerFor возвращает spawn.Spawner для режима сессии. Для docker-режима — ошибка,
+// если docker недоступен на этом инстансе.
+func (r *Registry) spawnerFor(mode store.SessionMode) (spawn.Spawner, error) {
+	if mode == store.SessionModeDocker {
+		if r.dockerSpawner == nil {
+			return nil, fmt.Errorf("session: docker недоступен на этом сервере")
+		}
+		return r.dockerSpawner, nil
+	}
+	return r.localSpawner, nil
 }
 
 // ErrTeardownInProgress возвращается Stop/Delete, если teardown этой сессии уже
@@ -193,7 +207,11 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 		// подписочным токеном (CLAUDE_CODE_OAUTH_TOKEN). Намеренно НЕ используем
 		// ANTHROPIC_API_KEY: подписочный токен и API-ключ — разные модели доступа,
 		// а одновременно заданные ключ и claude.ai-логин ломают auth агента.
-		handle, err := r.spawner.Spawn(ctx, spawn.Spec{
+		spawner, err := r.spawnerFor(sess.Mode)
+		if err != nil {
+			return nil, "", "", err
+		}
+		handle, err := spawner.Spawn(ctx, spawn.Spec{
 			SessionID: sess.ID,
 			AgentType: sess.AgentType,
 			Cwd:       sess.Cwd,
@@ -276,19 +294,17 @@ func (r *Registry) installSkill(sess store.Session) {
 	}
 }
 
-// applyACPSpawnMode настраивает способ запуска adapter'а под режим сервиса: в
+// applyACPSpawnMode настраивает способ запуска adapter'а под режим сессии: в
 // docker-режиме подставляет фабрику контейнерного процесса (adapter внутри контейнера
 // сессии), в local ничего не меняет (acp.New поднимет локальный subprocess).
 func (r *Registry) applyACPSpawnMode(ctx context.Context, opts *acp.Options, sess store.Session) error {
-	// Режим берётся у СЕССИИ, не у сервиса: рестарт в docker-режиме не должен
-	// пытаться контейнеризировать сессии, созданные локальными (и наоборот).
 	if sess.Mode != store.SessionModeDocker {
 		return nil
 	}
-	ds, ok := r.spawner.(*spawn.DockerSpawner)
-	if !ok {
-		return fmt.Errorf("session: docker-режим без DockerSpawner")
+	if r.dockerSpawner == nil {
+		return fmt.Errorf("session: docker недоступен на этом сервере")
 	}
+	ds := r.dockerSpawner
 	stateID, err := r.rootID(ctx, sess)
 	if err != nil {
 		return err
@@ -376,11 +392,10 @@ func (r *Registry) Shell(ctx context.Context, sessionID, userID string) (termws.
 
 	switch sess.Mode {
 	case store.SessionModeDocker:
-		ds, ok := r.spawner.(*spawn.DockerSpawner)
-		if !ok {
-			return nil, fmt.Errorf("session: docker shell without DockerSpawner")
+		if r.dockerSpawner == nil {
+			return nil, fmt.Errorf("session: docker недоступен на этом сервере")
 		}
-		return ds.SpawnShell(ctx, sess.ID)
+		return r.dockerSpawner.SpawnShell(ctx, sess.ID)
 	default:
 		return spawn.StartLocalShell(ctx, sess.Cwd)
 	}
@@ -587,7 +602,11 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 		if sess.AgentSessionID == "" {
 			return r.store.UpdateSessionStatus(ctx, sess.ID, store.SessionStatusStopped)
 		}
-		handle, err := r.spawner.Reattach(ctx, spawn.Persisted{
+		spawner, err := r.spawnerFor(sess.Mode)
+		if err != nil {
+			return err
+		}
+		handle, err := spawner.Reattach(ctx, spawn.Persisted{
 			SessionID:      sess.ID,
 			AgentSessionID: sess.AgentSessionID,
 			ContainerLabel: sess.ContainerLabel,

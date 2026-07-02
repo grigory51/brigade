@@ -1,8 +1,10 @@
 # Конфигурация brigade по умолчанию для контейнерного образа. Любое значение
 # перекрывается переменной окружения с префиксом BRIGADE_ (вложенность — через
-# двойное подчёркивание): BRIGADE_MODE, BRIGADE_JWT__SECRET и т.д.
+# двойное подчёркивание): BRIGADE_JWT__SECRET и т.д.
+#
+# Docker-сессии доступны, если контейнеру проброшен docker-сокет хоста
+# (-v /var/run/docker.sock:/var/run/docker.sock). Режим — свойство сессии.
 
-mode: local
 addr: ":8080"
 sqlite_path: "/data/brigade.db"
 

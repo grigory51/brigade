@@ -15,18 +15,12 @@ import (
 	"github.com/knadh/koanf/v2"
 )
 
-// Mode определяет, где спавнятся агенты: локально в хост-процессе или в Docker-контейнере.
-type Mode string
-
-const (
-	ModeLocal  Mode = "local"
-	ModeDocker Mode = "docker"
-)
-
 // Config — полная конфигурация сервиса.
+//
+// Режим спавна агента (local-процесс либо docker-контейнер) — свойство каждой
+// сессии, а не сервиса: инстанс обслуживает оба вида. Docker-сессии доступны, если
+// на хосте достижим docker-демон (автоопределяется на старте).
 type Config struct {
-	// Mode — режим спавна агентов (local|docker).
-	Mode Mode `koanf:"mode"`
 	// Addr — адрес HTTP-сервера, например ":8080".
 	Addr string `koanf:"addr"`
 
@@ -35,8 +29,8 @@ type Config struct {
 	JWT  JWTConfig  `koanf:"jwt"`
 	Seed SeedConfig `koanf:"seed"`
 
-	// WorkDir — корневая рабочая директория; в docker-режиме её подпапки
-	// bind-mount'ятся в контейнеры сессий.
+	// WorkDir — корневая рабочая директория; для docker-сессий её подпапки
+	// bind-mount'ятся в контейнеры.
 	WorkDir string `koanf:"work_dir"`
 
 	// ClaudeCodeOAuthToken — долгоживущий подписочный токен Claude Code
@@ -129,14 +123,6 @@ func Load(path string) (*Config, error) {
 // Validate проверяет согласованность загруженной конфигурации. Цель — поймать
 // заведомо нерабочие значения на старте, а не при первом обращении к ним.
 func (c *Config) Validate() error {
-	switch c.Mode {
-	case ModeLocal, ModeDocker:
-	case "":
-		return fmt.Errorf("config: mode не задан (ожидается %q или %q)", ModeLocal, ModeDocker)
-	default:
-		return fmt.Errorf("config: недопустимый mode %q (ожидается %q или %q)", c.Mode, ModeLocal, ModeDocker)
-	}
-
 	if c.Addr == "" {
 		return fmt.Errorf("config: addr не задан")
 	}

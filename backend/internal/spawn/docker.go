@@ -48,6 +48,13 @@ func NewDockerSpawner() (*DockerSpawner, error) {
 // Close освобождает ресурсы клиента Docker.
 func (s *DockerSpawner) Close() error { return s.cli.Close() }
 
+// Ping проверяет достижимость docker-демона. Используется при старте, чтобы решить,
+// доступны ли docker-сессии на этом инстансе.
+func (s *DockerSpawner) Ping(ctx context.Context) error {
+	_, err := s.cli.Ping(ctx)
+	return err
+}
+
 // Spawn создаёт контейнер сессии, запускает его и подключается (attach) к его TTY.
 //
 // Контейнер помечается label brigade.session.id=<SessionID>. Рабочая директория
