@@ -27,6 +27,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/grigory51/brigade/backend/internal/acp"
+	"github.com/grigory51/brigade/backend/internal/preview"
 	"github.com/grigory51/brigade/backend/internal/spawn"
 	"github.com/grigory51/brigade/backend/internal/store"
 	"github.com/grigory51/brigade/backend/internal/transport/termws"
@@ -59,6 +60,10 @@ type Registry struct {
 	mode       store.SessionMode
 	workDir    string
 	oauthToken string
+	// previews — сервис публикации dev-серверов: окружение агента (env), скилл в
+	// cwd, реестр зарегистрированных preview. Всегда не-nil; при выключенном preview
+	// его методы деградируют до no-op.
+	previews *preview.Service
 
 	mu   sync.Mutex
 	live map[string]*live
@@ -67,14 +72,16 @@ type Registry struct {
 // NewRegistry собирает реестр. spawner используется для CLI-режима; ACP-клиент
 // спавнит adapter самостоятельно. mode — режим сервиса (store.SessionModeLocal|Docker);
 // workDir — корневая рабочая директория (дефолт Cwd сессии); oauthToken —
-// подписочный токен Claude Code, пробрасывается агентам.
-func NewRegistry(st *store.Store, spawner spawn.Spawner, mode store.SessionMode, workDir, oauthToken string) *Registry {
+// подписочный токен Claude Code, пробрасывается агентам; previews — сервис
+// публикации dev-серверов сессий.
+func NewRegistry(st *store.Store, spawner spawn.Spawner, mode store.SessionMode, workDir, oauthToken string, previews *preview.Service) *Registry {
 	return &Registry{
 		store:      st,
 		spawner:    spawner,
 		mode:       mode,
 		workDir:    workDir,
 		oauthToken: oauthToken,
+		previews:   previews,
 		live:       make(map[string]*live),
 	}
 }
@@ -112,6 +119,10 @@ func (r *Registry) Create(ctx context.Context, userID string, mode store.Session
 	}
 	log.Printf("session: creating %s user=%s mode=%s kind=%s agent=%s cwd=%s",
 		sess.ID, userID, mode, kind, agentType, cwd)
+
+	// Скилл публикации preview кладётся до спавна: агент должен видеть его с первого
+	// хода. В docker-режиме cwd — путь хоста, файл попадает в контейнер через bind-mount.
+	r.installSkill(sess)
 
 	// Агент должен пережить запрос Create: его жизнь равна жизни сессии, а не
 	// вызову RPC. Отвязываем спавн от ctx запроса, иначе по завершении Create его
@@ -155,7 +166,7 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 			SessionID: sess.ID,
 			AgentType: sess.AgentType,
 			Cwd:       sess.Cwd,
-			Env:       r.agentEnv(),
+			Env:       r.agentEnv(sess),
 		})
 		if err != nil {
 			return nil, "", "", fmt.Errorf("session: spawn cli: %w", err)
@@ -170,7 +181,7 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 	case store.SessionKindACP:
 		// local: acp.New сам поднимает adapter-subprocess; docker: adapter живёт в
 		// контейнере сессии, состояние агента — в named volume дерева сессий.
-		opts := acp.Options{Cwd: sess.Cwd, OAuthToken: r.oauthToken}
+		opts := acp.Options{Cwd: sess.Cwd, OAuthToken: r.oauthToken, ExtraEnv: r.previewEnv(sess)}
 		if err := r.applyACPSpawnMode(ctx, &opts, sess); err != nil {
 			return nil, "", "", err
 		}
@@ -191,13 +202,47 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 	}
 }
 
-// agentEnv формирует переменные окружения агента. Подписочный токен Claude Code
-// пробрасывается как CLAUDE_CODE_OAUTH_TOKEN, если задан в конфиге.
-func (r *Registry) agentEnv() []string {
-	if r.oauthToken == "" {
+// agentEnv формирует переменные окружения агента: подписочный токен Claude Code
+// (CLAUDE_CODE_OAUTH_TOKEN) и, при включённом preview, переменные публикации
+// dev-серверов (см. previewEnv).
+func (r *Registry) agentEnv(sess store.Session) []string {
+	var env []string
+	if r.oauthToken != "" {
+		env = append(env, "CLAUDE_CODE_OAUTH_TOKEN="+r.oauthToken)
+	}
+	return append(env, r.previewEnv(sess)...)
+}
+
+// previewEnv формирует preview-переменные агента: идентификатор сессии, токен
+// регистрации, адрес API brigade и шаблон публичного URL. Пусто при выключенном
+// preview. Адрес API — plain-listener brigade: локальному процессу он доступен как
+// 127.0.0.1, контейнеру — как host.docker.internal (ExtraHosts host-gateway).
+func (r *Registry) previewEnv(sess store.Session) []string {
+	cfg := r.previews.Config()
+	if !cfg.Enabled {
 		return nil
 	}
-	return []string{"CLAUDE_CODE_OAUTH_TOKEN=" + r.oauthToken}
+	apiHost := "127.0.0.1"
+	if sess.Mode == store.SessionModeDocker {
+		apiHost = "host.docker.internal"
+	}
+	return []string{
+		"BRIGADE_SESSION_ID=" + sess.ID,
+		"BRIGADE_PREVIEW_TOKEN=" + r.previews.TokenFor(sess.ID),
+		fmt.Sprintf("BRIGADE_API_URL=http://%s:%d", apiHost, cfg.APIPort),
+		"BRIGADE_PREVIEW_URL_TEMPLATE=" + cfg.URLTemplate(sess.ID),
+	}
+}
+
+// installSkill кладёт скилл brigade-preview в cwd сессии (при включённом preview).
+// Ошибка не роняет создание сессии — скилл вспомогателен.
+func (r *Registry) installSkill(sess store.Session) {
+	if !r.previews.Config().Enabled {
+		return
+	}
+	if err := preview.InstallSkill(sess.Cwd); err != nil {
+		log.Printf("session: install preview skill %s: %v", sess.ID, err)
+	}
 }
 
 // applyACPSpawnMode настраивает способ запуска adapter'а под режим сервиса: в
@@ -221,7 +266,7 @@ func (r *Registry) applyACPSpawnMode(ctx context.Context, opts *acp.Options, ses
 		SessionID: sess.ID,
 		AgentType: sess.AgentType,
 		Cwd:       sess.Cwd,
-		Env:       r.agentEnv(),
+		Env:       r.agentEnv(sess),
 	}, stateID)
 	// Агент живёт внутри контейнера: его cwd — точка монтирования рабочей директории,
 	// а не путь хоста (хостовый путь существует только в bind-mount).
@@ -376,12 +421,14 @@ func (r *Registry) Fork(ctx context.Context, sessionID, userID string) (store.Se
 	if err := r.store.CreateSession(ctx, sess); err != nil {
 		return store.Session{}, err
 	}
+	r.installSkill(sess)
 
 	// Как и в Create: жизнь агента равна жизни сессии, спавн отвязывается от ctx запроса.
 	forkOpts := acp.Options{
 		Cwd:               sess.Cwd,
 		OAuthToken:        r.oauthToken,
 		ForkFromSessionID: src.AgentSessionID,
+		ExtraEnv:          r.previewEnv(sess),
 	}
 	if err := r.applyACPSpawnMode(ctx, &forkOpts, sess); err != nil {
 		_ = r.store.DeleteSession(ctx, sess.ID)
@@ -441,6 +488,7 @@ func (r *Registry) Stop(ctx context.Context, sessionID, userID string) error {
 		_ = lv.terminate(tctx)
 		cancel()
 	}
+	r.previews.Drop(sessionID)
 	log.Printf("session: stopped %s by user=%s", sessionID, userID)
 	return r.store.UpdateSessionStatus(ctx, sessionID, store.SessionStatusStopped)
 }
@@ -461,6 +509,7 @@ func (r *Registry) Delete(ctx context.Context, sessionID, userID string) error {
 		_ = lv.terminate(tctx)
 		cancel()
 	}
+	r.previews.Drop(sessionID)
 	log.Printf("session: deleted %s by user=%s", sessionID, userID)
 	return r.store.DeleteSession(ctx, sessionID)
 }
@@ -510,7 +559,7 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 			AgentSessionID: sess.AgentSessionID,
 			ContainerLabel: sess.ContainerLabel,
 			Cwd:            sess.Cwd,
-			Env:            r.agentEnv(),
+			Env:            r.agentEnv(sess),
 		})
 		if err != nil {
 			return fmt.Errorf("reattach cli: %w", err)
@@ -526,7 +575,12 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 		// Восстановление ACP: новый процесс adapter'а (local subprocess или контейнер) +
 		// session/load. В docker-режиме состояние агента живёт в named volume дерева
 		// сессий и переживает контейнеры — история восстанавливается так же, как в local.
-		restoreOpts := acp.Options{Cwd: sess.Cwd, OAuthToken: r.oauthToken, ResumeSessionID: sess.AgentSessionID}
+		restoreOpts := acp.Options{
+			Cwd:             sess.Cwd,
+			OAuthToken:      r.oauthToken,
+			ResumeSessionID: sess.AgentSessionID,
+			ExtraEnv:        r.previewEnv(sess),
+		}
 		if err := r.applyACPSpawnMode(ctx, &restoreOpts, sess); err != nil {
 			return err
 		}

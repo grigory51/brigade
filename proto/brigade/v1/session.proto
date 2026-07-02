@@ -106,6 +106,25 @@ message DeleteSessionRequest {
   string session_id = 1;
 }
 
+// Preview — dev-сервер, поднятый агентом внутри сессии и опубликованный через
+// встроенный прокси brigade. Регистрируется агентом (HTTP API, не этот сервис);
+// список нужен UI для показа ссылок.
+message Preview {
+  int32 port = 1;
+  // name — человекочитаемая подпись (например, "vite"). Может быть пустым.
+  string name = 2;
+  // url — публичный preview-URL ({sessionId}-{port}.{domain}).
+  string url = 3;
+}
+
+message ListPreviewsRequest {
+  string session_id = 1;
+}
+
+message ListPreviewsResponse {
+  repeated Preview previews = 1;
+}
+
 // Тикет — короткоживущий одноразовый токен для авторизации WebSocket-подключения
 // (браузер не отправляет кастомные заголовки при апгрейде).
 message IssueStreamTicketRequest {
@@ -128,4 +147,5 @@ service SessionService {
   rpc Stop(StopSessionRequest) returns (Empty) {}
   rpc Delete(DeleteSessionRequest) returns (Empty) {}
   rpc IssueStreamTicket(IssueStreamTicketRequest) returns (IssueStreamTicketResponse) {}
+  rpc ListPreviews(ListPreviewsRequest) returns (ListPreviewsResponse) {}
 }

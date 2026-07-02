@@ -32,3 +32,26 @@ work_dir: "./workspace"
 # CLAUDE_CODE_OAUTH_TOKEN. Можно задать здесь или через env
 # BRIGADE_CLAUDE_CODE_OAUTH_TOKEN.
 claude_code_oauth_token: ""
+
+# Публикация dev-серверов сессий через встроенный L7-прокси: запрос на
+# {sessionId}-{port}.{domain} проксируется к порту сессии (local — 127.0.0.1,
+# docker — IP контейнера). Подробности — docs/preview.md.
+preview:
+  enabled: true
+  # Базовый домен preview-поддоменов. "localhost" — для разработки (Chrome/Firefox
+  # резолвят *.localhost сами); в проде — домен с wildcard-DNS (*.domain → хост brigade).
+  domain: "localhost"
+  # Схема публичных preview-URL. https предполагает TLS: встроенный (секция tls) или
+  # внешний терминатор.
+  scheme: "http"
+  # Порт в публичных URL, если отличается от порта прослушивания (например, 443 при
+  # внешнем TLS-терминаторе). 0 — порт из addr (или tls.addr при scheme=https).
+  external_port: 0
+
+# Встроенная TLS-терминация (UI, API и preview-поддомены). Пустой addr — выключено.
+# Сертификат должен покрывать домен и wildcard preview-поддоменов
+# (SAN: domain + *.domain); wildcard выдаётся только по DNS-01 (certbot).
+tls:
+  addr: ""
+  cert_file: ""
+  key_file: ""

@@ -50,6 +50,9 @@ const (
 	// SessionServiceIssueStreamTicketProcedure is the fully-qualified name of the SessionService's
 	// IssueStreamTicket RPC.
 	SessionServiceIssueStreamTicketProcedure = "/brigade.v1.SessionService/IssueStreamTicket"
+	// SessionServiceListPreviewsProcedure is the fully-qualified name of the SessionService's
+	// ListPreviews RPC.
+	SessionServiceListPreviewsProcedure = "/brigade.v1.SessionService/ListPreviews"
 )
 
 // SessionServiceClient is a client for the brigade.v1.SessionService service.
@@ -62,6 +65,7 @@ type SessionServiceClient interface {
 	Stop(context.Context, *connect.Request[v1.StopSessionRequest]) (*connect.Response[v1.Empty], error)
 	Delete(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.Empty], error)
 	IssueStreamTicket(context.Context, *connect.Request[v1.IssueStreamTicketRequest]) (*connect.Response[v1.IssueStreamTicketResponse], error)
+	ListPreviews(context.Context, *connect.Request[v1.ListPreviewsRequest]) (*connect.Response[v1.ListPreviewsResponse], error)
 }
 
 // NewSessionServiceClient constructs a client for the brigade.v1.SessionService service. By
@@ -123,6 +127,12 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(sessionServiceMethods.ByName("IssueStreamTicket")),
 			connect.WithClientOptions(opts...),
 		),
+		listPreviews: connect.NewClient[v1.ListPreviewsRequest, v1.ListPreviewsResponse](
+			httpClient,
+			baseURL+SessionServiceListPreviewsProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("ListPreviews")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -136,6 +146,7 @@ type sessionServiceClient struct {
 	stop              *connect.Client[v1.StopSessionRequest, v1.Empty]
 	delete            *connect.Client[v1.DeleteSessionRequest, v1.Empty]
 	issueStreamTicket *connect.Client[v1.IssueStreamTicketRequest, v1.IssueStreamTicketResponse]
+	listPreviews      *connect.Client[v1.ListPreviewsRequest, v1.ListPreviewsResponse]
 }
 
 // Create calls brigade.v1.SessionService.Create.
@@ -178,6 +189,11 @@ func (c *sessionServiceClient) IssueStreamTicket(ctx context.Context, req *conne
 	return c.issueStreamTicket.CallUnary(ctx, req)
 }
 
+// ListPreviews calls brigade.v1.SessionService.ListPreviews.
+func (c *sessionServiceClient) ListPreviews(ctx context.Context, req *connect.Request[v1.ListPreviewsRequest]) (*connect.Response[v1.ListPreviewsResponse], error) {
+	return c.listPreviews.CallUnary(ctx, req)
+}
+
 // SessionServiceHandler is an implementation of the brigade.v1.SessionService service.
 type SessionServiceHandler interface {
 	Create(context.Context, *connect.Request[v1.CreateSessionRequest]) (*connect.Response[v1.CreateSessionResponse], error)
@@ -188,6 +204,7 @@ type SessionServiceHandler interface {
 	Stop(context.Context, *connect.Request[v1.StopSessionRequest]) (*connect.Response[v1.Empty], error)
 	Delete(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.Empty], error)
 	IssueStreamTicket(context.Context, *connect.Request[v1.IssueStreamTicketRequest]) (*connect.Response[v1.IssueStreamTicketResponse], error)
+	ListPreviews(context.Context, *connect.Request[v1.ListPreviewsRequest]) (*connect.Response[v1.ListPreviewsResponse], error)
 }
 
 // NewSessionServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -245,6 +262,12 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		connect.WithSchema(sessionServiceMethods.ByName("IssueStreamTicket")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sessionServiceListPreviewsHandler := connect.NewUnaryHandler(
+		SessionServiceListPreviewsProcedure,
+		svc.ListPreviews,
+		connect.WithSchema(sessionServiceMethods.ByName("ListPreviews")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/brigade.v1.SessionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SessionServiceCreateProcedure:
@@ -263,6 +286,8 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 			sessionServiceDeleteHandler.ServeHTTP(w, r)
 		case SessionServiceIssueStreamTicketProcedure:
 			sessionServiceIssueStreamTicketHandler.ServeHTTP(w, r)
+		case SessionServiceListPreviewsProcedure:
+			sessionServiceListPreviewsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -302,4 +327,8 @@ func (UnimplementedSessionServiceHandler) Delete(context.Context, *connect.Reque
 
 func (UnimplementedSessionServiceHandler) IssueStreamTicket(context.Context, *connect.Request[v1.IssueStreamTicketRequest]) (*connect.Response[v1.IssueStreamTicketResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.IssueStreamTicket is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) ListPreviews(context.Context, *connect.Request[v1.ListPreviewsRequest]) (*connect.Response[v1.ListPreviewsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.ListPreviews is not implemented"))
 }

@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { ChevronDown, ChevronUp, RotateCw, SquareTerminal } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PreviewLinks } from "@/features/sessions/PreviewLinks";
 import { TerminalView, type TermConnState } from "./TerminalView";
 
 /**
@@ -45,6 +46,9 @@ export function ShellPanel({ sessionId }: { sessionId: string }) {
             )}
           </span>
         </button>
+        {/* Ссылки на dev-серверы сессии (brigade preview): бар виден в любой сессии,
+            поэтому ссылки живут здесь, а не в топбаре, скрытом на ACP-экране. */}
+        <PreviewLinks sessionId={sessionId} />
         {open && (conn === "closed" || conn === "error") && (
           <Button
             variant="outline"

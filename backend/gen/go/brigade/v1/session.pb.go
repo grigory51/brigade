@@ -880,6 +880,159 @@ func (x *DeleteSessionRequest) GetSessionId() string {
 	return ""
 }
 
+// Preview — dev-сервер, поднятый агентом внутри сессии и опубликованный через
+// встроенный прокси brigade. Регистрируется агентом (HTTP API, не этот сервис);
+// список нужен UI для показа ссылок.
+type Preview struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Port  int32                  `protobuf:"varint,1,opt,name=port,proto3" json:"port,omitempty"`
+	// name — человекочитаемая подпись (например, "vite"). Может быть пустым.
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// url — публичный preview-URL ({sessionId}-{port}.{domain}).
+	Url           string `protobuf:"bytes,3,opt,name=url,proto3" json:"url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Preview) Reset() {
+	*x = Preview{}
+	mi := &file_brigade_v1_session_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Preview) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Preview) ProtoMessage() {}
+
+func (x *Preview) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_session_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Preview.ProtoReflect.Descriptor instead.
+func (*Preview) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *Preview) GetPort() int32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *Preview) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Preview) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+type ListPreviewsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPreviewsRequest) Reset() {
+	*x = ListPreviewsRequest{}
+	mi := &file_brigade_v1_session_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPreviewsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPreviewsRequest) ProtoMessage() {}
+
+func (x *ListPreviewsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_session_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPreviewsRequest.ProtoReflect.Descriptor instead.
+func (*ListPreviewsRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ListPreviewsRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+type ListPreviewsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Previews      []*Preview             `protobuf:"bytes,1,rep,name=previews,proto3" json:"previews,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPreviewsResponse) Reset() {
+	*x = ListPreviewsResponse{}
+	mi := &file_brigade_v1_session_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPreviewsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPreviewsResponse) ProtoMessage() {}
+
+func (x *ListPreviewsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_session_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPreviewsResponse.ProtoReflect.Descriptor instead.
+func (*ListPreviewsResponse) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ListPreviewsResponse) GetPreviews() []*Preview {
+	if x != nil {
+		return x.Previews
+	}
+	return nil
+}
+
 // Тикет — короткоживущий одноразовый токен для авторизации WebSocket-подключения
 // (браузер не отправляет кастомные заголовки при апгрейде).
 type IssueStreamTicketRequest struct {
@@ -891,7 +1044,7 @@ type IssueStreamTicketRequest struct {
 
 func (x *IssueStreamTicketRequest) Reset() {
 	*x = IssueStreamTicketRequest{}
-	mi := &file_brigade_v1_session_proto_msgTypes[13]
+	mi := &file_brigade_v1_session_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -903,7 +1056,7 @@ func (x *IssueStreamTicketRequest) String() string {
 func (*IssueStreamTicketRequest) ProtoMessage() {}
 
 func (x *IssueStreamTicketRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[13]
+	mi := &file_brigade_v1_session_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -916,7 +1069,7 @@ func (x *IssueStreamTicketRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueStreamTicketRequest.ProtoReflect.Descriptor instead.
 func (*IssueStreamTicketRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{13}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *IssueStreamTicketRequest) GetSessionId() string {
@@ -937,7 +1090,7 @@ type IssueStreamTicketResponse struct {
 
 func (x *IssueStreamTicketResponse) Reset() {
 	*x = IssueStreamTicketResponse{}
-	mi := &file_brigade_v1_session_proto_msgTypes[14]
+	mi := &file_brigade_v1_session_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -949,7 +1102,7 @@ func (x *IssueStreamTicketResponse) String() string {
 func (*IssueStreamTicketResponse) ProtoMessage() {}
 
 func (x *IssueStreamTicketResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[14]
+	mi := &file_brigade_v1_session_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -962,7 +1115,7 @@ func (x *IssueStreamTicketResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueStreamTicketResponse.ProtoReflect.Descriptor instead.
 func (*IssueStreamTicketResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{14}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *IssueStreamTicketResponse) GetTicket() string {
@@ -1034,7 +1187,16 @@ const file_brigade_v1_session_proto_rawDesc = "" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\"5\n" +
 	"\x14DeleteSessionRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"9\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"C\n" +
+	"\aPreview\x12\x12\n" +
+	"\x04port\x18\x01 \x01(\x05R\x04port\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x10\n" +
+	"\x03url\x18\x03 \x01(\tR\x03url\"4\n" +
+	"\x13ListPreviewsRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"G\n" +
+	"\x14ListPreviewsResponse\x12/\n" +
+	"\bpreviews\x18\x01 \x03(\v2\x13.brigade.v1.PreviewR\bpreviews\"9\n" +
 	"\x18IssueStreamTicketRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\"R\n" +
@@ -1054,7 +1216,7 @@ const file_brigade_v1_session_proto_rawDesc = "" +
 	"\x1aSESSION_STATUS_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16SESSION_STATUS_RUNNING\x10\x01\x12\x1a\n" +
 	"\x16SESSION_STATUS_STOPPED\x10\x02\x12\x19\n" +
-	"\x15SESSION_STATUS_FAILED\x10\x032\xf4\x04\n" +
+	"\x15SESSION_STATUS_FAILED\x10\x032\xc9\x05\n" +
 	"\x0eSessionService\x12O\n" +
 	"\x06Create\x12 .brigade.v1.CreateSessionRequest\x1a!.brigade.v1.CreateSessionResponse\"\x00\x12K\n" +
 	"\x04List\x12\x1f.brigade.v1.ListSessionsRequest\x1a .brigade.v1.ListSessionsResponse\"\x00\x12F\n" +
@@ -1063,7 +1225,8 @@ const file_brigade_v1_session_proto_rawDesc = "" +
 	"\x04Fork\x12\x1e.brigade.v1.ForkSessionRequest\x1a\x1f.brigade.v1.ForkSessionResponse\"\x00\x12;\n" +
 	"\x04Stop\x12\x1e.brigade.v1.StopSessionRequest\x1a\x11.brigade.v1.Empty\"\x00\x12?\n" +
 	"\x06Delete\x12 .brigade.v1.DeleteSessionRequest\x1a\x11.brigade.v1.Empty\"\x00\x12b\n" +
-	"\x11IssueStreamTicket\x12$.brigade.v1.IssueStreamTicketRequest\x1a%.brigade.v1.IssueStreamTicketResponse\"\x00B\xa9\x01\n" +
+	"\x11IssueStreamTicket\x12$.brigade.v1.IssueStreamTicketRequest\x1a%.brigade.v1.IssueStreamTicketResponse\"\x00\x12S\n" +
+	"\fListPreviews\x12\x1f.brigade.v1.ListPreviewsRequest\x1a .brigade.v1.ListPreviewsResponse\"\x00B\xa9\x01\n" +
 	"\x0ecom.brigade.v1B\fSessionProtoP\x01Z@github.com/grigory51/brigade/backend/gen/go/brigade/v1;brigadev1\xa2\x02\x03BXX\xaa\x02\n" +
 	"Brigade.V1\xca\x02\n" +
 	"Brigade\\V1\xe2\x02\x16Brigade\\V1\\GPBMetadata\xea\x02\vBrigade::V1b\x06proto3"
@@ -1081,7 +1244,7 @@ func file_brigade_v1_session_proto_rawDescGZIP() []byte {
 }
 
 var file_brigade_v1_session_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_brigade_v1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_brigade_v1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_brigade_v1_session_proto_goTypes = []any{
 	(SessionMode)(0),                  // 0: brigade.v1.SessionMode
 	(SessionKind)(0),                  // 1: brigade.v1.SessionKind
@@ -1099,9 +1262,12 @@ var file_brigade_v1_session_proto_goTypes = []any{
 	(*UpdateSessionResponse)(nil),     // 13: brigade.v1.UpdateSessionResponse
 	(*StopSessionRequest)(nil),        // 14: brigade.v1.StopSessionRequest
 	(*DeleteSessionRequest)(nil),      // 15: brigade.v1.DeleteSessionRequest
-	(*IssueStreamTicketRequest)(nil),  // 16: brigade.v1.IssueStreamTicketRequest
-	(*IssueStreamTicketResponse)(nil), // 17: brigade.v1.IssueStreamTicketResponse
-	(*Empty)(nil),                     // 18: brigade.v1.Empty
+	(*Preview)(nil),                   // 16: brigade.v1.Preview
+	(*ListPreviewsRequest)(nil),       // 17: brigade.v1.ListPreviewsRequest
+	(*ListPreviewsResponse)(nil),      // 18: brigade.v1.ListPreviewsResponse
+	(*IssueStreamTicketRequest)(nil),  // 19: brigade.v1.IssueStreamTicketRequest
+	(*IssueStreamTicketResponse)(nil), // 20: brigade.v1.IssueStreamTicketResponse
+	(*Empty)(nil),                     // 21: brigade.v1.Empty
 }
 var file_brigade_v1_session_proto_depIdxs = []int32{
 	0,  // 0: brigade.v1.Session.mode:type_name -> brigade.v1.SessionMode
@@ -1114,27 +1280,30 @@ var file_brigade_v1_session_proto_depIdxs = []int32{
 	3,  // 7: brigade.v1.GetSessionResponse.session:type_name -> brigade.v1.Session
 	3,  // 8: brigade.v1.ForkSessionResponse.session:type_name -> brigade.v1.Session
 	3,  // 9: brigade.v1.UpdateSessionResponse.session:type_name -> brigade.v1.Session
-	4,  // 10: brigade.v1.SessionService.Create:input_type -> brigade.v1.CreateSessionRequest
-	6,  // 11: brigade.v1.SessionService.List:input_type -> brigade.v1.ListSessionsRequest
-	8,  // 12: brigade.v1.SessionService.Get:input_type -> brigade.v1.GetSessionRequest
-	12, // 13: brigade.v1.SessionService.Update:input_type -> brigade.v1.UpdateSessionRequest
-	10, // 14: brigade.v1.SessionService.Fork:input_type -> brigade.v1.ForkSessionRequest
-	14, // 15: brigade.v1.SessionService.Stop:input_type -> brigade.v1.StopSessionRequest
-	15, // 16: brigade.v1.SessionService.Delete:input_type -> brigade.v1.DeleteSessionRequest
-	16, // 17: brigade.v1.SessionService.IssueStreamTicket:input_type -> brigade.v1.IssueStreamTicketRequest
-	5,  // 18: brigade.v1.SessionService.Create:output_type -> brigade.v1.CreateSessionResponse
-	7,  // 19: brigade.v1.SessionService.List:output_type -> brigade.v1.ListSessionsResponse
-	9,  // 20: brigade.v1.SessionService.Get:output_type -> brigade.v1.GetSessionResponse
-	13, // 21: brigade.v1.SessionService.Update:output_type -> brigade.v1.UpdateSessionResponse
-	11, // 22: brigade.v1.SessionService.Fork:output_type -> brigade.v1.ForkSessionResponse
-	18, // 23: brigade.v1.SessionService.Stop:output_type -> brigade.v1.Empty
-	18, // 24: brigade.v1.SessionService.Delete:output_type -> brigade.v1.Empty
-	17, // 25: brigade.v1.SessionService.IssueStreamTicket:output_type -> brigade.v1.IssueStreamTicketResponse
-	18, // [18:26] is the sub-list for method output_type
-	10, // [10:18] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	16, // 10: brigade.v1.ListPreviewsResponse.previews:type_name -> brigade.v1.Preview
+	4,  // 11: brigade.v1.SessionService.Create:input_type -> brigade.v1.CreateSessionRequest
+	6,  // 12: brigade.v1.SessionService.List:input_type -> brigade.v1.ListSessionsRequest
+	8,  // 13: brigade.v1.SessionService.Get:input_type -> brigade.v1.GetSessionRequest
+	12, // 14: brigade.v1.SessionService.Update:input_type -> brigade.v1.UpdateSessionRequest
+	10, // 15: brigade.v1.SessionService.Fork:input_type -> brigade.v1.ForkSessionRequest
+	14, // 16: brigade.v1.SessionService.Stop:input_type -> brigade.v1.StopSessionRequest
+	15, // 17: brigade.v1.SessionService.Delete:input_type -> brigade.v1.DeleteSessionRequest
+	19, // 18: brigade.v1.SessionService.IssueStreamTicket:input_type -> brigade.v1.IssueStreamTicketRequest
+	17, // 19: brigade.v1.SessionService.ListPreviews:input_type -> brigade.v1.ListPreviewsRequest
+	5,  // 20: brigade.v1.SessionService.Create:output_type -> brigade.v1.CreateSessionResponse
+	7,  // 21: brigade.v1.SessionService.List:output_type -> brigade.v1.ListSessionsResponse
+	9,  // 22: brigade.v1.SessionService.Get:output_type -> brigade.v1.GetSessionResponse
+	13, // 23: brigade.v1.SessionService.Update:output_type -> brigade.v1.UpdateSessionResponse
+	11, // 24: brigade.v1.SessionService.Fork:output_type -> brigade.v1.ForkSessionResponse
+	21, // 25: brigade.v1.SessionService.Stop:output_type -> brigade.v1.Empty
+	21, // 26: brigade.v1.SessionService.Delete:output_type -> brigade.v1.Empty
+	20, // 27: brigade.v1.SessionService.IssueStreamTicket:output_type -> brigade.v1.IssueStreamTicketResponse
+	18, // 28: brigade.v1.SessionService.ListPreviews:output_type -> brigade.v1.ListPreviewsResponse
+	20, // [20:29] is the sub-list for method output_type
+	11, // [11:20] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_brigade_v1_session_proto_init() }
@@ -1149,7 +1318,7 @@ func file_brigade_v1_session_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_brigade_v1_session_proto_rawDesc), len(file_brigade_v1_session_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   15,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

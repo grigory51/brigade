@@ -46,6 +46,38 @@ type Config struct {
 	// по токенам. По соображениям безопасности задаётся через env
 	// (BRIGADE_CLAUDE_CODE_OAUTH_TOKEN), но допустимо и значение из yaml.
 	ClaudeCodeOAuthToken string `koanf:"claude_code_oauth_token"`
+
+	Preview PreviewConfig `koanf:"preview"`
+	TLS     TLSConfig     `koanf:"tls"`
+}
+
+// PreviewConfig — публикация dev-серверов сессий через встроенный L7-прокси.
+// Запрос на {sessionId}-{port}.{Domain} проксируется к соответствующему порту сессии
+// (local — 127.0.0.1, docker — IP контейнера); маршрут детерминирован и не требует
+// регистрации.
+type PreviewConfig struct {
+	Enabled bool `koanf:"enabled"`
+	// Domain — базовый домен preview-поддоменов: "localhost" для разработки
+	// (браузеры резолвят *.localhost сами) либо реальный домен с wildcard-DNS.
+	Domain string `koanf:"domain"`
+	// Scheme — схема публичных preview-URL (http|https). https предполагает
+	// TLS-терминацию: встроенную (TLS.Addr) либо внешнюю.
+	Scheme string `koanf:"scheme"`
+	// ExternalPort — порт в публичных preview-URL, если он отличается от порта
+	// прослушивания (например, 443 при внешнем TLS-терминаторе). 0 — использовать
+	// порт из Addr (или TLS.Addr при scheme=https со встроенным TLS).
+	ExternalPort int `koanf:"external_port"`
+}
+
+// TLSConfig — встроенная TLS-терминация всего сервера (UI, API и preview-поддомены).
+// Сертификат должен покрывать и сам домен, и wildcard preview-поддоменов
+// (SAN: domain + *.domain — wildcard сам по себе корень не покрывает).
+type TLSConfig struct {
+	// Addr — адрес HTTPS-listener'а, например ":443". Пусто — TLS выключен.
+	// Plain-listener на Addr при этом продолжает работать (локальный доступ).
+	Addr     string `koanf:"addr"`
+	CertFile string `koanf:"cert_file"`
+	KeyFile  string `koanf:"key_file"`
 }
 
 type JWTConfig struct {
@@ -142,6 +174,32 @@ func (c *Config) Validate() error {
 	}
 	if c.Seed.Password == "" {
 		return fmt.Errorf("config: seed.password не задан")
+	}
+
+	if c.Preview.Enabled {
+		d := c.Preview.Domain
+		if d == "" {
+			return fmt.Errorf("config: preview.domain is required when preview is enabled")
+		}
+		if strings.Contains(d, "://") || strings.HasPrefix(d, ".") || strings.HasSuffix(d, ".") {
+			return fmt.Errorf("config: preview.domain %q must be a bare host name (no scheme, no leading/trailing dot)", d)
+		}
+		switch c.Preview.Scheme {
+		case "http", "https":
+		case "":
+			return fmt.Errorf("config: preview.scheme is required when preview is enabled (http or https)")
+		default:
+			return fmt.Errorf("config: invalid preview.scheme %q (expected http or https)", c.Preview.Scheme)
+		}
+		if p := c.Preview.ExternalPort; p < 0 || p > 65535 {
+			return fmt.Errorf("config: preview.external_port %d out of range", p)
+		}
+	}
+
+	if c.TLS.Addr != "" {
+		if c.TLS.CertFile == "" || c.TLS.KeyFile == "" {
+			return fmt.Errorf("config: tls.cert_file and tls.key_file are required when tls.addr is set")
+		}
 	}
 
 	return nil

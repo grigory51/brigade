@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/grigory51/brigade/backend/internal/spawn"
+	"github.com/grigory51/brigade/backend/internal/preview"
 	"github.com/grigory51/brigade/backend/internal/store"
 )
 
@@ -74,7 +75,7 @@ func newTestRegistry(t *testing.T) *Registry {
 		t.Fatalf("store.Open: %v", err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	return NewRegistry(st, nil, store.SessionModeLocal, "/tmp", "")
+	return NewRegistry(st, nil, store.SessionModeLocal, "/tmp", "", preview.NewService(preview.Config{}, []byte("test")))
 }
 
 // seedSession записывает running CLI-сессию в store и регистрирует её живой объект с

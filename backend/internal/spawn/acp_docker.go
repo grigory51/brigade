@@ -84,6 +84,9 @@ func (d *DockerACPSpawner) start(ctx context.Context, spec Spec, stateID string)
 		// (например, убитые шеллы /ws/shell и их детей), иначе в контейнере копились
 		// бы зомби.
 		Init: &initProcess,
+		// host.docker.internal резолвится в шлюз хоста и на Linux (host-gateway);
+		// агент обращается по нему к API brigade (регистрация preview).
+		ExtraHosts: []string{"host.docker.internal:host-gateway"},
 		Mounts: []mount.Mount{{
 			Type:   mount.TypeVolume,
 			Source: volName,

@@ -38,7 +38,7 @@ func spawnLocalProc(opts Options) (AgentProc, error) {
 	cmd := exec.Command(adapterBinary)
 	cmd.Dir = opts.Cwd
 	cmd.Stderr = os.Stderr
-	cmd.Env = append(os.Environ(), "CLAUDE_CODE_OAUTH_TOKEN="+opts.OAuthToken)
+	cmd.Env = append(append(os.Environ(), opts.ExtraEnv...), "CLAUDE_CODE_OAUTH_TOKEN="+opts.OAuthToken)
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

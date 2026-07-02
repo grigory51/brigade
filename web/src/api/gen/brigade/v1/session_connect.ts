@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, ForkSessionRequest, ForkSessionResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListSessionsRequest, ListSessionsResponse, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse } from "./session_pb.js";
+import { CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, ForkSessionRequest, ForkSessionResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse } from "./session_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { Empty } from "./auth_pb.js";
 
@@ -85,6 +85,15 @@ export const SessionService = {
       name: "IssueStreamTicket",
       I: IssueStreamTicketRequest,
       O: IssueStreamTicketResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.SessionService.ListPreviews
+     */
+    listPreviews: {
+      name: "ListPreviews",
+      I: ListPreviewsRequest,
+      O: ListPreviewsResponse,
       kind: MethodKind.Unary,
     },
   }

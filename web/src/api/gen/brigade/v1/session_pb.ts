@@ -692,6 +692,137 @@ export class DeleteSessionRequest extends Message<DeleteSessionRequest> {
 }
 
 /**
+ * Preview — dev-сервер, поднятый агентом внутри сессии и опубликованный через
+ * встроенный прокси brigade. Регистрируется агентом (HTTP API, не этот сервис);
+ * список нужен UI для показа ссылок.
+ *
+ * @generated from message brigade.v1.Preview
+ */
+export class Preview extends Message<Preview> {
+  /**
+   * @generated from field: int32 port = 1;
+   */
+  port = 0;
+
+  /**
+   * name — человекочитаемая подпись (например, "vite"). Может быть пустым.
+   *
+   * @generated from field: string name = 2;
+   */
+  name = "";
+
+  /**
+   * url — публичный preview-URL ({sessionId}-{port}.{domain}).
+   *
+   * @generated from field: string url = 3;
+   */
+  url = "";
+
+  constructor(data?: PartialMessage<Preview>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.Preview";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "port", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 2, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Preview {
+    return new Preview().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): Preview {
+    return new Preview().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): Preview {
+    return new Preview().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: Preview | PlainMessage<Preview> | undefined, b: Preview | PlainMessage<Preview> | undefined): boolean {
+    return proto3.util.equals(Preview, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.ListPreviewsRequest
+ */
+export class ListPreviewsRequest extends Message<ListPreviewsRequest> {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId = "";
+
+  constructor(data?: PartialMessage<ListPreviewsRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.ListPreviewsRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ListPreviewsRequest {
+    return new ListPreviewsRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ListPreviewsRequest {
+    return new ListPreviewsRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ListPreviewsRequest {
+    return new ListPreviewsRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: ListPreviewsRequest | PlainMessage<ListPreviewsRequest> | undefined, b: ListPreviewsRequest | PlainMessage<ListPreviewsRequest> | undefined): boolean {
+    return proto3.util.equals(ListPreviewsRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.ListPreviewsResponse
+ */
+export class ListPreviewsResponse extends Message<ListPreviewsResponse> {
+  /**
+   * @generated from field: repeated brigade.v1.Preview previews = 1;
+   */
+  previews: Preview[] = [];
+
+  constructor(data?: PartialMessage<ListPreviewsResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.ListPreviewsResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "previews", kind: "message", T: Preview, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ListPreviewsResponse {
+    return new ListPreviewsResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ListPreviewsResponse {
+    return new ListPreviewsResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ListPreviewsResponse {
+    return new ListPreviewsResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: ListPreviewsResponse | PlainMessage<ListPreviewsResponse> | undefined, b: ListPreviewsResponse | PlainMessage<ListPreviewsResponse> | undefined): boolean {
+    return proto3.util.equals(ListPreviewsResponse, a, b);
+  }
+}
+
+/**
  * Тикет — короткоживущий одноразовый токен для авторизации WebSocket-подключения
  * (браузер не отправляет кастомные заголовки при апгрейде).
  *

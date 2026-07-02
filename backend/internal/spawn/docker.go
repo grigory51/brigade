@@ -76,7 +76,12 @@ func (s *DockerSpawner) Spawn(ctx context.Context, spec Spec) (Handle, error) {
 	// (например, убитые шеллы /ws/shell и их детей), иначе в контейнере копились
 	// бы зомби.
 	initProcess := true
-	hostCfg := &container.HostConfig{Init: &initProcess}
+	hostCfg := &container.HostConfig{
+		Init: &initProcess,
+		// host.docker.internal резолвится в шлюз хоста и на Linux (host-gateway);
+		// агент обращается по нему к API brigade (регистрация preview).
+		ExtraHosts: []string{"host.docker.internal:host-gateway"},
+	}
 	if spec.Cwd != "" {
 		// bind-mount подпапки рабочей директории внутрь контейнера.
 		hostCfg.Binds = []string{fmt.Sprintf("%s:%s", spec.Cwd, containerWorkdir)}
@@ -121,6 +126,28 @@ func (s *DockerSpawner) Reattach(ctx context.Context, p Persisted) (Handle, erro
 		return nil, err
 	}
 	return s.newHandle(id, p.SessionID, hijacked), nil
+}
+
+// ContainerIP возвращает IP контейнера сессии в его сети (первый непустой адрес
+// среди подключённых сетей). Используется preview-прокси: порты контейнеров не
+// публикуются, upstream доступен по адресу bridge-сети с хоста docker-демона.
+func (s *DockerSpawner) ContainerIP(ctx context.Context, sessionID string) (string, error) {
+	id, err := s.findBySessionLabel(ctx, sessionID)
+	if err != nil {
+		return "", err
+	}
+	info, err := s.cli.ContainerInspect(ctx, id)
+	if err != nil {
+		return "", fmt.Errorf("spawn: container inspect: %w", err)
+	}
+	if info.NetworkSettings != nil {
+		for _, nw := range info.NetworkSettings.Networks {
+			if nw.IPAddress != "" {
+				return nw.IPAddress, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("spawn: container %s has no network address", id)
 }
 
 // findBySessionLabel ищет контейнер по label brigade.session.id=<label>.

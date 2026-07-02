@@ -8,6 +8,7 @@ import (
 
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
 	"github.com/grigory51/brigade/backend/internal/auth"
+	"github.com/grigory51/brigade/backend/internal/preview"
 	"github.com/grigory51/brigade/backend/internal/session"
 	"github.com/grigory51/brigade/backend/internal/store"
 )
@@ -17,11 +18,12 @@ import (
 type SessionService struct {
 	registry *session.Registry
 	tickets  *auth.TicketStore
+	previews *preview.Service
 }
 
 // NewSessionService собирает реализацию SessionService.
-func NewSessionService(registry *session.Registry, tickets *auth.TicketStore) *SessionService {
-	return &SessionService{registry: registry, tickets: tickets}
+func NewSessionService(registry *session.Registry, tickets *auth.TicketStore, previews *preview.Service) *SessionService {
+	return &SessionService{registry: registry, tickets: tickets, previews: previews}
 }
 
 // Create создаёт сессию для аутентифицированного пользователя и спавнит агента.
@@ -147,6 +149,25 @@ func (s *SessionService) IssueStreamTicket(ctx context.Context, req *connect.Req
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&v1.IssueStreamTicketResponse{Ticket: token}), nil
+}
+
+// ListPreviews возвращает preview-эндпоинты сессии, зарегистрированные агентом.
+// Сессия проверяется на принадлежность пользователю (чужая — NotFound).
+func (s *SessionService) ListPreviews(ctx context.Context, req *connect.Request[v1.ListPreviewsRequest]) (*connect.Response[v1.ListPreviewsResponse], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.registry.Get(ctx, req.Msg.SessionId, userID); err != nil {
+		return nil, sessionError(err)
+	}
+
+	regs := s.previews.List(req.Msg.SessionId)
+	out := make([]*v1.Preview, 0, len(regs))
+	for _, reg := range regs {
+		out = append(out, &v1.Preview{Port: int32(reg.Port), Name: reg.Name, Url: reg.URL})
+	}
+	return connect.NewResponse(&v1.ListPreviewsResponse{Previews: out}), nil
 }
 
 // requireUser извлекает аутентифицированного пользователя; иначе — Unauthenticated.

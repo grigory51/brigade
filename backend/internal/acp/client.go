@@ -61,6 +61,10 @@ type Options struct {
 	// claude-agent-acp; docker-режим передаёт сюда фабрику контейнерного процесса
 	// (см. spawn.DockerACPSpawner).
 	SpawnProc ProcSpawner
+	// ExtraEnv — дополнительные переменные окружения агента ("KEY=VALUE").
+	// Используется локальным subprocess'ом (spawnLocalProc); контейнерный процесс
+	// получает окружение через spawn.Spec.Env.
+	ExtraEnv []string
 }
 
 // Client управляет одной ACP-сессией: владеет subprocess'ом adapter'а, реализует
