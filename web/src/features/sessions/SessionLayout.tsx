@@ -99,11 +99,14 @@ export function SessionLayout() {
   const [state, setState] = useState<LoadState>("loading");
   const [createOpen, setCreateOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
-  // deletingId — сессия, удаление которой сейчас выполняется на сервере. Отдельно от
-  // busyId (fork): на время удаления показывается блокирующий оверлей — teardown
-  // контейнера/процесса занимает до ~15 секунд, и без индикации клик выглядит
-  // проигнорированным (а повторные клики порождали параллельные удаления).
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  // deletingIds — сессии, удаление которых сейчас выполняется на сервере. Отдельно от
+  // busyId (fork): teardown контейнера/процесса занимает до ~15 секунд, и без индикации
+  // клик выглядит проигнорированным (а повторные клики порождали параллельные
+  // удаления). Блокируется только сама удаляемая сессия (пункт списка + её контент,
+  // если она открыта) — остальной UI живёт, можно перейти к другой сессии.
+  const [deletingIds, setDeletingIds] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setState("loading");
@@ -126,14 +129,16 @@ export function SessionLayout() {
 
   const onDelete = useCallback(
     async (id: string) => {
-      setDeletingId(id);
+      setDeletingIds((prev) => new Set(prev).add(id));
       try {
         await sessionClient.delete({ sessionId: id });
         setSessions((prev) => prev.filter((s) => s.id !== id));
         toast.success("Сессия удалена");
         // Удалили открытую сейчас сессию — её маршрут /s/:id больше не существует,
-        // уводим на пустой экран, иначе остался бы заход по несуществующему id (404).
-        if (id === activeId) {
+        // уводим на пустой экран. Сверяемся с актуальным location, а не с замыканием:
+        // пока шло удаление, пользователь мог перейти к другой сессии — уводить его
+        // с неё нельзя.
+        if (window.location.pathname.endsWith(`/${id}`)) {
           navigate("/sessions");
         }
       } catch (err) {
@@ -143,11 +148,14 @@ export function SessionLayout() {
             : "Не удалось удалить сессию",
         );
       } finally {
-        setDeletingId(null);
+        setDeletingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeId, navigate],
+    [navigate],
   );
 
   const onRename = useCallback(
@@ -307,8 +315,8 @@ export function SessionLayout() {
                           key={s.id}
                           session={s}
                           depth={depth}
-                          busy={busyId === s.id || deletingId === s.id}
-                          deleting={deletingId === s.id}
+                          busy={busyId === s.id || deletingIds.has(s.id)}
+                          deleting={deletingIds.has(s.id)}
                           onOpen={() => navigate(sessionRoute(s.id))}
                           onDelete={() => void onDelete(s.id)}
                           onRename={(name) => void onRename(s.id, name)}
@@ -328,32 +336,31 @@ export function SessionLayout() {
 
           <SidebarInset className="h-svh min-h-0">
             <SessionTopbar />
-            <div className="flex min-h-0 flex-1 flex-col">
+            <div className="relative flex min-h-0 flex-1 flex-col">
               <div className="min-h-0 flex-1">
                 <Outlet />
               </div>
               {/* Вспомогательный шелл активной сессии. key пересоздаёт панель при
                   переключении сессии: шелл принадлежит конкретной сессии. */}
               {activeId && <ShellPanel key={activeId} sessionId={activeId} />}
+              {/* Оверлей контента открытой сессии на время её удаления: блокируется
+                  только эта сессия, сайдбар доступен — можно перейти к другой. */}
+              {activeId && deletingIds.has(activeId) && (
+                <div className="bg-background/60 absolute inset-0 z-40 flex items-center justify-center backdrop-blur-sm">
+                  <div className="bg-background flex items-center gap-3 rounded-lg border px-5 py-4 shadow-lg">
+                    <Loader2 className="text-muted-foreground size-5 animate-spin" />
+                    <div className="text-sm">
+                      <div className="font-medium">Сессия удаляется…</div>
+                      <div className="text-muted-foreground text-xs">
+                        Останавливаем агента и освобождаем ресурсы.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </SidebarInset>
         </SidebarProvider>
-
-        {/* Блокирующий оверлей на время удаления: teardown агента (процесс/контейнер)
-            занимает до ~15 секунд, все действия в UI на это время недоступны. */}
-        {deletingId && (
-          <div className="bg-background/60 fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm">
-            <div className="bg-background flex items-center gap-3 rounded-lg border px-5 py-4 shadow-lg">
-              <Loader2 className="text-muted-foreground size-5 animate-spin" />
-              <div className="text-sm">
-                <div className="font-medium">Сессия удаляется…</div>
-                <div className="text-muted-foreground text-xs">
-                  Останавливаем агента и освобождаем ресурсы.
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         <CreateSessionDialog
           open={createOpen}
@@ -461,13 +468,14 @@ function SessionItem({
     <SidebarMenuItem>
       <SidebarMenuButton
         isActive={active}
-        onClick={onOpen}
+        // Удаляемую сессию не открываем: её контент уже блокирован оверлеем.
+        onClick={deleting ? undefined : onOpen}
         onDoubleClick={(e) => {
           e.stopPropagation();
-          startEdit();
+          if (!deleting) startEdit();
         }}
         tooltip={label}
-        className="pr-20"
+        className={deleting ? "pr-20 opacity-60" : "pr-20"}
         // Ветки визуально вкладываются под родителя (см. ordered в SessionLayout).
         style={depth > 0 ? { paddingLeft: `${8 + depth * 16}px` } : undefined}
       >
