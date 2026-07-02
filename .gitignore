@@ -34,4 +34,5 @@ mobile/local.properties
 # IDE / OS.
 .DS_Store
 .idea/
+.claude/
 backend/workspace/
