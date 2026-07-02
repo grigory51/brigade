@@ -34,10 +34,15 @@ const (
 	AgentGID = 1001
 )
 
-// ContainerWorkdir — точка монтирования рабочей директории сессии внутри контейнера.
-// Подпапка из WorkDir хоста (Spec.Cwd) bind-mount'ится сюда. Экспортирована: в
-// docker-режиме ACP-агенту передаётся именно этот путь (хостовый живёт только в bind).
-const ContainerWorkdir = "/workspace"
+// AgentHome — домашний каталог пользователя agent в контейнере. Bind-mount'ится
+// целиком с хоста (per-user), чтобы состояние Claude (~/.claude, ~/.claude.json) и
+// рабочие файлы (~/workspace) переживали сессии и были общими между контейнерами
+// пользователя. Экспортирован — реестр строит cwd относительно него.
+const AgentHome = "/home/agent"
+
+// ContainerWorkdir — рабочая директория агента в docker-режиме: подпапка home
+// (переживает контейнеры, не расшарена между пользователями, т.к. home per-user).
+const ContainerWorkdir = AgentHome + "/workspace"
 const containerWorkdir = ContainerWorkdir
 
 // DockerSpawner запускает каждого агента в отдельном контейнере (контейнер на сессию).
@@ -144,23 +149,24 @@ func (s *DockerSpawner) Ping(ctx context.Context) error {
 	return err
 }
 
-// claudeHomeBind добавляет bind-mount персонального ~/.claude пользователя
-// (spec.ClaudeHomeHost → agentStateDir) к hostCfg.Binds, если путь задан. Общий для
-// всех контейнеров пользователя: авторизация Claude делается один раз. Каталог на
-// хосте создаётся заранее (см. registry.claudeHomeHost), здесь только монтируется.
-func claudeHomeBind(hostCfg *container.HostConfig, spec Spec) {
-	if spec.ClaudeHomeHost == "" {
+// homeBind добавляет bind-mount персонального home пользователя
+// (spec.HomeHost → /home/agent) к hostCfg.Binds, если путь задан. Весь home общий
+// между контейнерами пользователя (per-user): состояние Claude и рабочие файлы
+// переживают сессии и видны во всех его контейнерах. Каталог на хосте создаётся
+// заранее (см. registry.homeHost), здесь только монтируется.
+func homeBind(hostCfg *container.HostConfig, spec Spec) {
+	if spec.HomeHost == "" {
 		return
 	}
 	hostCfg.Binds = append(hostCfg.Binds,
-		fmt.Sprintf("%s:%s", spec.ClaudeHomeHost, agentStateDir))
+		fmt.Sprintf("%s:%s", spec.HomeHost, AgentHome))
 }
 
 // Spawn создаёт контейнер сессии, запускает его и подключается (attach) к его TTY.
 //
-// Контейнер помечается label brigade.session.id=<SessionID>. Рабочая директория
-// сессии (Spec.Cwd, подпапка WorkDir хоста) bind-mount'ится в containerWorkdir —
-// именно bind-mount подпапки, а не named volume, как требует контракт изоляции.
+// Контейнер помечается label brigade.session.id=<SessionID>. Персональный home
+// пользователя (Spec.HomeHost) bind-mount'ится в /home/agent целиком — рабочая
+// директория агента (~/workspace) и состояние Claude живут там, per-user.
 func (s *DockerSpawner) Spawn(ctx context.Context, spec Spec) (Handle, error) {
 	image := spec.Image
 	if image == "" {
@@ -192,14 +198,10 @@ func (s *DockerSpawner) Spawn(ctx context.Context, spec Spec) (Handle, error) {
 		ExtraHosts:  []string{"host.docker.internal:host-gateway"},
 		NetworkMode: s.netMode(),
 	}
-	if spec.Cwd != "" {
-		// bind-mount подпапки рабочей директории внутрь контейнера.
-		hostCfg.Binds = []string{fmt.Sprintf("%s:%s", spec.Cwd, containerWorkdir)}
-	}
-	// Персональный ~/.claude пользователя: общая авторизация Claude между его
-	// сессиями. CLI-режим опирается именно на него (интерактивный claude не берёт
-	// CLAUDE_CODE_OAUTH_TOKEN из env).
-	claudeHomeBind(hostCfg, spec)
+	// Весь home пользователя монтируется per-user: рабочие файлы (~/workspace) и
+	// состояние Claude (~/.claude, ~/.claude.json) переживают сессии и общие между
+	// контейнерами пользователя. Отдельного bind рабочей директории нет.
+	homeBind(hostCfg, spec)
 
 	created, err := s.cli.ContainerCreate(ctx, cfg, hostCfg, s.networkingConfig(), nil, "brigade-"+spec.SessionID)
 	if err != nil {

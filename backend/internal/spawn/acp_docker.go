@@ -20,12 +20,8 @@ import (
 // acpAdapterCommand — команда ACP-adapter'а внутри контейнера агента.
 const acpAdapterCommand = "claude-agent-acp"
 
-// agentStateDir — каталог состояния Claude внутри контейнера (сессии, конфиг). Сюда
-// монтируется named volume сессии, чтобы состояние переживало пересоздание контейнера
-// (restore = новый контейнер + session/load).
-const agentStateDir = "/home/agent/.claude"
-
-// ACPVolumeName возвращает имя named volume состояния агента для сессии.
+// ACPVolumeName возвращает имя named volume home агента для сессии (fallback, когда
+// персональный home пользователя не задан — claude_home_dir пуст).
 func ACPVolumeName(sessionID string) string { return "brigade-claude-" + sessionID }
 
 // DockerACPSpawner порождает контейнерные процессы ACP-adapter'а (docker-режим).
@@ -56,20 +52,20 @@ func (d *DockerACPSpawner) start(ctx context.Context, spec Spec, stateID string)
 		image = defaultImage
 	}
 
-	// Состояние агента ~/.claude:
-	//  - если задан персональный claude-home пользователя (spec.ClaudeHomeHost) —
-	//    bind-mount с хоста, общий для всех его сессий (CLI и ACP): авторизация Claude
-	//    делается один раз;
-	//  - иначе fallback на named volume по дереву сессий (stateID) — прежнее поведение.
-	var stateMount mount.Mount
-	if spec.ClaudeHomeHost != "" {
-		stateMount = mount.Mount{Type: mount.TypeBind, Source: spec.ClaudeHomeHost, Target: agentStateDir}
+	// Home агента (/home/agent) целиком:
+	//  - если задан персональный home пользователя (spec.HomeHost) — bind-mount с
+	//    хоста, общий для всех его сессий (CLI и ACP): авторизация Claude и рабочие
+	//    файлы (~/workspace) переживают сессии и видны везде;
+	//  - иначе fallback на named volume по дереву сессий (stateID).
+	var homeMount mount.Mount
+	if spec.HomeHost != "" {
+		homeMount = mount.Mount{Type: mount.TypeBind, Source: spec.HomeHost, Target: AgentHome}
 	} else {
 		volName := ACPVolumeName(stateID)
 		if _, err := cli.VolumeCreate(ctx, volume.CreateOptions{Name: volName}); err != nil {
 			return nil, fmt.Errorf("spawn: acp volume create: %w", err)
 		}
-		stateMount = mount.Mount{Type: mount.TypeVolume, Source: volName, Target: agentStateDir}
+		homeMount = mount.Mount{Type: mount.TypeVolume, Source: volName, Target: AgentHome}
 	}
 
 	cfg := &container.Config{
@@ -99,10 +95,7 @@ func (d *DockerACPSpawner) start(ctx context.Context, spec Spec, stateID string)
 		// используется, когда brigade — процесс на хосте (нет своей docker-сети).
 		ExtraHosts:  []string{"host.docker.internal:host-gateway"},
 		NetworkMode: d.spawner.netMode(),
-		Mounts:      []mount.Mount{stateMount},
-	}
-	if spec.Cwd != "" {
-		hostCfg.Binds = []string{fmt.Sprintf("%s:%s", spec.Cwd, containerWorkdir)}
+		Mounts:      []mount.Mount{homeMount},
 	}
 
 	// Осиротевший контейнер сессии (нечистая смерть brigade — Close не отработал)

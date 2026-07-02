@@ -15,7 +15,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -36,7 +35,6 @@ export function CreateSessionDialog({
   const [agents, setAgents] = useState<AgentType[] | null>(null);
   const [agentId, setAgentId] = useState("");
   const [kind, setKind] = useState<SessionKind>(SessionKind.CLI);
-  const [cwd, setCwd] = useState("");
   const [busy, setBusy] = useState(false);
   // tokenSet — задан ли у пользователя токен Claude. ACP-сессия стартует агента сразу
   // (non-interactive), поэтому без токена не поднимется — ACP-опцию дизейблим. CLI
@@ -101,12 +99,10 @@ export function CreateSessionDialog({
         agentType: agentId,
         kind,
         prompt: "",
-        cwd: cwd.trim(),
       });
       const session = res.session;
       if (!session) throw new Error("пустой ответ Create");
       onOpenChange(false);
-      resetTransient();
       onCreated(session);
     } catch (err) {
       toast.error(
@@ -117,10 +113,6 @@ export function CreateSessionDialog({
     } finally {
       setBusy(false);
     }
-  }
-
-  function resetTransient() {
-    setCwd("");
   }
 
   const loading = agents === null;
@@ -192,19 +184,6 @@ export function CreateSessionDialog({
                   можно авторизовать вручную в терминале.
                 </p>
               )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="cwd">
-                Рабочая директория{" "}
-                <span className="text-muted-foreground">(опц.)</span>
-              </Label>
-              <Input
-                id="cwd"
-                placeholder="по умолчанию из конфига"
-                value={cwd}
-                onChange={(e) => setCwd(e.target.value)}
-              />
             </div>
           </div>
         )}

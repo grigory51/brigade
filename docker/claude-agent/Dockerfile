@@ -7,9 +7,10 @@
 #   - ACP: контейнер запускает `claude-agent-acp` со stdio JSON-RPC (без TTY).
 # Команда задаётся при создании контейнера, ENTRYPOINT намеренно не фиксируется.
 #
-# Состояние агента (~/.claude: сессии, конфиг) живёт в /home/agent/.claude —
-# brigade монтирует туда named volume сессии, чтобы состояние переживало пересоздание
-# контейнера (restore = новый контейнер + session/load).
+# Весь home агента (/home/agent) brigade bind-mount'ит per-user с хоста: состояние
+# Claude (~/.claude, ~/.claude.json) и рабочие файлы (~/workspace) переживают
+# пересоздание контейнера и общие между контейнерами пользователя. Каталоги в образе
+# создаются как fallback для случая, когда home не смонтирован (claude_home_dir пуст).
 
 FROM node:22-slim
 
@@ -24,14 +25,16 @@ RUN npm install -g @anthropic-ai/claude-code "@agentclientprotocol/claude-agent-
     && npm cache clean --force
 
 # Непривилегированный пользователь: агент исполняет произвольные команды.
-# uid ФИКСИРОВАН (1001): brigade создаёт персональный ~/.claude на хосте и chown'ит
-# его на этот uid, чтобы bind-mount был writable агентом (иначе root-owned mount →
-# EACCES при `/login`). См. spawn.AgentUID.
+# uid ФИКСИРОВАН (1001): brigade создаёт персональный home на хосте и chown'ит его на
+# этот uid, чтобы bind-mount был writable агентом (иначе root-owned mount → EACCES при
+# `/login`). См. spawn.AgentUID.
 RUN useradd --create-home --shell /bin/bash --uid 1001 agent \
-    && mkdir -p /home/agent/.claude \
-    && chown agent:agent /home/agent/.claude
+    && mkdir -p /home/agent/.claude /home/agent/workspace \
+    && chown -R agent:agent /home/agent
 USER agent
-WORKDIR /workspace
+# Рабочая директория агента — подпапка home (~/workspace): в docker-режиме brigade
+# монтирует home per-user, файлы проекта не расшарены между пользователями.
+WORKDIR /home/agent/workspace
 
 # Токен подписки передаётся окружением: CLAUDE_CODE_OAUTH_TOKEN.
 CMD ["claude"]

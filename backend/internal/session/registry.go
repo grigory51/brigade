@@ -98,28 +98,31 @@ func NewRegistry(st *store.Store, spawner spawn.Spawner, mode store.SessionMode,
 	}
 }
 
-// claudeHomeHost возвращает путь на хосте к персональному ~/.claude пользователя
-// (<claudeHomeDir>/<userID>) и создаёт каталог, если его нет. Пусто — фича выключена
-// (claudeHomeDir не задан) либо сессия не docker (в local ~/.claude — хостовый $HOME).
+// homeHost возвращает путь на хосте к персональному home пользователя
+// (<claudeHomeDir>/<userID>), монтируемому в /home/agent контейнера. Создаёт home и
+// подкаталог workspace (рабочая директория агента), chown'ит их на uid/gid agent.
+// Пусто — фича выключена (claudeHomeDir не задан) либо сессия не docker.
 //
-// Каталог chown'ится на uid/gid пользователя agent в контейнере (spawn.AgentUID):
-// иначе bind-mount, созданный brigade (обычно под root), был бы root-owned, и агент
-// падал бы с EACCES при записи (`/login`). Ошибки логируются, но не роняют спавн.
-func (r *Registry) claudeHomeHost(sess store.Session) string {
+// chown обязателен: bind-mount, созданный brigade (обычно root), был бы root-owned,
+// и агент (uid 1001) падал бы с EACCES при записи. Ошибки логируются, не роняют спавн.
+func (r *Registry) homeHost(sess store.Session) string {
 	if r.claudeHomeDir == "" || sess.Mode != store.SessionModeDocker {
 		return ""
 	}
-	dir := filepath.Join(r.claudeHomeDir, sess.UserID)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		log.Printf("session: create claude home %s: %v", dir, err)
+	home := filepath.Join(r.claudeHomeDir, sess.UserID)
+	// Подкаталог workspace создаём сразу — это cwd агента (иначе claude стартует в
+	// несуществующей директории).
+	ws := filepath.Join(home, "workspace")
+	if err := os.MkdirAll(ws, 0o700); err != nil {
+		log.Printf("session: create home %s: %v", home, err)
 		return ""
 	}
-	if err := os.Chown(dir, spawn.AgentUID, spawn.AgentGID); err != nil {
-		// Не фатально: brigade может не иметь прав chown (не root) — тогда каталог
-		// должен быть заранее подготовлен с нужным ownership оператором.
-		log.Printf("session: chown claude home %s to %d:%d: %v", dir, spawn.AgentUID, spawn.AgentGID, err)
+	for _, dir := range []string{home, ws} {
+		if err := os.Chown(dir, spawn.AgentUID, spawn.AgentGID); err != nil {
+			log.Printf("session: chown %s to %d:%d: %v", dir, spawn.AgentUID, spawn.AgentGID, err)
+		}
 	}
-	return dir
+	return home
 }
 
 // userHostname возвращает hostname для контейнеров пользователя — его логин. У всех
@@ -206,17 +209,21 @@ func (r *Registry) Create(ctx context.Context, userID string, kind store.Session
 	if kind == store.SessionKindACP && r.userClaudeToken(ctx, userID) == "" {
 		return store.Session{}, ErrClaudeTokenRequired
 	}
-	if cwd == "" {
-		cwd = r.workDir
+	// В docker-режиме cwd фиксирован — рабочая директория внутри контейнера
+	// (~/workspace в персональном home); пользовательский cwd не используется. В
+	// local-режиме cwd — путь на хосте (дефолт work_dir), нормализуется в абсолютный.
+	if r.mode == store.SessionModeDocker {
+		cwd = spawn.ContainerWorkdir
+	} else {
+		if cwd == "" {
+			cwd = r.workDir
+		}
+		abs, err := filepath.Abs(cwd)
+		if err != nil {
+			return store.Session{}, fmt.Errorf("session: resolve cwd %q: %w", cwd, err)
+		}
+		cwd = abs
 	}
-	// ACP-агент требует абсолютный cwd (относительный путь вроде "./workspace" он
-	// отвергает). Нормализуем здесь, чтобы и дефолт из конфига, и пользовательский ввод
-	// были абсолютными; в docker-режиме это к тому же корректный путь хоста для bind-mount.
-	abs, err := filepath.Abs(cwd)
-	if err != nil {
-		return store.Session{}, fmt.Errorf("session: resolve cwd %q: %w", cwd, err)
-	}
-	cwd = abs
 
 	sess := store.Session{
 		ID:        uuid.NewString(),
@@ -284,7 +291,7 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 			AgentType:      sess.AgentType,
 			Cwd:            sess.Cwd,
 			Env:            r.agentEnv(sess, token),
-			ClaudeHomeHost: r.claudeHomeHost(sess),
+			HomeHost:       r.homeHost(sess),
 			Hostname:       r.userHostname(ctx, sess.UserID),
 		})
 		if err != nil {
@@ -365,13 +372,23 @@ func (r *Registry) dockerAPIHost() string {
 	return "host.docker.internal"
 }
 
-// installSkill кладёт скилл brigade-preview в cwd сессии (при включённом preview).
-// Ошибка не роняет создание сессии — скилл вспомогателен.
+// installSkill кладёт скилл brigade-preview в рабочую директорию сессии на ХОСТЕ
+// (при включённом preview). В docker-режиме sess.Cwd — путь внутри контейнера, а файл
+// нужно положить в хостовый workspace персонального home (<home>/workspace); в local
+// это и есть sess.Cwd. Ошибка не роняет создание сессии — скилл вспомогателен.
 func (r *Registry) installSkill(sess store.Session) {
 	if !r.previews.Config().Enabled {
 		return
 	}
-	if err := preview.InstallSkill(sess.Cwd); err != nil {
+	dir := sess.Cwd
+	if sess.Mode == store.SessionModeDocker {
+		if home := r.homeHost(sess); home != "" {
+			dir = filepath.Join(home, "workspace")
+		} else {
+			return // фича home выключена — скилл класть некуда (эфемерный контейнер)
+		}
+	}
+	if err := preview.InstallSkill(dir); err != nil {
 		log.Printf("session: install preview skill %s: %v", sess.ID, err)
 	}
 }
@@ -397,7 +414,7 @@ func (r *Registry) applyACPSpawnMode(ctx context.Context, opts *acp.Options, ses
 		AgentType:      sess.AgentType,
 		Cwd:            sess.Cwd,
 		Env:            r.agentEnv(sess, token),
-		ClaudeHomeHost: r.claudeHomeHost(sess),
+		HomeHost:       r.homeHost(sess),
 		Hostname:       r.userHostname(ctx, sess.UserID),
 	}, stateID)
 	// Агент живёт внутри контейнера: его cwd — точка монтирования рабочей директории,
