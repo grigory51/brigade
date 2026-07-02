@@ -101,18 +101,57 @@ func NewRegistry(st *store.Store, spawner spawn.Spawner, mode store.SessionMode,
 // claudeHomeHost возвращает путь на хосте к персональному ~/.claude пользователя
 // (<claudeHomeDir>/<userID>) и создаёт каталог, если его нет. Пусто — фича выключена
 // (claudeHomeDir не задан) либо сессия не docker (в local ~/.claude — хостовый $HOME).
-// Ошибка создания каталога логируется, но не роняет спавн (claude создаст файлы сам,
-// если права позволят).
+//
+// Каталог chown'ится на uid/gid пользователя agent в контейнере (spawn.AgentUID):
+// иначе bind-mount, созданный brigade (обычно под root), был бы root-owned, и агент
+// падал бы с EACCES при записи (`/login`). Ошибки логируются, но не роняют спавн.
 func (r *Registry) claudeHomeHost(sess store.Session) string {
 	if r.claudeHomeDir == "" || sess.Mode != store.SessionModeDocker {
 		return ""
 	}
 	dir := filepath.Join(r.claudeHomeDir, sess.UserID)
-	if err := os.MkdirAll(dir, 0o777); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		log.Printf("session: create claude home %s: %v", dir, err)
 		return ""
 	}
+	if err := os.Chown(dir, spawn.AgentUID, spawn.AgentGID); err != nil {
+		// Не фатально: brigade может не иметь прав chown (не root) — тогда каталог
+		// должен быть заранее подготовлен с нужным ownership оператором.
+		log.Printf("session: chown claude home %s to %d:%d: %v", dir, spawn.AgentUID, spawn.AgentGID, err)
+	}
 	return dir
+}
+
+// userHostname возвращает hostname для контейнеров пользователя — его логин. У всех
+// контейнеров пользователя hostname одинаковый: Claude привязывает креды к
+// machine/hostname, и при разных hostname авторизация одной сессии не видна в другой.
+// Ошибка резолва — пустой hostname (docker назначит по container id).
+func (r *Registry) userHostname(ctx context.Context, userID string) string {
+	u, err := r.store.GetUserByID(ctx, userID)
+	if err != nil {
+		log.Printf("session: get user %s for hostname: %v", userID, err)
+		return ""
+	}
+	return sanitizeHostname(u.Username)
+}
+
+// sanitizeHostname приводит логин к валидному DNS-hostname (docker отвергает
+// недопустимые): оставляет буквы/цифры/дефис, прочее заменяет дефисом, обрезает до 63.
+func sanitizeHostname(name string) string {
+	var b strings.Builder
+	for _, ch := range name {
+		switch {
+		case ch >= 'a' && ch <= 'z', ch >= 'A' && ch <= 'Z', ch >= '0' && ch <= '9', ch == '-':
+			b.WriteRune(ch)
+		default:
+			b.WriteByte('-')
+		}
+	}
+	h := strings.Trim(b.String(), "-")
+	if len(h) > 63 {
+		h = h[:63]
+	}
+	return h
 }
 
 // userClaudeToken возвращает подписочный токен Claude пользователя из store (пусто,
@@ -246,6 +285,7 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 			Cwd:            sess.Cwd,
 			Env:            r.agentEnv(sess, token),
 			ClaudeHomeHost: r.claudeHomeHost(sess),
+			Hostname:       r.userHostname(ctx, sess.UserID),
 		})
 		if err != nil {
 			return nil, "", "", fmt.Errorf("session: spawn cli: %w", err)
@@ -358,6 +398,7 @@ func (r *Registry) applyACPSpawnMode(ctx context.Context, opts *acp.Options, ses
 		Cwd:            sess.Cwd,
 		Env:            r.agentEnv(sess, token),
 		ClaudeHomeHost: r.claudeHomeHost(sess),
+		Hostname:       r.userHostname(ctx, sess.UserID),
 	}, stateID)
 	// Агент живёт внутри контейнера: его cwd — точка монтирования рабочей директории,
 	// а не путь хоста (хостовый путь существует только в bind-mount).

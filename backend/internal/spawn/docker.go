@@ -26,6 +26,14 @@ const dockerStopTimeoutSeconds = 5
 // defaultImage — образ контейнера агента по умолчанию (если Spec.Image пуст).
 const defaultImage = "brigade/claude-agent:latest"
 
+// AgentUID/AgentGID — uid/gid пользователя agent в образе (зафиксированы в
+// docker/claude-agent/Dockerfile). brigade chown'ит персональный ~/.claude на них,
+// чтобы bind-mount был writable агентом (иначе root-owned mount → EACCES).
+const (
+	AgentUID = 1001
+	AgentGID = 1001
+)
+
 // ContainerWorkdir — точка монтирования рабочей директории сессии внутри контейнера.
 // Подпапка из WorkDir хоста (Spec.Cwd) bind-mount'ится сюда. Экспортирована: в
 // docker-режиме ACP-агенту передаётся именно этот путь (хостовый живёт только в bind).
@@ -163,6 +171,7 @@ func (s *DockerSpawner) Spawn(ctx context.Context, spec Spec) (Handle, error) {
 		Image:        image,
 		Cmd:          []string{agentCommand},
 		Env:          spec.Env,
+		Hostname:     spec.Hostname,
 		WorkingDir:   containerWorkdir,
 		Labels:       map[string]string{labelSessionID: spec.SessionID},
 		Tty:          true,

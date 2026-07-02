@@ -24,10 +24,10 @@ RUN npm install -g @anthropic-ai/claude-code "@agentclientprotocol/claude-agent-
     && npm cache clean --force
 
 # Непривилегированный пользователь: агент исполняет произвольные команды.
-# Каталог состояния создаётся заранее с правами агента: пустой named volume наследует
-# ownership точки монтирования из образа (иначе mount был бы root-owned и агент падал
-# бы с EACCES).
-RUN useradd --create-home --shell /bin/bash agent \
+# uid ФИКСИРОВАН (1001): brigade создаёт персональный ~/.claude на хосте и chown'ит
+# его на этот uid, чтобы bind-mount был writable агентом (иначе root-owned mount →
+# EACCES при `/login`). См. spawn.AgentUID.
+RUN useradd --create-home --shell /bin/bash --uid 1001 agent \
     && mkdir -p /home/agent/.claude \
     && chown agent:agent /home/agent/.claude
 USER agent

@@ -73,9 +73,10 @@ func (d *DockerACPSpawner) start(ctx context.Context, spec Spec, stateID string)
 	}
 
 	cfg := &container.Config{
-		Image: image,
-		Cmd:   []string{acpAdapterCommand},
-		Env:   spec.Env,
+		Image:    image,
+		Cmd:      []string{acpAdapterCommand},
+		Env:      spec.Env,
+		Hostname: spec.Hostname,
 		// Adapter говорит JSON-RPC по stdio: TTY недопустим (исказил бы поток),
 		// stdin держится открытым на всё время жизни.
 		Tty:          false,
