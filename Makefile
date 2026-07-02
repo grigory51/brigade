@@ -7,7 +7,7 @@ WEB_DIR     := $(ROOT)/web
 BACKEND_DIR := $(ROOT)/backend
 MOBILE_DIR  := $(ROOT)/mobile
 
-.PHONY: all proto build-web build build-all build-mobile run test vet clean tidy
+.PHONY: all proto build-web build build-all build-mobile run test vet clean tidy release
 
 all: build
 
@@ -51,3 +51,26 @@ tidy:
 clean:
 	$(MAKE) -C $(BACKEND_DIR) clean
 	$(MAKE) -C $(WEB_DIR) clean
+
+# Релиз: инкремент последнего semver-тега и push — docker-workflow CI собирает и
+# публикует образы с этой версией. Источник истины версии — git-тег, в файлах
+# проекта она не хранится.
+#   make release              # patch: v0.1.0 → v0.1.1
+#   make release BUMP=minor   # v0.1.1 → v0.2.0
+#   make release BUMP=major   # v0.2.0 → v1.0.0
+BUMP ?= patch
+release:
+	@test -z "$$(git status --porcelain)" || { echo "error: working tree is dirty"; exit 1; }
+	@last=$$(git tag --list 'v*' --sort=-v:refname | head -1); \
+	last=$${last:-v0.0.0}; \
+	ver=$${last#v}; \
+	major=$${ver%%.*}; rest=$${ver#*.}; minor=$${rest%%.*}; patch=$${rest#*.}; \
+	case "$(BUMP)" in \
+	  major) major=$$((major+1)); minor=0; patch=0 ;; \
+	  minor) minor=$$((minor+1)); patch=0 ;; \
+	  patch) patch=$$((patch+1)) ;; \
+	  *) echo "error: BUMP must be major|minor|patch"; exit 1 ;; \
+	esac; \
+	next="v$$major.$$minor.$$patch"; \
+	echo "$$last -> $$next"; \
+	git tag -a "$$next" -m "$$next" && git push origin "$$next"
