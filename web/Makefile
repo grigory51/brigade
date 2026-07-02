@@ -11,7 +11,11 @@ dev:
 	npm run dev
 
 # Собрать продакшен-бандл (Vite → web/dist; встраивается в бинарь бэкенда).
+# Зависимости ставятся идемпотентно: на чистом checkout (CI, свежий клон) без них
+# tsc не видит модулей. npm ci при наличии package-lock.json — детерминированно и
+# быстро; иначе fallback на npm install.
 build:
+	@if [ -f package-lock.json ]; then npm ci; else npm install; fi
 	npm run build
 
 # Проверка типов (tsc без эмита) — линт текущего сетапа.
