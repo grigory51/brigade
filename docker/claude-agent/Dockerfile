@@ -18,7 +18,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends git ripgrep ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g @anthropic-ai/claude-code @agentclientprotocol/claude-agent-acp \
+# Adapter не ниже 0.54: в 0.52 session/set_config_option (смена модели) рассинхро-
+# нивался с SDK-процессом — adapter рапортовал новую модель, а отвечала старая.
+RUN npm install -g @anthropic-ai/claude-code "@agentclientprotocol/claude-agent-acp@^0.54.1" \
     && npm cache clean --force
 
 # Непривилегированный пользователь: агент исполняет произвольные команды.
