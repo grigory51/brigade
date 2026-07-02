@@ -17,6 +17,7 @@ import { cardsCatalog } from "./a2ui/catalog";
 const RUN_URL = "/api/ag-ui/run";
 const PERMISSION_URL = "/api/ag-ui/permission";
 const HISTORY_URL = "/api/ag-ui/history";
+const CONFIG_URL = "/api/ag-ui/config";
 
 // HistoryMessage — сообщение истории чата от бэкенда (GET /api/ag-ui/history).
 type HistoryMessage = { id: string; role: string; content: string };
@@ -45,6 +46,24 @@ export type AvailableCommand = {
   hint?: string;
 };
 
+// ConfigOption — конфигурационная опция ACP-сессии (модель, режим прав, усилие):
+// селектор с текущим значением. Бэкенд отдаёт снимок с историей и после смены
+// значения (POST /api/ag-ui/config); live-обновления приходят CUSTOM
+// {name:"config_options"}.
+export type ConfigOption = {
+  id: string;
+  name: string;
+  category?: string;
+  currentValue: string;
+  options: ConfigOptionValue[];
+};
+
+export type ConfigOptionValue = {
+  value: string;
+  name: string;
+  description?: string;
+};
+
 // A2uiState — процессор A2UI-поверхностей сессии и счётчик их изменений (version
 // растёт при создании/удалении поверхности — потребители ре-рендерятся).
 export type A2uiState = {
@@ -62,6 +81,8 @@ export type AcpRuntime = {
   commands: AvailableCommand[];
   plan: PlanEntry[];
   a2ui: A2uiState;
+  configOptions: ConfigOption[];
+  setConfigOption: (configId: string, value: string) => Promise<void>;
 };
 
 // CustomEventValue — нетипизированная полезная нагрузка CUSTOM-события AG-UI.
@@ -72,6 +93,7 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
   const [permission, setPermission] = useState<PendingPermission | null>(null);
   const [commands, setCommands] = useState<AvailableCommand[]>([]);
   const [plan, setPlan] = useState<PlanEntry[]>([]);
+  const [configOptions, setConfigOptions] = useState<ConfigOption[]>([]);
   const [a2uiVersion, setA2uiVersion] = useState(0);
 
   // Процессор A2UI-поверхностей живёт вместе с сессией: бэкенд шлёт поставки
@@ -143,6 +165,9 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
           if (Array.isArray(messages)) {
             a2uiProcessor.processMessages(messages);
           }
+        } else if (event.name === "config_options") {
+          // Снимок опций сессии изменился на стороне агента (value — массив опций).
+          setConfigOptions(toConfigOptions(event.value));
         }
       },
       onStateSnapshotEvent: ({ event }) => {
@@ -182,10 +207,12 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
         const data = (await res.json()) as {
           messages?: HistoryMessage[];
           commands?: unknown;
+          configOptions?: unknown;
         };
-        // Команды агента приходят тем же запросом: при открытии треда SSE-прогон не
-        // стартует, поэтому CUSTOM-событие available_commands не приходит (см. backend).
+        // Команды агента и конфигурационные опции приходят тем же запросом: при
+        // открытии треда SSE-прогон не стартует, поэтому CUSTOM-события не приходят.
         setCommands(toCommands({ commands: data.commands }));
+        setConfigOptions(toConfigOptions(data.configOptions));
         // Бэкенд отдаёт историю в форме AG-UI-сообщений ({id, role, content}).
         // fromAgUiMessages переводит их в сообщения assistant-ui (с поддержкой
         // tool-call/reasoning, если они появятся), а ExportedMessageRepository.fromArray
@@ -219,6 +246,20 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
     setPermission((cur) => (cur && cur.id === id ? null : cur));
   }).current;
 
+  // setConfigOption меняет значение опции сессии (модель, режим, усилие) и обновляет
+  // локальный снимок из ответа бэкенда.
+  const setConfigOptionRef = useRef(async (configId: string, value: string) => {
+    const res = await fetch(CONFIG_URL, {
+      method: "POST",
+      credentials: "include",
+      headers: authHeaders(tokenRef.current()),
+      body: JSON.stringify({ threadId: sessionId, configId, value }),
+    });
+    if (!res.ok) return;
+    const data = (await res.json()) as { configOptions?: unknown };
+    setConfigOptions(toConfigOptions(data.configOptions));
+  });
+
   return {
     runtime,
     permission,
@@ -226,6 +267,8 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
     commands,
     plan,
     a2ui: { processor: a2uiProcessor, version: a2uiVersion },
+    configOptions,
+    setConfigOption: setConfigOptionRef.current,
   };
 }
 
@@ -279,6 +322,35 @@ function toPlan(snapshot: CustomEventValue): PlanEntry[] {
       content: e.content as string,
       status: typeof e.status === "string" ? e.status : "pending",
       priority: typeof e.priority === "string" ? e.priority : undefined,
+    }));
+}
+
+// toConfigOptions нормализует снимок опций сессии (массив ACP SessionConfigOption).
+// Boolean-опции (unstable) пропускаются: UI показывает только селекторы.
+function toConfigOptions(value: unknown): ConfigOption[] {
+  const raw = Array.isArray(value) ? value : [];
+  return raw
+    .map((o) => o as Record<string, unknown>)
+    .filter(
+      (o) =>
+        typeof o.id === "string" &&
+        typeof o.currentValue === "string" &&
+        Array.isArray(o.options),
+    )
+    .map((o) => ({
+      id: o.id as string,
+      name: typeof o.name === "string" ? o.name : (o.id as string),
+      category: typeof o.category === "string" ? o.category : undefined,
+      currentValue: o.currentValue as string,
+      options: (o.options as unknown[])
+        .map((v) => v as Record<string, unknown>)
+        .filter((v) => typeof v.value === "string")
+        .map((v) => ({
+          value: v.value as string,
+          name: typeof v.name === "string" ? v.name : (v.value as string),
+          description:
+            typeof v.description === "string" ? v.description : undefined,
+        })),
     }));
 }
 

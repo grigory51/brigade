@@ -2,6 +2,7 @@ package acp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
@@ -117,6 +118,11 @@ type Client struct {
 	// идемпотентно заменяющий предыдущий, важно лишь актуальное значение. Реплеится в
 	// Bind. nil, пока агент не прислал список команд.
 	lastCommands *agui.Event
+	// configOptions — текущие конфигурационные опции сессии (модель, режим прав,
+	// усилие): снимок из session/new|load|fork, обновляется ConfigOptionUpdate и
+	// ответами session/set_config_option. Отдаётся фронту вместе с историей
+	// (history-endpoint); изменение — SetConfigOption. Доступ — под mu.
+	configOptions []acpsdk.SessionConfigOption
 	// promptActive — true, пока выполняется живой Prompt. В этом окне трансляцию
 	// user_message_chunk подавляем, чтобы не дублировать оптимистичное сообщение фронта
 	// (см. translate.emitUserMessage). Доступ — под mu.
@@ -209,6 +215,9 @@ func (c *Client) handshake(ctx context.Context) error {
 			return fmt.Errorf("acp: fork session %s: %w", c.opts.ForkFromSessionID, err)
 		}
 		c.sessionID = forkResp.SessionId
+		// Unstable-вариант типа опций структурно идентичен стабильному (одинаковый
+		// wire-формат) — конвертируем через JSON, чтобы не дублировать union-логику.
+		c.configOptions = convertConfigOptions(forkResp.ConfigOptions)
 		return nil
 	}
 
@@ -218,7 +227,7 @@ func (c *Client) handshake(ctx context.Context) error {
 	// любая ошибка load (в т.ч. resourceNotFound на устаревший/неизвестный id) не
 	// валит восстановление: логируем и проваливаемся в NewSession ниже.
 	if c.opts.ResumeSessionID != "" && initResp.AgentCapabilities.LoadSession {
-		if _, err := c.conn.LoadSession(ctx, acpsdk.LoadSessionRequest{
+		if loadResp, err := c.conn.LoadSession(ctx, acpsdk.LoadSessionRequest{
 			SessionId:  acpsdk.SessionId(c.opts.ResumeSessionID),
 			Cwd:        c.opts.Cwd,
 			McpServers: []acpsdk.McpServer{},
@@ -226,6 +235,7 @@ func (c *Client) handshake(ctx context.Context) error {
 			log.Printf("acp: load session %s failed (%v), starting fresh session", c.opts.ResumeSessionID, err)
 		} else {
 			c.sessionID = acpsdk.SessionId(c.opts.ResumeSessionID)
+			c.configOptions = loadResp.ConfigOptions
 			// Реплей session/load не закрывает потоковые сообщения — последний текст
 			// остаётся «открытым» в stream-состоянии. Без закрытия первый Bind нового
 			// run'а переоткрыл бы старый messageId, и клиентский агрегатор принял бы его
@@ -247,7 +257,56 @@ func (c *Client) handshake(ctx context.Context) error {
 		return fmt.Errorf("acp: new session: %w", err)
 	}
 	c.sessionID = newSess.SessionId
+	c.configOptions = newSess.ConfigOptions
 	return nil
+}
+
+// convertConfigOptions приводит unstable-вариант опций (session/fork) к стабильному
+// типу через JSON: wire-формат обоих идентичен.
+func convertConfigOptions(in []acpsdk.UnstableSessionConfigOption) []acpsdk.SessionConfigOption {
+	if len(in) == 0 {
+		return nil
+	}
+	raw, err := json.Marshal(in)
+	if err != nil {
+		return nil
+	}
+	var out []acpsdk.SessionConfigOption
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil
+	}
+	return out
+}
+
+// ConfigOptions возвращает текущие конфигурационные опции сессии (модель, режим
+// прав, усилие). Отдаётся фронту history-endpoint'ом вместе с историей и командами.
+func (c *Client) ConfigOptions() []acpsdk.SessionConfigOption {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]acpsdk.SessionConfigOption, len(c.configOptions))
+	copy(out, c.configOptions)
+	return out
+}
+
+// SetConfigOption устанавливает значение конфигурационной опции сессии
+// (session/set_config_option) и возвращает актуальный полный набор опций из ответа
+// агента.
+func (c *Client) SetConfigOption(ctx context.Context, configID, value string) ([]acpsdk.SessionConfigOption, error) {
+	resp, err := c.conn.SetSessionConfigOption(ctx, acpsdk.SetSessionConfigOptionRequest{
+		ValueId: &acpsdk.SetSessionConfigOptionValueId{
+			SessionId: c.sessionID,
+			ConfigId:  acpsdk.SessionConfigId(configID),
+			Value:     acpsdk.SessionConfigValueId(value),
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("acp: set config option %s=%s: %w", configID, value, err)
+	}
+
+	c.mu.Lock()
+	c.configOptions = resp.ConfigOptions
+	c.mu.Unlock()
+	return c.ConfigOptions(), nil
 }
 
 // SessionID возвращает идентификатор ACP-сессии агента. Сохраняется в store как

@@ -53,6 +53,17 @@ func (c *Client) translateUpdate(u acpsdk.SessionUpdate) []agui.Event {
 	case u.AvailableCommandsUpdate != nil:
 		return []agui.Event{availableCommandsEvent(u.AvailableCommandsUpdate)}
 
+	case u.ConfigOptionUpdate != nil:
+		// Снимок опций сессии (модель, режим прав, усилие) изменился на стороне
+		// агента. Сохраняем и уведомляем фронт CUSTOM-событием, чтобы селекторы в
+		// composer не отставали от фактического состояния.
+		c.configOptions = u.ConfigOptionUpdate.ConfigOptions
+		return []agui.Event{{
+			Type:  agui.EventCustom,
+			Name:  agui.CustomConfigOptionsName,
+			Value: u.ConfigOptionUpdate.ConfigOptions,
+		}}
+
 	case u.AgentMessageChunk != nil:
 		id := deref(u.AgentMessageChunk.MessageId)
 		return c.streamText(id, contentText(u.AgentMessageChunk.Content))

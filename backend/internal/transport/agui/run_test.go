@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	acpsdk "github.com/coder/acp-go-sdk"
+
 	"github.com/grigory51/brigade/backend/internal/acp"
 	aguimodel "github.com/grigory51/brigade/backend/internal/agui"
 )
@@ -20,9 +22,9 @@ type fakeBindable struct {
 	promptStopReason string
 	promptErr        error
 
-	promptCalled   bool
-	promptText     string
-	finishCalled   bool
+	promptCalled bool
+	promptText   string
+	finishCalled bool
 }
 
 func (b *fakeBindable) Bind(sink acp.EventSink, resolver acp.PermissionResolver) (unbind func()) {
@@ -35,10 +37,14 @@ func (b *fakeBindable) Prompt(ctx context.Context, text string) (string, error) 
 	return b.promptStopReason, b.promptErr
 }
 
-func (b *fakeBindable) SetFrontendTools(tools []acp.FrontendTool) {}
-func (b *fakeBindable) FinishStreams()                            { b.finishCalled = true }
-func (b *fakeBindable) Messages() []acp.Message                   { return nil }
-func (b *fakeBindable) Commands() []aguimodel.AvailableCommand    { return nil }
+func (b *fakeBindable) SetFrontendTools(tools []acp.FrontendTool)   {}
+func (b *fakeBindable) FinishStreams()                              { b.finishCalled = true }
+func (b *fakeBindable) Messages() []acp.Message                     { return nil }
+func (b *fakeBindable) Commands() []aguimodel.AvailableCommand      { return nil }
+func (b *fakeBindable) ConfigOptions() []acpsdk.SessionConfigOption { return nil }
+func (b *fakeBindable) SetConfigOption(context.Context, string, string) ([]acpsdk.SessionConfigOption, error) {
+	return nil, nil
+}
 
 // flushRecorder — httptest.ResponseRecorder не реализует http.Flusher, а run.serve
 // требует Flusher. Оборачиваем запись в буфер собственным типом с no-op Flush.

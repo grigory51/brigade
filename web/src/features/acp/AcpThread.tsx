@@ -6,7 +6,11 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Thread } from "@/components/assistant-ui/thread";
 import { FRONTEND_TOOL_NAMES } from "./frontendTools";
-import type { AvailableCommand, A2uiState } from "./useAcpRuntime";
+import type {
+  AvailableCommand,
+  A2uiState,
+  ConfigOption,
+} from "./useAcpRuntime";
 import { parseDiffResult } from "./tools/diff";
 import { DiffCard } from "./tools/DiffCard";
 import { TerminalCard } from "./tools/TerminalCard";
@@ -28,10 +32,14 @@ export function AcpThread({
   commands,
   plan,
   a2ui,
+  configOptions,
+  onConfigChange,
 }: {
   commands: AvailableCommand[];
   plan: PlanEntry[];
   a2ui: A2uiState;
+  configOptions: ConfigOption[];
+  onConfigChange: (configId: string, value: string) => void;
 }) {
   return (
     <A2uiContext.Provider value={a2ui}>
@@ -39,6 +47,8 @@ export function AcpThread({
         commands={commands}
         components={{ ToolFallback }}
         footer={<PlanPanel plan={plan} />}
+        configOptions={configOptions}
+        onConfigChange={onConfigChange}
       />
     </A2uiContext.Provider>
   );

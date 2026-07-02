@@ -25,6 +25,7 @@ import (
 
 	"github.com/grigory51/brigade/backend/internal/auth"
 
+	acpsdk "github.com/coder/acp-go-sdk"
 	"github.com/google/uuid"
 
 	"github.com/grigory51/brigade/backend/internal/acp"
@@ -70,6 +71,12 @@ type Bindable interface {
 	// Commands возвращает последний список slash-команд агента (для автокомплита
 	// composer'а; отдаётся вместе с историей).
 	Commands() []aguimodel.AvailableCommand
+	// ConfigOptions возвращает текущие конфигурационные опции сессии (модель, режим
+	// прав, усилие) в wire-формате ACP; отдаётся вместе с историей.
+	ConfigOptions() []acpsdk.SessionConfigOption
+	// SetConfigOption устанавливает значение опции сессии и возвращает актуальный
+	// полный набор опций.
+	SetConfigOption(ctx context.Context, configID, value string) ([]acpsdk.SessionConfigOption, error)
 }
 
 // *acp.Client удовлетворяет Bindable напрямую — проверяется на этапе компиляции.
@@ -151,6 +158,47 @@ func Mux(mux *http.ServeMux, verifier TokenVerifier, provider ClientProvider) {
 	mux.Handle("POST /api/ag-ui/run", runHandler(verifier, provider, perms))
 	mux.Handle("POST /api/ag-ui/permission", permissionHandler(verifier, perms))
 	mux.Handle("GET /api/ag-ui/history", historyHandler(verifier, provider))
+	mux.Handle("POST /api/ag-ui/config", configHandler(verifier, provider))
+}
+
+// configHandler обслуживает POST /api/ag-ui/config: устанавливает значение
+// конфигурационной опции сессии (модель, режим прав, усилие) и возвращает актуальный
+// полный набор опций {configOptions: [...]}.
+func configHandler(verifier TokenVerifier, provider ClientProvider) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := verifier.Verify(accessToken(r))
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		var body struct {
+			ThreadID string `json:"threadId"`
+			ConfigID string `json:"configId"`
+			Value    string `json:"value"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil ||
+			body.ThreadID == "" || body.ConfigID == "" || body.Value == "" {
+			http.Error(w, "threadId, configId and value are required", http.StatusBadRequest)
+			return
+		}
+
+		bindable, ok := provider.Bindable(body.ThreadID, userID)
+		if !ok {
+			http.Error(w, "session not found", http.StatusNotFound)
+			return
+		}
+
+		opts, err := bindable.SetConfigOption(r.Context(), body.ConfigID, body.Value)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(struct {
+			ConfigOptions []acpsdk.SessionConfigOption `json:"configOptions"`
+		}{ConfigOptions: opts})
+	})
 }
 
 // historyHandler обслуживает GET /api/ag-ui/history?threadId=<id>: отдаёт историю чата
@@ -188,10 +236,15 @@ func historyHandler(verifier TokenVerifier, provider ClientProvider) http.Handle
 		if cmds == nil {
 			cmds = []aguimodel.AvailableCommand{}
 		}
+		opts := bindable.ConfigOptions()
+		if opts == nil {
+			opts = []acpsdk.SessionConfigOption{}
+		}
 		_ = json.NewEncoder(w).Encode(struct {
-			Messages []acp.Message              `json:"messages"`
-			Commands []aguimodel.AvailableCommand `json:"commands"`
-		}{Messages: msgs, Commands: cmds})
+			Messages      []acp.Message                `json:"messages"`
+			Commands      []aguimodel.AvailableCommand `json:"commands"`
+			ConfigOptions []acpsdk.SessionConfigOption `json:"configOptions"`
+		}{Messages: msgs, Commands: cmds, ConfigOptions: opts})
 	})
 }
 

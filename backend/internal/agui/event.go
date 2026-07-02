@@ -83,6 +83,11 @@ const CustomCommandsName = "available_commands"
 // где элементы — server→client сообщения A2UI v0.9 (см. internal/a2ui).
 const CustomA2UIName = "a2ui"
 
+// CustomConfigOptionsName — значение поля Name события EventCustom, несущего
+// актуальный набор конфигурационных опций сессии (модель, режим прав, усилие).
+// Value — массив ACP SessionConfigOption (wire-формат ACP).
+const CustomConfigOptionsName = "config_options"
+
 // Event — обобщённое событие AG-UI. Незаполненные поля опускаются при сериализации,
 // поэтому одна структура покрывает все варианты без отдельных типов на каждый. Имена
 // полей в JSON соответствуют каноническим *EventSchema из @ag-ui/core.

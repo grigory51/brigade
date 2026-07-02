@@ -42,6 +42,7 @@ import {
   ArrowDownIcon,
   ArrowUpIcon,
   CheckIcon,
+  ChevronDownIcon,
   CopyIcon,
   DownloadIcon,
   MicIcon,
@@ -60,7 +61,16 @@ import {
   type PropsWithChildren,
   type ReactNode,
 } from "react";
-import type { AvailableCommand } from "@/features/acp/useAcpRuntime";
+import type {
+  AvailableCommand,
+  ConfigOption,
+} from "@/features/acp/useAcpRuntime";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 
@@ -89,6 +99,10 @@ export type ThreadProps = {
   commands?: AvailableCommand[] | undefined;
   // footer — дополнительный блок над composer'ом (например, план агента).
   footer?: ReactNode | undefined;
+  // configOptions — конфигурационные опции сессии (модель, усилие) для селекторов
+  // в composer'е; onConfigChange отправляет новое значение бэкенду.
+  configOptions?: ConfigOption[] | undefined;
+  onConfigChange?: ((configId: string, value: string) => void) | undefined;
 };
 
 const EMPTY_COMPONENTS: ThreadComponents = {};
@@ -100,6 +114,16 @@ const ThreadComponentsContext =
 // передачи пропом через все промежуточные компоненты registry-разметки.
 const CommandsContext = createContext<AvailableCommand[]>([]);
 
+// Контекст конфигурационных опций сессии для селекторов composer'а (см. ConfigSelectors).
+type ConfigContextValue = {
+  options: ConfigOption[];
+  onChange: (configId: string, value: string) => void;
+};
+const ConfigContext = createContext<ConfigContextValue>({
+  options: [],
+  onChange: () => {},
+});
+
 // Startup exposes a loading placeholder thread; treat it as a new chat so
 // the composer mounts centered. Loads after startup keep the docked layout.
 const isNewChatView = (s: AssistantState) =>
@@ -110,13 +134,21 @@ export const Thread: FC<ThreadProps> = ({
   components = EMPTY_COMPONENTS,
   commands = [],
   footer,
+  configOptions = [],
+  onConfigChange,
 }) => {
   const isEmpty = useAuiState(isNewChatView);
+  const configValue = useMemo<ConfigContextValue>(
+    () => ({ options: configOptions, onChange: onConfigChange ?? (() => {}) }),
+    [configOptions, onConfigChange],
+  );
 
   return (
     <ThreadComponentsContext.Provider value={components}>
       <CommandsContext.Provider value={commands}>
-        <ThreadRoot isEmpty={isEmpty} footer={footer} />
+        <ConfigContext.Provider value={configValue}>
+          <ThreadRoot isEmpty={isEmpty} footer={footer} />
+        </ConfigContext.Provider>
       </CommandsContext.Provider>
     </ThreadComponentsContext.Provider>
   );
@@ -139,8 +171,10 @@ const ThreadRoot: FC<{ isEmpty: boolean; footer?: ReactNode }> = ({
         ["--composer-padding" as string]: "8px",
       }}
     >
+      {/* Без turnAnchor="top" (дефолт registry): он прокручивал начало нового
+          turn'а к верху вьюпорта — «отскролл наверх» при каждом сообщении.
+          Обычное поведение — прилипание к низу, как в терминале. */}
       <ThreadPrimitive.Viewport
-        turnAnchor="top"
         data-slot="aui_thread-viewport"
         className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth"
       >
@@ -381,10 +415,72 @@ const SlashMenu: FC = () => {
   );
 };
 
+// configSelectorCategories — какие опции сессии показываются селекторами в composer'е
+// и в каком порядке. Прочие категории (permission mode, agent) намеренно не выводятся.
+const configSelectorCategories = ["model", "thought_level"];
+
+// ConfigSelectors — компактные выпадающие селекторы опций сессии (модель, усилие)
+// слева в строке действий composer'а. Текущее значение — подписью на кнопке; выбор
+// уходит бэкенду (session/set_config_option) через onConfigChange.
+const ConfigSelectors: FC = () => {
+  const { options, onChange } = useContext(ConfigContext);
+  const shown = configSelectorCategories
+    .map((cat) => options.find((o) => o.category === cat))
+    .filter((o): o is ConfigOption => o !== undefined && o.options.length > 0);
+  if (shown.length === 0) return null;
+
+  return (
+    <div className="flex items-center gap-0.5">
+      {shown.map((opt) => {
+        const current = opt.options.find((v) => v.value === opt.currentValue);
+        return (
+          <DropdownMenu key={opt.id}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-foreground h-7 gap-1 px-2 text-xs font-normal"
+              >
+                {current?.name ?? opt.currentValue}
+                <ChevronDownIcon className="size-3 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="top" align="start" className="w-64">
+              {opt.options.map((v) => (
+                <DropdownMenuItem
+                  key={v.value}
+                  onSelect={() => onChange(opt.id, v.value)}
+                  className="flex-col items-start gap-0.5"
+                >
+                  <span className="flex w-full items-center justify-between text-sm">
+                    {v.name}
+                    {v.value === opt.currentValue && (
+                      <CheckIcon className="size-3.5" />
+                    )}
+                  </span>
+                  {v.description && (
+                    <span className="text-muted-foreground text-xs">
+                      {v.description}
+                    </span>
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        );
+      })}
+    </div>
+  );
+};
+
 const ComposerAction: FC = () => {
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between">
-      <ComposerAddAttachment />
+      <div className="flex items-center gap-1">
+        <ComposerAddAttachment />
+        <ConfigSelectors />
+      </div>
       <div className="flex items-center gap-1.5">
         <AuiIf condition={(s) => s.thread.capabilities.dictation}>
           <AuiIf condition={(s) => s.composer.dictation == null}>
