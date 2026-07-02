@@ -505,9 +505,10 @@ function SessionItem({
       )}
       <SidebarMenuAction
         showOnHover
+        disabled={busy}
         onClick={(e) => {
           e.stopPropagation();
-          startEdit();
+          if (!busy) startEdit();
         }}
         aria-label="Переименовать сессию"
         className="right-7 text-sidebar-foreground/60 hover:text-sidebar-foreground"
