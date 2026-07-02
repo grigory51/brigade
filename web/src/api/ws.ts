@@ -8,10 +8,11 @@ import { sessionClient } from "./client";
  * всегда доходит. Поэтому используется одноразовый ticket из unary-вызова,
  * который передаётся в query-параметре.
  *
- * kind определяет неймспейс пути: terminal (CLI) или acp.
+ * kind определяет неймспейс пути: terminal (терминал агента CLI-сессии) или
+ * shell (вспомогательный шелл рядом с любой сессией).
  */
 export async function streamUrl(
-  kind: "terminal" | "acp",
+  kind: "terminal" | "shell",
   sessionId: string,
 ): Promise<string> {
   const { ticket } = await sessionClient.issueStreamTicket({ sessionId });

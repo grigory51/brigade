@@ -72,12 +72,14 @@ func (s *DockerSpawner) Spawn(ctx context.Context, spec Spec) (Handle, error) {
 		AttachStderr: true,
 	}
 
-	var hostCfg *container.HostConfig
+	// pid 1 — docker-init (tini), а не агент: он реапит осиротевшие процессы
+	// (например, убитые шеллы /ws/shell и их детей), иначе в контейнере копились
+	// бы зомби.
+	initProcess := true
+	hostCfg := &container.HostConfig{Init: &initProcess}
 	if spec.Cwd != "" {
 		// bind-mount подпапки рабочей директории внутрь контейнера.
-		hostCfg = &container.HostConfig{
-			Binds: []string{fmt.Sprintf("%s:%s", spec.Cwd, containerWorkdir)},
-		}
+		hostCfg.Binds = []string{fmt.Sprintf("%s:%s", spec.Cwd, containerWorkdir)}
 	}
 
 	created, err := s.cli.ContainerCreate(ctx, cfg, hostCfg, nil, nil, "brigade-"+spec.SessionID)

@@ -32,10 +32,14 @@ import (
 	"github.com/grigory51/brigade/backend/internal/transport/termws"
 )
 
-// Registry удовлетворяет провайдеру termws: тот берёт у него Handle CLI-сессии.
-// Проверяется на этапе компиляции. ACP-режим (AG-UI поверх SSE) подключается через
-// тонкий адаптер в main, который берёт у реестра живого *acp.Client (метод ACPClient).
-var _ termws.HandleProvider = (*Registry)(nil)
+// Registry удовлетворяет провайдерам termws: HandleProvider отдаёт Handle CLI-сессии,
+// ShellProvider спавнит вспомогательный шелл рядом с любой сессией. Проверяется на
+// этапе компиляции. ACP-режим (AG-UI поверх SSE) подключается через тонкий адаптер в
+// main, который берёт у реестра живого *acp.Client (метод ACPClient).
+var (
+	_ termws.HandleProvider = (*Registry)(nil)
+	_ termws.ShellProvider  = (*Registry)(nil)
+)
 
 // live — живая сессия в памяти. Для CLI заполнено handle, для ACP — client; второе
 // поле в каждом случае nil. owner фиксирует владельца для проверки доступа из WS.
@@ -281,6 +285,29 @@ func (r *Registry) Handle(sessionID, userID string) (spawn.Handle, bool) {
 		return nil, false
 	}
 	return lv.handle, true
+}
+
+// Shell реализует termws.ShellProvider: спавнит вспомогательный шелл рядом с сессией
+// для ручного осмотра её рабочей директории. Режим берётся у сессии (см.
+// applyACPSpawnMode): local — интерактивный шелл хоста в pty с cwd сессии; docker —
+// exec в работающий контейнер сессии. Жизненный цикл шелла — на вызывающей стороне
+// (termws завершает его при разрыве WS); реестр шеллы не отслеживает.
+func (r *Registry) Shell(ctx context.Context, sessionID, userID string) (termws.Shell, error) {
+	sess, err := r.Get(ctx, sessionID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	switch sess.Mode {
+	case store.SessionModeDocker:
+		ds, ok := r.spawner.(*spawn.DockerSpawner)
+		if !ok {
+			return nil, fmt.Errorf("session: docker shell without DockerSpawner")
+		}
+		return ds.SpawnShell(ctx, sess.ID)
+	default:
+		return spawn.StartLocalShell(ctx, sess.Cwd)
+	}
 }
 
 // ACPClient отдаёт живого ACP-клиента сессии её владельцу. Используется AG-UI-транспортом

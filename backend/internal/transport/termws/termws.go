@@ -1,27 +1,61 @@
-// Package termws обслуживает WebSocket терминала CLI-режима.
+// Package termws обслуживает WebSocket-терминалы.
 //
-// Эндпоинт апгрейдит HTTP-соединение до WebSocket, аутентифицирует клиента по
-// одноразовому тикету (?ticket=) и связывает поток псевдотерминала агента
-// (spawn.Handle) с WebSocket:
+// Эндпоинты апгрейдят HTTP-соединение до WebSocket, аутентифицируют клиента по
+// одноразовому тикету (?ticket=) и связывают поток псевдотерминала с WebSocket:
 //
-//   - сервер→клиент: raw-байты pty бинарными фреймами (io.Copy handle→WS);
+//   - сервер→клиент: raw-байты pty бинарными фреймами (io.Copy терминал→WS);
 //   - клиент→сервер: JSON-сообщения {type:"input",data} | {type:"resize",cols,rows}.
 //
-// Resize прокидывается в handle.Resize (pty.Setsize / docker ContainerResize). Сам
-// агент спавнится не здесь, а реестром живых сессий; термина получает уже готовый
-// Handle по sessionID через HandleProvider.
+// Два эндпоинта:
+//
+//   - Handler — терминал агента CLI-сессии: живой Handle отдаёт реестр сессий
+//     (HandleProvider), жизненный цикл агента этим эндпоинтом не управляется;
+//   - ShellHandler — вспомогательный шелл рядом с любой сессией: спавнится на
+//     каждое WS-подключение (ShellProvider) и завершается при его разрыве.
 package termws
 
 import (
 	"context"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/coder/websocket"
 
 	"github.com/grigory51/brigade/backend/internal/spawn"
 )
+
+// Terminal — минимальный контракт псевдотерминала, который умеет обслуживать serve:
+// поток ввода-вывода, изменение размера и хвост вывода для восстановления экрана.
+// spawn.Handle удовлетворяет ему структурно.
+type Terminal interface {
+	io.ReadWriter
+
+	// Resize меняет размер псевдотерминала.
+	Resize(cols, rows uint16) error
+
+	// History возвращает копию накопленного хвоста вывода (может быть пустой).
+	History() []byte
+}
+
+// Shell — терминал вспомогательного шелла вместе с завершением его процесса.
+// Terminate вызывается транспортом при разрыве WS-подключения.
+type Shell interface {
+	Terminal
+
+	// Terminate завершает процесс шелла и освобождает его ресурсы. Идемпотентна.
+	Terminate(ctx context.Context) error
+}
+
+// ShellProvider спавнит вспомогательный шелл рядом с сессией. Реализуется реестром
+// сессий: local-сессия — шелл-процесс хоста в pty (cwd сессии), docker-сессия —
+// exec в контейнер сессии. Ошибка означает, что шелл недоступен (сессия не найдена,
+// принадлежит другому пользователю или её контейнер не работает).
+type ShellProvider interface {
+	Shell(ctx context.Context, sessionID, userID string) (Shell, error)
+}
 
 // TicketRedeemer проверяет одноразовый WS-тикет, привязанный к session_id, и
 // возвращает id пользователя. Удовлетворяется auth.TicketStore.
@@ -84,12 +118,62 @@ func Handler(tickets TicketRedeemer, provider HandleProvider) http.Handler {
 	})
 }
 
-// serve связывает WebSocket с pty-хендлом до разрыва любой из сторон.
+// ShellHandler возвращает http.Handler WS-эндпоинта вспомогательного шелла. Путь
+// регистрируется как "GET /ws/shell/{sessionId}". Шелл живёт ровно столько, сколько
+// WS-подключение: спавнится после успешной аутентификации и завершается при разрыве.
+func ShellHandler(tickets TicketRedeemer, shells ShellProvider) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sessionID := r.PathValue("sessionId")
+		if sessionID == "" {
+			http.Error(w, "sessionId не задан", http.StatusBadRequest)
+			return
+		}
+
+		userID, ok := tickets.Redeem(r.URL.Query().Get("ticket"), sessionID)
+		if !ok {
+			http.Error(w, "невалидный тикет", http.StatusUnauthorized)
+			return
+		}
+
+		// Спавн привязан к контексту запроса: разрыв WS отменяет ctx и локальный
+		// шелл-процесс получает сигнал завершения даже без явного Terminate.
+		shell, err := shells.Shell(r.Context(), sessionID, userID)
+		if err != nil {
+			log.Printf("termws: shell %s: %v", sessionID, err)
+			http.Error(w, "шелл недоступен", http.StatusNotFound)
+			return
+		}
+
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			terminateShell(shell, sessionID)
+			return
+		}
+		defer conn.CloseNow()
+		// Шелл одноразов: разорванное подключение завершает его процесс, повторное
+		// открытие панели спавнит новый.
+		defer terminateShell(shell, sessionID)
+
+		serve(r.Context(), conn, shell)
+	})
+}
+
+// terminateShell завершает процесс шелла с собственным бюджетом времени: контекст
+// запроса к этому моменту уже отменён и для teardown непригоден.
+func terminateShell(shell Shell, sessionID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := shell.Terminate(ctx); err != nil {
+		log.Printf("termws: shell terminate %s: %v", sessionID, err)
+	}
+}
+
+// serve связывает WebSocket с псевдотерминалом до разрыва любой из сторон.
 //
 // Поток pty→WS копируется в отдельной горутине через адаптер net.Conn (бинарные
 // фреймы). Поток WS→pty читается в текущей горутине покадрово как JSON. Завершение
 // любого направления отменяет общий ctx и закрывает соединение.
-func serve(ctx context.Context, conn *websocket.Conn, handle spawn.Handle) {
+func serve(ctx context.Context, conn *websocket.Conn, handle Terminal) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 

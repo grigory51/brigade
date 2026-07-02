@@ -81,6 +81,10 @@ func main() {
 	// по WS, а по каноническому AG-UI (SSE, см. ниже).
 	mux.Handle("/ws/terminal/{sessionId}", termws.Handler(tickets, registry))
 
+	// WS вспомогательного шелла: параллельный терминал рядом с любой сессией (осмотр
+	// рабочей директории руками). Шелл спавнится на подключение и живёт до его разрыва.
+	mux.Handle("/ws/shell/{sessionId}", termws.ShellHandler(tickets, registry))
+
 	// AG-UI (канонический protocol поверх SSE). В отличие от WS-режима аутентификация —
 	// Bearer access-JWT на каждый запрос, а не одноразовый тикет; threadId трактуется как
 	// идентификатор сессии. POST /api/ag-ui/{run,permission}.

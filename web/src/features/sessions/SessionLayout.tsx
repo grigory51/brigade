@@ -57,6 +57,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { ShellPanel } from "@/features/terminal/ShellPanel";
 import { CreateSessionDialog } from "./CreateSessionDialog";
 import {
   SessionHeaderProvider,
@@ -320,8 +321,13 @@ export function SessionLayout() {
 
           <SidebarInset className="h-svh min-h-0">
             <SessionTopbar />
-            <div className="min-h-0 flex-1">
-              <Outlet />
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="min-h-0 flex-1">
+                <Outlet />
+              </div>
+              {/* Вспомогательный шелл активной сессии. key пересоздаёт панель при
+                  переключении сессии: шелл принадлежит конкретной сессии. */}
+              {activeId && <ShellPanel key={activeId} sessionId={activeId} />}
             </div>
           </SidebarInset>
         </SidebarProvider>

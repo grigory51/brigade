@@ -76,9 +76,14 @@ func (d *DockerACPSpawner) start(ctx context.Context, spec Spec, stateID string)
 		WorkingDir:   containerWorkdir,
 		Labels:       map[string]string{labelSessionID: spec.SessionID},
 	}
+	initProcess := true
 	hostCfg := &container.HostConfig{
 		// Контейнер одноразов: состояние в volume, teardown не оставляет мусора.
 		AutoRemove: true,
+		// pid 1 — docker-init (tini), а не adapter: он реапит осиротевшие процессы
+		// (например, убитые шеллы /ws/shell и их детей), иначе в контейнере копились
+		// бы зомби.
+		Init: &initProcess,
 		Mounts: []mount.Mount{{
 			Type:   mount.TypeVolume,
 			Source: volName,
