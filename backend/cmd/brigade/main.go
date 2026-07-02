@@ -44,6 +44,15 @@ func main() {
 
 	ctx := context.Background()
 
+	// Диагностика конфигурации токена агента: пробрасывается ли подписочный токен
+	// Claude Code в сессии. Значение не логируем — только факт наличия и длину,
+	// чтобы отличить «токен не задан» от «задан, но отвергается».
+	if cfg.ClaudeCodeOAuthToken == "" {
+		log.Printf("brigade: WARNING claude_code_oauth_token is empty — agents will prompt for /login")
+	} else {
+		log.Printf("brigade: claude_code_oauth_token present (len=%d)", len(cfg.ClaudeCodeOAuthToken))
+	}
+
 	// Авторизация: сервис JWT/refresh, сидирование стартового пользователя и
 	// процессное хранилище одноразовых WS-тикетов.
 	authSvc := auth.NewService(st.DB(), cfg.JWT.Secret, cfg.JWT.AccessTTL, cfg.JWT.RefreshTTL)

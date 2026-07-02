@@ -250,7 +250,8 @@ func (r *Registry) agentEnv(sess store.Session) []string {
 // previewEnv формирует preview-переменные агента: идентификатор сессии, токен
 // регистрации, адрес API brigade и шаблон публичного URL. Пусто при выключенном
 // preview. Адрес API — plain-listener brigade: локальному процессу он доступен как
-// 127.0.0.1, контейнеру — как host.docker.internal (ExtraHosts host-gateway).
+// 127.0.0.1; контейнеру — по hostname brigade в общей docker-сети (если brigade сам
+// в контейнере) либо через host.docker.internal (если brigade — процесс на хосте).
 func (r *Registry) previewEnv(sess store.Session) []string {
 	cfg := r.previews.Config()
 	if !cfg.Enabled {
@@ -258,7 +259,7 @@ func (r *Registry) previewEnv(sess store.Session) []string {
 	}
 	apiHost := "127.0.0.1"
 	if sess.Mode == store.SessionModeDocker {
-		apiHost = "host.docker.internal"
+		apiHost = r.dockerAPIHost()
 	}
 	return []string{
 		"BRIGADE_SESSION_ID=" + sess.ID,
@@ -266,6 +267,16 @@ func (r *Registry) previewEnv(sess store.Session) []string {
 		fmt.Sprintf("BRIGADE_API_URL=http://%s:%d", apiHost, cfg.APIPort),
 		"BRIGADE_PREVIEW_URL_TEMPLATE=" + cfg.URLTemplate(sess.ID),
 	}
+}
+
+// dockerAPIHost возвращает hostname, по которому агент-контейнер обращается к API
+// brigade. Определяется docker-спавнером: имя контейнера brigade в общей сети либо
+// host.docker.internal. Фолбэк host.docker.internal, если спавнер не docker.
+func (r *Registry) dockerAPIHost() string {
+	if ds, ok := r.spawner.(*spawn.DockerSpawner); ok {
+		return ds.APIHost()
+	}
+	return "host.docker.internal"
 }
 
 // installSkill кладёт скилл brigade-preview в cwd сессии (при включённом preview).

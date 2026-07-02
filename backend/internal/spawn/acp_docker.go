@@ -85,8 +85,9 @@ func (d *DockerACPSpawner) start(ctx context.Context, spec Spec, stateID string)
 		// бы зомби.
 		Init: &initProcess,
 		// host.docker.internal резолвится в шлюз хоста и на Linux (host-gateway);
-		// агент обращается по нему к API brigade (регистрация preview).
-		ExtraHosts: []string{"host.docker.internal:host-gateway"},
+		// используется, когда brigade — процесс на хосте (нет своей docker-сети).
+		ExtraHosts:  []string{"host.docker.internal:host-gateway"},
+		NetworkMode: d.spawner.netMode(),
 		Mounts: []mount.Mount{{
 			Type:   mount.TypeVolume,
 			Source: volName,
@@ -105,7 +106,7 @@ func (d *DockerACPSpawner) start(ctx context.Context, spec Spec, stateID string)
 		return nil, fmt.Errorf("spawn: acp remove stale container: %w", err)
 	}
 
-	created, err := cli.ContainerCreate(ctx, cfg, hostCfg, nil, nil, name)
+	created, err := cli.ContainerCreate(ctx, cfg, hostCfg, d.spawner.networkingConfig(), nil, name)
 	if err != nil {
 		return nil, fmt.Errorf("spawn: acp container create: %w", err)
 	}

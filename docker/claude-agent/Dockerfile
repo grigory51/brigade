@@ -15,7 +15,7 @@ FROM node:22-slim
 
 # Инструменты, без которых кодинг-агент недееспособен в контейнере.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git ripgrep ca-certificates curl \
+    && apt-get install -y --no-install-recommends git ripgrep ca-certificates curl python3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Adapter не ниже 0.54: в 0.52 session/set_config_option (смена модели) рассинхро-

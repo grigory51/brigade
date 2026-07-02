@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"sync"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 )
 
@@ -33,20 +35,99 @@ const containerWorkdir = ContainerWorkdir
 // DockerSpawner запускает каждого агента в отдельном контейнере (контейнер на сессию).
 type DockerSpawner struct {
 	cli *client.Client
+	// selfNetwork — docker-сеть, в которой работает сам brigade (если он в контейнере).
+	// Контейнеры сессий подключаются к ней, чтобы агент достучался до API brigade по
+	// его hostname. Пусто, если brigade — процесс на хосте (тогда агент ходит через
+	// host.docker.internal / host-gateway).
+	selfNetwork string
+	// selfHost — hostname, по которому агент обращается к API brigade: имя контейнера
+	// brigade в общей сети (self-container mode) либо "host.docker.internal" (host mode).
+	selfHost string
 }
 
 // NewDockerSpawner создаёт DockerSpawner с клиентом Docker из окружения
-// (DOCKER_HOST и т. п.). Клиент следует закрыть через Close при остановке сервиса.
+// (DOCKER_HOST и т. п.). Определяет собственную сеть brigade: если процесс работает
+// в docker-контейнере, контейнеры сессий будут спавниться в ту же сеть, чтобы агент
+// мог обратиться к API brigade по имени сервиса. Клиент следует закрыть через Close.
 func NewDockerSpawner() (*DockerSpawner, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, fmt.Errorf("spawn: docker client: %w", err)
 	}
-	return &DockerSpawner{cli: cli}, nil
+	s := &DockerSpawner{cli: cli, selfHost: "host.docker.internal"}
+	s.detectSelfNetwork(context.Background())
+	return s, nil
+}
+
+// detectSelfNetwork определяет, работает ли brigade в docker-контейнере, и если да —
+// запоминает его первую сеть и hostname для сетевого соединения с агентами. Любая
+// ошибка (brigade не в контейнере, hostname не резолвится в контейнер) — не фатальна:
+// остаётся режим host.docker.internal. Best-effort, вызывается один раз на старте.
+func (s *DockerSpawner) detectSelfNetwork(ctx context.Context) {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return
+	}
+	// В контейнере hostname по умолчанию — short container id; docker принимает его
+	// как идентификатор для inspect. Вне контейнера inspect вернёт ошибку — это ок.
+	info, err := s.cli.ContainerInspect(ctx, hostname)
+	if err != nil {
+		log.Printf("spawn: not running in a container (%v) — agents reach API via host.docker.internal", err)
+		return
+	}
+	if info.NetworkSettings == nil {
+		return
+	}
+	for name := range info.NetworkSettings.Networks {
+		// bridge/host/none — служебные сети без DNS по именам контейнеров; для связи
+		// агент→brigade по hostname нужна user-defined сеть (её создаёт compose).
+		if name == "bridge" || name == "host" || name == "none" {
+			continue
+		}
+		s.selfNetwork = name
+		// Имя контейнера brigade (без ведущего "/") — по нему агент к нему обратится.
+		s.selfHost = trimLeadingSlash(info.Name)
+		log.Printf("spawn: brigade in container %q on network %q — agents join it, API host=%q",
+			s.selfHost, s.selfNetwork, s.selfHost)
+		return
+	}
+	log.Printf("spawn: brigade container has no user-defined network — agents reach API via host.docker.internal")
+}
+
+// APIHost возвращает hostname, по которому агент в контейнере обращается к API
+// brigade: имя контейнера brigade (если он сам в user-defined сети) либо
+// host.docker.internal (host mode / только служебные сети).
+func (s *DockerSpawner) APIHost() string { return s.selfHost }
+
+func trimLeadingSlash(s string) string {
+	if len(s) > 0 && s[0] == '/' {
+		return s[1:]
+	}
+	return s
 }
 
 // Close освобождает ресурсы клиента Docker.
 func (s *DockerSpawner) Close() error { return s.cli.Close() }
+
+// networkingConfig подключает контейнер сессии к сети brigade (если она определена),
+// чтобы агент достучался до API brigade по его hostname. nil — контейнер уходит в
+// дефолтную bridge-сеть (host mode: агент обращается через host.docker.internal).
+func (s *DockerSpawner) networkingConfig() *network.NetworkingConfig {
+	if s.selfNetwork == "" {
+		return nil
+	}
+	return &network.NetworkingConfig{
+		EndpointsConfig: map[string]*network.EndpointSettings{
+			s.selfNetwork: {},
+		},
+	}
+}
+
+// netMode возвращает NetworkMode для HostConfig: имя сети brigade, если она
+// определена (совпадает с networkingConfig), иначе пусто (дефолтный bridge).
+func (s *DockerSpawner) netMode() container.NetworkMode {
+	return container.NetworkMode(s.selfNetwork)
+}
 
 // Ping проверяет достижимость docker-демона. Используется при старте, чтобы решить,
 // доступны ли docker-сессии на этом инстансе.
@@ -86,15 +167,16 @@ func (s *DockerSpawner) Spawn(ctx context.Context, spec Spec) (Handle, error) {
 	hostCfg := &container.HostConfig{
 		Init: &initProcess,
 		// host.docker.internal резолвится в шлюз хоста и на Linux (host-gateway);
-		// агент обращается по нему к API brigade (регистрация preview).
-		ExtraHosts: []string{"host.docker.internal:host-gateway"},
+		// используется, когда brigade — процесс на хосте (нет своей docker-сети).
+		ExtraHosts:  []string{"host.docker.internal:host-gateway"},
+		NetworkMode: s.netMode(),
 	}
 	if spec.Cwd != "" {
 		// bind-mount подпапки рабочей директории внутрь контейнера.
 		hostCfg.Binds = []string{fmt.Sprintf("%s:%s", spec.Cwd, containerWorkdir)}
 	}
 
-	created, err := s.cli.ContainerCreate(ctx, cfg, hostCfg, nil, nil, "brigade-"+spec.SessionID)
+	created, err := s.cli.ContainerCreate(ctx, cfg, hostCfg, s.networkingConfig(), nil, "brigade-"+spec.SessionID)
 	if err != nil {
 		return nil, fmt.Errorf("spawn: container create: %w", err)
 	}
