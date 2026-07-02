@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ConnectError } from "@connectrpc/connect";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { agentClient, sessionClient } from "@/api/client";
+import { agentClient, authClient, sessionClient } from "@/api/client";
 import { AgentType } from "@/api/gen/brigade/v1/agent_pb";
 import { Session, SessionKind } from "@/api/gen/brigade/v1/session_pb";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,10 @@ export function CreateSessionDialog({
   const [kind, setKind] = useState<SessionKind>(SessionKind.CLI);
   const [cwd, setCwd] = useState("");
   const [busy, setBusy] = useState(false);
+  // tokenSet — задан ли у пользователя токен Claude. ACP-сессия стартует агента сразу
+  // (non-interactive), поэтому без токена не поднимется — ACP-опцию дизейблим. CLI
+  // же можно авторизовать вручную в терминале (/login), поэтому доступен всегда.
+  const [tokenSet, setTokenSet] = useState<boolean | null>(null);
 
   // Список типов агентов подгружается один раз при первом открытии диалога.
   // Режим взаимодействия (kind) выбирается независимо от агента, поэтому при
@@ -61,6 +65,33 @@ export function CreateSessionDialog({
       cancelled = true;
     };
   }, [open, agents]);
+
+  // Статус токена Claude перечитывается при каждом открытии диалога (мог измениться
+  // в настройках). Пока грузится — ACP-опция ещё не блокируется (tokenSet === null).
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setTokenSet(null);
+    authClient
+      .getClaudeSettings({})
+      .then((res) => {
+        if (!cancelled) setTokenSet(res.tokenSet);
+      })
+      .catch(() => {
+        if (!cancelled) setTokenSet(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  // Если токен не задан, а выбран ACP (например, статус догрузился после выбора) —
+  // откатываем на CLI, чтобы нельзя было создать заведомо нерабочую ACP-сессию.
+  useEffect(() => {
+    if (tokenSet === false && kind === SessionKind.ACP) {
+      setKind(SessionKind.CLI);
+    }
+  }, [tokenSet, kind]);
 
   async function onSubmit() {
     if (!agentId) return;
@@ -144,11 +175,23 @@ export function CreateSessionDialog({
                   <SelectItem value={String(SessionKind.CLI)}>
                     CLI (терминал)
                   </SelectItem>
-                  <SelectItem value={String(SessionKind.ACP)}>
+                  {/* ACP стартует агента сразу и без токена не поднимется; пока
+                      статус токена грузится (tokenSet === null) не блокируем. */}
+                  <SelectItem
+                    value={String(SessionKind.ACP)}
+                    disabled={tokenSet === false}
+                  >
                     ACP (чат)
                   </SelectItem>
                 </SelectContent>
               </Select>
+              {tokenSet === false && (
+                <p className="text-xs text-muted-foreground">
+                  ACP недоступен без токена Claude — задайте его в{" "}
+                  <span className="font-medium">Настройки → Claude</span>. CLI
+                  можно авторизовать вручную в терминале.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">

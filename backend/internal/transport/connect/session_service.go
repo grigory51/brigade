@@ -37,6 +37,9 @@ func (s *SessionService) Create(ctx context.Context, req *connect.Request[v1.Cre
 		kindFromProto(req.Msg.Kind),
 		req.Msg.AgentType, req.Msg.Cwd, req.Msg.Prompt)
 	if err != nil {
+		if errors.Is(err, session.ErrClaudeTokenRequired) {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 

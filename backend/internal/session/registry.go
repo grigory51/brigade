@@ -131,6 +131,11 @@ func (r *Registry) userClaudeToken(ctx context.Context, userID string) string {
 // выполняется другим запросом.
 var ErrTeardownInProgress = errors.New("session: teardown already in progress")
 
+// ErrClaudeTokenRequired возвращается Create для ACP-сессии, если у пользователя не
+// задан токен Claude: ACP-агент стартует сразу (non-interactive) и без авторизации не
+// поднимется. CLI-сессию создать можно — там пользователь авторизуется в терминале.
+var ErrClaudeTokenRequired = errors.New("session: требуется токен Claude (задайте его в настройках) для ACP-сессии")
+
 // beginTeardown помечает сессию как останавливаемую и снимает её живой объект.
 // Возвращает ErrTeardownInProgress, если teardown уже идёт. Парный endTeardown
 // обязателен по завершении (defer).
@@ -157,6 +162,11 @@ func (r *Registry) endTeardown(sessionID string) {
 // пользователем. agentType — тип агента; cwd пустой означает дефолт workDir; prompt
 // передаётся ACP-агенту первым ходом (для CLI игнорируется — ввод идёт по WS).
 func (r *Registry) Create(ctx context.Context, userID string, kind store.SessionKind, agentType, cwd, prompt string) (store.Session, error) {
+	// ACP стартует агента сразу (non-interactive) — без токена не авторизуется.
+	// CLI можно создать без токена: пользователь авторизуется в терминале.
+	if kind == store.SessionKindACP && r.userClaudeToken(ctx, userID) == "" {
+		return store.Session{}, ErrClaudeTokenRequired
+	}
 	if cwd == "" {
 		cwd = r.workDir
 	}
