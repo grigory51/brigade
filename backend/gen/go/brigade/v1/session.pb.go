@@ -318,7 +318,6 @@ func (x *Session) GetParentId() string {
 type CreateSessionRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	AgentType string                 `protobuf:"bytes,1,opt,name=agent_type,json=agentType,proto3" json:"agent_type,omitempty"`
-	Mode      SessionMode            `protobuf:"varint,2,opt,name=mode,proto3,enum=brigade.v1.SessionMode" json:"mode,omitempty"`
 	Kind      SessionKind            `protobuf:"varint,3,opt,name=kind,proto3,enum=brigade.v1.SessionKind" json:"kind,omitempty"`
 	// prompt — необязательный стартовый промпт (актуален для ACP).
 	Prompt string `protobuf:"bytes,4,opt,name=prompt,proto3" json:"prompt,omitempty"`
@@ -363,13 +362,6 @@ func (x *CreateSessionRequest) GetAgentType() string {
 		return x.AgentType
 	}
 	return ""
-}
-
-func (x *CreateSessionRequest) GetMode() SessionMode {
-	if x != nil {
-		return x.Mode
-	}
-	return SessionMode_SESSION_MODE_UNSPECIFIED
 }
 
 func (x *CreateSessionRequest) GetKind() SessionKind {
@@ -1153,14 +1145,13 @@ const file_brigade_v1_session_proto_rawDesc = "" +
 	"created_at\x18\n" +
 	" \x01(\x03R\tcreatedAt\x12\x12\n" +
 	"\x04name\x18\v \x01(\tR\x04name\x12\x1b\n" +
-	"\tparent_id\x18\f \x01(\tR\bparentId\"\xb9\x01\n" +
+	"\tparent_id\x18\f \x01(\tR\bparentId\"\x98\x01\n" +
 	"\x14CreateSessionRequest\x12\x1d\n" +
 	"\n" +
 	"agent_type\x18\x01 \x01(\tR\tagentType\x12+\n" +
-	"\x04mode\x18\x02 \x01(\x0e2\x17.brigade.v1.SessionModeR\x04mode\x12+\n" +
 	"\x04kind\x18\x03 \x01(\x0e2\x17.brigade.v1.SessionKindR\x04kind\x12\x16\n" +
 	"\x06prompt\x18\x04 \x01(\tR\x06prompt\x12\x10\n" +
-	"\x03cwd\x18\x05 \x01(\tR\x03cwd\"F\n" +
+	"\x03cwd\x18\x05 \x01(\tR\x03cwdJ\x04\b\x02\x10\x03R\x04mode\"F\n" +
 	"\x15CreateSessionResponse\x12-\n" +
 	"\asession\x18\x01 \x01(\v2\x13.brigade.v1.SessionR\asession\"\x15\n" +
 	"\x13ListSessionsRequest\"G\n" +
@@ -1273,37 +1264,36 @@ var file_brigade_v1_session_proto_depIdxs = []int32{
 	0,  // 0: brigade.v1.Session.mode:type_name -> brigade.v1.SessionMode
 	1,  // 1: brigade.v1.Session.kind:type_name -> brigade.v1.SessionKind
 	2,  // 2: brigade.v1.Session.status:type_name -> brigade.v1.SessionStatus
-	0,  // 3: brigade.v1.CreateSessionRequest.mode:type_name -> brigade.v1.SessionMode
-	1,  // 4: brigade.v1.CreateSessionRequest.kind:type_name -> brigade.v1.SessionKind
-	3,  // 5: brigade.v1.CreateSessionResponse.session:type_name -> brigade.v1.Session
-	3,  // 6: brigade.v1.ListSessionsResponse.sessions:type_name -> brigade.v1.Session
-	3,  // 7: brigade.v1.GetSessionResponse.session:type_name -> brigade.v1.Session
-	3,  // 8: brigade.v1.ForkSessionResponse.session:type_name -> brigade.v1.Session
-	3,  // 9: brigade.v1.UpdateSessionResponse.session:type_name -> brigade.v1.Session
-	16, // 10: brigade.v1.ListPreviewsResponse.previews:type_name -> brigade.v1.Preview
-	4,  // 11: brigade.v1.SessionService.Create:input_type -> brigade.v1.CreateSessionRequest
-	6,  // 12: brigade.v1.SessionService.List:input_type -> brigade.v1.ListSessionsRequest
-	8,  // 13: brigade.v1.SessionService.Get:input_type -> brigade.v1.GetSessionRequest
-	12, // 14: brigade.v1.SessionService.Update:input_type -> brigade.v1.UpdateSessionRequest
-	10, // 15: brigade.v1.SessionService.Fork:input_type -> brigade.v1.ForkSessionRequest
-	14, // 16: brigade.v1.SessionService.Stop:input_type -> brigade.v1.StopSessionRequest
-	15, // 17: brigade.v1.SessionService.Delete:input_type -> brigade.v1.DeleteSessionRequest
-	19, // 18: brigade.v1.SessionService.IssueStreamTicket:input_type -> brigade.v1.IssueStreamTicketRequest
-	17, // 19: brigade.v1.SessionService.ListPreviews:input_type -> brigade.v1.ListPreviewsRequest
-	5,  // 20: brigade.v1.SessionService.Create:output_type -> brigade.v1.CreateSessionResponse
-	7,  // 21: brigade.v1.SessionService.List:output_type -> brigade.v1.ListSessionsResponse
-	9,  // 22: brigade.v1.SessionService.Get:output_type -> brigade.v1.GetSessionResponse
-	13, // 23: brigade.v1.SessionService.Update:output_type -> brigade.v1.UpdateSessionResponse
-	11, // 24: brigade.v1.SessionService.Fork:output_type -> brigade.v1.ForkSessionResponse
-	21, // 25: brigade.v1.SessionService.Stop:output_type -> brigade.v1.Empty
-	21, // 26: brigade.v1.SessionService.Delete:output_type -> brigade.v1.Empty
-	20, // 27: brigade.v1.SessionService.IssueStreamTicket:output_type -> brigade.v1.IssueStreamTicketResponse
-	18, // 28: brigade.v1.SessionService.ListPreviews:output_type -> brigade.v1.ListPreviewsResponse
-	20, // [20:29] is the sub-list for method output_type
-	11, // [11:20] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	1,  // 3: brigade.v1.CreateSessionRequest.kind:type_name -> brigade.v1.SessionKind
+	3,  // 4: brigade.v1.CreateSessionResponse.session:type_name -> brigade.v1.Session
+	3,  // 5: brigade.v1.ListSessionsResponse.sessions:type_name -> brigade.v1.Session
+	3,  // 6: brigade.v1.GetSessionResponse.session:type_name -> brigade.v1.Session
+	3,  // 7: brigade.v1.ForkSessionResponse.session:type_name -> brigade.v1.Session
+	3,  // 8: brigade.v1.UpdateSessionResponse.session:type_name -> brigade.v1.Session
+	16, // 9: brigade.v1.ListPreviewsResponse.previews:type_name -> brigade.v1.Preview
+	4,  // 10: brigade.v1.SessionService.Create:input_type -> brigade.v1.CreateSessionRequest
+	6,  // 11: brigade.v1.SessionService.List:input_type -> brigade.v1.ListSessionsRequest
+	8,  // 12: brigade.v1.SessionService.Get:input_type -> brigade.v1.GetSessionRequest
+	12, // 13: brigade.v1.SessionService.Update:input_type -> brigade.v1.UpdateSessionRequest
+	10, // 14: brigade.v1.SessionService.Fork:input_type -> brigade.v1.ForkSessionRequest
+	14, // 15: brigade.v1.SessionService.Stop:input_type -> brigade.v1.StopSessionRequest
+	15, // 16: brigade.v1.SessionService.Delete:input_type -> brigade.v1.DeleteSessionRequest
+	19, // 17: brigade.v1.SessionService.IssueStreamTicket:input_type -> brigade.v1.IssueStreamTicketRequest
+	17, // 18: brigade.v1.SessionService.ListPreviews:input_type -> brigade.v1.ListPreviewsRequest
+	5,  // 19: brigade.v1.SessionService.Create:output_type -> brigade.v1.CreateSessionResponse
+	7,  // 20: brigade.v1.SessionService.List:output_type -> brigade.v1.ListSessionsResponse
+	9,  // 21: brigade.v1.SessionService.Get:output_type -> brigade.v1.GetSessionResponse
+	13, // 22: brigade.v1.SessionService.Update:output_type -> brigade.v1.UpdateSessionResponse
+	11, // 23: brigade.v1.SessionService.Fork:output_type -> brigade.v1.ForkSessionResponse
+	21, // 24: brigade.v1.SessionService.Stop:output_type -> brigade.v1.Empty
+	21, // 25: brigade.v1.SessionService.Delete:output_type -> brigade.v1.Empty
+	20, // 26: brigade.v1.SessionService.IssueStreamTicket:output_type -> brigade.v1.IssueStreamTicketResponse
+	18, // 27: brigade.v1.SessionService.ListPreviews:output_type -> brigade.v1.ListPreviewsResponse
+	19, // [19:28] is the sub-list for method output_type
+	10, // [10:19] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_brigade_v1_session_proto_init() }

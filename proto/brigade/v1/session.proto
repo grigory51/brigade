@@ -52,7 +52,10 @@ message Session {
 
 message CreateSessionRequest {
   string agent_type = 1;
-  SessionMode mode = 2;
+  // mode (2) удалён: режим спавна (local|docker) — свойство инстанса (BRIGADE_MODE),
+  // а не выбор пользователя. Сервер проставляет его из конфига.
+  reserved 2;
+  reserved "mode";
   SessionKind kind = 3;
   // prompt — необязательный стартовый промпт (актуален для ACP).
   string prompt = 4;

@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -51,23 +52,21 @@ func main() {
 	}
 	tickets := auth.NewTicketStore()
 
-	// Спавнеры: local (pty в хост-процессе) доступен всегда; docker (контейнер на
-	// сессию) — только если достижим docker-демон (сокет). Режим — свойство сессии,
-	// а не сервиса: один инстанс обслуживает и local-, и docker-сессии. Docker
-	// недоступен → docker-сессии дают понятную ошибку при создании, local работают.
-	localSpawner := spawn.NewLocalSpawner()
-	dockerSpawner := tryDockerSpawner()
-	if dockerSpawner != nil {
-		defer func() { _ = dockerSpawner.Close() }()
+	// Спавнер выбирается по режиму инстанса (BRIGADE_MODE): local — pty в
+	// хост-процессе, docker — контейнер на сессию. Все сессии наследуют этот режим.
+	spawner, closeSpawner, err := buildSpawner(cfg.Mode)
+	if err != nil {
+		log.Fatalf("brigade: spawner: %v", err)
 	}
+	defer closeSpawner()
 
 	// Публикация dev-серверов сессий: HMAC-токены регистрации, реестр preview и
 	// конфигурация публичных URL. Сервис создаётся всегда (даже при выключенном
 	// preview) — зависимые компоненты не проверяют nil.
 	previewSvc := preview.NewService(previewConfig(cfg), []byte(cfg.JWT.Secret))
 
-	// Реестр живых сессий поверх store и спавнеров.
-	registry := session.NewRegistry(st, localSpawner, dockerSpawner, cfg.WorkDir, cfg.ClaudeCodeOAuthToken, previewSvc)
+	// Реестр живых сессий поверх store и спавнера. Режим фиксируется в каждой сессии.
+	registry := session.NewRegistry(st, spawner, store.SessionMode(cfg.Mode), cfg.WorkDir, cfg.ClaudeCodeOAuthToken, previewSvc)
 	defer registry.Close()
 
 	// Восстановление живых сессий после рестарта: упавшие помечаются failed и не
@@ -115,8 +114,8 @@ func main() {
 	var handler http.Handler = mux
 	if cfg.Preview.Enabled {
 		var ips preview.ContainerIPs
-		if dockerSpawner != nil {
-			ips = dockerSpawner
+		if ds, ok := spawner.(*spawn.DockerSpawner); ok {
+			ips = ds
 		}
 		handler = preview.Wrap(previewSvc.Config(), preview.NewResolver(st, ips), mux)
 	}
@@ -134,27 +133,30 @@ func main() {
 
 	// Кликабельный URL в логе: пустой/wildcard-хост в Addr (":10000", "0.0.0.0:…")
 	// заменяется на localhost, чтобы ссылку можно было открыть из терминала.
-	log.Printf("brigade: docker=%t, listening on %s", dockerSpawner != nil, listenURL(cfg.Addr))
+	log.Printf("brigade: mode=%s, listening on %s", cfg.Mode, listenURL(cfg.Addr))
 	if err := http.ListenAndServe(cfg.Addr, handler); err != nil {
 		log.Fatalf("brigade: server: %v", err)
 	}
 }
 
-// tryDockerSpawner создаёт docker-спавнер и проверяет достижимость демона (Ping).
-// Возвращает nil, если docker недоступен: docker-сессии тогда не поднять (при их
-// создании вернётся понятная ошибка), а local-сессии работают как обычно.
-func tryDockerSpawner() *spawn.DockerSpawner {
-	ds, err := spawn.NewDockerSpawner()
-	if err != nil {
-		log.Printf("brigade: docker unavailable (client: %v) — docker sessions disabled", err)
-		return nil
+// buildSpawner создаёт спавнер по режиму инстанса и возвращает функцию его остановки
+// (docker-клиент требует Close; local — no-op). Docker-режим проверяет достижимость
+// демона (Ping): недоступен → фатально, инстанс с mode=docker без docker бессмыслен.
+func buildSpawner(mode config.Mode) (spawn.Spawner, func(), error) {
+	switch mode {
+	case config.ModeDocker:
+		ds, err := spawn.NewDockerSpawner()
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := ds.Ping(context.Background()); err != nil {
+			_ = ds.Close()
+			return nil, nil, fmt.Errorf("docker daemon unreachable: %w", err)
+		}
+		return ds, func() { _ = ds.Close() }, nil
+	default:
+		return spawn.NewLocalSpawner(), func() {}, nil
 	}
-	if err := ds.Ping(context.Background()); err != nil {
-		log.Printf("brigade: docker unavailable (ping: %v) — docker sessions disabled", err)
-		_ = ds.Close()
-		return nil
-	}
-	return ds
 }
 
 // previewConfig собирает preview.Config из секции конфига, дополняя её фактическим

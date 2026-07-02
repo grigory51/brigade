@@ -47,24 +47,24 @@ make run                                             # → http://localhost:8080
 or with Docker:
 
 ```sh
-# Mount the docker socket to enable Docker session mode; the workspace must be
-# mounted at the SAME path inside and outside the container, since brigade passes
-# workspace paths to the host Docker daemon for session bind-mounts.
+# BRIGADE_MODE=docker runs each session in its own container; it needs the host
+# docker socket, and the workspace must be mounted at the SAME path inside and
+# outside the container (brigade passes workspace paths to the host Docker daemon
+# for session bind-mounts).
 docker run -d --name brigade \
   -p 8080:8080 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v brigade-data:/data \
   -v /srv/brigade/workspace:/srv/brigade/workspace \
+  -e BRIGADE_MODE=docker \
   -e BRIGADE_WORK_DIR=/srv/brigade/workspace \
   -e BRIGADE_JWT__SECRET=change-me \
   -e BRIGADE_CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-... \
   ghcr.io/grigory51/brigade:latest
 ```
 
-Each session picks local (host process) or Docker (one container per session) at
-creation time — one instance serves both. Docker sessions become available when the
-docker daemon is reachable (locally, or via a mounted socket). They also need the
-agent image on the host:
+`BRIGADE_MODE` (`local` | `docker`) is set per instance — all its sessions inherit it,
+users don't pick a mode. Docker mode also needs the agent image on the host:
 
 ```sh
 docker build -t brigade/claude-agent:latest docker/claude-agent
@@ -74,8 +74,9 @@ docker build -t brigade/claude-agent:latest docker/claude-agent
 ## Configuration
 
 YAML file plus env overrides (`BRIGADE_` prefix, `__` as the nesting separator):
-`BRIGADE_JWT__SECRET`, `BRIGADE_CLAUDE_CODE_OAUTH_TOKEN`, `BRIGADE_WORK_DIR`,
-`BRIGADE_PREVIEW__DOMAIN`, … See [`backend/config.example.yaml`](backend/config.example.yaml)
+`BRIGADE_MODE`, `BRIGADE_JWT__SECRET`, `BRIGADE_CLAUDE_CODE_OAUTH_TOKEN`,
+`BRIGADE_WORK_DIR`, `BRIGADE_PREVIEW__DOMAIN`, … See
+[`backend/config.example.yaml`](backend/config.example.yaml)
 for the full annotated list and [`docs/preview.md`](docs/preview.md) for exposing
 dev servers behind a wildcard domain with built-in TLS.
 

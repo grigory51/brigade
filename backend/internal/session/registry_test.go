@@ -75,7 +75,7 @@ func newTestRegistry(t *testing.T) *Registry {
 		t.Fatalf("store.Open: %v", err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	return NewRegistry(st, spawn.NewLocalSpawner(), nil, "/tmp", "", preview.NewService(preview.Config{}, []byte("test")))
+	return NewRegistry(st, spawn.NewLocalSpawner(), store.SessionModeLocal, "/tmp", "", preview.NewService(preview.Config{}, []byte("test")))
 }
 
 // seedSession записывает running CLI-сессию в store и регистрирует её живой объект с
@@ -241,17 +241,5 @@ func TestDeleteRejectsParallelTeardown(t *testing.T) {
 	// Guard снят: повторный Delete уже несуществующей сессии — обычный NotFound.
 	if err := r.Delete(context.Background(), id, "user-1"); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("Delete after teardown: err = %v, want ErrNotFound", err)
-	}
-}
-
-// TestSpawnerForDockerUnavailable проверяет: без docker-спавнера local-режим
-// доступен, а docker-режим даёт понятную ошибку (не паникует).
-func TestSpawnerForDockerUnavailable(t *testing.T) {
-	r := newTestRegistry(t) // dockerSpawner == nil
-	if _, err := r.spawnerFor(store.SessionModeLocal); err != nil {
-		t.Fatalf("local spawner: %v", err)
-	}
-	if _, err := r.spawnerFor(store.SessionModeDocker); err == nil {
-		t.Fatal("docker spawner without docker: want error, got nil")
 	}
 }

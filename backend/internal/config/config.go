@@ -15,12 +15,20 @@ import (
 	"github.com/knadh/koanf/v2"
 )
 
+// Mode определяет, как инстанс спавнит агентов: local — процесс на хосте в pty;
+// docker — отдельный контейнер на сессию. Это свойство инстанса, не сессии:
+// пользователь его не выбирает, все сессии наследуют режим сервиса.
+type Mode string
+
+const (
+	ModeLocal  Mode = "local"
+	ModeDocker Mode = "docker"
+)
+
 // Config — полная конфигурация сервиса.
-//
-// Режим спавна агента (local-процесс либо docker-контейнер) — свойство каждой
-// сессии, а не сервиса: инстанс обслуживает оба вида. Docker-сессии доступны, если
-// на хосте достижим docker-демон (автоопределяется на старте).
 type Config struct {
+	// Mode — режим спавна агентов инстанса (local|docker). Дефолт local.
+	Mode Mode `koanf:"mode"`
 	// Addr — адрес HTTP-сервера, например ":8080".
 	Addr string `koanf:"addr"`
 
@@ -123,6 +131,15 @@ func Load(path string) (*Config, error) {
 // Validate проверяет согласованность загруженной конфигурации. Цель — поймать
 // заведомо нерабочие значения на старте, а не при первом обращении к ним.
 func (c *Config) Validate() error {
+	// Пустой mode трактуем как local (дефолт), явный недопустимый — ошибка.
+	switch c.Mode {
+	case "":
+		c.Mode = ModeLocal
+	case ModeLocal, ModeDocker:
+	default:
+		return fmt.Errorf("config: недопустимый mode %q (ожидается %q или %q)", c.Mode, ModeLocal, ModeDocker)
+	}
+
 	if c.Addr == "" {
 		return fmt.Errorf("config: addr не задан")
 	}

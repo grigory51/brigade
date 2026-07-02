@@ -34,7 +34,7 @@ func (s *SessionService) Create(ctx context.Context, req *connect.Request[v1.Cre
 	}
 
 	sess, err := s.registry.Create(ctx, userID,
-		modeFromProto(req.Msg.Mode), kindFromProto(req.Msg.Kind),
+		kindFromProto(req.Msg.Kind),
 		req.Msg.AgentType, req.Msg.Cwd, req.Msg.Prompt)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)

@@ -224,11 +224,6 @@ export class CreateSessionRequest extends Message<CreateSessionRequest> {
   agentType = "";
 
   /**
-   * @generated from field: brigade.v1.SessionMode mode = 2;
-   */
-  mode = SessionMode.UNSPECIFIED;
-
-  /**
    * @generated from field: brigade.v1.SessionKind kind = 3;
    */
   kind = SessionKind.UNSPECIFIED;
@@ -256,7 +251,6 @@ export class CreateSessionRequest extends Message<CreateSessionRequest> {
   static readonly typeName = "brigade.v1.CreateSessionRequest";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "agent_type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 2, name: "mode", kind: "enum", T: proto3.getEnumType(SessionMode) },
     { no: 3, name: "kind", kind: "enum", T: proto3.getEnumType(SessionKind) },
     { no: 4, name: "prompt", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 5, name: "cwd", kind: "scalar", T: 9 /* ScalarType.STRING */ },

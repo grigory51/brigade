@@ -8,16 +8,8 @@ import (
 // Маппинг между proto-перечислениями и строковыми значениями store сосредоточен здесь —
 // store намеренно не знает про proto, а реестр сессий оперирует store-типами.
 
-func modeFromProto(m v1.SessionMode) store.SessionMode {
-	switch m {
-	case v1.SessionMode_SESSION_MODE_DOCKER:
-		return store.SessionModeDocker
-	default:
-		// UNSPECIFIED и LOCAL трактуются как local: это безопасный дефолт спавна.
-		return store.SessionModeLocal
-	}
-}
-
+// modeToProto — обратный маппинг режима сессии в proto (сессия несёт режим в ответах;
+// выбор режима при создании убран — он берётся из конфига инстанса).
 func modeToProto(m store.SessionMode) v1.SessionMode {
 	switch m {
 	case store.SessionModeDocker:

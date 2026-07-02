@@ -52,18 +52,18 @@ type live struct {
 	client *acp.Client  // ACP-режим
 }
 
-// Registry — реестр живых сессий поверх store и спавнеров.
+// Registry — реестр живых сессий поверх store и спавнера.
 //
-// Режим спавна (local|docker) — свойство каждой сессии, а не сервиса: реестр держит
-// оба спавнера и выбирает нужный по sess.Mode. localSpawner доступен всегда;
-// dockerSpawner nil, если docker-демон недоступен — тогда docker-сессии не поднять
-// (понятная ошибка), а local работают.
+// Режим спавна (local|docker) — свойство ИНСТАНСА (BRIGADE_MODE), не сессии:
+// пользователь его не выбирает, все сессии наследуют режим сервиса. Реестр держит
+// один спавнер, соответствующий этому режиму, и фиксирует mode в каждой сессии при
+// создании (нужно и для restore после рестарта).
 type Registry struct {
-	store         *store.Store
-	localSpawner  *spawn.LocalSpawner
-	dockerSpawner *spawn.DockerSpawner // nil, если docker недоступен
-	workDir       string
-	oauthToken    string
+	store   *store.Store
+	spawner spawn.Spawner
+	mode    store.SessionMode
+	workDir string
+	oauthToken string
 	// previews — сервис публикации dev-серверов: окружение агента (env), скилл в
 	// cwd, реестр зарегистрированных preview. Всегда не-nil; при выключенном preview
 	// его методы деградируют до no-op.
@@ -77,33 +77,21 @@ type Registry struct {
 	tearingDown map[string]struct{}
 }
 
-// NewRegistry собирает реестр. localSpawner используется для local-сессий (всегда
-// доступен); dockerSpawner — для docker-сессий, nil если docker недоступен. workDir —
-// корневая рабочая директория (дефолт Cwd сессии); oauthToken — подписочный токен
-// Claude Code, пробрасывается агентам; previews — сервис публикации dev-серверов.
-func NewRegistry(st *store.Store, localSpawner *spawn.LocalSpawner, dockerSpawner *spawn.DockerSpawner, workDir, oauthToken string, previews *preview.Service) *Registry {
+// NewRegistry собирает реестр. spawner соответствует режиму инстанса (mode); mode
+// фиксируется в каждой создаваемой сессии. workDir — корневая рабочая директория
+// (дефолт Cwd сессии); oauthToken — подписочный токен Claude Code, пробрасывается
+// агентам; previews — сервис публикации dev-серверов.
+func NewRegistry(st *store.Store, spawner spawn.Spawner, mode store.SessionMode, workDir, oauthToken string, previews *preview.Service) *Registry {
 	return &Registry{
-		store:         st,
-		localSpawner:  localSpawner,
-		dockerSpawner: dockerSpawner,
-		workDir:       workDir,
-		oauthToken:    oauthToken,
-		previews:      previews,
-		live:          make(map[string]*live),
-		tearingDown:   make(map[string]struct{}),
+		store:       st,
+		spawner:     spawner,
+		mode:        mode,
+		workDir:     workDir,
+		oauthToken:  oauthToken,
+		previews:    previews,
+		live:        make(map[string]*live),
+		tearingDown: make(map[string]struct{}),
 	}
-}
-
-// spawnerFor возвращает spawn.Spawner для режима сессии. Для docker-режима — ошибка,
-// если docker недоступен на этом инстансе.
-func (r *Registry) spawnerFor(mode store.SessionMode) (spawn.Spawner, error) {
-	if mode == store.SessionModeDocker {
-		if r.dockerSpawner == nil {
-			return nil, fmt.Errorf("session: docker недоступен на этом сервере")
-		}
-		return r.dockerSpawner, nil
-	}
-	return r.localSpawner, nil
 }
 
 // ErrTeardownInProgress возвращается Stop/Delete, если teardown этой сессии уже
@@ -132,9 +120,10 @@ func (r *Registry) endTeardown(sessionID string) {
 }
 
 // Create регистрирует новую сессию: пишет её в store (status=running), спавнит агента
-// и сохраняет resume-поля. agentType — тип агента; cwd пустой означает дефолт workDir;
-// prompt передаётся ACP-агенту первым ходом (для CLI игнорируется — ввод идёт по WS).
-func (r *Registry) Create(ctx context.Context, userID string, mode store.SessionMode, kind store.SessionKind, agentType, cwd, prompt string) (store.Session, error) {
+// и сохраняет resume-поля. Режим спавна берётся у инстанса (r.mode), не выбирается
+// пользователем. agentType — тип агента; cwd пустой означает дефолт workDir; prompt
+// передаётся ACP-агенту первым ходом (для CLI игнорируется — ввод идёт по WS).
+func (r *Registry) Create(ctx context.Context, userID string, kind store.SessionKind, agentType, cwd, prompt string) (store.Session, error) {
 	if cwd == "" {
 		cwd = r.workDir
 	}
@@ -150,7 +139,7 @@ func (r *Registry) Create(ctx context.Context, userID string, mode store.Session
 	sess := store.Session{
 		ID:        uuid.NewString(),
 		UserID:    userID,
-		Mode:      mode,
+		Mode:      r.mode,
 		Kind:      kind,
 		AgentType: agentType,
 		Status:    store.SessionStatusRunning,
@@ -163,7 +152,7 @@ func (r *Registry) Create(ctx context.Context, userID string, mode store.Session
 		return store.Session{}, err
 	}
 	log.Printf("session: creating %s user=%s mode=%s kind=%s agent=%s cwd=%s",
-		sess.ID, userID, mode, kind, agentType, cwd)
+		sess.ID, userID, sess.Mode, kind, agentType, cwd)
 
 	// Скилл публикации preview кладётся до спавна: агент должен видеть его с первого
 	// хода. В docker-режиме cwd — путь хоста, файл попадает в контейнер через bind-mount.
@@ -176,7 +165,7 @@ func (r *Registry) Create(ctx context.Context, userID string, mode store.Session
 	if err != nil {
 		// Спавн не удался — сессия в store остаётся как failed для аудита, живой
 		// объект не регистрируется.
-		log.Printf("session: spawn %s (%s/%s) failed: %v", sess.ID, mode, kind, err)
+		log.Printf("session: spawn %s (%s/%s) failed: %v", sess.ID, sess.Mode, kind, err)
 		_ = r.store.UpdateSessionStatus(ctx, sess.ID, store.SessionStatusFailed)
 		return store.Session{}, err
 	}
@@ -194,7 +183,7 @@ func (r *Registry) Create(ctx context.Context, userID string, mode store.Session
 	r.mu.Unlock()
 
 	log.Printf("session: created %s (%s/%s) agent_session_id=%q container_label=%q",
-		sess.ID, mode, kind, agentSessionID, containerLabel)
+		sess.ID, sess.Mode, kind, agentSessionID, containerLabel)
 	return sess, nil
 }
 
@@ -207,11 +196,7 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 		// подписочным токеном (CLAUDE_CODE_OAUTH_TOKEN). Намеренно НЕ используем
 		// ANTHROPIC_API_KEY: подписочный токен и API-ключ — разные модели доступа,
 		// а одновременно заданные ключ и claude.ai-логин ломают auth агента.
-		spawner, err := r.spawnerFor(sess.Mode)
-		if err != nil {
-			return nil, "", "", err
-		}
-		handle, err := spawner.Spawn(ctx, spawn.Spec{
+		handle, err := r.spawner.Spawn(ctx, spawn.Spec{
 			SessionID: sess.ID,
 			AgentType: sess.AgentType,
 			Cwd:       sess.Cwd,
@@ -301,10 +286,10 @@ func (r *Registry) applyACPSpawnMode(ctx context.Context, opts *acp.Options, ses
 	if sess.Mode != store.SessionModeDocker {
 		return nil
 	}
-	if r.dockerSpawner == nil {
-		return fmt.Errorf("session: docker недоступен на этом сервере")
+	ds, ok := r.spawner.(*spawn.DockerSpawner)
+	if !ok {
+		return fmt.Errorf("session: docker-режим без DockerSpawner")
 	}
-	ds := r.dockerSpawner
 	stateID, err := r.rootID(ctx, sess)
 	if err != nil {
 		return err
@@ -392,10 +377,11 @@ func (r *Registry) Shell(ctx context.Context, sessionID, userID string) (termws.
 
 	switch sess.Mode {
 	case store.SessionModeDocker:
-		if r.dockerSpawner == nil {
-			return nil, fmt.Errorf("session: docker недоступен на этом сервере")
+		ds, ok := r.spawner.(*spawn.DockerSpawner)
+		if !ok {
+			return nil, fmt.Errorf("session: docker shell without DockerSpawner")
 		}
-		return r.dockerSpawner.SpawnShell(ctx, sess.ID)
+		return ds.SpawnShell(ctx, sess.ID)
 	default:
 		return spawn.StartLocalShell(ctx, sess.Cwd)
 	}
@@ -602,11 +588,7 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 		if sess.AgentSessionID == "" {
 			return r.store.UpdateSessionStatus(ctx, sess.ID, store.SessionStatusStopped)
 		}
-		spawner, err := r.spawnerFor(sess.Mode)
-		if err != nil {
-			return err
-		}
-		handle, err := spawner.Reattach(ctx, spawn.Persisted{
+		handle, err := r.spawner.Reattach(ctx, spawn.Persisted{
 			SessionID:      sess.ID,
 			AgentSessionID: sess.AgentSessionID,
 			ContainerLabel: sess.ContainerLabel,

@@ -4,11 +4,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { agentClient, sessionClient } from "@/api/client";
 import { AgentType } from "@/api/gen/brigade/v1/agent_pb";
-import {
-  Session,
-  SessionKind,
-  SessionMode,
-} from "@/api/gen/brigade/v1/session_pb";
+import { Session, SessionKind } from "@/api/gen/brigade/v1/session_pb";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -40,7 +36,6 @@ export function CreateSessionDialog({
   const [agents, setAgents] = useState<AgentType[] | null>(null);
   const [agentId, setAgentId] = useState("");
   const [kind, setKind] = useState<SessionKind>(SessionKind.CLI);
-  const [mode, setMode] = useState<SessionMode>(SessionMode.LOCAL);
   const [cwd, setCwd] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -73,7 +68,6 @@ export function CreateSessionDialog({
     try {
       const res = await sessionClient.create({
         agentType: agentId,
-        mode,
         kind,
         prompt: "",
         cwd: cwd.trim(),
@@ -137,46 +131,24 @@ export function CreateSessionDialog({
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Режим взаимодействия</Label>
-                <Select
-                  value={String(kind)}
-                  onValueChange={(v) => setKind(Number(v) as SessionKind)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={String(SessionKind.CLI)}>
-                      CLI (терминал)
-                    </SelectItem>
-                    <SelectItem value={String(SessionKind.ACP)}>
-                      ACP (чат)
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Окружение</Label>
-                <Select
-                  value={String(mode)}
-                  onValueChange={(v) => setMode(Number(v) as SessionMode)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={String(SessionMode.LOCAL)}>
-                      local
-                    </SelectItem>
-                    <SelectItem value={String(SessionMode.DOCKER)}>
-                      docker
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-2">
+              <Label>Режим взаимодействия</Label>
+              <Select
+                value={String(kind)}
+                onValueChange={(v) => setKind(Number(v) as SessionKind)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={String(SessionKind.CLI)}>
+                    CLI (терминал)
+                  </SelectItem>
+                  <SelectItem value={String(SessionKind.ACP)}>
+                    ACP (чат)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
