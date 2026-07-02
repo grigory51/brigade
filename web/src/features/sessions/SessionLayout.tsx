@@ -11,6 +11,7 @@ import { Link, Outlet, useNavigate, useParams } from "react-router-dom";
 import { ConnectError } from "@connectrpc/connect";
 import {
   GitBranch,
+  Loader2,
   LogOut,
   MessagesSquare,
   Pencil,
@@ -98,6 +99,11 @@ export function SessionLayout() {
   const [state, setState] = useState<LoadState>("loading");
   const [createOpen, setCreateOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // deletingId — сессия, удаление которой сейчас выполняется на сервере. Отдельно от
+  // busyId (fork): на время удаления показывается блокирующий оверлей — teardown
+  // контейнера/процесса занимает до ~15 секунд, и без индикации клик выглядит
+  // проигнорированным (а повторные клики порождали параллельные удаления).
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setState("loading");
@@ -120,7 +126,7 @@ export function SessionLayout() {
 
   const onDelete = useCallback(
     async (id: string) => {
-      setBusyId(id);
+      setDeletingId(id);
       try {
         await sessionClient.delete({ sessionId: id });
         setSessions((prev) => prev.filter((s) => s.id !== id));
@@ -137,7 +143,7 @@ export function SessionLayout() {
             : "Не удалось удалить сессию",
         );
       } finally {
-        setBusyId(null);
+        setDeletingId(null);
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -301,7 +307,8 @@ export function SessionLayout() {
                           key={s.id}
                           session={s}
                           depth={depth}
-                          busy={busyId === s.id}
+                          busy={busyId === s.id || deletingId === s.id}
+                          deleting={deletingId === s.id}
                           onOpen={() => navigate(sessionRoute(s.id))}
                           onDelete={() => void onDelete(s.id)}
                           onRename={(name) => void onRename(s.id, name)}
@@ -331,6 +338,22 @@ export function SessionLayout() {
             </div>
           </SidebarInset>
         </SidebarProvider>
+
+        {/* Блокирующий оверлей на время удаления: teardown агента (процесс/контейнер)
+            занимает до ~15 секунд, все действия в UI на это время недоступны. */}
+        {deletingId && (
+          <div className="bg-background/60 fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm">
+            <div className="bg-background flex items-center gap-3 rounded-lg border px-5 py-4 shadow-lg">
+              <Loader2 className="text-muted-foreground size-5 animate-spin" />
+              <div className="text-sm">
+                <div className="font-medium">Сессия удаляется…</div>
+                <div className="text-muted-foreground text-xs">
+                  Останавливаем агента и освобождаем ресурсы.
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <CreateSessionDialog
           open={createOpen}
@@ -363,6 +386,7 @@ function SessionItem({
   session,
   depth = 0,
   busy,
+  deleting = false,
   onOpen,
   onDelete,
   onRename,
@@ -371,6 +395,7 @@ function SessionItem({
   session: Session;
   depth?: number;
   busy: boolean;
+  deleting?: boolean;
   onOpen: () => void;
   onDelete: () => void;
   onRename: (name: string) => void;
@@ -486,12 +511,22 @@ function SessionItem({
         disabled={busy}
         onClick={(e) => {
           e.stopPropagation();
-          onDelete();
+          if (!busy) onDelete();
         }}
         aria-label="Удалить сессию"
-        className="text-sidebar-foreground/60 hover:text-destructive"
+        // showOnHover прячет кнопку без наведения — на время удаления спиннер
+        // остаётся видимым принудительно.
+        className={
+          deleting
+            ? "text-sidebar-foreground/60 opacity-100"
+            : "text-sidebar-foreground/60 hover:text-destructive"
+        }
       >
-        <Trash2 className="size-4" />
+        {deleting ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <Trash2 className="size-4" />
+        )}
       </SidebarMenuAction>
     </SidebarMenuItem>
   );

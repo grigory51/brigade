@@ -195,3 +195,51 @@ func TestStopForeignUser(t *testing.T) {
 		t.Fatalf("live-объект снят при чужом Stop: count = %d, want 1", r.liveCount())
 	}
 }
+
+// blockingHandle — fakeHandle с Terminate, блокирующимся до release: имитирует
+// долгий teardown (остановку контейнера) для проверки guard'а параллельных удалений.
+type blockingHandle struct {
+	*fakeHandle
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (h *blockingHandle) Terminate(ctx context.Context) error {
+	close(h.entered)
+	<-h.release
+	return h.fakeHandle.Terminate(ctx)
+}
+
+// TestDeleteRejectsParallelTeardown проверяет guard: пока первый Delete выполняет
+// terminate, повторный Delete той же сессии получает ErrTeardownInProgress и не
+// трогает состояние; после завершения первого сессия удалена.
+func TestDeleteRejectsParallelTeardown(t *testing.T) {
+	r := newTestRegistry(t)
+	handle := &blockingHandle{
+		fakeHandle: newFakeHandle(),
+		entered:    make(chan struct{}),
+		release:    make(chan struct{}),
+	}
+	id := seedSession(t, r, "user-1", handle)
+
+	firstDone := make(chan error, 1)
+	go func() { firstDone <- r.Delete(context.Background(), id, "user-1") }()
+
+	// Ждём входа первого Delete в terminate, затем пробуем параллельный.
+	<-handle.entered
+	if err := r.Delete(context.Background(), id, "user-1"); !errors.Is(err, ErrTeardownInProgress) {
+		t.Fatalf("parallel Delete: err = %v, want ErrTeardownInProgress", err)
+	}
+
+	close(handle.release)
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first Delete: %v", err)
+	}
+	if _, err := r.store.GetSession(context.Background(), id); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("session after delete: err = %v, want ErrNotFound", err)
+	}
+	// Guard снят: повторный Delete уже несуществующей сессии — обычный NotFound.
+	if err := r.Delete(context.Background(), id, "user-1"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("Delete after teardown: err = %v, want ErrNotFound", err)
+	}
+}

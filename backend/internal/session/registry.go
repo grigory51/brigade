@@ -17,6 +17,7 @@ package session
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"path/filepath"
@@ -67,6 +68,10 @@ type Registry struct {
 
 	mu   sync.Mutex
 	live map[string]*live
+	// tearingDown — сессии, для которых сейчас выполняется Stop/Delete. Guard от
+	// параллельного teardown одной сессии (повторный клик «удалить», двойной запрос):
+	// второй вызов получает ErrTeardownInProgress, не дублируя terminate.
+	tearingDown map[string]struct{}
 }
 
 // NewRegistry собирает реестр. spawner используется для CLI-режима; ACP-клиент
@@ -76,14 +81,40 @@ type Registry struct {
 // публикации dev-серверов сессий.
 func NewRegistry(st *store.Store, spawner spawn.Spawner, mode store.SessionMode, workDir, oauthToken string, previews *preview.Service) *Registry {
 	return &Registry{
-		store:      st,
-		spawner:    spawner,
-		mode:       mode,
-		workDir:    workDir,
-		oauthToken: oauthToken,
-		previews:   previews,
-		live:       make(map[string]*live),
+		store:       st,
+		spawner:     spawner,
+		mode:        mode,
+		workDir:     workDir,
+		oauthToken:  oauthToken,
+		previews:    previews,
+		live:        make(map[string]*live),
+		tearingDown: make(map[string]struct{}),
 	}
+}
+
+// ErrTeardownInProgress возвращается Stop/Delete, если teardown этой сессии уже
+// выполняется другим запросом.
+var ErrTeardownInProgress = errors.New("session: teardown already in progress")
+
+// beginTeardown помечает сессию как останавливаемую и снимает её живой объект.
+// Возвращает ErrTeardownInProgress, если teardown уже идёт. Парный endTeardown
+// обязателен по завершении (defer).
+func (r *Registry) beginTeardown(sessionID string) (*live, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, busy := r.tearingDown[sessionID]; busy {
+		return nil, ErrTeardownInProgress
+	}
+	r.tearingDown[sessionID] = struct{}{}
+	lv := r.live[sessionID]
+	delete(r.live, sessionID)
+	return lv, nil
+}
+
+func (r *Registry) endTeardown(sessionID string) {
+	r.mu.Lock()
+	delete(r.tearingDown, sessionID)
+	r.mu.Unlock()
 }
 
 // Create регистрирует новую сессию: пишет её в store (status=running), спавнит агента
@@ -478,10 +509,11 @@ func (r *Registry) Stop(ctx context.Context, sessionID, userID string) error {
 		return err
 	}
 
-	r.mu.Lock()
-	lv := r.live[sessionID]
-	delete(r.live, sessionID)
-	r.mu.Unlock()
+	lv, err := r.beginTeardown(sessionID)
+	if err != nil {
+		return err
+	}
+	defer r.endTeardown(sessionID)
 
 	if lv != nil {
 		tctx, cancel := terminateCtx(ctx)
@@ -499,10 +531,11 @@ func (r *Registry) Delete(ctx context.Context, sessionID, userID string) error {
 		return err
 	}
 
-	r.mu.Lock()
-	lv := r.live[sessionID]
-	delete(r.live, sessionID)
-	r.mu.Unlock()
+	lv, err := r.beginTeardown(sessionID)
+	if err != nil {
+		return err
+	}
+	defer r.endTeardown(sessionID)
 
 	if lv != nil {
 		tctx, cancel := terminateCtx(ctx)
