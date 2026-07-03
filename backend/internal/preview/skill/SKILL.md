@@ -18,8 +18,11 @@ from the user's browser at a deterministic preview URL — no port forwarding ne
    - python: `python3 -m http.server 8000 --bind 0.0.0.0`.
 
 2. Build the preview URL: take `$BRIGADE_PREVIEW_URL_TEMPLATE` and replace `{port}`
-   with the actual port. Example: template `http://abc-{port}.localhost:10000`,
-   port 3000 → `http://abc-3000.localhost:10000`.
+   with the actual port. The template is already the full, correct URL for this
+   deployment (subdomain or single-host cookie form) — just substitute the port,
+   do not assemble it yourself. Examples:
+   - `http://abc-{port}.localhost:10000` → `http://abc-3000.localhost:10000`
+   - `https://preview.example.com/?id=abc-{port}` → `https://preview.example.com/?id=abc-3000`
 
 3. Register the port so the link shows up in the brigade UI:
 

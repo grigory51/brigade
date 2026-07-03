@@ -32,8 +32,12 @@ const tokenContext = "brigade-preview:"
 // Config — параметры публикации preview (снимок секции конфига + порт listener'а).
 type Config struct {
 	Enabled bool
-	// Domain — базовый домен preview-поддоменов ("localhost" | "brigade.example.com").
+	// Mode — subdomain (поддомены) | cookie (один хост + cookie-роутинг).
+	Mode string
+	// Domain — базовый домен preview-поддоменов (mode=subdomain).
 	Domain string
+	// CookieHost — хост cookie-режима целиком (mode=cookie).
+	CookieHost string
 	// Scheme — схема публичных URL (http|https).
 	Scheme string
 	// ExternalPort — порт публичных URL; 0 — использовать ListenPort.
@@ -55,15 +59,32 @@ func (c Config) publicPort() int {
 	return c.ListenPort
 }
 
-// PublicURL строит публичный URL preview для порта сессии. Стандартные порты
-// (80/http, 443/https) в URL опускаются.
+// PublicURL строит публичный URL preview для порта сессии.
+//   - subdomain: {scheme}://{id}-{port}.{domain}[:port];
+//   - cookie:    {scheme}://{cookieHost}[:port]/?id={id}-{port}.
+// Стандартные порты (80/http, 443/https) в URL опускаются.
 func (c Config) PublicURL(sessionID string, port int) string {
+	if c.Mode == "cookie" {
+		base := c.schemeHost(c.CookieHost)
+		return fmt.Sprintf("%s/?id=%s", base, cookieValue(sessionID, port))
+	}
 	host := fmt.Sprintf("%s-%d.%s", sessionID, port, c.Domain)
+	return c.schemeHost(host)
+}
+
+// schemeHost собирает {scheme}://{host}[:port], опуская стандартный порт.
+func (c Config) schemeHost(host string) string {
 	p := c.publicPort()
 	if (c.Scheme == "http" && p == 80) || (c.Scheme == "https" && p == 443) {
 		return fmt.Sprintf("%s://%s", c.Scheme, host)
 	}
 	return fmt.Sprintf("%s://%s:%d", c.Scheme, host, p)
+}
+
+// cookieValue кодирует сессию и порт в значение cookie / query id (тот же формат,
+// что поддомен-лейбл): {sessionId}-{port}.
+func cookieValue(sessionID string, port int) string {
+	return fmt.Sprintf("%s-%d", sessionID, port)
 }
 
 // URLTemplate возвращает шаблон публичного URL сессии с плейсхолдером {port}.
@@ -72,7 +93,7 @@ func (c Config) URLTemplate(sessionID string) string {
 	// PublicURL с маркерным портом, затем маркер заменяется на плейсхолдер: логика
 	// пропуска стандартных портов остаётся в одном месте.
 	const marker = 65535
-	return strings.Replace(c.PublicURL(sessionID, marker), fmt.Sprintf("-%d.", marker), "-{port}.", 1)
+	return strings.Replace(c.PublicURL(sessionID, marker), fmt.Sprintf("-%d", marker), "-{port}", 1)
 }
 
 // Registered — зарегистрированный агентом preview-эндпоинт (для отображения в UI).

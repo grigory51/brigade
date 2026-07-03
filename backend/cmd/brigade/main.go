@@ -166,7 +166,9 @@ func buildSpawner(mode config.Mode) (spawn.Spawner, func(), error) {
 func previewConfig(cfg *config.Config) preview.Config {
 	pc := preview.Config{
 		Enabled:      cfg.Preview.Enabled,
+		Mode:         cfg.Preview.Mode,
 		Domain:       cfg.Preview.Domain,
+		CookieHost:   cfg.Preview.CookieHost,
 		Scheme:       cfg.Preview.Scheme,
 		ExternalPort: cfg.Preview.ExternalPort,
 		ListenPort:   addrPort(cfg.Addr),

@@ -44,9 +44,17 @@ claude_home_dir: ""
 # docker — IP контейнера). Подробности — docs/preview.md.
 preview:
   enabled: true
-  # Базовый домен preview-поддоменов. "localhost" — для разработки (Chrome/Firefox
-  # резолвят *.localhost сами); в проде — домен с wildcard-DNS (*.domain → хост brigade).
+  # Режим адресации preview:
+  #   subdomain — {sessionId}-{port}.{domain} (требует wildcard-DNS);
+  #   cookie    — один хост cookie_host, выбор через cookie (для сред без wildcard,
+  #               например netbird expose). Ссылка вида https://cookie_host/?id=<id>-<port>
+  #               ставит cookie и редиректит; дальше весь хост проксируется к dev-серверу.
+  mode: "subdomain"
+  # Базовый домен preview-поддоменов (mode=subdomain). "localhost" — для разработки
+  # (Chrome/Firefox резолвят *.localhost сами); в проде — домен с wildcard-DNS.
   domain: "localhost"
+  # Хост cookie-режима целиком (mode=cookie), напр. "preview.brigade.example.com".
+  cookie_host: ""
   # Схема публичных preview-URL. https предполагает TLS: встроенный (секция tls) или
   # внешний терминатор.
   scheme: "http"

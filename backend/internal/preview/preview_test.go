@@ -260,3 +260,104 @@ func splitHostPortForTest(hostport string) (string, string, error) {
 	port := hostport[len(host)+1:]
 	return host, port, nil
 }
+
+func cookieConfig() Config {
+	return Config{
+		Enabled:      true,
+		Mode:         "cookie",
+		CookieHost:   "preview.example.com",
+		Scheme:       "https",
+		ExternalPort: 443,
+	}
+}
+
+func TestCookiePublicURL(t *testing.T) {
+	got := cookieConfig().PublicURL(testSessionID, 3000)
+	want := "https://preview.example.com/?id=" + testSessionID + "-3000"
+	if got != want {
+		t.Fatalf("cookie PublicURL = %q, want %q", got, want)
+	}
+	tmpl := cookieConfig().URLTemplate(testSessionID)
+	wantTmpl := "https://preview.example.com/?id=" + testSessionID + "-{port}"
+	if tmpl != wantTmpl {
+		t.Fatalf("cookie URLTemplate = %q, want %q", tmpl, wantTmpl)
+	}
+}
+
+func TestWrapCookie(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("dev:" + r.URL.Path))
+	}))
+	defer upstream.Close()
+	u, _ := url.Parse(upstream.URL)
+	_, portStr, _ := splitHostPortForTest(u.Host)
+
+	sessions := &fakeSessions{sessions: map[string]store.Session{
+		testSessionID: {ID: testSessionID, Mode: store.SessionModeLocal, Status: store.SessionStatusRunning},
+	}}
+	r := NewResolver(sessions, nil)
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTeapot) })
+	h := Wrap(cookieConfig(), r, next)
+
+	id := testSessionID + "-" + portStr
+
+	// 1) ?id=... → Set-Cookie + 302 на "/"
+	req := httptest.NewRequest(http.MethodGet, "https://x/?id="+id, nil)
+	req.Host = "preview.example.com"
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusFound {
+		t.Fatalf("id query: code %d, want 302", w.Code)
+	}
+	if loc := w.Header().Get("Location"); loc != "/" {
+		t.Fatalf("redirect to %q, want /", loc)
+	}
+	var setCookie string
+	for _, c := range w.Result().Cookies() {
+		if c.Name == cookieName {
+			setCookie = c.Value
+		}
+	}
+	if setCookie != id {
+		t.Fatalf("cookie value %q, want %q", setCookie, id)
+	}
+
+	// 2) cookie → proxy к upstream (корневой и абсолютный путь)
+	for _, path := range []string{"/", "/assets/app.js"} {
+		req = httptest.NewRequest(http.MethodGet, "https://x"+path, nil)
+		req.Host = "preview.example.com"
+		req.AddCookie(&http.Cookie{Name: cookieName, Value: id})
+		w = httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusOK || w.Body.String() != "dev:"+path {
+			t.Fatalf("proxy %s: code %d body %q", path, w.Code, w.Body.String())
+		}
+	}
+
+	// 3) нет cookie → заглушка (200, не проксирование, не next)
+	req = httptest.NewRequest(http.MethodGet, "https://x/", nil)
+	req.Host = "preview.example.com"
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || w.Code == http.StatusTeapot {
+		t.Fatalf("no cookie: code %d, want 200 заглушка", w.Code)
+	}
+
+	// 4) чужой хост → next
+	req = httptest.NewRequest(http.MethodGet, "https://x/", nil)
+	req.Host = "brigade.example.com"
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusTeapot {
+		t.Fatalf("other host: code %d, want 418 (next)", w.Code)
+	}
+
+	// 5) невалидный id в query → 400
+	req = httptest.NewRequest(http.MethodGet, "https://x/?id=garbage", nil)
+	req.Host = "preview.example.com"
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("bad id: code %d, want 400", w.Code)
+	}
+}

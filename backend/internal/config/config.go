@@ -58,9 +58,19 @@ type Config struct {
 // регистрации.
 type PreviewConfig struct {
 	Enabled bool `koanf:"enabled"`
-	// Domain — базовый домен preview-поддоменов: "localhost" для разработки
-	// (браузеры резолвят *.localhost сами) либо реальный домен с wildcard-DNS.
+	// Mode — способ адресации preview:
+	//   - "subdomain" (дефолт): {sessionId}-{port}.{Domain} — требует wildcard-DNS;
+	//   - "cookie": один хост CookieHost, выбор сессии/порта через cookie
+	//     (?id=<id>-<port> ставит cookie и редиректит) — для сред без wildcard
+	//     (например, netbird expose, где wildcard-поддомены не поддержаны).
+	Mode string `koanf:"mode"`
+	// Domain — базовый домен preview-поддоменов (mode=subdomain): "localhost" для
+	// разработки (браузеры резолвят *.localhost сами) либо домен с wildcard-DNS.
 	Domain string `koanf:"domain"`
+	// CookieHost — хост cookie-режима целиком (mode=cookie), напр.
+	// "preview.brigade.example.com". Один хост обслуживает по одному активному
+	// dev-серверу на браузер.
+	CookieHost string `koanf:"cookie_host"`
 	// Scheme — схема публичных preview-URL (http|https). https предполагает
 	// TLS-терминацию: встроенную (TLS.Addr) либо внешнюю.
 	Scheme string `koanf:"scheme"`
@@ -189,12 +199,18 @@ func (c *Config) Validate() error {
 	}
 
 	if c.Preview.Enabled {
-		d := c.Preview.Domain
-		if d == "" {
-			return fmt.Errorf("config: preview.domain is required when preview is enabled")
-		}
-		if strings.Contains(d, "://") || strings.HasPrefix(d, ".") || strings.HasSuffix(d, ".") {
-			return fmt.Errorf("config: preview.domain %q must be a bare host name (no scheme, no leading/trailing dot)", d)
+		switch c.Preview.Mode {
+		case "", "subdomain":
+			c.Preview.Mode = "subdomain"
+			if err := validateBareHost("preview.domain", c.Preview.Domain, true); err != nil {
+				return err
+			}
+		case "cookie":
+			if err := validateBareHost("preview.cookie_host", c.Preview.CookieHost, true); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("config: invalid preview.mode %q (expected subdomain or cookie)", c.Preview.Mode)
 		}
 		switch c.Preview.Scheme {
 		case "http", "https":
@@ -214,5 +230,20 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	return nil
+}
+
+// validateBareHost проверяет, что значение — голое имя хоста (без схемы и без
+// ведущей/замыкающей точки). required — обязательно ли непустое.
+func validateBareHost(field, v string, required bool) error {
+	if v == "" {
+		if required {
+			return fmt.Errorf("config: %s is required", field)
+		}
+		return nil
+	}
+	if strings.Contains(v, "://") || strings.HasPrefix(v, ".") || strings.HasSuffix(v, ".") {
+		return fmt.Errorf("config: %s %q must be a bare host name (no scheme, no leading/trailing dot)", field, v)
+	}
 	return nil
 }
