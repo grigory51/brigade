@@ -697,13 +697,17 @@ func (r *Registry) RestoreAll(ctx context.Context) error {
 func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 	switch sess.Kind {
 	case store.SessionKindCLI:
-		// Восстановить CLI-сессию можно только через `claude --resume <id>`, для чего
-		// нужен agent_session_id. В local-режиме brigade его не получает (claude не
+		// В local-режиме восстановить CLI-сессию можно только через `claude --resume
+		// <id>`, для чего нужен agent_session_id. brigade его не получает (claude не
 		// сообщает идентификатор структурно), поэтому для свежих CLI-сессий он пуст.
 		// Рестарт бэкенда к тому же завершает дочерние процессы, так что такая сессия
 		// объективно мертва — помечаем её stopped, а не пытаемся (заведомо неудачно)
 		// переподключиться. Это штатный исход, не ошибка восстановления.
-		if sess.AgentSessionID == "" {
+		//
+		// В docker-режиме агент живёт в отдельном контейнере, переживающем рестарт
+		// бэкенда, а Reattach переподключается по label brigade.session.id и не требует
+		// agent_session_id. Поэтому здесь пустой id не повод считать сессию мёртвой.
+		if sess.Mode == store.SessionModeLocal && sess.AgentSessionID == "" {
 			return r.store.UpdateSessionStatus(ctx, sess.ID, store.SessionStatusStopped)
 		}
 		handle, err := r.spawner.Reattach(ctx, spawn.Persisted{
