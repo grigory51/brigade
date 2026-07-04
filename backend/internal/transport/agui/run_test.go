@@ -25,20 +25,28 @@ type fakeBindable struct {
 	promptCalled bool
 	promptText   string
 	finishCalled bool
+	// calls — порядок вызовов Bind/Prompt/FinishStreams для проверки, что стрим-стейт
+	// закрывается ДО привязки к новому sink (см. TestServePromptFinishesStreamsBeforeBind).
+	calls []string
 }
 
 func (b *fakeBindable) Bind(sink acp.EventSink, resolver acp.PermissionResolver) (unbind func()) {
+	b.calls = append(b.calls, "Bind")
 	return func() {}
 }
 
 func (b *fakeBindable) Prompt(ctx context.Context, text string) (string, error) {
 	b.promptCalled = true
 	b.promptText = text
+	b.calls = append(b.calls, "Prompt")
 	return b.promptStopReason, b.promptErr
 }
 
-func (b *fakeBindable) SetFrontendTools(tools []acp.FrontendTool)   {}
-func (b *fakeBindable) FinishStreams()                              { b.finishCalled = true }
+func (b *fakeBindable) SetFrontendTools(tools []acp.FrontendTool) {}
+func (b *fakeBindable) FinishStreams() {
+	b.finishCalled = true
+	b.calls = append(b.calls, "FinishStreams")
+}
 func (b *fakeBindable) Messages() []acp.Message                     { return nil }
 func (b *fakeBindable) Commands() []aguimodel.AvailableCommand      { return nil }
 func (b *fakeBindable) ConfigOptions() []acpsdk.SessionConfigOption { return nil }
@@ -115,6 +123,38 @@ func TestServePrompt(t *testing.T) {
 	}
 	if !strings.Contains(body, `"stopReason":"end_turn"`) {
 		t.Errorf("в потоке нет stopReason end_turn:\n%s", body)
+	}
+}
+
+// TestServePromptFinishesStreamsBeforeBind фиксирует порядок для нового промпта:
+// FinishStreams вызывается ДО Bind. Так незакрытые потоки прошлых (в т.ч. фоновых)
+// turn'ов закрываются в history до привязки к новому sink, и Bind не переоткрывает их
+// старый messageId в поток нового run'а (иначе агрегатор клиента ломает порядок
+// сообщений — «ответ с середины»). В replay-ветке порядок обратный (см. ниже).
+func TestServePromptFinishesStreamsBeforeBind(t *testing.T) {
+	b := &fakeBindable{promptStopReason: "end_turn"}
+	serveInput(b, runAgentInput{
+		ThreadID: "t",
+		RunID:    "r",
+		Messages: []inputMessage{{Role: "user", Content: "привет"}},
+	})
+
+	want := []string{"FinishStreams", "Bind", "Prompt"}
+	if strings.Join(b.calls, ",") != strings.Join(want, ",") {
+		t.Errorf("порядок вызовов = %v, want %v", b.calls, want)
+	}
+}
+
+// TestServeReplayFinishesStreamsAfterBind фиксирует обратный порядок для replay
+// (reconnect без нового сообщения): Bind обязан переоткрыть ещё живой поток того же
+// turn'а, и только потом FinishStreams закрывает его перед RUN_FINISHED.
+func TestServeReplayFinishesStreamsAfterBind(t *testing.T) {
+	b := &fakeBindable{}
+	serveInput(b, runAgentInput{ThreadID: "t", RunID: "r"})
+
+	want := []string{"Bind", "FinishStreams"}
+	if strings.Join(b.calls, ",") != strings.Join(want, ",") {
+		t.Errorf("порядок вызовов = %v, want %v", b.calls, want)
 	}
 }
 
