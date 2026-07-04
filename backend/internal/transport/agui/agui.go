@@ -77,6 +77,9 @@ type Bindable interface {
 	// SetConfigOption устанавливает значение опции сессии и возвращает актуальный
 	// полный набор опций.
 	SetConfigOption(ctx context.Context, configID, value string) ([]acpsdk.SessionConfigOption, error)
+	// Status сообщает, генерирует ли агент сейчас (живой Prompt или недавняя фоновая
+	// активность), и монотонный seq ленты для детекта новых сообщений на клиенте.
+	Status() (generating bool, seq int)
 }
 
 // *acp.Client удовлетворяет Bindable напрямую — проверяется на этапе компиляции.
@@ -158,6 +161,7 @@ func Mux(mux *http.ServeMux, verifier TokenVerifier, provider ClientProvider) {
 	mux.Handle("POST /api/ag-ui/run", runHandler(verifier, provider, perms))
 	mux.Handle("POST /api/ag-ui/permission", permissionHandler(verifier, perms))
 	mux.Handle("GET /api/ag-ui/history", historyHandler(verifier, provider))
+	mux.Handle("GET /api/ag-ui/status", statusHandler(verifier, provider))
 	mux.Handle("POST /api/ag-ui/config", configHandler(verifier, provider))
 }
 
@@ -245,6 +249,40 @@ func historyHandler(verifier TokenVerifier, provider ClientProvider) http.Handle
 			Commands      []aguimodel.AvailableCommand `json:"commands"`
 			ConfigOptions []acpsdk.SessionConfigOption `json:"configOptions"`
 		}{Messages: msgs, Commands: cmds, ConfigOptions: opts})
+	})
+}
+
+// statusHandler обслуживает GET /api/ag-ui/status?threadId=<id>: отдаёт лёгкий снимок
+// состояния сессии {generating, seq}. Фронт поллит его, пока тред открыт: generating
+// зажигает индикатор «агент работает в фоне» (для turn'ов без активного /run — agent
+// wakeup после завершения Workflow/задачи), а рост seq сигналит о новых сообщениях в
+// ленте, по которому фронт перечитывает историю. Дёшев (без стрима, без Bind).
+func statusHandler(verifier TokenVerifier, provider ClientProvider) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := verifier.Verify(accessToken(r))
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		threadID := r.URL.Query().Get("threadId")
+		if threadID == "" {
+			http.Error(w, "threadId required", http.StatusBadRequest)
+			return
+		}
+
+		bindable, ok := provider.Bindable(threadID, userID)
+		if !ok {
+			http.Error(w, "session not found", http.StatusNotFound)
+			return
+		}
+
+		generating, seq := bindable.Status()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(struct {
+			Generating bool `json:"generating"`
+			Seq        int  `json:"seq"`
+		}{Generating: generating, Seq: seq})
 	})
 }
 

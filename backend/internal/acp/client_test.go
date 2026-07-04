@@ -2,6 +2,7 @@ package acp
 
 import (
 	"testing"
+	"time"
 
 	"github.com/grigory51/brigade/backend/internal/agui"
 )
@@ -102,6 +103,34 @@ func TestEmitDeliversToSink(t *testing.T) {
 
 	if len(got) != 1 || got[0].Delta != "x" {
 		t.Errorf("sink получил %+v, want [{delta:x}]", got)
+	}
+}
+
+// TestStatus проверяет детект «агент генерирует» и монотонный seq: свежая
+// содержательная активность (или живой Prompt) → generating=true, устаревшая → false;
+// seq растёт по числу событий ленты.
+func TestStatus(t *testing.T) {
+	c := &Client{}
+	if gen, seq := c.Status(); gen || seq != 0 {
+		t.Fatalf("пустой клиент: generating=%v seq=%d, want false 0", gen, seq)
+	}
+
+	// Содержательное событие фонового turn'а: активность свежая → generating.
+	c.emit(agui.Event{Type: agui.EventTextMessageContent, MessageID: "m1", Delta: "x"})
+	if gen, seq := c.Status(); !gen || seq != 1 {
+		t.Fatalf("после активности: generating=%v seq=%d, want true 1", gen, seq)
+	}
+
+	// Активность за пределами окна → idle, но seq сохраняется.
+	c.lastActivityAt = time.Now().Add(-backgroundIdleWindow - time.Second)
+	if gen, seq := c.Status(); gen || seq != 1 {
+		t.Fatalf("после окна: generating=%v seq=%d, want false 1", gen, seq)
+	}
+
+	// Живой Prompt держит generating независимо от давности активности.
+	c.promptActive = true
+	if gen, _ := c.Status(); !gen {
+		t.Fatal("promptActive: generating=false, want true")
 	}
 }
 

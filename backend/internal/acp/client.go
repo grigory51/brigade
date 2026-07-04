@@ -127,6 +127,12 @@ type Client struct {
 	// user_message_chunk подавляем, чтобы не дублировать оптимистичное сообщение фронта
 	// (см. translate.emitUserMessage). Доступ — под mu.
 	promptActive bool
+	// lastActivityAt — время последнего содержательного события агента (текст/размышление/
+	// tool call). Служит для детекта «агент генерирует» вне живого Prompt: фоновый turn
+	// (agent wakeup после завершения Workflow/задачи) стримит session/update без активного
+	// /run, и его нельзя отследить через promptActive. Идёт в Status() c дебаунс-окном.
+	// Доступ — под mu.
+	lastActivityAt time.Time
 	// bindGen — номер текущей привязки. Увеличивается при каждом Bind; unbind снимает
 	// привязку только если её номер ещё актуален, чтобы закрытие старого сеанса не
 	// затёрло привязку нового.
@@ -374,6 +380,25 @@ func (c *Client) Messages() []Message {
 	return out
 }
 
+// backgroundIdleWindow — окно тишины, после которого фоновый turn считается
+// завершённым. Turn от wakeup (после завершения Workflow/фоновой задачи) не имеет
+// сигнала окончания, в отличие от Prompt со stopReason, поэтому «idle» выводится по
+// отсутствию новых содержательных событий в этом окне.
+const backgroundIdleWindow = 4 * time.Second
+
+// Status сообщает, генерирует ли агент сейчас, и монотонный seq ленты. generating =
+// идёт живой Prompt ИЛИ недавно (в пределах backgroundIdleWindow) приходили
+// содержательные события фонового turn'а. seq — число событий в history: растёт при
+// каждом новом содержательном событии, что позволяет фронту заметить появление
+// фонового turn'а, не разбирая сами события (по изменению seq — перечитать историю).
+func (c *Client) Status() (generating bool, seq int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	generating = c.promptActive ||
+		(!c.lastActivityAt.IsZero() && time.Since(c.lastActivityAt) < backgroundIdleWindow)
+	return generating, len(c.history)
+}
+
 // Bind привязывает к клиенту доставку событий (sink) и обработку разрешений (resolver)
 // на время одного WS-сеанса. Возвращает unbind, который снимает привязку (события снова
 // отбрасываются, разрешения трактуются как cancelled). Повторный Bind поверх активного
@@ -465,6 +490,11 @@ func (c *Client) emit(evt agui.Event) {
 		c.lastCommands = &cm
 	default:
 		c.appendHistoryLocked(evt)
+		// Отмечаем содержательную активность агента для Status(): по ней детектируется
+		// фоновый turn без активного Prompt. Служебные снимки (usage/commands) и
+		// permission-запросы сюда не попадают (обработаны выше), поэтому индикатор
+		// «работает» не залипает на высокочастотных usage-обновлениях.
+		c.lastActivityAt = time.Now()
 	}
 	sink := c.sink
 	c.mu.Unlock()
@@ -560,6 +590,16 @@ func (c *Client) Prompt(ctx context.Context, text string) (stopReason string, er
 	for _, evt := range closing {
 		c.emit(evt)
 	}
+
+	// Сбрасываем метку активности после закрывающих emit'ов: события foreground-turn'а
+	// (в т.ч. закрывающие END выше) обновляют lastActivityAt, и без сброса generating
+	// держался бы ещё backgroundIdleWindow после возврата Prompt — фронт ложно принял бы
+	// хвост завершённого прогона за фоновую работу. Активность живого turn'а атрибутируется
+	// promptActive, поэтому по его завершении обнуляем окно; фоновый turn (без Prompt)
+	// выставит метку заново своим первым событием. Turn'ы не пересекаются (promptMu).
+	c.mu.Lock()
+	c.lastActivityAt = time.Time{}
+	c.mu.Unlock()
 
 	if err != nil {
 		return "", fmt.Errorf("acp: prompt: %w", err)

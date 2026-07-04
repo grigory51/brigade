@@ -18,6 +18,10 @@ const RUN_URL = "/api/ag-ui/run";
 const PERMISSION_URL = "/api/ag-ui/permission";
 const HISTORY_URL = "/api/ag-ui/history";
 const CONFIG_URL = "/api/ag-ui/config";
+const STATUS_URL = "/api/ag-ui/status";
+// STATUS_POLL_MS — интервал поллинга состояния сессии. Компромисс: достаточно часто для
+// живого индикатора фоновой работы, но без заметной нагрузки (запрос дешёвый, без стрима).
+const STATUS_POLL_MS = 2000;
 
 // HistoryMessage — сообщение истории чата от бэкенда (GET /api/ag-ui/history).
 type HistoryMessage = { id: string; role: string; content: string };
@@ -83,7 +87,14 @@ export type AcpRuntime = {
   a2ui: A2uiState;
   configOptions: ConfigOption[];
   setConfigOption: (configId: string, value: string) => Promise<void>;
+  status: AgentStatus;
 };
+
+// AgentStatus — лёгкий снимок состояния сессии (GET /api/ag-ui/status). generating:
+// агент сейчас генерирует (живой Prompt или фоновый turn без активного /run — agent
+// wakeup после Workflow/задачи). seq: монотонный счётчик событий ленты — по его росту
+// вне активного прогона детектируется появление фонового turn'а.
+export type AgentStatus = { generating: boolean; seq: number };
 
 // CustomEventValue — нетипизированная полезная нагрузка CUSTOM-события AG-UI.
 type CustomEventValue = Record<string, unknown> | undefined;
@@ -94,6 +105,10 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
   const [commands, setCommands] = useState<AvailableCommand[]>([]);
   const [plan, setPlan] = useState<PlanEntry[]>([]);
   const [configOptions, setConfigOptions] = useState<ConfigOption[]>([]);
+  const [status, setStatus] = useState<AgentStatus>({
+    generating: false,
+    seq: 0,
+  });
   const [a2uiVersion, setA2uiVersion] = useState(0);
 
   // Процессор A2UI-поверхностей живёт вместе с сессией: бэкенд шлёт поставки
@@ -176,6 +191,40 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
     });
     return () => sub.unsubscribe();
   }, [agent, a2uiProcessor]);
+
+  // Поллинг состояния сессии: пока тред открыт, дёргаем GET /status. Он несёт признак
+  // «агент генерирует» (в т.ч. фоновый turn без активного /run) и seq ленты — по ним
+  // AcpSession зажигает индикатор фоновой работы и перезагружает историю при появлении
+  // фоновых сообщений. Ошибки/401 проглатываем: это фоновый опрос, не критичный к сбою.
+  useEffect(() => {
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const res = await fetch(
+          `${STATUS_URL}?threadId=${encodeURIComponent(sessionId)}`,
+          { credentials: "include", headers: authHeaders(tokenRef.current()) },
+        );
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          generating?: boolean;
+          seq?: number;
+        };
+        if (stopped) return;
+        setStatus({
+          generating: Boolean(data.generating),
+          seq: typeof data.seq === "number" ? data.seq : 0,
+        });
+      } catch {
+        // Транзиентный сбой сети — следующий тик повторит.
+      }
+    };
+    void tick();
+    const id = window.setInterval(tick, STATUS_POLL_MS);
+    return () => {
+      stopped = true;
+      window.clearInterval(id);
+    };
+  }, [sessionId]);
 
   // history-адаптер восстанавливает прошлые turn'ы при открытии треда. load() забирает
   // историю чата массивом сообщений (GET /api/ag-ui/history) и отдаёт её рантайму с
@@ -269,6 +318,7 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
     a2ui: { processor: a2uiProcessor, version: a2uiVersion },
     configOptions,
     setConfigOption: setConfigOptionRef.current,
+    status,
   };
 }
 

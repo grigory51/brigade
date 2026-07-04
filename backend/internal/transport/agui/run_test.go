@@ -53,6 +53,7 @@ func (b *fakeBindable) ConfigOptions() []acpsdk.SessionConfigOption { return nil
 func (b *fakeBindable) SetConfigOption(context.Context, string, string) ([]acpsdk.SessionConfigOption, error) {
 	return nil, nil
 }
+func (b *fakeBindable) Status() (bool, int) { return false, 0 }
 
 // flushRecorder — httptest.ResponseRecorder не реализует http.Flusher, а run.serve
 // требует Flusher. Оборачиваем запись в буфер собственным типом с no-op Flush.
