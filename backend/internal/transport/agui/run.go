@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/grigory51/brigade/backend/internal/agui"
@@ -170,7 +171,11 @@ func (rn *run) resolvePermission(ctx context.Context, req agui.PermissionRequest
 func lastUserText(messages []inputMessage) string {
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role == "user" {
-			return messages[i].Content
+			// Обрезаем окаймляющие пробелы и переводы строки: клиенты (в частности
+			// мобильный ввод) могут добавлять завершающий \n при отправке. Сообщение
+			// из одних пробелов схлопывается в "" и уходит в replay-путь — агенту
+			// пустой ввод не отправляется.
+			return strings.TrimSpace(messages[i].Content)
 		}
 	}
 	return ""

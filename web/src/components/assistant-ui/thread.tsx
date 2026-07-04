@@ -303,6 +303,11 @@ const Composer: FC = () => {
             className="aui-composer-input placeholder:text-muted-foreground/80 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none disabled:opacity-60"
             rows={1}
             autoFocus
+            // На тач-устройствах (мобильный браузер) нет Shift, поэтому Shift+Enter
+            // для переноса строки недоступен. Проп заставляет plain Enter вставлять
+            // \n на touch-primary устройствах; отправка — кнопкой Send. На десктопе
+            // (есть точный указатель) поведение прежнее: Enter отправляет.
+            unstable_insertNewlineOnTouchEnter
             aria-label="Message input"
           />
           <ComposerAction />
@@ -416,8 +421,9 @@ const SlashMenu: FC = () => {
 };
 
 // configSelectorCategories — какие опции сессии показываются селекторами в composer'е
-// и в каком порядке. Прочие категории (permission mode, agent) намеренно не выводятся.
-const configSelectorCategories = ["model", "thought_level"];
+// и в каком порядке. Категория "mode" — режим прав/агента (напр. auto-approve): даёт
+// выбрать авто-одобрение инструментов вместо ручного подтверждения каждого запроса.
+const configSelectorCategories = ["model", "mode", "thought_level"];
 
 // ConfigSelectors — компактные выпадающие селекторы опций сессии (модель, усилие)
 // слева в строке действий composer'а. Текущее значение — подписью на кнопке; выбор
