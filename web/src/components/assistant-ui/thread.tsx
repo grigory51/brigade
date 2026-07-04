@@ -448,6 +448,10 @@ const ConfigSelectors: FC = () => {
                 size="sm"
                 className="text-muted-foreground hover:text-foreground h-7 gap-1 px-2 text-xs font-normal"
               >
+                {/* Префикс названием опции: несколько селекторов могут иметь
+                    одинаковое текущее значение (напр. Mode=Default и Effort=Default),
+                    без подписи их не различить. */}
+                <span className="opacity-60">{opt.name}:</span>
                 {current?.name ?? opt.currentValue}
                 <ChevronDownIcon className="size-3 opacity-60" />
               </Button>

@@ -325,6 +325,13 @@ function toPlan(snapshot: CustomEventValue): PlanEntry[] {
     }));
 }
 
+// HIDDEN_CONFIG_VALUES — значения опций, скрытые из UI по соображениям безопасности.
+// bypassPermissions полностью отключает проверку прав (агент выполняет любые
+// инструменты без подтверждения) — слишком опасно для веб-клиента, вырезаем.
+const HIDDEN_CONFIG_VALUES: Record<string, ReadonlySet<string>> = {
+  mode: new Set(["bypassPermissions"]),
+};
+
 // toConfigOptions нормализует снимок опций сессии (массив ACP SessionConfigOption).
 // Boolean-опции (unstable) пропускаются: UI показывает только селекторы.
 function toConfigOptions(value: unknown): ConfigOption[] {
@@ -337,21 +344,26 @@ function toConfigOptions(value: unknown): ConfigOption[] {
         typeof o.currentValue === "string" &&
         Array.isArray(o.options),
     )
-    .map((o) => ({
+    .map((o) => {
+      const category = typeof o.category === "string" ? o.category : undefined;
+      const hidden = category ? HIDDEN_CONFIG_VALUES[category] : undefined;
+      return {
       id: o.id as string,
       name: typeof o.name === "string" ? o.name : (o.id as string),
-      category: typeof o.category === "string" ? o.category : undefined,
+      category,
       currentValue: o.currentValue as string,
       options: (o.options as unknown[])
         .map((v) => v as Record<string, unknown>)
         .filter((v) => typeof v.value === "string")
+        .filter((v) => !hidden?.has(v.value as string))
         .map((v) => ({
           value: v.value as string,
           name: typeof v.name === "string" ? v.name : (v.value as string),
           description:
             typeof v.description === "string" ? v.description : undefined,
         })),
-    }));
+      };
+    });
 }
 
 function toCommands(value: CustomEventValue): AvailableCommand[] {
