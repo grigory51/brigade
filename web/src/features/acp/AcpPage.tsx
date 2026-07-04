@@ -57,6 +57,7 @@ function AcpSessionInner({
     configOptions,
     setConfigOption,
     status,
+    refreshStatus,
   } = useAcpRuntime(sessionId);
 
   return (
@@ -77,7 +78,11 @@ function AcpSessionInner({
             }
           />
         </div>
-        <BackgroundActivity status={status} onReload={onReload} />
+        <BackgroundActivity
+          status={status}
+          onReload={onReload}
+          refreshStatus={refreshStatus}
+        />
       </div>
 
       <PermissionDialog
@@ -91,89 +96,83 @@ function AcpSessionInner({
 }
 
 // BackgroundActivity показывает индикатор фоновой работы агента и перезагружает историю,
-// когда фоновый turn завершился. «Фон» = агент генерирует (status.generating), но живого
-// прогона в этом клиенте нет (thread.isRunning=false): вывод такого turn'а не попадает в
-// тред живьём, только в history бэкенда. Перезагрузку откладываем, пока это небезопасно
-// (идёт прогон или в поле ввода есть недописанный текст), чтобы ремоунт его не затёр.
+// когда в ленте бэкенда появились сообщения, не прошедшие через живой прогон этого
+// клиента (фоновый turn — agent wakeup после завершения Workflow/задачи). Детекция — по
+// росту seq в покое, а не по наблюдению generating: setInterval в фоновой вкладке
+// троттлится браузером до 1/мин, и короткий фоновый turn целиком проваливается между
+// поллами — момент generating=true можно не увидеть вовсе, но рост seq неустраним.
+// generating используется только для индикатора. Перезагрузку откладываем, пока это
+// небезопасно (идёт прогон или в поле ввода есть недописанный текст).
 function BackgroundActivity({
   status,
   onReload,
+  refreshStatus,
 }: {
   status: AgentStatus;
   onReload: () => void;
+  refreshStatus: () => void;
 }) {
   const isRunning = useAuiState((s) => s.thread.isRunning);
   const composerText = useComposer((c) => c.text);
 
-  // idleSeq — seq ленты, до которого тред считается синхронизированным (последнее
-  // «спокойное» наблюдение). Пока идёт фоновый turn, он заморожен на дофоновом значении —
-  // так рост ленты за время turn'а корректно виден как «есть новые сообщения», даже если
-  // быстрый turn успел вырасти между поллами.
-  const idleSeq = useRef(status.seq);
-  const sawBg = useRef(false);
+  // idleSeq — seq ленты, до которого тред синхронизирован. null до первого достоверного
+  // полла: маунт уже загрузил полную историю, поэтому первый полл лишь задаёт базу — без
+  // этого ремоунт (сбрасывающий status на дефолт {seq:0}) уходил бы в цикл перезагрузок
+  // (свежий seq всегда больше нуля).
+  const idleSeq = useRef<number | null>(null);
   const wasRunning = useRef(isRunning);
-  // cooldownTick — tick, на котором foreground-прогон завершился. Фоновую детекцию
-  // включаем только со СЛЕДУЮЩЕГО полла (status.tick > cooldownTick): isRunning выключается
-  // мгновенно по RUN_FINISHED (SSE), а кэш status.generating обновляется лишь поллингом
-  // (до STATUS_POLL_MS позже) и в этом окне ещё stale-true — без «остывания» хвост
-  // завершённого прогона ложно считался бы фоновой активностью (лишний ремоунт + мигание).
+  // cooldownTick — tick на момент завершения foreground-прогона. isRunning гаснет
+  // мгновенно (SSE RUN_FINISHED), а кэш status обновляется поллингом — до свежего полла
+  // (tick > cooldownTick) и generating, и seq могут быть stale: generating ложно-true
+  // (мигание индикатора), seq занижен (события прогона ещё не учтены — сдвиг базы по
+  // нему дал бы ложный «фоновый рост» и лишний ремоунт).
   const cooldownTick = useRef<number | null>(null);
   const [bgActive, setBgActive] = useState(false);
 
   useEffect(() => {
     if (isRunning) {
-      // Foreground-прогон: его сообщения стримятся в тред живьём, база едет за seq.
-      idleSeq.current = status.seq;
-      sawBg.current = false;
+      // Foreground-прогон: сообщения стримятся в тред живьём. База синхронизируется на
+      // выходе из остывания; здесь только фиксируем факт прогона.
       cooldownTick.current = null;
       wasRunning.current = true;
       setBgActive(false);
       return;
     }
     if (wasRunning.current) {
-      // Прогон только что завершился — входим в остывание до свежего полла: пока не
-      // доверяем status.generating (может быть stale-true из полла во время прогона).
+      // Прогон только что завершился. Входим в остывание и просим немедленный полл:
+      // ждать штатного тика нельзя — в затроттленной вкладке он может прийти через
+      // минуту, и фоновые события успели бы слиться с событиями прогона в одной дельте.
       wasRunning.current = false;
       cooldownTick.current = status.tick;
-      idleSeq.current = status.seq;
       setBgActive(false);
+      refreshStatus();
       return;
     }
     if (cooldownTick.current !== null) {
       if (status.tick <= cooldownTick.current) {
-        // Тот же (возможно stale) полл — держим базу у seq, generating не доверяем.
-        idleSeq.current = status.seq;
         setBgActive(false);
-        return;
+        return; // stale-полл: ни generating, ни seq не достоверны — ждём свежий.
       }
-      // Пришёл свежий полл после конца прогона — generating теперь достоверен.
+      // Свежий полл после конца прогона: синхронизируем базу (события прогона уже в
+      // треде — отрисованы живым стримом).
       cooldownTick.current = null;
       idleSeq.current = status.seq;
-      // проваливаемся в обычную логику ниже
     }
 
-    const bgBusy = status.generating && !isRunning;
-    if (bgBusy) {
-      // Фоновый turn генерирует: помечаем и НЕ трогаем idleSeq (держим дофоновую базу).
-      sawBg.current = true;
-      setBgActive(true);
+    setBgActive(status.generating);
+    if (status.generating) return; // фоновый turn идёт: базу держим дофоновой.
+
+    if (idleSeq.current === null) {
+      idleSeq.current = status.seq; // первый достоверный полл — задаём базу без reload
       return;
     }
-    setBgActive(false);
-    // Покой без активного прогона (turn завершён, generating=false).
-    if (sawBg.current) {
-      // Был фоновый turn. Перезагружаем историю (ремоунт рантайма подтянет ленту), когда
-      // безопасно: лента выросла сверх дофоновой базы и поле ввода пусто (иначе ремоунт
-      // затёр бы недописанное — ждём, sawBg остаётся, перезагрузим по очистке ввода).
-      if (status.seq > idleSeq.current && composerText.trim() === "") {
-        sawBg.current = false;
-        idleSeq.current = status.seq;
-        onReload();
-      }
-      return;
+    // Покой: рост seq сверх базы = в ленте появились сообщения, которых тред не видел.
+    // Перезагружаем историю (ремоунт рантайма), когда поле ввода пусто — иначе ремоунт
+    // затёр бы недописанный текст (база не двигается, повторим по очистке ввода).
+    if (status.seq > idleSeq.current && composerText.trim() === "") {
+      idleSeq.current = status.seq;
+      onReload();
     }
-    // Обычный покой — двигаем базу за лентой (foreground-сообщения уже в треде).
-    idleSeq.current = status.seq;
   }, [
     isRunning,
     status.generating,
@@ -181,6 +180,7 @@ function BackgroundActivity({
     status.tick,
     composerText,
     onReload,
+    refreshStatus,
   ]);
 
   if (!bgActive) return null;

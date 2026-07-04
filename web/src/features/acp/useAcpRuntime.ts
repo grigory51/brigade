@@ -89,6 +89,7 @@ export type AcpRuntime = {
   configOptions: ConfigOption[];
   setConfigOption: (configId: string, value: string) => Promise<void>;
   status: AgentStatus;
+  refreshStatus: () => void;
 };
 
 // AgentStatus — лёгкий снимок состояния сессии (GET /api/ag-ui/status). generating:
@@ -200,6 +201,16 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
   // «агент генерирует» (в т.ч. фоновый turn без активного /run) и seq ленты — по ним
   // AcpSession зажигает индикатор фоновой работы и перезагружает историю при появлении
   // фоновых сообщений. Ошибки/401 проглатываем: это фоновый опрос, не критичный к сбою.
+  //
+  // refreshStatusRef — внеплановый немедленный полл. Нужен в двух местах: (1) на границе
+  // «прогон завершился» — setInterval в фоновой вкладке троттлится браузером до 1/мин,
+  // и без немедленного полла база seq синхронизировалась бы с опозданием, съедая фоновые
+  // события; (2) на visibilitychange — пользователь вернулся во вкладку, догоняем
+  // состояние сразу, не дожидаясь ближайшего тика.
+  const refreshStatusRef = useRef<() => void>(() => {});
+  // Стабильная обёртка: идентичность не меняется между рендерами, чтобы эффекты
+  // потребителей (BackgroundActivity) не передёргивались.
+  const refreshStatusStable = useRef(() => refreshStatusRef.current()).current;
   useEffect(() => {
     let stopped = false;
     const tick = async () => {
@@ -223,11 +234,18 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
         // Транзиентный сбой сети — следующий тик повторит.
       }
     };
+    refreshStatusRef.current = () => void tick();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     void tick();
     const id = window.setInterval(tick, STATUS_POLL_MS);
     return () => {
       stopped = true;
       window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+      refreshStatusRef.current = () => {};
     };
   }, [sessionId]);
 
@@ -339,6 +357,7 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
     configOptions,
     setConfigOption: setConfigOptionRef.current,
     status,
+    refreshStatus: refreshStatusStable,
   };
 }
 
