@@ -465,7 +465,7 @@ const ConfigSelectors: FC = () => {
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="text-muted-foreground hover:text-foreground h-7 gap-1 px-2 text-xs font-normal"
+                className="text-muted-foreground hover:text-foreground h-7 shrink-0 gap-1 px-2 text-xs font-normal"
               >
                 {/* Префикс названием опции: несколько селекторов могут иметь
                     одинаковое текущее значение (напр. Mode=Default и Effort=Default),
@@ -505,12 +505,15 @@ const ConfigSelectors: FC = () => {
 
 const ComposerAction: FC = () => {
   return (
-    <div className="aui-composer-action-wrapper relative flex items-center justify-between">
-      <div className="flex items-center gap-1">
+    <div className="aui-composer-action-wrapper relative flex items-center justify-between gap-1">
+      {/* min-w-0 + overflow-x-auto: на узких экранах (мобильный браузер) селекторы
+          опций шире вьюпорта — группа сжимается и скроллится внутри себя, не выталкивая
+          кнопку отправки за край экрана (горизонтальный скролл страницы). */}
+      <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         <ComposerAddAttachment />
         <ConfigSelectors />
       </div>
-      <div className="flex items-center gap-1.5">
+      <div className="flex shrink-0 items-center gap-1.5">
         <AuiIf condition={(s) => s.thread.capabilities.dictation}>
           <AuiIf condition={(s) => s.composer.dictation == null}>
             <ComposerPrimitive.Dictate asChild>
