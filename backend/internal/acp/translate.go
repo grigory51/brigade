@@ -2,6 +2,8 @@ package acp
 
 import (
 	"encoding/json"
+	"regexp"
+	"strings"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
@@ -174,16 +176,76 @@ func (c *Client) translateUpdate(u acpsdk.SessionUpdate) []agui.Event {
 // отрисовано оптимистично на фронте (POST /api/ag-ui/run), и его дубликат был бы лишним.
 // user_message_chunk нужен лишь при воспроизведении истории через session/load, когда
 // живого Prompt нет. Открытые потоки при этом всё равно закрываем.
+//
+// Синтетические инжекции харнесса — wake-up уведомления о фоновых задачах — приходят
+// в контекст агента user-сообщениями (сырой <task-notification>-XML) и неотличимы от
+// реплик пользователя по каналу доставки: и живьём, и в реплее session/load (транскрипт
+// агента хранит их обычными user-записями, адаптер их не фильтрует). Показывать их от
+// имени пользователя нельзя — распознаём по точным маркерам содержимого
+// (looksSyntheticNotification) и транслируем системной карточкой: Role="system" с
+// человекочитаемой выжимкой. Проверка безусловна (не зависит от фазы реплея/гонок
+// поздних нотификаций): точность маркеров исключает ложное срабатывание на реальных
+// репликах, а реплей после рестарта рисует те же карточки, что и живой показ.
+//
+// Замечание: в живой SSE-прогон системная тройка фактически не попадает (фоновый turn
+// идёт с sink=nil, живой ввод подавлен promptActive); если путь когда-то откроется,
+// агрегатор @ag-ui на клиенте роняет role у TEXT_MESSAGE_START — выжимка отрисуется
+// текстом ассистента (косметика, не порча данных).
 func (c *Client) emitUserMessage(id, text string) []agui.Event {
 	evts := c.finishStreams()
 	if c.promptActive {
 		return evts
 	}
+	role := "user"
+	if looksSyntheticNotification(text) {
+		role = "system"
+		text = systemNotificationSummary(text)
+	}
 	return append(evts,
-		agui.Event{Type: agui.EventTextMessageStart, MessageID: id, Role: "user"},
+		agui.Event{Type: agui.EventTextMessageStart, MessageID: id, Role: role},
 		agui.Event{Type: agui.EventTextMessageContent, MessageID: id, Delta: text},
 		agui.Event{Type: agui.EventTextMessageEnd, MessageID: id},
 	)
+}
+
+// looksSyntheticNotification распознаёт инжекции харнесса по точным маркерам начала
+// текста: <task-notification> (фоновые задачи), <system-reminder> (служебные вставки),
+// [SYSTEM NOTIFICATION (префикс-предупреждение перед уведомлением). Намеренно НЕ
+// матчим произвольный "<": реальная реплика пользователя может начинаться с XML/HTML
+// (вставленный код), и она обязана остаться role=user. Новые форматы инжекций
+// добавлять сюда же.
+func looksSyntheticNotification(text string) bool {
+	t := strings.TrimSpace(text)
+	return strings.HasPrefix(t, "<task-notification") ||
+		strings.HasPrefix(t, "<system-reminder") ||
+		strings.HasPrefix(t, "[SYSTEM NOTIFICATION")
+}
+
+// summaryTagRe выделяет содержимое <summary> из wake-up уведомления харнесса
+// (<task-notification> несёт краткое описание исхода задачи именно там).
+var summaryTagRe = regexp.MustCompile(`(?s)<summary>(.*?)</summary>`)
+
+// xmlTagRe вычищает XML-подобные теги из уведомления, если <summary> не нашёлся.
+var xmlTagRe = regexp.MustCompile(`<[^>]*>`)
+
+// systemNotificationSummary приводит синтетическое сообщение харнесса к короткому
+// человекочитаемому виду для системной карточки в ленте: берёт содержимое <summary>,
+// иначе весь текст; в обоих случаях вычищает остаточные теги (вложенная разметка внутри
+// summary — тоже) и усечает до разумной длины.
+func systemNotificationSummary(text string) string {
+	src := text
+	if m := summaryTagRe.FindStringSubmatch(text); m != nil && strings.TrimSpace(m[1]) != "" {
+		src = m[1]
+	}
+	s := strings.TrimSpace(strings.Join(strings.Fields(xmlTagRe.ReplaceAllString(src, " ")), " "))
+	if s == "" {
+		return "Системное уведомление"
+	}
+	const maxRunes = 300
+	if r := []rune(s); len(r) > maxRunes {
+		return string(r[:maxRunes]) + "…"
+	}
+	return s
 }
 
 // availableCommandsEvent транслирует список slash-команд агента (ACP

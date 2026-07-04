@@ -45,6 +45,7 @@ import {
   ChevronDownIcon,
   CopyIcon,
   DownloadIcon,
+  InfoIcon,
   MicIcon,
   MoreHorizontalIcon,
   SquareIcon,
@@ -225,7 +226,25 @@ const ThreadMessage: FC = () => {
 
   if (isEditing) return <EditComposer />;
   if (role === "user") return <UserMessage />;
+  // Системные уведомления (wake-up харнесса о фоновых задачах) бэкенд транслирует
+  // role=system — компактная информационная карточка, не реплика диалога.
+  if (role === "system") return <SystemMessage />;
   return <AssistantMessageComponent />;
+};
+
+// SystemMessage — компактная системная карточка по центру ленты: уведомление о фоновой
+// задаче (завершилась/упала), инжектированное харнессом агента между turn'ами.
+const SystemMessage: FC = () => {
+  return (
+    <MessagePrimitive.Root className="aui-system-message mx-auto flex w-full max-w-[var(--thread-max-width)] justify-center py-1">
+      <div className="bg-muted/60 text-muted-foreground flex max-w-[85%] items-start gap-2 rounded-lg border border-dashed px-3 py-2 text-xs">
+        <InfoIcon className="mt-0.5 size-3.5 shrink-0 opacity-70" />
+        <span className="min-w-0 break-words">
+          <MessagePrimitive.Parts />
+        </span>
+      </div>
+    </MessagePrimitive.Root>
+  );
 };
 
 const ThreadScrollToBottom: FC = () => {

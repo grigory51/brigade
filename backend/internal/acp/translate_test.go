@@ -159,6 +159,39 @@ func TestTranslateUserMessageChunk(t *testing.T) {
 		assertShapes(t, got, nil)
 	})
 
+	t.Run("синтетическое уведомление → системная карточка", func(t *testing.T) {
+		// user_message_chunk с маркером инжекции харнесса (wake-up о фоновой задаче)
+		// транслируется role=system с выжимкой из <summary> — и живьём, и в реплее
+		// session/load (проверка безусловна, фаза не важна).
+		c := &Client{}
+		mid := "n1"
+		got := c.translateUpdate(acpsdk.SessionUpdate{UserMessageChunk: &acpsdk.SessionUpdateUserMessageChunk{
+			MessageId: &mid,
+			Content:   acpsdk.TextBlock("<task-notification><task-id>x</task-id><summary>Задача завершена</summary></task-notification>"),
+		}})
+		assertShapes(t, got, []eventShape{
+			{Type: agui.EventTextMessageStart, MessageID: "n1", Role: "system"},
+			{Type: agui.EventTextMessageContent, MessageID: "n1", Delta: "Задача завершена"},
+			{Type: agui.EventTextMessageEnd, MessageID: "n1"},
+		})
+	})
+
+	t.Run("реплика с XML-префиксом остаётся репликой пользователя", func(t *testing.T) {
+		// Точные маркеры не матчат произвольный "<": пользовательский текст со
+		// вставленным HTML/кодом не должен превращаться в системную карточку.
+		c := &Client{}
+		mid := "u2"
+		got := c.translateUpdate(acpsdk.SessionUpdate{UserMessageChunk: &acpsdk.SessionUpdateUserMessageChunk{
+			MessageId: &mid,
+			Content:   acpsdk.TextBlock(`<div class="x"> не центрируется, почему?`),
+		}})
+		assertShapes(t, got, []eventShape{
+			{Type: agui.EventTextMessageStart, MessageID: "u2", Role: "user"},
+			{Type: agui.EventTextMessageContent, MessageID: "u2", Delta: `<div class="x"> не центрируется, почему?`},
+			{Type: agui.EventTextMessageEnd, MessageID: "u2"},
+		})
+	})
+
 	t.Run("promptActive=true закрывает открытый текстовый поток", func(t *testing.T) {
 		c := &Client{promptActive: true}
 		// Открываем текстовое сообщение ассистента.
@@ -168,6 +201,31 @@ func TestTranslateUserMessageChunk(t *testing.T) {
 		assertShapes(t, got, []eventShape{
 			{Type: agui.EventTextMessageEnd, MessageID: "m1"},
 		})
+	})
+}
+
+// TestSystemNotificationSummary проверяет выжимку из синтетического уведомления:
+// содержимое <summary>; без него — текст без тегов с усечением; пустой ввод — заглушка.
+func TestSystemNotificationSummary(t *testing.T) {
+	cases := []struct{ name, in, want string }{
+		{"summary", "<task-notification><summary>Готово: отчёт собран</summary></task-notification>", "Готово: отчёт собран"},
+		{"вложенные теги внутри summary вычищаются", "<task-notification><summary>Итог <b>жирный</b></summary></task-notification>", "Итог жирный"},
+		{"без summary — теги вычищены", "<x>привет</x> <y>мир</y>", "привет мир"},
+		{"пусто", "<a></a>", "Системное уведомление"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := systemNotificationSummary(tc.in); got != tc.want {
+				t.Errorf("systemNotificationSummary(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+	t.Run("усечение длинного текста", func(t *testing.T) {
+		long := strings.Repeat("а", 400)
+		got := systemNotificationSummary(long)
+		if r := []rune(got); len(r) != 301 || r[300] != '…' {
+			t.Errorf("len = %d, want 301 с многоточием на конце", len(r))
+		}
 	})
 }
 
