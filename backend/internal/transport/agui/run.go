@@ -68,32 +68,17 @@ func (rn *run) serve(in runAgentInput) {
 
 	// Replay-прогон: при открытии треда клиент стартует run без нового пользовательского
 	// сообщения (history-адаптер с unstable_resume), чтобы восстановить ленту. Пустой
-	// prompt агенту не отправляем — иначе он ответил бы на пустой ввод; историю уже
-	// проиграл Bind, остаётся лишь закрыть поток.
+	// prompt агенту не отправляем — иначе он ответил бы на пустой ввод.
 	text := lastUserText(in.Messages)
 
-	// Новый промпт: перед Bind закрываем незавершённые потоки прошлых turn'ов. Фоновый
-	// turn (agent wakeup от завершившегося Workflow/задачи) генерирует вывод без активного
-	// /run — sink тогда nil, поток остаётся открытым в c.stream. Без этого Bind переоткрыл
-	// бы старый messageId в sink нового run'а, и агрегатор @ag-ui принял бы его за ответ
-	// текущего turn'а — порядок сообщений на клиенте ломался («ответ с середины»).
-	// Закрытие ДО Bind уводит END в history (sink ещё не привязан), а не в новый поток.
-	// Replay-ветка (reconnect, text=="") намеренно этого не делает: там Bind обязан
-	// переоткрыть ещё живой поток того же turn'а, иначе END прилетит без START.
-	if text != "" {
-		rn.bindable.FinishStreams()
-	}
-
-	// Привязываем ACP-клиента к потоку: накопленная история (в т.ч. восстановленная через
-	// session/load после рестарта) синхронно проигрывается в sink сразу за RUN_STARTED,
-	// затем идут живые события текущего turn'а.
-	unbind := rn.bindable.Bind(rn.sink, rn.resolvePermission)
-	defer unbind()
-
 	if text == "" {
-		// История из session/load может оканчиваться незакрытым потоковым сообщением
-		// (load не проходит через Prompt и не закрывает потоки) — закрываем их, чтобы
-		// END ушёл в SSE до RUN_FINISHED, иначе клиент отвергнет RUN_FINISHED.
+		// Reconnect без нового сообщения: привязываем sink немедленно, чтобы Bind переоткрыл
+		// ещё живой поток того же turn'а (иначе последующий CONTENT/END прилетел бы без START
+		// и клиент отверг бы событие). Затем закрываем незавершённые потоки: история из
+		// session/load может оканчиваться незакрытым сообщением (load не проходит через
+		// Prompt), а RUN_FINISHED поверх открытого потока клиент отвергает.
+		unbind := rn.bindable.Bind(rn.sink, rn.resolvePermission)
+		defer unbind()
 		rn.bindable.FinishStreams()
 		rn.send(agui.Event{
 			Type:     agui.EventRunFinished,
@@ -104,7 +89,21 @@ func (rn *run) serve(in runAgentInput) {
 		return
 	}
 
-	stopReason, err := rn.bindable.Prompt(rn.ctx, text)
+	// Новый промпт: привязку sink делаем ВНУТРИ Prompt (хук onTurnStart), а не до него.
+	// Хук вызывается под turn-барьером (promptMu) — к этому моменту предыдущий turn
+	// полностью завершён и его отложенный cleanup закрыл потоки. Поэтому поток этого
+	// прогона привязывается только после того, как хвост предыдущего turn'а физически
+	// прекратился, и слипание ответов двух turn'ов невозможно (см. acp.Client.Prompt).
+	// FinishStreams в хуке — защитный no-op (предыдущий turn уже закрыл свои потоки).
+	// Bind делается на той же горутине, что и serve, поэтому запись unbind без гонки.
+	var unbind func()
+	stopReason, err := rn.bindable.Prompt(rn.ctx, text, func() {
+		rn.bindable.FinishStreams()
+		unbind = rn.bindable.Bind(rn.sink, rn.resolvePermission)
+	})
+	if unbind != nil {
+		unbind()
+	}
 	if err != nil {
 		rn.send(agui.Event{Type: agui.EventRunError, Message: err.Error()})
 		return

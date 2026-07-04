@@ -105,31 +105,85 @@ function BackgroundActivity({
   const isRunning = useAuiState((s) => s.thread.isRunning);
   const composerText = useComposer((c) => c.text);
 
-  const bgBusy = status.generating && !isRunning;
-
-  const wasBg = useRef(false);
-  const seqAtStart = useRef(status.seq);
-  const pendingReload = useRef(false);
+  // idleSeq — seq ленты, до которого тред считается синхронизированным (последнее
+  // «спокойное» наблюдение). Пока идёт фоновый turn, он заморожен на дофоновом значении —
+  // так рост ленты за время turn'а корректно виден как «есть новые сообщения», даже если
+  // быстрый turn успел вырасти между поллами.
+  const idleSeq = useRef(status.seq);
+  const sawBg = useRef(false);
+  const wasRunning = useRef(isRunning);
+  // cooldownTick — tick, на котором foreground-прогон завершился. Фоновую детекцию
+  // включаем только со СЛЕДУЮЩЕГО полла (status.tick > cooldownTick): isRunning выключается
+  // мгновенно по RUN_FINISHED (SSE), а кэш status.generating обновляется лишь поллингом
+  // (до STATUS_POLL_MS позже) и в этом окне ещё stale-true — без «остывания» хвост
+  // завершённого прогона ложно считался бы фоновой активностью (лишний ремоунт + мигание).
+  const cooldownTick = useRef<number | null>(null);
+  const [bgActive, setBgActive] = useState(false);
 
   useEffect(() => {
-    if (bgBusy) {
-      if (!wasBg.current) {
-        wasBg.current = true;
-        seqAtStart.current = status.seq;
+    if (isRunning) {
+      // Foreground-прогон: его сообщения стримятся в тред живьём, база едет за seq.
+      idleSeq.current = status.seq;
+      sawBg.current = false;
+      cooldownTick.current = null;
+      wasRunning.current = true;
+      setBgActive(false);
+      return;
+    }
+    if (wasRunning.current) {
+      // Прогон только что завершился — входим в остывание до свежего полла: пока не
+      // доверяем status.generating (может быть stale-true из полла во время прогона).
+      wasRunning.current = false;
+      cooldownTick.current = status.tick;
+      idleSeq.current = status.seq;
+      setBgActive(false);
+      return;
+    }
+    if (cooldownTick.current !== null) {
+      if (status.tick <= cooldownTick.current) {
+        // Тот же (возможно stale) полл — держим базу у seq, generating не доверяем.
+        idleSeq.current = status.seq;
+        setBgActive(false);
+        return;
       }
-    } else if (wasBg.current) {
-      wasBg.current = false;
-      // Фоновый turn закончился: если лента выросла — появились новые сообщения к показу.
-      if (status.seq > seqAtStart.current) pendingReload.current = true;
+      // Пришёл свежий полл после конца прогона — generating теперь достоверен.
+      cooldownTick.current = null;
+      idleSeq.current = status.seq;
+      // проваливаемся в обычную логику ниже
     }
-    // Перезагружаем только когда безопасно: нет активного прогона и пусто в поле ввода.
-    if (pendingReload.current && !isRunning && composerText.trim() === "") {
-      pendingReload.current = false;
-      onReload();
-    }
-  }, [bgBusy, status.seq, isRunning, composerText, onReload]);
 
-  if (!bgBusy) return null;
+    const bgBusy = status.generating && !isRunning;
+    if (bgBusy) {
+      // Фоновый turn генерирует: помечаем и НЕ трогаем idleSeq (держим дофоновую базу).
+      sawBg.current = true;
+      setBgActive(true);
+      return;
+    }
+    setBgActive(false);
+    // Покой без активного прогона (turn завершён, generating=false).
+    if (sawBg.current) {
+      // Был фоновый turn. Перезагружаем историю (ремоунт рантайма подтянет ленту), когда
+      // безопасно: лента выросла сверх дофоновой базы и поле ввода пусто (иначе ремоунт
+      // затёр бы недописанное — ждём, sawBg остаётся, перезагрузим по очистке ввода).
+      if (status.seq > idleSeq.current && composerText.trim() === "") {
+        sawBg.current = false;
+        idleSeq.current = status.seq;
+        onReload();
+      }
+      return;
+    }
+    // Обычный покой — двигаем базу за лентой (foreground-сообщения уже в треде).
+    idleSeq.current = status.seq;
+  }, [
+    isRunning,
+    status.generating,
+    status.seq,
+    status.tick,
+    composerText,
+    onReload,
+  ]);
+
+  if (!bgActive) return null;
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-28 z-10 flex justify-center">
       <div className="bg-muted/90 text-muted-foreground flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs shadow-sm backdrop-blur">

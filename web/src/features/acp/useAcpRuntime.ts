@@ -19,6 +19,7 @@ const PERMISSION_URL = "/api/ag-ui/permission";
 const HISTORY_URL = "/api/ag-ui/history";
 const CONFIG_URL = "/api/ag-ui/config";
 const STATUS_URL = "/api/ag-ui/status";
+const CANCEL_URL = "/api/ag-ui/cancel";
 // STATUS_POLL_MS — интервал поллинга состояния сессии. Компромисс: достаточно часто для
 // живого индикатора фоновой работы, но без заметной нагрузки (запрос дешёвый, без стрима).
 const STATUS_POLL_MS = 2000;
@@ -93,8 +94,10 @@ export type AcpRuntime = {
 // AgentStatus — лёгкий снимок состояния сессии (GET /api/ag-ui/status). generating:
 // агент сейчас генерирует (живой Prompt или фоновый turn без активного /run — agent
 // wakeup после Workflow/задачи). seq: монотонный счётчик событий ленты — по его росту
-// вне активного прогона детектируется появление фонового turn'а.
-export type AgentStatus = { generating: boolean; seq: number };
+// вне активного прогона детектируется появление фонового turn'а. tick: номер поллинга,
+// растёт на каждый опрос даже при неизменных generating/seq — heartbeat для логики
+// фоновой активности (нужен, чтобы фазовый переход отрабатывал по расписанию поллинга).
+export type AgentStatus = { generating: boolean; seq: number; tick: number };
 
 // CustomEventValue — нетипизированная полезная нагрузка CUSTOM-события AG-UI.
 type CustomEventValue = Record<string, unknown> | undefined;
@@ -108,6 +111,7 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
   const [status, setStatus] = useState<AgentStatus>({
     generating: false,
     seq: 0,
+    tick: 0,
   });
   const [a2uiVersion, setA2uiVersion] = useState(0);
 
@@ -210,10 +214,11 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
           seq?: number;
         };
         if (stopped) return;
-        setStatus({
+        setStatus((prev) => ({
           generating: Boolean(data.generating),
           seq: typeof data.seq === "number" ? data.seq : 0,
-        });
+          tick: prev.tick + 1,
+        }));
       } catch {
         // Транзиентный сбой сети — следующий тик повторит.
       }
@@ -281,6 +286,21 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
     agent,
     showThinking: true,
     adapters: { history },
+    // onCancel вызывается при клике Stop. Клиентская отмена рантайма гасит только UI и
+    // абортит СВОЙ AbortController, но не HTTP-запрос /run (@ag-ui/client абортит fetch
+    // отдельным контроллером, который никто не дёргает), поэтому turn агента продолжал
+    // генерироваться. Явно шлём session/cancel через отдельный эндпоинт — агент сворачивает
+    // turn кооперативно (stopReason=cancelled). Намеренно НЕ зовём agent.abortRun(): не
+    // обрываем HTTP/ctx, чтобы весь хвост turn'а пришёл под серверным turn-барьером и не
+    // слипся со следующим прогоном (см. backend acp.Client.Cancel/Prompt). Best-effort.
+    onCancel: () => {
+      void fetch(CANCEL_URL, {
+        method: "POST",
+        credentials: "include",
+        headers: authHeaders(tokenRef.current()),
+        body: JSON.stringify({ threadId: sessionId }),
+      });
+    },
   });
 
   // resolvePermission отправляет решение пользователя отдельным POST с Bearer и

@@ -25,6 +25,8 @@ type fakeBindable struct {
 	promptCalled bool
 	promptText   string
 	finishCalled bool
+	cancelCalled bool
+	cancelErr    error
 	// calls — порядок вызовов Bind/Prompt/FinishStreams для проверки, что стрим-стейт
 	// закрывается ДО привязки к новому sink (см. TestServePromptFinishesStreamsBeforeBind).
 	calls []string
@@ -35,11 +37,22 @@ func (b *fakeBindable) Bind(sink acp.EventSink, resolver acp.PermissionResolver)
 	return func() {}
 }
 
-func (b *fakeBindable) Prompt(ctx context.Context, text string) (string, error) {
+func (b *fakeBindable) Prompt(ctx context.Context, text string, onTurnStart func()) (string, error) {
+	// Хук вызывается под turn-барьером ДО фактической отправки агенту: воспроизводим это,
+	// вызывая onTurnStart до записи "Prompt", чтобы порядок совпадал с боевым (FinishStreams
+	// и Bind из хука предшествуют самому Prompt).
+	if onTurnStart != nil {
+		onTurnStart()
+	}
 	b.promptCalled = true
 	b.promptText = text
 	b.calls = append(b.calls, "Prompt")
 	return b.promptStopReason, b.promptErr
+}
+
+func (b *fakeBindable) Cancel(ctx context.Context) error {
+	b.cancelCalled = true
+	return b.cancelErr
 }
 
 func (b *fakeBindable) SetFrontendTools(tools []acp.FrontendTool) {}

@@ -543,7 +543,14 @@ func (c *Client) SetFrontendTools(tools []FrontendTool) {
 // клиент, а транспорт: эти события несут threadId/runId конкретного запроса, известные
 // только ему (см. internal/transport/agui). Возвращаемый stopReason транспорт кладёт в
 // RUN_FINISHED.result.
-func (c *Client) Prompt(ctx context.Context, text string) (stopReason string, err error) {
+//
+// onTurnStart (может быть nil) вызывается ровно один раз ПОСЛЕ захвата turn-барьера
+// (promptMu) и записи реплики пользователя, но ДО отправки запроса агенту. К этому
+// моменту предыдущий turn полностью завершён (его отложенный cleanup закрыл потоки),
+// поэтому хук — безопасная точка привязать sink нового прогона: события предыдущего
+// turn'а физически не могут прийти после освобождения им promptMu, а значит не попадут
+// в sink этого прогона (структурная защита от слипания ответов двух turn'ов).
+func (c *Client) Prompt(ctx context.Context, text string, onTurnStart func()) (stopReason string, err error) {
 	// Сериализуем turn'ы: пока идёт один Prompt, следующий ждёт. Иначе потоковые события
 	// двух turn'ов смешались бы в общем sink (см. promptMu).
 	c.promptMu.Lock()
@@ -558,6 +565,13 @@ func (c *Client) Prompt(ctx context.Context, text string) (stopReason string, er
 	// рестарте, и при reload в рамках живого процесса лента теряла бы реплики пользователя.
 	c.recordUserMessage(text)
 	c.mu.Unlock()
+
+	// Барьер привязки sink: под удержанным promptMu предыдущий turn гарантированно
+	// завершён, поэтому здесь транспорт привязывает поток текущего прогона (см. коммент
+	// выше и transport/agui/run.go).
+	if onTurnStart != nil {
+		onTurnStart()
+	}
 	// Страховка от паники в conn.Prompt: залипший promptActive подавлял бы трансляцию
 	// user-сообщений всех последующих turn'ов. Штатный сброс ниже остаётся (повторный
 	// сброс безвреден), defer покрывает только аварийный выход.
@@ -605,6 +619,21 @@ func (c *Client) Prompt(ctx context.Context, text string) (stopReason string, er
 		return "", fmt.Errorf("acp: prompt: %w", err)
 	}
 	return string(resp.StopReason), nil
+}
+
+// Cancel просит агента отменить текущий turn — отправляет протокольное уведомление
+// session/cancel (fire-and-forget, без ответа). Идемпотентно и безопасно без активного
+// turn'а: агент по ACP-контракту игнорирует отмену неактивной сессии, повторный вызов
+// тоже безвреден. Намеренно НЕ трогает promptMu и НЕ отменяет ctx выполняющегося Prompt:
+// turn сворачивается кооперативно (агент доводит его до stopReason=cancelled и присылает
+// финальный ответ), поэтому весь хвост событий turn'а приходит, пока Prompt ещё держит
+// барьер, и не может утечь в следующий прогон. Работает и для фонового wakeup-turn
+// (registry.go), который запущен на неотменяемом контексте. Пустой sessionID — no-op.
+func (c *Client) Cancel(ctx context.Context) error {
+	if c.sessionID == "" {
+		return nil
+	}
+	return c.conn.Cancel(ctx, acpsdk.CancelNotification{SessionId: c.sessionID})
 }
 
 // FinishStreams закрывает открытые потоковые сообщения (TEXT_MESSAGE_END /

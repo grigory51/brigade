@@ -58,8 +58,13 @@ type Bindable interface {
 	// permission-flow на время прогона. Возвращает unbind для снятия привязки.
 	Bind(sink acp.EventSink, resolver acp.PermissionResolver) (unbind func())
 	// Prompt передаёт пользовательский ввод агенту (блокируется до конца turn'а) и
-	// возвращает stopReason завершённого turn'а.
-	Prompt(ctx context.Context, text string) (stopReason string, err error)
+	// возвращает stopReason завершённого turn'а. onTurnStart (может быть nil) вызывается
+	// под turn-барьером до отправки запроса агенту — точка привязки sink нового прогона
+	// (см. acp.Client.Prompt).
+	Prompt(ctx context.Context, text string, onTurnStart func()) (stopReason string, err error)
+	// Cancel просит агента отменить текущий turn (session/cancel). Идемпотентно,
+	// безопасно без активного turn'а.
+	Cancel(ctx context.Context) error
 	// SetFrontendTools обновляет реестр кастомных инструментов сессии.
 	SetFrontendTools(tools []acp.FrontendTool)
 	// FinishStreams закрывает открытые потоковые сообщения перед завершением
@@ -162,6 +167,7 @@ func Mux(mux *http.ServeMux, verifier TokenVerifier, provider ClientProvider) {
 	mux.Handle("POST /api/ag-ui/permission", permissionHandler(verifier, perms))
 	mux.Handle("GET /api/ag-ui/history", historyHandler(verifier, provider))
 	mux.Handle("GET /api/ag-ui/status", statusHandler(verifier, provider))
+	mux.Handle("POST /api/ag-ui/cancel", cancelHandler(verifier, provider))
 	mux.Handle("POST /api/ag-ui/config", configHandler(verifier, provider))
 }
 
@@ -283,6 +289,41 @@ func statusHandler(verifier TokenVerifier, provider ClientProvider) http.Handler
 			Generating bool `json:"generating"`
 			Seq        int  `json:"seq"`
 		}{Generating: generating, Seq: seq})
+	})
+}
+
+// cancelHandler обслуживает POST /api/ag-ui/cancel: просит агента отменить текущий turn
+// сессии (session/cancel). Тело — {threadId}. Отдельная от /run точка отмены нужна
+// потому, что клиентский Stop не обрывает HTTP-запрос /run (см. корень бага в
+// acp.Client.Cancel), а фоновый wakeup-turn вообще не имеет активного /run. Ответ 204 в
+// любом исходе доставки (fire-and-forget); 404 — неизвестная сессия, 502 — ошибка отправки.
+func cancelHandler(verifier TokenVerifier, provider ClientProvider) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := verifier.Verify(accessToken(r))
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		var body struct {
+			ThreadID string `json:"threadId"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ThreadID == "" {
+			http.Error(w, "threadId required", http.StatusBadRequest)
+			return
+		}
+
+		bindable, ok := provider.Bindable(body.ThreadID, userID)
+		if !ok {
+			http.Error(w, "session not found", http.StatusNotFound)
+			return
+		}
+
+		if err := bindable.Cancel(r.Context()); err != nil {
+			http.Error(w, "cancel failed", http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	})
 }
 

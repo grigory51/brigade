@@ -318,7 +318,7 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 		if prompt != "" {
 			// Стартовый промпт отправляем в фоне: turn доходит до конца независимо от
 			// того, подключился ли уже WS-клиент (события буферизуются клиентом ACP).
-			go func() { _, _ = client.Prompt(context.WithoutCancel(ctx), prompt) }()
+			go func() { _, _ = client.Prompt(context.WithoutCancel(ctx), prompt, nil) }()
 		}
 		lv := &live{owner: sess.UserID, kind: sess.Kind, client: client}
 		return lv, client.SessionID(), "", nil
