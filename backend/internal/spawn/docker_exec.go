@@ -19,13 +19,13 @@ const execPollInterval = time.Second
 // spawnExecCLI запускает CLI-сессию exec'ом в общем контейнере пользователя: TTY,
 // рабочая директория агента, окружение сессии + маркер sessionMarkEnv (по нему
 // процесс находят teardown и зачистка орфанов — Docker API не умеет завершать exec).
-func (s *DockerSpawner) spawnExecCLI(ctx context.Context, containerID, sessionID string, env []string, cmd []string) (Handle, error) {
+func (s *DockerSpawner) spawnExecCLI(ctx context.Context, containerID, sessionID, workdir string, env []string, cmd []string) (Handle, error) {
 	execResp, err := s.cli.ContainerExecCreate(ctx, containerID, container.ExecOptions{
 		Tty:          true,
 		AttachStdin:  true,
 		AttachStdout: true,
 		AttachStderr: true,
-		WorkingDir:   containerWorkdir,
+		WorkingDir:   workdir,
 		Env:          append(append([]string{}, env...), sessionMarkEnv+"="+sessionID),
 		Cmd:          cmd,
 	})
@@ -110,21 +110,33 @@ func (h *execCLIHandle) Resize(cols, rows uint16) error {
 	})
 }
 
+// execInspectMaxFailures — сколько подряд ошибок ContainerExecInspect терпим, прежде
+// чем счесть exec завершённым. Транзиентный сбой демона (рестарт dockerd, таймаут
+// сокета) не должен помечать живую сессию завершённой — иначе watchExit запишет
+// stopped, оставив claude-орфана.
+const execInspectMaxFailures = 5
+
 // Wait блокируется до завершения exec-процесса, опрашивая его состояние: блокирующего
-// ожидания exec'а в Docker API нет. Ошибка inspect трактуется как завершение (демон
-// недоступен — судьбу процесса всё равно не узнать), код выхода фиксируется из
-// последнего inspect. Идемпотентна.
+// ожидания exec'а в Docker API нет. Единичные ошибки inspect считаются транзиентными и
+// ретраятся (до execInspectMaxFailures подряд); только устойчивый сбой трактуется как
+// завершение. Код выхода фиксируется из последнего успешного inspect. Идемпотентна.
 func (h *execCLIHandle) Wait() error {
 	h.waitOnce.Do(func() {
 		ticker := time.NewTicker(execPollInterval)
 		defer ticker.Stop()
+		failures := 0
 		for range ticker.C {
 			info, err := h.cli.ContainerExecInspect(context.Background(), h.execID)
 			if err != nil {
-				log.Printf("spawn: cli exec inspect %s: %v", h.execID, err)
-				h.waitErr = err
-				return
+				failures++
+				log.Printf("spawn: cli exec inspect %s (%d/%d): %v", h.execID, failures, execInspectMaxFailures, err)
+				if failures >= execInspectMaxFailures {
+					h.waitErr = err
+					return
+				}
+				continue
 			}
+			failures = 0
 			if !info.Running {
 				h.exitCode = info.ExitCode
 				return

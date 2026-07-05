@@ -128,18 +128,24 @@ func (h *execShellHandle) Terminate(ctx context.Context) error {
 	return killByEnvMark(ctx, h.cli, h.containerID, shellMarkEnv, h.mark)
 }
 
+// killMarkScript строит sh-скрипт, убивающий процессы с envKey=value в окружении.
+// Совпадение заякорено к началу записи /proc/*/environ (записи разделены \0): grep -z
+// разбивает по \0 и матчит по ^, поэтому "MARK=abc" не срабатывает на "MARK=abc-def"
+// (значение с суффиксом) и на "X_MARK=abc" (имя с префиксом).
+func killMarkScript(envKey, value string) string {
+	return fmt.Sprintf(
+		`for p in /proc/[0-9]*; do grep -qaz '^%s=%s$' "$p/environ" 2>/dev/null && kill -9 "${p#/proc/}" 2>/dev/null; done; true`,
+		envKey, value)
+}
+
 // killByEnvMark убивает внутри контейнера все процессы, в окружении которых есть
 // envKey=value: сам целевой процесс и его дети (окружение наследуется). Это обходной
-// путь завершения exec-процессов — Docker API их убивать не умеет. Запускается
-// detach-exec'ом со скриптом по /proc/*/environ; отсутствие совпадений — штатный
-// исход (процесс уже завершился).
+// путь завершения exec-процессов — Docker API их убивать не умеет. Fire-and-forget
+// (detach): не дожидается завершения. Отсутствие совпадений — штатный исход.
 func killByEnvMark(ctx context.Context, cli *client.Client, containerID, envKey, value string) error {
-	script := fmt.Sprintf(
-		`for p in /proc/[0-9]*; do grep -qa %s=%s "$p/environ" 2>/dev/null && kill -9 "${p#/proc/}" 2>/dev/null; done; true`,
-		envKey, value)
 	execResp, err := cli.ContainerExecCreate(ctx, containerID, container.ExecOptions{
 		Detach: true,
-		Cmd:    []string{"/bin/sh", "-c", script},
+		Cmd:    []string{"/bin/sh", "-c", killMarkScript(envKey, value)},
 	})
 	if err != nil {
 		return fmt.Errorf("spawn: mark cleanup create: %w", err)
@@ -147,5 +153,28 @@ func killByEnvMark(ctx context.Context, cli *client.Client, containerID, envKey,
 	if err := cli.ContainerExecStart(ctx, execResp.ID, container.ExecStartOptions{Detach: true}); err != nil {
 		return fmt.Errorf("spawn: mark cleanup start: %w", err)
 	}
+	return nil
+}
+
+// killByEnvMarkSync — как killByEnvMark, но ДОЖИДАЕТСЯ завершения kill-скрипта
+// (attach вместо detach: чтение до EOF блокируется до конца процесса). Нужен там, где
+// сразу после kill спавнится новый процесс с тем же маркером (resume в общем
+// контейнере): без ожидания kill-скрипт мог бы убить свежий процесс.
+func killByEnvMarkSync(ctx context.Context, cli *client.Client, containerID, envKey, value string) error {
+	execResp, err := cli.ContainerExecCreate(ctx, containerID, container.ExecOptions{
+		AttachStdout: true,
+		AttachStderr: true,
+		Cmd:          []string{"/bin/sh", "-c", killMarkScript(envKey, value)},
+	})
+	if err != nil {
+		return fmt.Errorf("spawn: mark cleanup create: %w", err)
+	}
+	att, err := cli.ContainerExecAttach(ctx, execResp.ID, container.ExecStartOptions{})
+	if err != nil {
+		return fmt.Errorf("spawn: mark cleanup attach: %w", err)
+	}
+	defer att.Close()
+	// Чтение до EOF блокируется, пока скрипт не завершится (stdout закрыт на выходе).
+	_, _ = io.Copy(io.Discard, att.Reader)
 	return nil
 }

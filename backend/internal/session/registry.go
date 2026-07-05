@@ -168,14 +168,17 @@ func (r *Registry) homeHost(sess store.Session) string {
 		return ""
 	}
 	home := filepath.Join(r.claudeHomeDir, sess.UserID)
-	// Подкаталог workspace создаём сразу — это cwd агента (иначе claude стартует в
-	// несуществующей директории).
+	// Создаём per-session рабочий каталог ~/workspace/<id> (cwd агента): claude стартует
+	// в несуществующей директории с ошибкой. Каталог на сессию изолирует Claude-проект
+	// (memory/транскрипты/todos выводятся из cwd). Сам home и общий workspace создаются
+	// попутно (MkdirAll — все уровни).
 	ws := filepath.Join(home, "workspace")
-	if err := os.MkdirAll(ws, 0o700); err != nil {
+	sessWs := filepath.Join(ws, sess.ID)
+	if err := os.MkdirAll(sessWs, 0o700); err != nil {
 		log.Printf("session: create home %s: %v", home, err)
 		return ""
 	}
-	for _, dir := range []string{home, ws} {
+	for _, dir := range []string{home, ws, sessWs} {
 		if err := os.Chown(dir, spawn.AgentUID, spawn.AgentGID); err != nil {
 			log.Printf("session: chown %s to %d:%d: %v", dir, spawn.AgentUID, spawn.AgentGID, err)
 		}
@@ -227,6 +230,16 @@ func (r *Registry) userClaudeToken(ctx context.Context, userID string) string {
 	return settings.ClaudeToken
 }
 
+// sharedUserID возвращает UserID сессии, только если она — docker-CLI (живёт в общем
+// per-user контейнере). Для прочих (ACP, legacy, local) — пусто: поиск контейнера по
+// сессии не должен фолбэчить на общий cli-shared контейнер пользователя.
+func sharedUserID(sess store.Session) string {
+	if sess.Mode == store.SessionModeDocker && sess.Kind == store.SessionKindCLI {
+		return sess.UserID
+	}
+	return ""
+}
+
 // ErrTeardownInProgress возвращается Stop/Delete, если teardown этой сессии уже
 // выполняется другим запросом.
 var ErrTeardownInProgress = errors.New("session: teardown already in progress")
@@ -267,24 +280,31 @@ func (r *Registry) Create(ctx context.Context, userID string, kind store.Session
 	if kind == store.SessionKindACP && r.userClaudeToken(ctx, userID) == "" {
 		return store.Session{}, ErrClaudeTokenRequired
 	}
-	// В docker-режиме cwd фиксирован — рабочая директория внутри контейнера
-	// (~/workspace в персональном home); пользовательский cwd не используется. В
-	// local-режиме cwd — путь на хосте (дефолт work_dir), нормализуется в абсолютный.
+	// Рабочая директория — на сессию, а не общая: Claude Code выводит проект
+	// (~/.claude/projects/<slug> — memory, транскрипты, todos) из cwd, поэтому общий
+	// cwd смешивал бы состояние несвязанных сессий. Каждая сессия получает свой
+	// подкаталог <id>. docker: путь внутри контейнера (~/workspace/<id> в персональном
+	// home, каталог создаёт homeHost на хосте). local: путь на хосте под work_dir.
+	id := uuid.NewString()
 	if r.mode == store.SessionModeDocker {
-		cwd = spawn.ContainerWorkdir
+		cwd = spawn.ContainerWorkdir + "/" + id
 	} else {
-		if cwd == "" {
-			cwd = r.workDir
+		base := cwd
+		if base == "" {
+			base = r.workDir
 		}
-		abs, err := filepath.Abs(cwd)
+		abs, err := filepath.Abs(filepath.Join(base, id))
 		if err != nil {
-			return store.Session{}, fmt.Errorf("session: resolve cwd %q: %w", cwd, err)
+			return store.Session{}, fmt.Errorf("session: resolve cwd %q: %w", base, err)
+		}
+		if err := os.MkdirAll(abs, 0o755); err != nil {
+			return store.Session{}, fmt.Errorf("session: create cwd %q: %w", abs, err)
 		}
 		cwd = abs
 	}
 
 	sess := store.Session{
-		ID:        uuid.NewString(),
+		ID:        id,
 		UserID:    userID,
 		Mode:      r.mode,
 		Kind:      kind,
@@ -308,18 +328,36 @@ func (r *Registry) Create(ctx context.Context, userID string, kind store.Session
 	// Агент должен пережить запрос Create: его жизнь равна жизни сессии, а не
 	// вызову RPC. Отвязываем спавн от ctx запроса, иначе по завершении Create его
 	// отмена убила бы дочерний процесс (exec.CommandContext) ещё до подключения WS.
+	// Для docker-CLI держим per-user лок от спавна до регистрации live-объекта:
+	// releaseUserContainerIfIdle (тоже под этим локом) считает живые сессии по r.live,
+	// и без удержания в окне «спавн готов, но live не записан» он снёс бы общий
+	// контейнер вместе со свежим exec'ом. Для прочих режимов — no-op.
+	unlock := func() {}
+	if r.mode == store.SessionModeDocker && kind == store.SessionKindCLI {
+		unlock = r.lockUser(userID)
+	}
+
+	// Спавн отвязан от ctx запроса: агент переживает Create (иначе отмена RPC убила бы
+	// его до подключения WS), а долгоживущий hijacked-attach нельзя привязывать к
+	// отменяемому контексту — cancel закрыл бы соединение сессии. Плата: зависший на
+	// спавне docker-демон удерживает per-user лок этого пользователя (деградация
+	// ограничена одним юзером), пока вызов не вернётся.
 	lv, agentSessionID, containerLabel, err := r.spawnFor(context.WithoutCancel(ctx), sess, prompt)
 	if err != nil {
 		// Спавн не удался — сессия в store остаётся как failed для аудита, живой
-		// объект не регистрируется.
+		// объект не регистрируется. Общий контейнер мог быть создан впустую — подчищаем.
 		log.Printf("session: spawn %s (%s/%s) failed: %v", sess.ID, sess.Mode, kind, err)
 		_ = r.store.UpdateSessionStatus(ctx, sess.ID, store.SessionStatusFailed)
+		unlock()
+		r.releaseUserContainerIfIdle(userID)
 		return store.Session{}, err
 	}
 
 	if err := r.store.UpdateSessionResume(ctx, sess.ID, agentSessionID, containerLabel); err != nil {
-		_ = lv.close()
+		_ = lv.terminate(context.WithoutCancel(ctx))
 		_ = r.store.UpdateSessionStatus(ctx, sess.ID, store.SessionStatusFailed)
+		unlock()
+		r.releaseUserContainerIfIdle(userID)
 		return store.Session{}, err
 	}
 	sess.AgentSessionID = agentSessionID
@@ -328,6 +366,8 @@ func (r *Registry) Create(ctx context.Context, userID string, kind store.Session
 	r.mu.Lock()
 	r.live[sess.ID] = lv
 	r.mu.Unlock()
+	// Live-объект зарегистрирован — теперь releaseUserContainerIfIdle увидит сессию.
+	unlock()
 
 	log.Printf("session: created %s (%s/%s) agent_session_id=%q container_label=%q",
 		sess.ID, sess.Mode, kind, agentSessionID, containerLabel)
@@ -346,8 +386,9 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 		// ANTHROPIC_API_KEY: подписочный токен и API-ключ — разные модели доступа.
 		// UserID включает shared-схему docker-спавна (общий контейнер на пользователя):
 		// авторизация Claude привязана к контейнеру, контейнер-на-сессию сбрасывал её.
-		// Спавн и удаление общего контейнера сериализуются per-user локом.
-		unlock := r.lockUser(sess.UserID)
+		// Сериализацию с удалением общего контейнера держит вызывающий (Create/restoreOne
+		// удерживают per-user лок до регистрации live-объекта — иначе releaseUserContainer
+		// в окне «спавн готов, но live ещё не записан» снёс бы контейнер под ногами).
 		handle, err := r.spawner.Spawn(ctx, spawn.Spec{
 			SessionID: sess.ID,
 			UserID:    sess.UserID,
@@ -357,7 +398,6 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 			HomeHost:  r.homeHost(sess),
 			Hostname:  r.userHostname(ctx, sess.UserID),
 		})
-		unlock()
 		if err != nil {
 			return nil, "", "", fmt.Errorf("session: spawn cli: %w", err)
 		}
@@ -447,7 +487,8 @@ func (r *Registry) installSkill(sess store.Session) {
 	dir := sess.Cwd
 	if sess.Mode == store.SessionModeDocker {
 		if home := r.homeHost(sess); home != "" {
-			dir = filepath.Join(home, "workspace")
+			// Скилл кладём в per-session рабочий каталог (cwd агента на хосте).
+			dir = filepath.Join(home, "workspace", sess.ID)
 		} else {
 			return // фича home выключена — скилл класть некуда (эфемерный контейнер)
 		}
@@ -474,16 +515,16 @@ func (r *Registry) applyACPSpawnMode(ctx context.Context, opts *acp.Options, ses
 		return err
 	}
 	opts.SpawnProc = ds.ACP().SpawnProc(spawn.Spec{
-		SessionID:      sess.ID,
-		AgentType:      sess.AgentType,
-		Cwd:            sess.Cwd,
-		Env:            r.agentEnv(sess, token),
-		HomeHost:       r.homeHost(sess),
-		Hostname:       r.userHostname(ctx, sess.UserID),
+		SessionID: sess.ID,
+		AgentType: sess.AgentType,
+		Cwd:       sess.Cwd,
+		Env:       r.agentEnv(sess, token),
+		HomeHost:  r.homeHost(sess),
+		Hostname:  r.userHostname(ctx, sess.UserID),
 	}, stateID)
-	// Агент живёт внутри контейнера: его cwd — точка монтирования рабочей директории,
-	// а не путь хоста (хостовый путь существует только в bind-mount).
-	opts.Cwd = spawn.ContainerWorkdir
+	// Агент живёт внутри контейнера: cwd — путь внутри него (per-session
+	// ~/workspace/<id> в смонтированном home), не путь хоста.
+	opts.Cwd = sess.Cwd
 	return nil
 }
 
@@ -567,7 +608,11 @@ func (r *Registry) Shell(ctx context.Context, sessionID, userID string) (termws.
 		if !ok {
 			return nil, fmt.Errorf("session: docker shell without DockerSpawner")
 		}
-		return ds.SpawnShell(ctx, sess.ID, sess.UserID)
+		// userID передаём только для CLI: fallback на общий cli-shared контейнер
+		// осмыслен лишь для его сессий. ACP-сессия живёт в собственном контейнере
+		// (brigade.session.id); при его отсутствии шелл должен вернуть ошибку, а не
+		// уйти в чужой cli-shared контейнер пользователя.
+		return ds.SpawnShell(ctx, sess.ID, sharedUserID(sess))
 	default:
 		return spawn.StartLocalShell(ctx, sess.Cwd)
 	}
@@ -794,7 +839,13 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 		if sess.Mode == store.SessionModeLocal && sess.AgentSessionID == "" {
 			return r.store.UpdateSessionStatus(ctx, sess.ID, store.SessionStatusStopped)
 		}
-		unlock := r.lockUser(sess.UserID)
+		// Лок держим до регистрации live-объекта (как в Create): свип контейнеров в
+		// конце RestoreAll идёт под тем же локом и без удержания мог бы снести контейнер
+		// в окне «reattach готов, live не записан».
+		unlock := func() {}
+		if sess.Mode == store.SessionModeDocker && sess.Kind == store.SessionKindCLI {
+			unlock = r.lockUser(sess.UserID)
+		}
 		handle, err := r.spawner.Reattach(ctx, spawn.Persisted{
 			SessionID:      sess.ID,
 			AgentSessionID: sess.AgentSessionID,
@@ -805,13 +856,14 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 			HomeHost:       r.homeHost(sess),
 			Hostname:       r.userHostname(ctx, sess.UserID),
 		})
-		unlock()
 		if err != nil {
+			unlock()
 			return fmt.Errorf("reattach cli: %w", err)
 		}
 		r.mu.Lock()
 		r.live[sess.ID] = &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, handle: handle}
 		r.mu.Unlock()
+		unlock()
 		// Следим за завершением восстановленного агента, как и при первичном спавне.
 		go r.watchExit(sess.ID, handle)
 		return nil

@@ -64,7 +64,14 @@ func (r *Resolver) Resolve(ctx context.Context, sessionID string, port int) (*ur
 
 	host := "127.0.0.1"
 	if sess.Mode == store.SessionModeDocker {
-		ip, err := r.containerIP(ctx, sessionID, sess.UserID)
+		// userID для поиска общего cli-shared контейнера — только у docker-CLI сессий;
+		// ACP-сессия живёт в собственном контейнере (по label сессии), фолбэк на общий
+		// контейнер пользователя для неё некорректен.
+		sharedUserID := ""
+		if sess.Kind == store.SessionKindCLI {
+			sharedUserID = sess.UserID
+		}
+		ip, err := r.containerIP(ctx, sessionID, sharedUserID)
 		if err != nil {
 			return nil, err
 		}

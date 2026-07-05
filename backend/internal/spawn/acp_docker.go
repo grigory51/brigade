@@ -80,7 +80,7 @@ func (d *DockerACPSpawner) start(ctx context.Context, spec Spec, stateID string)
 		AttachStdin:  true,
 		AttachStdout: true,
 		AttachStderr: true,
-		WorkingDir:   containerWorkdir,
+		WorkingDir:   specWorkdir(spec),
 		Labels:       map[string]string{labelSessionID: spec.SessionID},
 	}
 	initProcess := true
