@@ -462,3 +462,13 @@ func TestTranslateUnknownUpdate(t *testing.T) {
 		t.Errorf("получено %d событий %+v, want 0", len(got), shapes(got))
 	}
 }
+
+// TestInterruptMarkerCard проверяет карточку для маркера прерывания turn'а.
+func TestInterruptMarkerCard(t *testing.T) {
+	if !looksSyntheticNotification("[Request interrupted by user]") {
+		t.Error("маркер прерывания не распознан")
+	}
+	if got := systemNotificationSummary("[Request interrupted by user]"); got != "Прервано пользователем" {
+		t.Errorf("summary = %q, want «Прервано пользователем»", got)
+	}
+}

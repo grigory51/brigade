@@ -218,7 +218,8 @@ func looksSyntheticNotification(text string) bool {
 	t := strings.TrimSpace(text)
 	return strings.HasPrefix(t, "<task-notification") ||
 		strings.HasPrefix(t, "<system-reminder") ||
-		strings.HasPrefix(t, "[SYSTEM NOTIFICATION")
+		strings.HasPrefix(t, "[SYSTEM NOTIFICATION") ||
+		strings.HasPrefix(t, "[Request interrupted")
 }
 
 // summaryTagRe выделяет содержимое <summary> из wake-up уведомления харнесса
@@ -233,6 +234,11 @@ var xmlTagRe = regexp.MustCompile(`<[^>]*>`)
 // иначе весь текст; в обоих случаях вычищает остаточные теги (вложенная разметка внутри
 // summary — тоже) и усечает до разумной длины.
 func systemNotificationSummary(text string) string {
+	// Маркер прерывания — не уведомление харнесса, а след остановки turn'а в
+	// транскрипте; показываем человекочитаемо, без сырой английской служебной строки.
+	if strings.HasPrefix(strings.TrimSpace(text), "[Request interrupted") {
+		return "Прервано пользователем"
+	}
 	src := text
 	if m := summaryTagRe.FindStringSubmatch(text); m != nil && strings.TrimSpace(m[1]) != "" {
 		src = m[1]

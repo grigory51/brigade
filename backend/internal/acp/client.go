@@ -324,6 +324,13 @@ type Message struct {
 	ID      string `json:"id"`
 	Role    string `json:"role"`
 	Content string `json:"content"`
+	// Поля карточки инструмента (Role == "tool_call"): без них tool-карточки исчезали
+	// из ленты при любом восстановлении истории (reload после фонового turn'а, рестарт
+	// бэкенда) — /history отдавал только текст. ArgsText — сырой JSON аргументов,
+	// Result — итоговый вывод вызова.
+	ToolName string `json:"toolName,omitempty"`
+	ArgsText string `json:"argsText,omitempty"`
+	Result   string `json:"result,omitempty"`
 }
 
 // Commands возвращает последний известный список slash-команд агента (ACP
@@ -356,7 +363,8 @@ func (c *Client) Messages() []Message {
 	defer c.mu.Unlock()
 
 	var out []Message
-	idx := make(map[string]int) // messageId → позиция в out
+	idx := make(map[string]int)     // messageId → позиция в out (текстовые сообщения)
+	toolIdx := make(map[string]int) // toolCallId → позиция в out (карточки инструментов)
 	for _, evt := range c.history {
 		switch evt.Type {
 		case agui.EventTextMessageStart:
@@ -374,6 +382,26 @@ func (c *Client) Messages() []Message {
 		case agui.EventTextMessageContent:
 			if i, ok := idx[evt.MessageID]; ok {
 				out[i].Content += evt.Delta
+			}
+		case agui.EventToolCallStart:
+			if evt.ToolCallID == "" {
+				continue
+			}
+			if _, ok := toolIdx[evt.ToolCallID]; !ok {
+				toolIdx[evt.ToolCallID] = len(out)
+				out = append(out, Message{
+					ID:       evt.ToolCallID,
+					Role:     "tool_call",
+					ToolName: evt.ToolCallName,
+				})
+			}
+		case agui.EventToolCallArgs:
+			if i, ok := toolIdx[evt.ToolCallID]; ok {
+				out[i].ArgsText += evt.Delta
+			}
+		case agui.EventToolCallResult:
+			if i, ok := toolIdx[evt.ToolCallID]; ok {
+				out[i].Result = evt.Content
 			}
 		}
 	}

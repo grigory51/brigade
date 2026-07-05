@@ -29,7 +29,45 @@ const WORKFLOWS_POLL_MS = 5000;
 const STATUS_POLL_MS = 2000;
 
 // HistoryMessage — сообщение истории чата от бэкенда (GET /api/ag-ui/history).
-type HistoryMessage = { id: string; role: string; content: string };
+// role="tool_call" — карточка вызова инструмента (toolName/argsText/result): без неё
+// tool-карточки исчезали бы из ленты при восстановлении истории.
+type HistoryMessage = {
+  id: string;
+  role: string;
+  content: string;
+  toolName?: string;
+  argsText?: string;
+  result?: string;
+};
+
+// toAgUiHistoryMessage переводит серверное сообщение истории в форму, понятную
+// fromAgUiMessages: tool_call — в assistant-сообщение с tool-call-частью (канонический
+// снапшот-формат @assistant-ui/react-ag-ui), остальные роли — как есть. result всегда
+// определён (пустая строка): часть без result агрегатор считает ещё выполняющейся и
+// рисовал бы вечный спиннер.
+function toAgUiHistoryMessage(m: HistoryMessage): unknown {
+  if (m.role !== "tool_call") return m;
+  let args: unknown = {};
+  try {
+    args = m.argsText ? JSON.parse(m.argsText) : {};
+  } catch {
+    // Невалидный/обрезанный JSON аргументов — карточка покажет сырой argsText.
+  }
+  return {
+    id: m.id,
+    role: "assistant",
+    content: [
+      {
+        type: "tool-call",
+        toolCallId: m.id,
+        toolName: m.toolName || "tool",
+        args,
+        argsText: m.argsText ?? "{}",
+        result: m.result ?? "",
+      },
+    ],
+  };
+}
 
 // PendingPermission — активный запрос разрешения (human-in-the-loop). Бэкенд шлёт его
 // событием CUSTOM {name:"permission_request"}; ответ уходит отдельным POST.
@@ -337,7 +375,9 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
         // истории для AG-UI-рантайма (см. assistant-ui docs: ag-ui/runtime-options).
         const raw = Array.isArray(data.messages) ? data.messages : [];
         return ExportedMessageRepository.fromArray(
-          fromAgUiMessages(raw, { showThinking: true }),
+          fromAgUiMessages(raw.map(toAgUiHistoryMessage), {
+            showThinking: true,
+          }),
         );
       },
       append: async () => {},

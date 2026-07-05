@@ -284,3 +284,37 @@ func TestBindUnbindGeneration(t *testing.T) {
 		t.Errorf("второй sink получил %+v, want [{delta:x}]", got2)
 	}
 }
+
+// TestMessagesToolCalls проверяет агрегацию tool-событий в карточки инструментов:
+// START даёт сообщение role=tool_call, ARGS копит аргументы, RESULT — итог; порядок
+// относительно текстовых сообщений сохраняется.
+func TestMessagesToolCalls(t *testing.T) {
+	c := &Client{}
+	c.recordUserMessage("сделай X")
+	c.emit(agui.Event{Type: agui.EventToolCallStart, ToolCallID: "t1", ToolCallName: "Bash"})
+	c.emit(agui.Event{Type: agui.EventToolCallArgs, ToolCallID: "t1", Delta: `{"cmd":`})
+	c.emit(agui.Event{Type: agui.EventToolCallArgs, ToolCallID: "t1", Delta: `"ls"}`})
+	c.emit(agui.Event{Type: agui.EventToolCallEnd, ToolCallID: "t1"})
+	c.emit(agui.Event{Type: agui.EventToolCallResult, ToolCallID: "t1", MessageID: "t1", Role: "tool", Content: "file.txt"})
+	c.emit(agui.Event{Type: agui.EventTextMessageStart, MessageID: "a1", Role: "assistant"})
+	c.emit(agui.Event{Type: agui.EventTextMessageContent, MessageID: "a1", Delta: "готово"})
+	c.emit(agui.Event{Type: agui.EventTextMessageEnd, MessageID: "a1"})
+
+	msgs := c.Messages()
+	if len(msgs) != 3 {
+		t.Fatalf("Messages вернул %d сообщений %+v, want 3", len(msgs), msgs)
+	}
+	tc := msgs[1]
+	if tc.Role != "tool_call" || tc.ID != "t1" || tc.ToolName != "Bash" {
+		t.Errorf("tool msg = %+v, want role=tool_call id=t1 tool=Bash", tc)
+	}
+	if tc.ArgsText != `{"cmd":"ls"}` {
+		t.Errorf("ArgsText = %q, want склеенный JSON", tc.ArgsText)
+	}
+	if tc.Result != "file.txt" {
+		t.Errorf("Result = %q, want file.txt", tc.Result)
+	}
+	if msgs[2].Content != "готово" || msgs[2].Role != "assistant" {
+		t.Errorf("text msg = %+v", msgs[2])
+	}
+}
