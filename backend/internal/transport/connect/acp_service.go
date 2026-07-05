@@ -128,9 +128,10 @@ func (s *AcpService) ResolvePermission(ctx context.Context, req *connect.Request
 }
 
 // configOptionsToProto нормализует опции сессии из union-формата ACP-SDK в типизированный
-// proto. Берутся только Select-опции (Boolean UI не показывает) с плоским (ungrouped)
-// списком значений — именно их эмитит адаптер claude-agent-acp. Политику скрытия
-// небезопасных значений (bypassPermissions) применяет web-клиент.
+// proto. Берутся только Select-опции (Boolean UI не показывает). UI-модель — плоский
+// список значений, поэтому grouped-варианты сплющиваются (заголовки групп отбрасываются:
+// селектор группировку не рисует). Политику скрытия небезопасных значений
+// (bypassPermissions) применяет web-клиент.
 func configOptionsToProto(opts []acpsdk.SessionConfigOption) []*v1.AcpConfigOption {
 	var out []*v1.AcpConfigOption
 	for _, o := range opts {
@@ -150,16 +151,26 @@ func configOptionsToProto(opts []acpsdk.SessionConfigOption) []*v1.AcpConfigOpti
 		}
 		if sel.Options.Ungrouped != nil {
 			for _, v := range *sel.Options.Ungrouped {
-				desc := ""
-				if v.Description != nil {
-					desc = *v.Description
+				opt.Options = append(opt.Options, selectValueToProto(v))
+			}
+		}
+		if sel.Options.Grouped != nil {
+			for _, g := range *sel.Options.Grouped {
+				for _, v := range g.Options {
+					opt.Options = append(opt.Options, selectValueToProto(v))
 				}
-				opt.Options = append(opt.Options, &v1.AcpConfigOptionValue{
-					Value: string(v.Value), Name: v.Name, Description: desc,
-				})
 			}
 		}
 		out = append(out, opt)
 	}
 	return out
+}
+
+// selectValueToProto переводит одно значение опции ACP-SDK в proto.
+func selectValueToProto(v acpsdk.SessionConfigSelectOption) *v1.AcpConfigOptionValue {
+	desc := ""
+	if v.Description != nil {
+		desc = *v.Description
+	}
+	return &v1.AcpConfigOptionValue{Value: string(v.Value), Name: v.Name, Description: desc}
 }

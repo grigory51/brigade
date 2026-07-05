@@ -25,7 +25,7 @@ const WORKFLOWS_POLL_MS = 5000;
 // живого индикатора фоновой работы, но без заметной нагрузки (запрос дешёвый, без стрима).
 const STATUS_POLL_MS = 2000;
 
-// HistoryMessage — сообщение истории чата от бэкенда (GET /api/ag-ui/history).
+// HistoryMessage — сообщение истории чата от бэкенда (AcpService.GetHistory).
 // role="tool_call" — карточка вызова инструмента (toolName/argsText/result): без неё
 // tool-карточки исчезали бы из ленты при восстановлении истории.
 type HistoryMessage = {
@@ -92,7 +92,7 @@ export type AvailableCommand = {
 
 // ConfigOption — конфигурационная опция ACP-сессии (модель, режим прав, усилие):
 // селектор с текущим значением. Бэкенд отдаёт снимок с историей и после смены
-// значения (POST /api/ag-ui/config); live-обновления приходят CUSTOM
+// значения (AcpService.SetConfigOption); live-обновления приходят CUSTOM
 // {name:"config_options"}.
 export type ConfigOption = {
   id: string;
@@ -132,7 +132,7 @@ export type AcpRuntime = {
   workflows: WorkflowInfo[];
 };
 
-// WorkflowInfo — workflow-запуск харнесса агента (GET /api/ag-ui/workflows): оркестрация
+// WorkflowInfo — workflow-запуск харнесса агента (AcpService.ListWorkflows): оркестрация
 // субагентов, выполняющаяся в фоне между turn'ами и не эмитящая ACP-событий. Панель
 // фоновых задач — единственная поверхность её видимости.
 export type WorkflowInfo = {
@@ -145,7 +145,7 @@ export type WorkflowInfo = {
   lastActivitySec: number;
 };
 
-// AgentStatus — лёгкий снимок состояния сессии (GET /api/ag-ui/status). generating:
+// AgentStatus — лёгкий снимок состояния сессии (AcpService.GetStatus). generating:
 // агент сейчас генерирует (живой Prompt или фоновый turn без активного /run — agent
 // wakeup после Workflow/задачи). seq: монотонный счётчик событий ленты — по его росту
 // вне активного прогона детектируется появление фонового turn'а. tick: номер поллинга,
@@ -327,7 +327,7 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
   }, [sessionId]);
 
   // history-адаптер восстанавливает прошлые turn'ы при открытии треда. load() забирает
-  // историю чата массивом сообщений (GET /api/ag-ui/history) и отдаёт её рантайму с
+  // историю чата массивом сообщений (AcpService.GetHistory) и отдаёт её рантайму с
   // корректными ролями. Это вместо прежнего SSE-replay: агрегатор @ag-ui/react-ag-ui
   // склеивает все события одного run'а в единственное assistant-сообщение, из-за чего
   // user-реплики из replay терялись (см. бэкенд acp.Client.Messages). append — no-op:

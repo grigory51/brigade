@@ -34,7 +34,7 @@ type EventSink func(agui.Event) error
 
 // PermissionResolver запрашивает у клиента решение по разрешению и блокируется до ответа.
 // Реализуется транспортом (agui): регистрирует ожидание по req.ID, отдаёт клиенту CUSTOM
-// {name:"permission_request"} и ждёт ответа отдельным POST /api/ag-ui/permission.
+// {name:"permission_request"} и ждёт ответа Connect-методом AcpService.ResolvePermission.
 // Возвращает OptionID выбранного варианта. Если ctx отменён (клиент отключился), ошибку —
 // ACP-вызов тогда трактует исход как cancelled.
 type PermissionResolver func(ctx context.Context, req agui.PermissionRequest) (optionID string, err error)
@@ -103,7 +103,7 @@ type Client struct {
 	resolver PermissionResolver
 	// history — лента ранее отправленных AG-UI событий сессии. В SSE-поток при Bind
 	// НЕ реплеится (это ломало агрегатор клиента) — служит источником для Messages(),
-	// по которому GET /api/ag-ui/history восстанавливает ленту массивом сообщений.
+	// по которому AcpService.GetHistory восстанавливает ленту массивом сообщений.
 	// Turn агента доходит до конца и копится здесь независимо от подключения клиента
 	// (см. emit/SessionUpdate). Permission-запросы в историю не пишутся: их повторный
 	// показ после ответа некорректен (см. emit).
@@ -454,7 +454,7 @@ func (c *Client) Bind(sink EventSink, resolver PermissionResolver) (unbind func(
 	c.mu.Unlock()
 
 	// Историю чата в SSE-поток НЕ проигрываем: лента восстанавливается отдельным запросом
-	// GET /api/ag-ui/history (ThreadHistoryAdapter.load массивом с корректными ролями).
+	// AcpService.GetHistory (ThreadHistoryAdapter.load массивом с корректными ролями).
 	// Иначе каждый живой turn повторно проигрывал бы всю накопленную ленту, а агрегатор
 	// @ag-ui/react-ag-ui склеил бы её с новым ответом в кашу. В sink уходят только
 	// актуальные снимки usage/commands (это состояние, а не история), переоткрытие
@@ -544,7 +544,7 @@ func (c *Client) appendHistoryLocked(evt agui.Event) {
 // recordUserMessage кладёт реплику пользователя в ленту истории как самодостаточную
 // тройку TEXT_MESSAGE_START/CONTENT/END (role=user), НЕ доставляя её в живой sink: на
 // живом turn'е фронт рисует сообщение оптимистично, дубль был бы лишним. Нужна, чтобы
-// GET /api/ag-ui/history (acp.Client.Messages) возвращал реплики пользователя текущего
+// AcpService.GetHistory (acp.Client.Messages) возвращал реплики пользователя текущего
 // процесса. Вызывается под c.mu.
 func (c *Client) recordUserMessage(text string) {
 	id := uuid.NewString()
@@ -589,7 +589,7 @@ func (c *Client) Prompt(ctx context.Context, text string, onTurnStart func()) (s
 	c.promptActive = true
 	// Записываем пользовательскую реплику в историю (без доставки в живой sink: фронт
 	// уже отрисовал её оптимистично при отправке). Без этого user-сообщения текущего
-	// процесса не попадали бы в GET /api/ag-ui/history — их эмитит лишь session/load при
+	// процесса не попадали бы в AcpService.GetHistory — их эмитит лишь session/load при
 	// рестарте, и при reload в рамках живого процесса лента теряла бы реплики пользователя.
 	c.recordUserMessage(text)
 	c.mu.Unlock()
