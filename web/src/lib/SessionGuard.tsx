@@ -69,10 +69,16 @@ export function SessionGuard({ sessionId }: { sessionId: string | undefined }) {
     return <SessionLoadError />;
   }
   // sessionId здесь гарантированно определён: пустой id даёт notfound выше.
+  // key={sessionId} обязателен: экран сессии держит долгоживущее состояние (у ACP —
+  // runtime-ядро assistant-ui с накопленными сообщениями, у CLI — WebSocket-терминал),
+  // которое НЕ пересоздаётся при смене одного лишь пропа sessionId. Без key переход
+  // между сессиями (в т.ч. открытие только что созданной из текущей) переиспользовал бы
+  // тот же инстанс — и сообщения прежней сессии «прорастали» бы в новую. Смена key
+  // гарантирует полный remount с чистым состоянием на каждую сессию.
   return kind === SessionKind.ACP ? (
-    <AcpSession sessionId={sessionId!} />
+    <AcpSession key={sessionId} sessionId={sessionId!} />
   ) : (
-    <CliSession sessionId={sessionId} />
+    <CliSession key={sessionId} sessionId={sessionId} />
   );
 }
 
