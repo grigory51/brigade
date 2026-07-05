@@ -734,7 +734,3 @@ func (c *Client) Close() error {
 	})
 	return nil
 }
-
-// Done закрывается, когда adapter отключился (subprocess завершился). Транспорт может
-// слушать этот канал, чтобы закрыть WS при падении агента.
-func (c *Client) Done() <-chan struct{} { return c.conn.Done() }

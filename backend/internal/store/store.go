@@ -4,15 +4,11 @@
 package store
 
 import (
-	"context"
 	"database/sql"
 	"embed"
 	"fmt"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/pressly/goose/v3"
-	"golang.org/x/crypto/bcrypt"
 
 	_ "modernc.org/sqlite"
 )
@@ -49,35 +45,6 @@ func (s *Store) DB() *sql.DB { return s.db }
 
 // Close закрывает соединение с БД.
 func (s *Store) Close() error { return s.db.Close() }
-
-// SeedUser создаёт стартового пользователя с bcrypt-хешем пароля, если таблица
-// users пуста. Идемпотентен: при непустой БД ничего не делает. Возвращает true,
-// если пользователь был создан. Вызывается на старте бэкенда из конфига.
-func (s *Store) SeedUser(ctx context.Context, username, password string) (bool, error) {
-	n, err := s.CountUsers(ctx)
-	if err != nil {
-		return false, err
-	}
-	if n > 0 {
-		return false, nil
-	}
-
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return false, fmt.Errorf("store: seed user: hash password: %w", err)
-	}
-
-	err = s.CreateUser(ctx, User{
-		ID:           uuid.NewString(),
-		Username:     username,
-		PasswordHash: string(hash),
-		CreatedAt:    time.Now(),
-	})
-	if err != nil {
-		return false, err
-	}
-	return true, nil
-}
 
 func migrate(db *sql.DB) error {
 	goose.SetBaseFS(migrations)

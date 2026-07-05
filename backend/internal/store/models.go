@@ -44,7 +44,6 @@ type User struct {
 type UserSettings struct {
 	UserID      string
 	ClaudeToken string
-	UpdatedAt   time.Time
 }
 
 // Session — сессия агента. Поля agent_session_id и container_label несут
@@ -65,14 +64,4 @@ type Session struct {
 	Name string
 	// ParentID — сессия-родитель для веток (Fork). Пустое — корневая сессия.
 	ParentID string
-}
-
-// RefreshToken — выданный refresh-токен. TokenHash — хеш предъявляемого секрета.
-type RefreshToken struct {
-	ID        string
-	UserID    string
-	TokenHash string
-	ExpiresAt time.Time
-	Revoked   bool
-	CreatedAt time.Time
 }

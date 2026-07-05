@@ -18,14 +18,6 @@ import (
 	"io"
 )
 
-// Mode определяет реализацию Spawner.
-type Mode string
-
-const (
-	ModeLocal  Mode = "local"
-	ModeDocker Mode = "docker"
-)
-
 // Spec описывает параметры первичного запуска агента.
 type Spec struct {
 	// SessionID — идентификатор сессии brigade. Используется как значение label
@@ -40,10 +32,6 @@ type Spec struct {
 	// сбрасывал логин, несмотря на общий home. Пусто — legacy-схема (контейнер на
 	// сессию). local-режим поле игнорирует.
 	UserID string
-
-	// AgentType — тип агента (например, "claude-code-cli"). Зарезервировано для
-	// выбора команды/образа; текущие реализации запускают `claude`.
-	AgentType string
 
 	// Cwd — рабочая директория агента.
 	//

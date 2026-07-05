@@ -392,7 +392,6 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 		handle, err := r.spawner.Spawn(ctx, spawn.Spec{
 			SessionID: sess.ID,
 			UserID:    sess.UserID,
-			AgentType: sess.AgentType,
 			Cwd:       sess.Cwd,
 			Env:       r.agentEnv(sess, token),
 			HomeHost:  r.homeHost(sess),
@@ -516,7 +515,6 @@ func (r *Registry) applyACPSpawnMode(ctx context.Context, opts *acp.Options, ses
 	}
 	opts.SpawnProc = ds.ACP().SpawnProc(spawn.Spec{
 		SessionID: sess.ID,
-		AgentType: sess.AgentType,
 		Cwd:       sess.Cwd,
 		Env:       r.agentEnv(sess, token),
 		HomeHost:  r.homeHost(sess),

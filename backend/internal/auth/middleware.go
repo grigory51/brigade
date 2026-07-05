@@ -56,26 +56,8 @@ func tokenFromHeaderOrCookie(h http.Header, cookie func(string) (*http.Cookie, e
 	return ""
 }
 
-// Middleware — HTTP-middleware, проверяющий access-токен (Bearer или cookie) и
-// кладущий User в контекст. Невалидный/отсутствующий токен сам по себе не
-// отклоняет запрос: решение об обязательности авторизации принимает конкретный
-// хендлер через UserFromContext. Это позволяет одним middleware покрыть как
-// защищённые, так и публичные маршруты (логин).
-func (s *Service) Middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := tokenFromHeaderOrCookie(r.Header, r.Cookie)
-		if token != "" {
-			if claims, err := s.jwt.Verify(token); err == nil {
-				r = r.WithContext(withUser(r.Context(),
-					User{ID: claims.Subject, Username: claims.Username}))
-			}
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-// Interceptor — Connect-интерсептор для unary- и stream-вызовов. Аналогично
-// HTTP-middleware кладёт User в контекст при валидном токене; обязательность
+// Interceptor — Connect-интерсептор для unary- и stream-вызовов. Кладёт User в
+// контекст при валидном токене (Bearer или cookie); обязательность
 // авторизации проверяет сам хендлер сервиса. Cookie читается из заголовка Cookie
 // запроса, так как connect.Request не даёт прямого доступа к *http.Request.
 func (s *Service) Interceptor() connect.Interceptor {

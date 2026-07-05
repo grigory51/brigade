@@ -22,7 +22,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 )
 
 // tokenContext отделяет HMAC-токены preview от любых других применений того же
@@ -62,6 +61,7 @@ func (c Config) publicPort() int {
 // PublicURL строит публичный URL preview для порта сессии.
 //   - subdomain: {scheme}://{id}-{port}.{domain}[:port];
 //   - cookie:    {scheme}://{cookieHost}[:port]/?id={id}-{port}.
+//
 // Стандартные порты (80/http, 443/https) в URL опускаются.
 func (c Config) PublicURL(sessionID string, port int) string {
 	if c.Mode == "cookie" {
@@ -98,10 +98,9 @@ func (c Config) URLTemplate(sessionID string) string {
 
 // Registered — зарегистрированный агентом preview-эндпоинт (для отображения в UI).
 type Registered struct {
-	Port         int       `json:"port"`
-	Name         string    `json:"name,omitempty"`
-	URL          string    `json:"url"`
-	RegisteredAt time.Time `json:"registered_at"`
+	Port int    `json:"port"`
+	Name string `json:"name,omitempty"`
+	URL  string `json:"url"`
 }
 
 // Service — HMAC-токены регистрации и in-memory реестр preview по сессиям.
@@ -145,10 +144,9 @@ func (s *Service) VerifyToken(sessionID, token string) bool {
 // с публичным URL.
 func (s *Service) Register(sessionID string, port int, name string) Registered {
 	reg := Registered{
-		Port:         port,
-		Name:         name,
-		URL:          s.cfg.PublicURL(sessionID, port),
-		RegisteredAt: time.Now(),
+		Port: port,
+		Name: name,
+		URL:  s.cfg.PublicURL(sessionID, port),
 	}
 
 	s.mu.Lock()

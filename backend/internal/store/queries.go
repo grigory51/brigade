@@ -14,42 +14,15 @@ var ErrNotFound = errors.New("store: not found")
 
 // Время хранится в колонках INTEGER как Unix-секунды (UTC). Хелперы централизуют
 // преобразование, чтобы формат не разъезжался между запросами.
-func toUnix(t time.Time) int64    { return t.UTC().Unix() }
+func toUnix(t time.Time) int64     { return t.UTC().Unix() }
 func fromUnix(sec int64) time.Time { return time.Unix(sec, 0).UTC() }
 
 // --- users ---
-
-// CreateUser вставляет нового пользователя. created_at берётся из u.CreatedAt.
-func (s *Store) CreateUser(ctx context.Context, u User) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO users (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)`,
-		u.ID, u.Username, u.PasswordHash, toUnix(u.CreatedAt),
-	)
-	if err != nil {
-		return fmt.Errorf("store: create user: %w", err)
-	}
-	return nil
-}
 
 // GetUserByID возвращает пользователя по идентификатору либо ErrNotFound.
 func (s *Store) GetUserByID(ctx context.Context, id string) (User, error) {
 	return s.scanUser(s.db.QueryRowContext(ctx,
 		`SELECT id, username, password_hash, created_at FROM users WHERE id = ?`, id))
-}
-
-// GetUserByUsername возвращает пользователя по логину либо ErrNotFound.
-func (s *Store) GetUserByUsername(ctx context.Context, username string) (User, error) {
-	return s.scanUser(s.db.QueryRowContext(ctx,
-		`SELECT id, username, password_hash, created_at FROM users WHERE username = ?`, username))
-}
-
-// CountUsers возвращает число пользователей. Используется при сидировании.
-func (s *Store) CountUsers(ctx context.Context) (int, error) {
-	var n int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&n); err != nil {
-		return 0, fmt.Errorf("store: count users: %w", err)
-	}
-	return n, nil
 }
 
 func (s *Store) scanUser(row *sql.Row) (User, error) {
@@ -79,20 +52,9 @@ func (s *Store) GetUserSettings(ctx context.Context, userID string) (UserSetting
 	if err != nil {
 		return UserSettings{}, fmt.Errorf("store: get user settings: %w", err)
 	}
-	settings.UpdatedAt = fromUnix(updatedAt)
+	// updated_at сканируется, но не хранится в модели (никто не читает).
+	_ = updatedAt
 	return settings, nil
-}
-
-// UpsertUserClaudeToken задаёт подписочный токен Claude пользователя (пустой очищает).
-func (s *Store) UpsertUserClaudeToken(ctx context.Context, userID, token string, now time.Time) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO user_settings (user_id, claude_token, updated_at) VALUES (?, ?, ?)
-		 ON CONFLICT(user_id) DO UPDATE SET claude_token = excluded.claude_token, updated_at = excluded.updated_at`,
-		userID, token, toUnix(now))
-	if err != nil {
-		return fmt.Errorf("store: upsert user claude token: %w", err)
-	}
-	return nil
 }
 
 // --- sessions ---
@@ -226,78 +188,7 @@ func scanSessionRow(r rowScanner) (Session, error) {
 	return sess, nil
 }
 
-// --- refresh_tokens ---
-
-// CreateRefreshToken сохраняет выданный refresh-токен (по его хешу).
-func (s *Store) CreateRefreshToken(ctx context.Context, t RefreshToken) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, revoked, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		t.ID, t.UserID, t.TokenHash, toUnix(t.ExpiresAt), boolToInt(t.Revoked), toUnix(t.CreatedAt),
-	)
-	if err != nil {
-		return fmt.Errorf("store: create refresh token: %w", err)
-	}
-	return nil
-}
-
-// GetRefreshTokenByHash возвращает refresh-токен по хешу предъявленного секрета
-// либо ErrNotFound. Проверку срока и отзыва выполняет вызывающий (auth).
-func (s *Store) GetRefreshTokenByHash(ctx context.Context, hash string) (RefreshToken, error) {
-	row := s.db.QueryRowContext(ctx,
-		`SELECT id, user_id, token_hash, expires_at, revoked, created_at
-		 FROM refresh_tokens WHERE token_hash = ?`, hash)
-	var t RefreshToken
-	var expiresAt, createdAt int64
-	var revoked int
-	if err := row.Scan(&t.ID, &t.UserID, &t.TokenHash, &expiresAt, &revoked, &createdAt); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return RefreshToken{}, ErrNotFound
-		}
-		return RefreshToken{}, fmt.Errorf("store: scan refresh token: %w", err)
-	}
-	t.ExpiresAt = fromUnix(expiresAt)
-	t.Revoked = revoked != 0
-	t.CreatedAt = fromUnix(createdAt)
-	return t, nil
-}
-
-// RevokeRefreshToken помечает токен отозванным (logout, ротация при обновлении).
-func (s *Store) RevokeRefreshToken(ctx context.Context, id string) error {
-	res, err := s.db.ExecContext(ctx, `UPDATE refresh_tokens SET revoked = 1 WHERE id = ?`, id)
-	if err != nil {
-		return fmt.Errorf("store: revoke refresh token: %w", err)
-	}
-	return affectedOne(res, "revoke refresh token")
-}
-
-// RevokeUserRefreshTokens отзывает все токены пользователя (logout со всех устройств).
-func (s *Store) RevokeUserRefreshTokens(ctx context.Context, userID string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE refresh_tokens SET revoked = 1 WHERE user_id = ?`, userID)
-	if err != nil {
-		return fmt.Errorf("store: revoke user refresh tokens: %w", err)
-	}
-	return nil
-}
-
-// DeleteExpiredRefreshTokens удаляет токены с истёкшим сроком (фоновая чистка).
-func (s *Store) DeleteExpiredRefreshTokens(ctx context.Context, now time.Time) (int64, error) {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM refresh_tokens WHERE expires_at < ?`, toUnix(now))
-	if err != nil {
-		return 0, fmt.Errorf("store: delete expired refresh tokens: %w", err)
-	}
-	n, _ := res.RowsAffected()
-	return n, nil
-}
-
 // --- helpers ---
-
-func boolToInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
-}
 
 // affectedOne приводит «0 затронутых строк» к ErrNotFound для UPDATE/DELETE по id.
 func affectedOne(res sql.Result, op string) error {
