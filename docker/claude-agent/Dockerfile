@@ -14,9 +14,17 @@
 
 FROM node:22-slim
 
-# Инструменты, без которых кодинг-агент недееспособен в контейнере.
+# Инструменты, без которых кодинг-агент недееспособен в контейнере. Базовый node:22-slim
+# несёт минимум ОС-утилит, поэтому доставляем ходовой набор для «простых операций»:
+# less (пейджер git), jq (JSON), python3-pip/venv (python3 без pip бесполезен),
+# unzip/zip/wget (архивы/загрузки), procps (ps), openssh-client (git по SSH), patch,
+# file, tree, vim-tiny (git $EDITOR). Компиляторы (build-essential) намеренно НЕ ставим —
+# образ остаётся лёгким; если понадобится сборка нативных зависимостей, добавить отдельно.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git ripgrep ca-certificates curl python3 \
+    && apt-get install -y --no-install-recommends \
+        git ripgrep ca-certificates curl wget \
+        python3 python3-pip python3-venv \
+        jq less unzip zip procps openssh-client patch file tree vim-tiny \
     && rm -rf /var/lib/apt/lists/*
 
 # Adapter не ниже 0.54: в 0.52 session/set_config_option (смена модели) рассинхро-
