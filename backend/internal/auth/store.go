@@ -9,6 +9,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+
+	"github.com/google/uuid"
 )
 
 // userByUsername возвращает id и хэш пароля по имени пользователя.
@@ -128,13 +130,10 @@ func randomToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// newID генерирует идентификатор сущности (128 бит, url-safe base64).
+// newID генерирует идентификатор сущности. UUID v4: стандартный читаемый формат —
+// прежний (128 бит url-safe base64) выглядел непрозрачным хешем в путях вида
+// claude-home/<userID>. Существующие сущности сохраняют старые идентификаторы:
+// переименование ломало бы per-user home-каталоги, ссылки сессий и subject JWT.
 func newID() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		// crypto/rand на поддерживаемых платформах не отказывает; паника здесь
-		// сигнализирует о фатально неработоспособном окружении.
-		panic(fmt.Sprintf("auth: read random for id: %v", err))
-	}
-	return base64.RawURLEncoding.EncodeToString(b)
+	return uuid.NewString()
 }
