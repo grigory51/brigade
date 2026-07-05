@@ -97,6 +97,37 @@ export function TerminalView({
     termRef.current = term;
     fitRef.current = fit;
 
+    // Копирование/вставка: xterm выделяет текст мышью (в mouse-режиме приложения — с
+    // зажатым Shift), но сам в буфер обмена не кладёт. Копируем выделение автоматически
+    // при его изменении (copy-on-select, как в терминалах Linux) и по Ctrl/Cmd+Shift+C;
+    // вставка — Ctrl/Cmd+Shift+V (шлём как ввод). Без этого нельзя, например, скопировать
+    // URL из `claude login`.
+    const copySelection = () => {
+      const sel = term.getSelection();
+      if (sel) void navigator.clipboard?.writeText(sel).catch(() => {});
+    };
+    const selSub = term.onSelectionChange(copySelection);
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.type !== "keydown") return true;
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.shiftKey && (e.key === "c" || e.key === "C")) {
+        copySelection();
+        return false;
+      }
+      if (mod && e.shiftKey && (e.key === "v" || e.key === "V")) {
+        void navigator.clipboard
+          ?.readText()
+          .then((text) => {
+            if (text) {
+              wsRef.current?.send(JSON.stringify({ type: "input", data: text }));
+            }
+          })
+          .catch(() => {});
+        return false;
+      }
+      return true;
+    });
+
     // Подгонка размера терминала под контейнер. Прямой вызов fit() из колбэка
     // ResizeObserver порождает бесконечную петлю: fit меняет геометрию xterm,
     // из-за чего у контейнера то появляется, то исчезает вертикальный скроллбар,
@@ -129,6 +160,7 @@ export function TerminalView({
     return () => {
       if (rafId !== 0) cancelAnimationFrame(rafId);
       ro.disconnect();
+      selSub.dispose();
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
