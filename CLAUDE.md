@@ -170,6 +170,41 @@ Kotlin Multiplatform 2.0 + Compose Multiplatform. Модули: `shared` (общ
 ## Конфиг и секреты
 
 `backend/config.yaml` — локальный, в .gitignore. Шаблон — `backend/config.example.yaml`.
-В проде секреты (`jwt.secret`, `claude_code_oauth_token`) задавать через env
-(`BRIGADE_JWT__SECRET`, `BRIGADE_CLAUDE_CODE_OAUTH_TOKEN`), не в yaml.
+В проде секрет `jwt.secret` задавать через env (`BRIGADE_JWT__SECRET`), не в yaml.
+
+Подписочный токен Claude Code — **не глобальный** (нет ни конфиг-поля, ни
+`BRIGADE_CLAUDE_CODE_OAUTH_TOKEN`): каждый пользователь задаёт свой в UI
+(Настройки → Claude), хранится per-user в store (`UserSettings.ClaudeToken`,
+`AuthService.SetClaudeToken`). Registry берёт его из store при создании/восстановлении
+ACP-сессии (`registry.userClaudeToken`) и пробрасывает агенту как env
+`CLAUDE_CODE_OAUTH_TOKEN`; ACP-сессия без токена не создаётся (`ErrClaudeTokenRequired`).
+
+## Локальный e2e-стенд
+
+Прогон живого стека без прод-хостов (проверялось для docker-режима: per-session/per-user
+контейнеры, ACP-turn, устойчивость к обрыву клиента). Каталог стенда — `/tmp/brigade-stand`
+(вне репозитория): свой `config-docker.yaml` (`mode: docker`, `addr: :18080`, отдельный
+SQLite, seed `admin/admin`, `claude_home_dir`), логи, БД. Docker-контекст — orbstack
+(дефолтный `docker.sock`); образ агента — `brigade/claude-agent:latest`.
+
+```bash
+# 1. Собрать бинарь с текущими правками (backend-only можно без web-пересборки):
+go build -o /tmp/brigade-l1 ./cmd/brigade      # из backend/ (dist уже встроен)
+
+# 2. Поднять стенд (глобального токена нет — не передаём env):
+nohup /tmp/brigade-l1 -config /tmp/brigade-stand/config-docker.yaml \
+  > /tmp/brigade-stand/brigade-docker.log 2>&1 &
+#   ждать в логе: "listening on http://localhost:18080"
+
+# 3. Токен Claude задаёт ВЛАДЕЛЕЦ вручную: залогиниться на http://localhost:18080
+#    (admin/admin) → Настройки → Claude → вставить токен. Хранится в БД стенда
+#    (переживает рестарт бинаря). Без него ACP-сессии не создаются.
 ```
+
+curl-уровень (Connect = `POST /brigade.v1.<Service>/<Method>`, JSON camelCase, `Bearer`):
+`AuthService/Login {username,password}` → `accessToken`; `SessionService/Create
+{agentType,kind:"SESSION_KIND_ACP"}` → `session.id`; turn — SSE `POST /api/ag-ui/run
+{threadId,runId,messages:[{id,role,content}],tools:[]}`; наблюдение —
+`AcpService/GetStatus {threadId}` (`generating`,`seq`) и `AcpService/GetHistory`.
+Репро устойчивости: оборвать `/run` (`curl --max-time N`) посреди turn'а и убедиться, что
+`seq` растёт ПОСЛЕ обрыва, а `GetHistory` содержит полный ответ.
