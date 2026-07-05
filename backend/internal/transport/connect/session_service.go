@@ -40,6 +40,9 @@ func (s *SessionService) Create(ctx context.Context, req *connect.Request[v1.Cre
 		if errors.Is(err, session.ErrClaudeTokenRequired) {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 		}
+		if errors.Is(err, session.ErrContainerLimitReached) {
+			return nil, connect.NewError(connect.CodeResourceExhausted, err)
+		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 

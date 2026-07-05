@@ -23,6 +23,11 @@ seed:
 # снаружи контейнера и перекройте BRIGADE_WORK_DIR этим путём.
 work_dir: "/data/workspace"
 
+# Потолок на число одновременных docker-контейнеров сессий (ACP — на сессию,
+# docker-CLI — на пользователя). Сверх лимита создание сессии отклоняется.
+# Не задано → 16; отрицательное — без лимита. Env: BRIGADE_MAX_CONTAINERS.
+max_containers: 16
+
 # Базовый каталог per-user ~/.claude (docker-режим). Смонтируйте его по одинаковому
 # пути внутри и снаружи контейнера (как workspace) и перекройте BRIGADE_CLAUDE_HOME_DIR.
 claude_home_dir: "/data/claude"

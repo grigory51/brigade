@@ -67,7 +67,7 @@ func main() {
 
 	// Реестр живых сессий поверх store и спавнера. Режим фиксируется в каждой сессии;
 	// подписочный токен Claude берётся per-user из store при создании сессии.
-	registry := session.NewRegistry(st, spawner, store.SessionMode(cfg.Mode), cfg.WorkDir, cfg.ClaudeHomeDir, previewSvc)
+	registry := session.NewRegistry(st, spawner, store.SessionMode(cfg.Mode), cfg.WorkDir, cfg.ClaudeHomeDir, cfg.MaxContainers, previewSvc)
 	defer registry.Close()
 
 	// Восстановление живых сессий после рестарта: упавшие помечаются failed и не

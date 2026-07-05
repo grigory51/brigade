@@ -41,6 +41,11 @@ type Config struct {
 	// bind-mount'ятся в контейнеры.
 	WorkDir string `koanf:"work_dir"`
 
+	// MaxContainers — потолок на число одновременных docker-контейнеров (ACP —
+	// контейнер на сессию, docker-CLI — общий на пользователя). Не задано (0) → дефолт
+	// 16; отрицательное значение отключает лимит. Применяется только в docker-режиме.
+	MaxContainers int `koanf:"max_containers"`
+
 	// ClaudeHomeDir — базовый каталог на хосте для персональных ~/.claude
 	// пользователей (docker-режим). brigade создаёт подкаталог <ClaudeHomeDir>/<userID>
 	// и bind-mount'ит его в /home/agent/.claude во все контейнеры пользователя, чтобы
@@ -151,6 +156,12 @@ func (c *Config) Validate() error {
 
 	if c.Addr == "" {
 		return fmt.Errorf("config: addr не задан")
+	}
+	// Лимит контейнеров: отсутствующее поле koanf даёт 0 — трактуем как дефолт 16.
+	// Отключить лимит можно отрицательным значением (registry.atContainerLimit: <=0 —
+	// без лимита).
+	if c.MaxContainers == 0 {
+		c.MaxContainers = 16
 	}
 	if c.SQLitePath == "" {
 		return fmt.Errorf("config: sqlite_path не задан")

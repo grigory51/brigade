@@ -75,7 +75,53 @@ func newTestRegistry(t *testing.T) *Registry {
 		t.Fatalf("store.Open: %v", err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	return NewRegistry(st, spawn.NewLocalSpawner(), store.SessionModeLocal, "/tmp", "", preview.NewService(preview.Config{}, []byte("test")))
+	return NewRegistry(st, spawn.NewLocalSpawner(), store.SessionModeLocal, "/tmp", "", 16, preview.NewService(preview.Config{}, []byte("test")))
+}
+
+// TestAtContainerLimit проверяет учёт контейнеров: ACP — контейнер на сессию, docker-CLI —
+// общий на пользователя; лимит применяется только в docker-режиме и только к сессии,
+// добавляющей контейнер.
+func TestAtContainerLimit(t *testing.T) {
+	add := func(r *Registry, id, owner string, kind store.SessionKind) {
+		r.live[id] = &live{owner: owner, kind: kind, mode: store.SessionModeDocker}
+	}
+
+	t.Run("ACP упирается по достижении лимита", func(t *testing.T) {
+		r := &Registry{mode: store.SessionModeDocker, maxContainers: 2, live: map[string]*live{}}
+		if r.atContainerLimit("u3", store.SessionKindACP) {
+			t.Fatal("пусто (0/2): новая ACP не должна упираться")
+		}
+		add(r, "a1", "u1", store.SessionKindACP)
+		add(r, "a2", "u2", store.SessionKindACP) // 2 контейнера = лимит
+		if !r.atContainerLimit("u3", store.SessionKindACP) {
+			t.Fatal("2/2: новая ACP должна упереться")
+		}
+	})
+
+	t.Run("docker-CLI переиспользует контейнер владельца", func(t *testing.T) {
+		r := &Registry{mode: store.SessionModeDocker, maxContainers: 2, live: map[string]*live{}}
+		add(r, "a1", "u1", store.SessionKindACP)
+		add(r, "c1", "u2", store.SessionKindCLI) // u2 уже имеет общий контейнер; всего 2
+		if r.atContainerLimit("u2", store.SessionKindCLI) {
+			t.Fatal("новая CLI юзера с контейнером не добавляет контейнер — не должна упираться")
+		}
+		if !r.atContainerLimit("u3", store.SessionKindCLI) {
+			t.Fatal("новая CLI нового юзера добавляет контейнер при лимите — должна упереться")
+		}
+	})
+
+	t.Run("лимит отключён и non-docker", func(t *testing.T) {
+		full := map[string]*live{
+			"a1": {owner: "u1", kind: store.SessionKindACP, mode: store.SessionModeDocker},
+			"a2": {owner: "u2", kind: store.SessionKindACP, mode: store.SessionModeDocker},
+		}
+		if (&Registry{mode: store.SessionModeDocker, maxContainers: -1, live: full}).atContainerLimit("u3", store.SessionKindACP) {
+			t.Fatal("maxContainers<=0 — лимит отключён")
+		}
+		if (&Registry{mode: store.SessionModeLocal, maxContainers: 1, live: full}).atContainerLimit("u3", store.SessionKindACP) {
+			t.Fatal("local-режим — лимит не применяется")
+		}
+	})
 }
 
 // seedSession записывает running CLI-сессию в store и регистрирует её живой объект с

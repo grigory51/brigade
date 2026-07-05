@@ -68,6 +68,10 @@ type Registry struct {
 	spawner spawn.Spawner
 	mode    store.SessionMode
 	workDir string
+	// maxContainers — потолок на число одновременно живущих docker-контейнеров brigade
+	// (ACP — контейнер на сессию, docker-CLI — общий на пользователя). 0 — без лимита.
+	// Применяется только в docker-режиме, при создании сессии, добавляющей контейнер.
+	maxContainers int
 	// claudeHomeDir — базовый каталог per-user ~/.claude на хосте (docker-режим).
 	// Пусто — фича выключена (fallback на named volume состояния по дереву сессий).
 	claudeHomeDir string
@@ -95,13 +99,14 @@ type Registry struct {
 // (дефолт Cwd сессии); claudeHomeDir — базовый каталог per-user ~/.claude (docker);
 // previews — сервис публикации dev-серверов. Подписочный токен Claude берётся
 // per-user из store при создании сессии.
-func NewRegistry(st *store.Store, spawner spawn.Spawner, mode store.SessionMode, workDir, claudeHomeDir string, previews *preview.Service) *Registry {
+func NewRegistry(st *store.Store, spawner spawn.Spawner, mode store.SessionMode, workDir, claudeHomeDir string, maxContainers int, previews *preview.Service) *Registry {
 	return &Registry{
 		store:         st,
 		spawner:       spawner,
 		mode:          mode,
 		workDir:       workDir,
 		claudeHomeDir: claudeHomeDir,
+		maxContainers: maxContainers,
 		previews:      previews,
 		live:          make(map[string]*live),
 		tearingDown:   make(map[string]struct{}),
@@ -250,6 +255,47 @@ var ErrTeardownInProgress = errors.New("session: teardown already in progress")
 // поднимется. CLI-сессию создать можно — там пользователь авторизуется в терминале.
 var ErrClaudeTokenRequired = errors.New("session: требуется токен Claude (задайте его в настройках) для ACP-сессии")
 
+// ErrContainerLimitReached возвращается Create, если создание сессии превысило бы лимит
+// одновременных docker-контейнеров (config.max_containers).
+var ErrContainerLimitReached = errors.New("session: достигнут лимит контейнеров")
+
+// atContainerLimit сообщает, превысит ли новая сессия (userID, kind) лимит docker-
+// контейнеров. Учёт зеркалит releaseUserContainerIfIdle: ACP-сессия = 1 контейнер,
+// docker-CLI сессии одного пользователя делят общий контейнер (1 на владельца). Новая
+// сессия добавляет контейнер, если она ACP либо у пользователя ещё нет docker-CLI
+// контейнера. Только docker-режим; maxContainers<=0 — без лимита.
+//
+// Проверка и спавн не атомарны (спавн идёт без r.mu), поэтому лимит мягкий: при гонке
+// параллельных Create возможен разовый перебор на 1-2 — это потолок безопасности, не
+// жёсткая квота.
+func (r *Registry) atContainerLimit(userID string, kind store.SessionKind) bool {
+	if r.mode != store.SessionModeDocker || r.maxContainers <= 0 {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	acp := 0
+	cliOwners := make(map[string]struct{})
+	userHasCLI := false
+	for _, lv := range r.live {
+		if lv.mode != store.SessionModeDocker {
+			continue
+		}
+		switch lv.kind {
+		case store.SessionKindACP:
+			acp++
+		case store.SessionKindCLI:
+			cliOwners[lv.owner] = struct{}{}
+			if lv.owner == userID {
+				userHasCLI = true
+			}
+		}
+	}
+	count := acp + len(cliOwners)
+	adds := kind == store.SessionKindACP || !userHasCLI
+	return adds && count >= r.maxContainers
+}
+
 // beginTeardown помечает сессию как останавливаемую и снимает её живой объект.
 // Возвращает ErrTeardownInProgress, если teardown уже идёт. Парный endTeardown
 // обязателен по завершении (defer).
@@ -280,6 +326,11 @@ func (r *Registry) Create(ctx context.Context, userID string, kind store.Session
 	// CLI можно создать без токена: пользователь авторизуется в терминале.
 	if kind == store.SessionKindACP && r.userClaudeToken(ctx, userID) == "" {
 		return store.Session{}, ErrClaudeTokenRequired
+	}
+	// Потолок на число docker-контейнеров: проверяем до записи сессии в store, чтобы не
+	// плодить failed-записи. Мягкий лимит (см. atContainerLimit).
+	if r.atContainerLimit(userID, kind) {
+		return store.Session{}, ErrContainerLimitReached
 	}
 	// Рабочая директория — на сессию, а не общая: Claude Code выводит проект
 	// (~/.claude/projects/<slug> — memory, транскрипты, todos) из cwd, поэтому общий
