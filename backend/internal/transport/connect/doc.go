@@ -16,4 +16,5 @@ var (
 	_ brigadev1connect.AuthServiceHandler    = (*AuthService)(nil)
 	_ brigadev1connect.SessionServiceHandler = (*SessionService)(nil)
 	_ brigadev1connect.AgentServiceHandler   = (*AgentService)(nil)
+	_ brigadev1connect.ArchiveServiceHandler = (*ArchiveService)(nil)
 )

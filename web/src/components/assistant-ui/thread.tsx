@@ -104,6 +104,9 @@ export type ThreadProps = {
   // в composer'е; onConfigChange отправляет новое значение бэкенду.
   configOptions?: ConfigOption[] | undefined;
   onConfigChange?: ((configId: string, value: string) => void) | undefined;
+  // readonly — режим только для чтения (архивная сессия): скрывает composer и
+  // suggestions, лента остаётся. Ввод недоступен — живого агента нет.
+  readonly?: boolean | undefined;
 };
 
 const EMPTY_COMPONENTS: ThreadComponents = {};
@@ -137,6 +140,7 @@ export const Thread: FC<ThreadProps> = ({
   footer,
   configOptions = [],
   onConfigChange,
+  readonly = false,
 }) => {
   const isEmpty = useAuiState(isNewChatView);
   const configValue = useMemo<ConfigContextValue>(
@@ -148,17 +152,18 @@ export const Thread: FC<ThreadProps> = ({
     <ThreadComponentsContext.Provider value={components}>
       <CommandsContext.Provider value={commands}>
         <ConfigContext.Provider value={configValue}>
-          <ThreadRoot isEmpty={isEmpty} footer={footer} />
+          <ThreadRoot isEmpty={isEmpty} footer={footer} readonly={readonly} />
         </ConfigContext.Provider>
       </CommandsContext.Provider>
     </ThreadComponentsContext.Provider>
   );
 };
 
-const ThreadRoot: FC<{ isEmpty: boolean; footer?: ReactNode }> = ({
-  isEmpty,
-  footer,
-}) => {
+const ThreadRoot: FC<{
+  isEmpty: boolean;
+  footer?: ReactNode;
+  readonly?: boolean;
+}> = ({ isEmpty, footer, readonly = false }) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
 
   return (
@@ -207,10 +212,12 @@ const ThreadRoot: FC<{ isEmpty: boolean; footer?: ReactNode }> = ({
           >
             <ThreadScrollToBottom />
             {footer}
-            <Composer />
-            <AuiIf condition={(s) => isNewChatView(s) && s.composer.isEmpty}>
-              <ThreadSuggestions />
-            </AuiIf>
+            {!readonly && <Composer />}
+            {!readonly && (
+              <AuiIf condition={(s) => isNewChatView(s) && s.composer.isEmpty}>
+                <ThreadSuggestions />
+              </AuiIf>
+            )}
           </ThreadPrimitive.ViewportFooter>
         </div>
       </ThreadPrimitive.Viewport>

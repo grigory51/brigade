@@ -48,6 +48,12 @@ message Session {
   string name = 11;
   // parent_id — сессия-родитель для веток (Fork). Пустое — корневая сессия.
   string parent_id = 12;
+  // archived — сессия в архиве (контейнер остановлен, чат — только для чтения из снимка
+  // истории). Архивные сессии не показываются в основном списке (List).
+  bool archived = 13;
+  // summary — краткий пересказ (recap) сессии от агента, генерируется при архивации;
+  // показывается на карточке архива.
+  string summary = 14;
 }
 
 message CreateSessionRequest {
@@ -109,6 +115,16 @@ message DeleteSessionRequest {
   string session_id = 1;
 }
 
+// Archive переносит сессию в архив: агент генерирует recap (summary), brigade сохраняет
+// снимок истории чата, останавливает контейнер и помечает сессию archived.
+message ArchiveSessionRequest {
+  string session_id = 1;
+}
+
+message ArchiveSessionResponse {
+  Session session = 1;
+}
+
 // Preview — dev-сервер, поднятый агентом внутри сессии и опубликованный через
 // встроенный прокси brigade. Регистрируется агентом (HTTP API, не этот сервис);
 // список нужен UI для показа ссылок.
@@ -149,6 +165,9 @@ service SessionService {
   rpc Fork(ForkSessionRequest) returns (ForkSessionResponse) {}
   rpc Stop(StopSessionRequest) returns (Empty) {}
   rpc Delete(DeleteSessionRequest) returns (Empty) {}
+  // Archive переносит сессию в архив (recap + снимок истории + остановка контейнера).
+  // Чтение архива (список, история) — в отдельном ArchiveService.
+  rpc Archive(ArchiveSessionRequest) returns (ArchiveSessionResponse) {}
   rpc IssueStreamTicket(IssueStreamTicketRequest) returns (IssueStreamTicketResponse) {}
   rpc ListPreviews(ListPreviewsRequest) returns (ListPreviewsResponse) {}
 }

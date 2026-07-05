@@ -57,10 +57,18 @@ const shellMarkEnv = "BRIGADE_SHELL_MARK"
 // Контейнер отыскивается по label brigade.session.id (legacy CLI, ACP) либо как общий
 // контейнер пользователя (shared CLI); он должен быть запущен — exec в остановленный
 // контейнер невозможен.
-func (s *DockerSpawner) SpawnShell(ctx context.Context, sessionLabel, userID string) (ShellHandle, error) {
+func (s *DockerSpawner) SpawnShell(ctx context.Context, sessionLabel, userID, cwd string) (ShellHandle, error) {
 	id, err := s.findSessionOrUserContainer(ctx, sessionLabel, userID)
 	if err != nil {
 		return nil, err
+	}
+
+	// Шелл открывается в рабочей директории сессии (per-session ~/workspace/<id>), а не в
+	// общем workspace — чтобы осмотр файлов совпадал с тем, что видит агент. Пусто —
+	// fallback на базовый workspace (старые сессии без per-session cwd).
+	workdir := cwd
+	if workdir == "" {
+		workdir = containerWorkdir
 	}
 
 	mark := uuid.NewString()
@@ -69,7 +77,7 @@ func (s *DockerSpawner) SpawnShell(ctx context.Context, sessionLabel, userID str
 		AttachStdin:  true,
 		AttachStdout: true,
 		AttachStderr: true,
-		WorkingDir:   containerWorkdir,
+		WorkingDir:   workdir,
 		Env:          []string{shellMarkEnv + "=" + mark},
 		Cmd:          []string{"/bin/bash"},
 	})

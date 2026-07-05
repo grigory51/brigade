@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package brigade.v1;
+
+import "brigade/v1/session.proto";
+import "brigade/v1/acp.proto";
+
+// ArchiveService — чтение архива сессий: список архивных сессий (карточки title+summary)
+// и снимок истории чата для readonly-просмотра. Сам переход в архив (recap + снимок +
+// остановка контейнера) выполняет SessionService.Archive — здесь только чтение уже
+// заархивированного, без живого агента.
+service ArchiveService {
+  // List — архивные сессии пользователя (для страницы архива).
+  rpc List(ListArchivedRequest) returns (ListArchivedResponse) {}
+  // GetHistory — снимок ленты чата архивной сессии (из БД, без живого агента) для
+  // readonly-рендера.
+  rpc GetHistory(ArchivedHistoryRequest) returns (ArchivedHistoryResponse) {}
+}
+
+message ListArchivedRequest {}
+
+message ListArchivedResponse {
+  repeated Session sessions = 1;
+}
+
+message ArchivedHistoryRequest {
+  string session_id = 1;
+}
+
+message ArchivedHistoryResponse {
+  // messages — снимок ленты (тот же формат, что и живая AcpService.GetHistory).
+  repeated AcpMessage messages = 1;
+}

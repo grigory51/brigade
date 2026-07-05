@@ -17,6 +17,7 @@ package session
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -667,7 +668,7 @@ func (r *Registry) Shell(ctx context.Context, sessionID, userID string) (termws.
 		// осмыслен лишь для его сессий. ACP-сессия живёт в собственном контейнере
 		// (brigade.session.id); при его отсутствии шелл должен вернуть ошибку, а не
 		// уйти в чужой cli-shared контейнер пользователя.
-		return ds.SpawnShell(ctx, sess.ID, sharedUserID(sess))
+		return ds.SpawnShell(ctx, sess.ID, sharedUserID(sess), sess.Cwd)
 	default:
 		return spawn.StartLocalShell(ctx, sess.Cwd)
 	}
@@ -837,6 +838,91 @@ func (r *Registry) Delete(ctx context.Context, sessionID, userID string) error {
 	r.releaseUserContainerIfIdle(userID)
 	log.Printf("session: deleted %s by user=%s", sessionID, userID)
 	return r.store.DeleteSession(ctx, sessionID)
+}
+
+// archiveRecapPrompt — служебный промпт recap при архивации. Просит краткий пересказ
+// сессии из контекста агента; ответ сохраняется как summary архивной карточки.
+const archiveRecapPrompt = "Кратко, в 1–2 предложениях, суммируй эту сессию для архива: " +
+	"что делали и чем закончили. Ответь только самим пересказом, без вступлений и списков."
+
+// Archive переносит сессию в архив: пока агент жив — снимает ленту чата в БД (для
+// readonly-просмотра без агента) и генерирует recap (summary), затем останавливает
+// контейнер как Stop и помечает сессию archived. Идемпотентно для уже архивной. Снимок и
+// recap возможны только для ACP с живым клиентом; для прочих summary остаётся пустым.
+func (r *Registry) Archive(ctx context.Context, sessionID, userID string) (store.Session, error) {
+	sess, err := r.Get(ctx, sessionID, userID)
+	if err != nil {
+		return store.Session{}, err
+	}
+	if sess.Archived {
+		return sess, nil
+	}
+
+	r.mu.Lock()
+	lv := r.live[sessionID]
+	r.mu.Unlock()
+
+	summary := ""
+	if lv != nil && lv.client != nil {
+		// Снимок ленты ДО recap: служебный recap-turn не должен попасть в архивную историю.
+		if data, err := json.Marshal(lv.client.Messages()); err != nil {
+			log.Printf("session: archive %s marshal history: %v", sessionID, err)
+		} else if err := r.store.SaveSessionSnapshot(ctx, sessionID, string(data), time.Now()); err != nil {
+			log.Printf("session: archive %s save snapshot: %v", sessionID, err)
+		}
+		// Recap на неотменяемом контексте: RPC мог вернуться раньше, чем агент ответит.
+		if s, err := lv.client.Summarize(context.WithoutCancel(ctx), archiveRecapPrompt); err != nil {
+			log.Printf("session: archive %s recap: %v", sessionID, err)
+		} else {
+			summary = s
+		}
+	}
+
+	if err := r.store.SetSessionArchived(ctx, sessionID, summary); err != nil {
+		return store.Session{}, err
+	}
+
+	// Teardown контейнера (как Stop): снять live-объект, завершить, статус stopped. Если
+	// teardown уже идёт (гонка) — флаг archived уже выставлен, этого достаточно.
+	if tv, err := r.beginTeardown(sessionID); err == nil {
+		defer r.endTeardown(sessionID)
+		if tv != nil {
+			tctx, cancel := terminateCtx(ctx)
+			_ = tv.terminate(tctx)
+			cancel()
+		}
+		r.previews.Drop(sessionID)
+		r.releaseUserContainerIfIdle(userID)
+		_ = r.store.UpdateSessionStatus(ctx, sessionID, store.SessionStatusStopped)
+	}
+
+	log.Printf("session: archived %s by user=%s", sessionID, userID)
+	sess.Archived = true
+	sess.Summary = summary
+	sess.Status = store.SessionStatusStopped
+	return sess, nil
+}
+
+// ListArchived возвращает архивные сессии пользователя (новые первыми).
+func (r *Registry) ListArchived(ctx context.Context, userID string) ([]store.Session, error) {
+	return r.store.ListArchivedByUser(ctx, userID)
+}
+
+// ArchivedHistory возвращает снимок ленты чата архивной сессии (из БД, без живого агента)
+// для readonly-рендера. Проверяет владение; ErrNotFound, если снимка нет.
+func (r *Registry) ArchivedHistory(ctx context.Context, sessionID, userID string) ([]acp.Message, error) {
+	if _, err := r.Get(ctx, sessionID, userID); err != nil {
+		return nil, err
+	}
+	data, err := r.store.GetSessionSnapshot(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	var msgs []acp.Message
+	if err := json.Unmarshal([]byte(data), &msgs); err != nil {
+		return nil, fmt.Errorf("session: unmarshal snapshot %s: %w", sessionID, err)
+	}
+	return msgs, nil
 }
 
 // terminateCtx порождает контекст завершения сессии, отвязанный от отмены исходного

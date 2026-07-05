@@ -27,7 +27,7 @@ const STATUS_POLL_MS = 2000;
 // HistoryMessage — сообщение истории чата от бэкенда (AcpService.GetHistory).
 // role="tool_call" — карточка вызова инструмента (toolName/argsText/result): без неё
 // tool-карточки исчезали бы из ленты при восстановлении истории.
-type HistoryMessage = {
+export type HistoryMessage = {
   id: string;
   role: string;
   content: string;
@@ -64,7 +64,7 @@ function toToolCallPart(m: HistoryMessage): unknown {
 // (MessagePrimitive.GroupedParts группирует смежные tool-call-части). Текст (user/
 // assistant) проходит как есть и разрывает серию — так группа отражает фактическую
 // последовательность turn'а.
-function assembleHistory(messages: HistoryMessage[]): unknown[] {
+export function assembleHistory(messages: HistoryMessage[]): unknown[] {
   const out: unknown[] = [];
   let group: { id: string; role: string; content: unknown[] } | null = null;
   for (const m of messages) {

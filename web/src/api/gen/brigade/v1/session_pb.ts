@@ -175,6 +175,22 @@ export class Session extends Message<Session> {
    */
   parentId = "";
 
+  /**
+   * archived — сессия в архиве (контейнер остановлен, чат — только для чтения из снимка
+   * истории). Архивные сессии не показываются в основном списке (List).
+   *
+   * @generated from field: bool archived = 13;
+   */
+  archived = false;
+
+  /**
+   * summary — краткий пересказ (recap) сессии от агента, генерируется при архивации;
+   * показывается на карточке архива.
+   *
+   * @generated from field: string summary = 14;
+   */
+  summary = "";
+
   constructor(data?: PartialMessage<Session>) {
     super();
     proto3.util.initPartial(data, this);
@@ -195,6 +211,8 @@ export class Session extends Message<Session> {
     { no: 10, name: "created_at", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
     { no: 11, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 12, name: "parent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 13, name: "archived", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 14, name: "summary", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Session {
@@ -682,6 +700,83 @@ export class DeleteSessionRequest extends Message<DeleteSessionRequest> {
 
   static equals(a: DeleteSessionRequest | PlainMessage<DeleteSessionRequest> | undefined, b: DeleteSessionRequest | PlainMessage<DeleteSessionRequest> | undefined): boolean {
     return proto3.util.equals(DeleteSessionRequest, a, b);
+  }
+}
+
+/**
+ * Archive переносит сессию в архив: агент генерирует recap (summary), brigade сохраняет
+ * снимок истории чата, останавливает контейнер и помечает сессию archived.
+ *
+ * @generated from message brigade.v1.ArchiveSessionRequest
+ */
+export class ArchiveSessionRequest extends Message<ArchiveSessionRequest> {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId = "";
+
+  constructor(data?: PartialMessage<ArchiveSessionRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.ArchiveSessionRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ArchiveSessionRequest {
+    return new ArchiveSessionRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ArchiveSessionRequest {
+    return new ArchiveSessionRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ArchiveSessionRequest {
+    return new ArchiveSessionRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: ArchiveSessionRequest | PlainMessage<ArchiveSessionRequest> | undefined, b: ArchiveSessionRequest | PlainMessage<ArchiveSessionRequest> | undefined): boolean {
+    return proto3.util.equals(ArchiveSessionRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.ArchiveSessionResponse
+ */
+export class ArchiveSessionResponse extends Message<ArchiveSessionResponse> {
+  /**
+   * @generated from field: brigade.v1.Session session = 1;
+   */
+  session?: Session;
+
+  constructor(data?: PartialMessage<ArchiveSessionResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.ArchiveSessionResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "session", kind: "message", T: Session },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ArchiveSessionResponse {
+    return new ArchiveSessionResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ArchiveSessionResponse {
+    return new ArchiveSessionResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ArchiveSessionResponse {
+    return new ArchiveSessionResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: ArchiveSessionResponse | PlainMessage<ArchiveSessionResponse> | undefined, b: ArchiveSessionResponse | PlainMessage<ArchiveSessionResponse> | undefined): boolean {
+    return proto3.util.equals(ArchiveSessionResponse, a, b);
   }
 }
 

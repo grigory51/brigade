@@ -79,9 +79,15 @@ func (s *Store) GetSession(ctx context.Context, id string) (Session, error) {
 	return s.scanSession(s.db.QueryRowContext(ctx, sessionSelect+` WHERE id = ?`, id))
 }
 
-// ListSessionsByUser возвращает сессии пользователя, новые первыми.
+// ListSessionsByUser возвращает НЕархивные сессии пользователя, новые первыми. Архивные
+// исключены — они живут на отдельной странице (см. ListArchivedByUser).
 func (s *Store) ListSessionsByUser(ctx context.Context, userID string) ([]Session, error) {
-	return s.querySessions(ctx, sessionSelect+` WHERE user_id = ? ORDER BY created_at DESC`, userID)
+	return s.querySessions(ctx, sessionSelect+` WHERE user_id = ? AND archived = 0 ORDER BY created_at DESC`, userID)
+}
+
+// ListArchivedByUser возвращает архивные сессии пользователя, новые первыми.
+func (s *Store) ListArchivedByUser(ctx context.Context, userID string) ([]Session, error) {
+	return s.querySessions(ctx, sessionSelect+` WHERE user_id = ? AND archived = 1 ORDER BY created_at DESC`, userID)
 }
 
 // ListSessionsByStatus возвращает сессии в заданном статусе. Используется при
@@ -131,8 +137,44 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 	return affectedOne(res, "delete session")
 }
 
+// SetSessionArchived помечает сессию архивной и записывает summary (recap от агента).
+// Возвращает ErrNotFound, если сессии нет.
+func (s *Store) SetSessionArchived(ctx context.Context, id, summary string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE sessions SET archived = 1, summary = ? WHERE id = ?`, summary, id)
+	if err != nil {
+		return fmt.Errorf("store: set session archived: %w", err)
+	}
+	return affectedOne(res, "set session archived")
+}
+
+// SaveSessionSnapshot сохраняет снимок ленты чата (JSON) для readonly-просмотра архива.
+// Идемпотентно перезаписывает существующий снимок сессии.
+func (s *Store) SaveSessionSnapshot(ctx context.Context, sessionID, messagesJSON string, at time.Time) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO session_snapshots (session_id, messages, created_at) VALUES (?, ?, ?)
+		 ON CONFLICT(session_id) DO UPDATE SET messages = excluded.messages, created_at = excluded.created_at`,
+		sessionID, messagesJSON, toUnix(at))
+	if err != nil {
+		return fmt.Errorf("store: save session snapshot: %w", err)
+	}
+	return nil
+}
+
+// GetSessionSnapshot возвращает снимок ленты (JSON) архивной сессии либо ErrNotFound.
+func (s *Store) GetSessionSnapshot(ctx context.Context, sessionID string) (string, error) {
+	var messages string
+	err := s.db.QueryRowContext(ctx, `SELECT messages FROM session_snapshots WHERE session_id = ?`, sessionID).Scan(&messages)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("store: get session snapshot: %w", err)
+	}
+	return messages, nil
+}
+
 const sessionSelect = `SELECT id, user_id, mode, kind, agent_type, agent_session_id,
-	container_label, status, cwd, created_at, name, parent_id FROM sessions`
+	container_label, status, cwd, created_at, name, parent_id, archived, summary FROM sessions`
 
 func (s *Store) querySessions(ctx context.Context, query string, args ...any) ([]Session, error) {
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -173,8 +215,10 @@ func scanSessionRow(r rowScanner) (Session, error) {
 	var sess Session
 	var mode, kind, status string
 	var createdAt int64
+	var archived int
 	err := r.Scan(&sess.ID, &sess.UserID, &mode, &kind, &sess.AgentType,
-		&sess.AgentSessionID, &sess.ContainerLabel, &status, &sess.Cwd, &createdAt, &sess.Name, &sess.ParentID)
+		&sess.AgentSessionID, &sess.ContainerLabel, &status, &sess.Cwd, &createdAt, &sess.Name, &sess.ParentID,
+		&archived, &sess.Summary)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Session{}, err
@@ -185,6 +229,7 @@ func scanSessionRow(r rowScanner) (Session, error) {
 	sess.Kind = SessionKind(kind)
 	sess.Status = SessionStatus(status)
 	sess.CreatedAt = fromUnix(createdAt)
+	sess.Archived = archived != 0
 	return sess, nil
 }
 

@@ -64,4 +64,9 @@ type Session struct {
 	Name string
 	// ParentID — сессия-родитель для веток (Fork). Пустое — корневая сессия.
 	ParentID string
+	// Archived — сессия в архиве: контейнер остановлен, чат доступен только для чтения
+	// из снимка истории (session_snapshots). Не показывается в основном списке.
+	Archived bool
+	// Summary — краткий пересказ (recap) сессии от агента, генерируется при архивации.
+	Summary string
 }

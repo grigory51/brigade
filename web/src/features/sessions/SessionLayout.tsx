@@ -10,6 +10,7 @@ import {
 import { Link, Outlet, useNavigate, useParams } from "react-router-dom";
 import { ConnectError } from "@connectrpc/connect";
 import {
+  Archive,
   GitBranch,
   Loader2,
   LogOut,
@@ -202,6 +203,30 @@ export function SessionLayout() {
     [navigate],
   );
 
+  const onArchive = useCallback(
+    async (id: string) => {
+      // Архивация зовёт агента за recap (несколько секунд) — держим busy-состояние.
+      setBusyId(id);
+      try {
+        await sessionClient.archive({ sessionId: id });
+        setSessions((prev) => prev.filter((s) => s.id !== id));
+        toast.success("Сессия в архиве");
+        if (window.location.pathname.endsWith(`/${id}`)) {
+          navigate("/sessions");
+        }
+      } catch (err) {
+        toast.error(
+          err instanceof ConnectError
+            ? err.rawMessage
+            : "Не удалось архивировать сессию",
+        );
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [navigate],
+  );
+
   const openCreate = useCallback(() => setCreateOpen(true), []);
 
   // Дерево веток в сайдбаре: корневые сессии в исходном порядке (новые сверху), после
@@ -322,6 +347,7 @@ export function SessionLayout() {
                           onDelete={() => void onDelete(s.id)}
                           onRename={(name) => void onRename(s.id, name)}
                           onFork={() => void onFork(s.id)}
+                          onArchive={() => void onArchive(s.id)}
                         />
                       ))}
                   </SidebarMenu>
@@ -399,6 +425,7 @@ function SessionItem({
   onDelete,
   onRename,
   onFork,
+  onArchive,
 }: {
   session: Session;
   depth?: number;
@@ -408,6 +435,7 @@ function SessionItem({
   onDelete: () => void;
   onRename: (name: string) => void;
   onFork: () => void;
+  onArchive: () => void;
 }) {
   const { sessionId } = useParams<{ sessionId: string }>();
   const active = sessionId === session.id;
@@ -490,6 +518,20 @@ function SessionItem({
         </span>
         <span className="truncate">{label}</span>
       </SidebarMenuButton>
+      {session.kind === SessionKind.ACP && (
+        <SidebarMenuAction
+          showOnHover
+          disabled={busy}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!busy) onArchive();
+          }}
+          aria-label="Архивировать сессию"
+          className="right-[5.25rem] text-sidebar-foreground/60 hover:text-sidebar-foreground"
+        >
+          <Archive className="size-4" />
+        </SidebarMenuAction>
+      )}
       {session.kind === SessionKind.ACP && (
         <SidebarMenuAction
           showOnHover
@@ -585,6 +627,10 @@ function UserMenu() {
               {user?.username ?? "—"}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => navigate("/archive")}>
+              <Archive className="size-4" />
+              Архив
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => navigate("/settings")}>
               <Settings className="size-4" />
               Настройки

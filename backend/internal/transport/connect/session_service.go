@@ -137,6 +137,20 @@ func (s *SessionService) Delete(ctx context.Context, req *connect.Request[v1.Del
 	return connect.NewResponse(&v1.Empty{}), nil
 }
 
+// Archive переносит сессию в архив: агент генерирует recap, brigade сохраняет снимок
+// истории, останавливает контейнер и помечает сессию archived. Чтение архива — ArchiveService.
+func (s *SessionService) Archive(ctx context.Context, req *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sess, err := s.registry.Archive(ctx, req.Msg.SessionId, userID)
+	if err != nil {
+		return nil, sessionError(err)
+	}
+	return connect.NewResponse(&v1.ArchiveSessionResponse{Session: sessionToProto(sess)}), nil
+}
+
 // IssueStreamTicket выпускает одноразовый тикет для апгрейда WS к указанной сессии.
 // Тикет привязан к пользователю и session_id; сессия проверяется на принадлежность.
 func (s *SessionService) IssueStreamTicket(ctx context.Context, req *connect.Request[v1.IssueStreamTicketRequest]) (*connect.Response[v1.IssueStreamTicketResponse], error) {

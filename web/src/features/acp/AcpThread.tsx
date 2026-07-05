@@ -30,21 +30,24 @@ export function AcpThread({
   a2ui,
   configOptions,
   onConfigChange,
+  readonly = false,
 }: {
   commands: AvailableCommand[];
   plan: PlanEntry[];
   a2ui: A2uiState;
   configOptions: ConfigOption[];
   onConfigChange: (configId: string, value: string) => void;
+  readonly?: boolean;
 }) {
   return (
     <A2uiContext.Provider value={a2ui}>
       <Thread
         commands={commands}
         components={{ ToolFallback }}
-        footer={<PlanPanel plan={plan} />}
+        footer={readonly ? undefined : <PlanPanel plan={plan} />}
         configOptions={configOptions}
         onConfigChange={onConfigChange}
+        readonly={readonly}
       />
     </A2uiContext.Provider>
   );

@@ -47,6 +47,8 @@ const (
 	SessionServiceStopProcedure = "/brigade.v1.SessionService/Stop"
 	// SessionServiceDeleteProcedure is the fully-qualified name of the SessionService's Delete RPC.
 	SessionServiceDeleteProcedure = "/brigade.v1.SessionService/Delete"
+	// SessionServiceArchiveProcedure is the fully-qualified name of the SessionService's Archive RPC.
+	SessionServiceArchiveProcedure = "/brigade.v1.SessionService/Archive"
 	// SessionServiceIssueStreamTicketProcedure is the fully-qualified name of the SessionService's
 	// IssueStreamTicket RPC.
 	SessionServiceIssueStreamTicketProcedure = "/brigade.v1.SessionService/IssueStreamTicket"
@@ -64,6 +66,9 @@ type SessionServiceClient interface {
 	Fork(context.Context, *connect.Request[v1.ForkSessionRequest]) (*connect.Response[v1.ForkSessionResponse], error)
 	Stop(context.Context, *connect.Request[v1.StopSessionRequest]) (*connect.Response[v1.Empty], error)
 	Delete(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.Empty], error)
+	// Archive переносит сессию в архив (recap + снимок истории + остановка контейнера).
+	// Чтение архива (список, история) — в отдельном ArchiveService.
+	Archive(context.Context, *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error)
 	IssueStreamTicket(context.Context, *connect.Request[v1.IssueStreamTicketRequest]) (*connect.Response[v1.IssueStreamTicketResponse], error)
 	ListPreviews(context.Context, *connect.Request[v1.ListPreviewsRequest]) (*connect.Response[v1.ListPreviewsResponse], error)
 }
@@ -121,6 +126,12 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(sessionServiceMethods.ByName("Delete")),
 			connect.WithClientOptions(opts...),
 		),
+		archive: connect.NewClient[v1.ArchiveSessionRequest, v1.ArchiveSessionResponse](
+			httpClient,
+			baseURL+SessionServiceArchiveProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("Archive")),
+			connect.WithClientOptions(opts...),
+		),
 		issueStreamTicket: connect.NewClient[v1.IssueStreamTicketRequest, v1.IssueStreamTicketResponse](
 			httpClient,
 			baseURL+SessionServiceIssueStreamTicketProcedure,
@@ -145,6 +156,7 @@ type sessionServiceClient struct {
 	fork              *connect.Client[v1.ForkSessionRequest, v1.ForkSessionResponse]
 	stop              *connect.Client[v1.StopSessionRequest, v1.Empty]
 	delete            *connect.Client[v1.DeleteSessionRequest, v1.Empty]
+	archive           *connect.Client[v1.ArchiveSessionRequest, v1.ArchiveSessionResponse]
 	issueStreamTicket *connect.Client[v1.IssueStreamTicketRequest, v1.IssueStreamTicketResponse]
 	listPreviews      *connect.Client[v1.ListPreviewsRequest, v1.ListPreviewsResponse]
 }
@@ -184,6 +196,11 @@ func (c *sessionServiceClient) Delete(ctx context.Context, req *connect.Request[
 	return c.delete.CallUnary(ctx, req)
 }
 
+// Archive calls brigade.v1.SessionService.Archive.
+func (c *sessionServiceClient) Archive(ctx context.Context, req *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error) {
+	return c.archive.CallUnary(ctx, req)
+}
+
 // IssueStreamTicket calls brigade.v1.SessionService.IssueStreamTicket.
 func (c *sessionServiceClient) IssueStreamTicket(ctx context.Context, req *connect.Request[v1.IssueStreamTicketRequest]) (*connect.Response[v1.IssueStreamTicketResponse], error) {
 	return c.issueStreamTicket.CallUnary(ctx, req)
@@ -203,6 +220,9 @@ type SessionServiceHandler interface {
 	Fork(context.Context, *connect.Request[v1.ForkSessionRequest]) (*connect.Response[v1.ForkSessionResponse], error)
 	Stop(context.Context, *connect.Request[v1.StopSessionRequest]) (*connect.Response[v1.Empty], error)
 	Delete(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.Empty], error)
+	// Archive переносит сессию в архив (recap + снимок истории + остановка контейнера).
+	// Чтение архива (список, история) — в отдельном ArchiveService.
+	Archive(context.Context, *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error)
 	IssueStreamTicket(context.Context, *connect.Request[v1.IssueStreamTicketRequest]) (*connect.Response[v1.IssueStreamTicketResponse], error)
 	ListPreviews(context.Context, *connect.Request[v1.ListPreviewsRequest]) (*connect.Response[v1.ListPreviewsResponse], error)
 }
@@ -256,6 +276,12 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		connect.WithSchema(sessionServiceMethods.ByName("Delete")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sessionServiceArchiveHandler := connect.NewUnaryHandler(
+		SessionServiceArchiveProcedure,
+		svc.Archive,
+		connect.WithSchema(sessionServiceMethods.ByName("Archive")),
+		connect.WithHandlerOptions(opts...),
+	)
 	sessionServiceIssueStreamTicketHandler := connect.NewUnaryHandler(
 		SessionServiceIssueStreamTicketProcedure,
 		svc.IssueStreamTicket,
@@ -284,6 +310,8 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 			sessionServiceStopHandler.ServeHTTP(w, r)
 		case SessionServiceDeleteProcedure:
 			sessionServiceDeleteHandler.ServeHTTP(w, r)
+		case SessionServiceArchiveProcedure:
+			sessionServiceArchiveHandler.ServeHTTP(w, r)
 		case SessionServiceIssueStreamTicketProcedure:
 			sessionServiceIssueStreamTicketHandler.ServeHTTP(w, r)
 		case SessionServiceListPreviewsProcedure:
@@ -323,6 +351,10 @@ func (UnimplementedSessionServiceHandler) Stop(context.Context, *connect.Request
 
 func (UnimplementedSessionServiceHandler) Delete(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.Empty], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.Delete is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) Archive(context.Context, *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.Archive is not implemented"))
 }
 
 func (UnimplementedSessionServiceHandler) IssueStreamTicket(context.Context, *connect.Request[v1.IssueStreamTicketRequest]) (*connect.Response[v1.IssueStreamTicketResponse], error) {

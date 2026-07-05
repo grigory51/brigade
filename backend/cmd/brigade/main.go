@@ -93,6 +93,8 @@ func main() {
 	// AcpService — управляющие вызовы ACP-чата (история/статус/workflow/отмена/опции/
 	// permission-ответ). JWT-авторизация, как у прочих пользовательских сервисов.
 	mux.Handle(brigadev1connect.NewAcpServiceHandler(connectsvc.NewAcpService(prov, prov, perms), interceptors))
+	// ArchiveService — чтение архива сессий (список + снимок истории для readonly).
+	mux.Handle(brigadev1connect.NewArchiveServiceHandler(connectsvc.NewArchiveService(registry), interceptors))
 	// AgentBridgeService — вызовы ИЗ сессии (скилл в контейнере). БЕЗ JWT-интерсептора:
 	// авторизация — per-session HMAC-токен, проверяется в самом хендлере.
 	mux.Handle(brigadev1connect.NewAgentBridgeServiceHandler(connectsvc.NewAgentBridgeService(previewSvc)))

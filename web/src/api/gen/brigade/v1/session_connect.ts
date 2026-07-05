@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, ForkSessionRequest, ForkSessionResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse } from "./session_pb.js";
+import { ArchiveSessionRequest, ArchiveSessionResponse, CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, ForkSessionRequest, ForkSessionResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse } from "./session_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { Empty } from "./auth_pb.js";
 
@@ -76,6 +76,18 @@ export const SessionService = {
       name: "Delete",
       I: DeleteSessionRequest,
       O: Empty,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Archive переносит сессию в архив (recap + снимок истории + остановка контейнера).
+     * Чтение архива (список, история) — в отдельном ArchiveService.
+     *
+     * @generated from rpc brigade.v1.SessionService.Archive
+     */
+    archive: {
+      name: "Archive",
+      I: ArchiveSessionRequest,
+      O: ArchiveSessionResponse,
       kind: MethodKind.Unary,
     },
     /**

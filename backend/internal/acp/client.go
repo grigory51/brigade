@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -644,6 +645,33 @@ func (c *Client) Prompt(ctx context.Context, text string, onTurnStart func()) (s
 		return "", fmt.Errorf("acp: prompt: %w", err)
 	}
 	return string(resp.StopReason), nil
+}
+
+// Summarize запускает служебный turn с промптом prompt и возвращает собранный текст ответа
+// ассистента, не выпуская потоковые события наружу (привязывает собственный sink-сборщик).
+// Используется для recap сессии при архивации: агент суммирует диалог из своего контекста.
+// Инструменты в этом turn'е недоступны (resolver nil → permission cancelled) — ожидается
+// только текст. Держит turn-барьер через Prompt, поэтому сериализуется с обычными turn'ами;
+// временно перехватывает sink (архивация — намеренное действие, не во время живого turn'а).
+func (c *Client) Summarize(ctx context.Context, prompt string) (string, error) {
+	var mu sync.Mutex
+	var buf strings.Builder
+	sink := func(evt agui.Event) error {
+		if evt.Type == agui.EventTextMessageContent {
+			mu.Lock()
+			buf.WriteString(evt.Delta)
+			mu.Unlock()
+		}
+		return nil
+	}
+	unbind := c.Bind(sink, nil)
+	defer unbind()
+	if _, err := c.Prompt(ctx, prompt, nil); err != nil {
+		return "", err
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	return strings.TrimSpace(buf.String()), nil
 }
 
 // Cancel просит агента отменить текущий turn — отправляет протокольное уведомление
