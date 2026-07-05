@@ -96,8 +96,21 @@ func (rn *run) serve(in runAgentInput) {
 	// прекратился, и слипание ответов двух turn'ов невозможно (см. acp.Client.Prompt).
 	// FinishStreams в хуке — защитный no-op (предыдущий turn уже закрыл свои потоки).
 	// Bind делается на той же горутине, что и serve, поэтому запись unbind без гонки.
+	//
+	// Контекст turn'а РАЗВЯЗАН от соединения клиента: context.WithoutCancel(rn.ctx).
+	// Обрыв клиента (reload, потеря сети, закрытие вкладки) отменяет rn.ctx (он выведен
+	// из r.Context() HTTP-запроса); если бы этот ctx уходил в conn.Prompt, ACP-SDK
+	// прислал бы агенту session/cancel и turn был бы убит на полуслове — пользователю
+	// пришлось бы писать retry. Backend — посредник между контуром AG-UI (клиент) и
+	// контуром ACP (агент) и обязан сглаживать обрыв клиента, а не пробрасывать его в
+	// агента. Поэтому turn идёт до конца независимо от клиента; события копятся в
+	// history (acp.Client.emit доставляет в sink опционально, а в ленту — всегда), и на
+	// reconnect лента восстанавливается через AcpService.GetHistory + поллинг статуса.
+	// Так уже работает фоновый wakeup-turn (session/registry.go). Явную отмену turn'а
+	// (Stop) это не ломает: она идёт отдельным session/cancel через AcpService.Cancel,
+	// независимо от ctx (см. acp.Client.Cancel).
 	var unbind func()
-	stopReason, err := rn.bindable.Prompt(rn.ctx, text, func() {
+	stopReason, err := rn.bindable.Prompt(context.WithoutCancel(rn.ctx), text, func() {
 		rn.bindable.FinishStreams()
 		unbind = rn.bindable.Bind(rn.sink, rn.resolvePermission)
 	})

@@ -24,6 +24,7 @@ type fakeBindable struct {
 
 	promptCalled bool
 	promptText   string
+	promptCtxErr error // ctx.Err() на входе Prompt: проверка развязки turn'а от обрыва клиента
 	finishCalled bool
 	cancelCalled bool
 	cancelErr    error
@@ -46,6 +47,9 @@ func (b *fakeBindable) Prompt(ctx context.Context, text string, onTurnStart func
 	}
 	b.promptCalled = true
 	b.promptText = text
+	// Фиксируем состояние ctx на входе: боевой serve обязан передать сюда неотменяемый
+	// контекст (context.WithoutCancel), чтобы обрыв клиента не сворачивал turn агента.
+	b.promptCtxErr = ctx.Err()
 	b.calls = append(b.calls, "Prompt")
 	return b.promptStopReason, b.promptErr
 }
@@ -89,9 +93,15 @@ func (r *flushRecorder) Flush()                 {}
 
 // serveInput прогоняет run.serve на фейковом Bindable и возвращает тело SSE-потока.
 func serveInput(b *fakeBindable, in runAgentInput) string {
+	return serveInputCtx(context.Background(), b, in)
+}
+
+// serveInputCtx — вариант с явным родительским контекстом (эмуляция обрыва клиента:
+// отменённый ctx = закрытое HTTP-соединение).
+func serveInputCtx(ctx context.Context, b *fakeBindable, in runAgentInput) string {
 	rec := newFlushRecorder()
 	perms := NewPermissionStore()
-	newRun(context.Background(), rec, rec, b, perms, "t", "r").serve(in)
+	newRun(ctx, rec, rec, b, perms, "t", "r").serve(in)
 	return rec.body.String()
 }
 
@@ -186,5 +196,32 @@ func TestServePromptError(t *testing.T) {
 	}
 	if !strings.Contains(body, errStub.Error()) {
 		t.Errorf("RUN_ERROR не несёт текст ошибки:\n%s", body)
+	}
+}
+
+// TestServePromptSurvivesClientDisconnect фиксирует развязку контуров: обрыв клиента
+// (отменённый родительский ctx = закрытое соединение) НЕ должен отменять turn агента.
+// serve обязан передать в Prompt неотменяемый контекст, а session/cancel слаться только
+// по явному Stop (Cancel), а не по обрыву — иначе работа терялась бы и пользователю
+// приходилось писать retry.
+func TestServePromptSurvivesClientDisconnect(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // клиент оборвал соединение: родительский ctx уже отменён
+
+	b := &fakeBindable{promptStopReason: "end_turn"}
+	serveInputCtx(ctx, b, runAgentInput{
+		ThreadID: "t",
+		RunID:    "r",
+		Messages: []inputMessage{{Role: "user", Content: "привет"}},
+	})
+
+	if !b.promptCalled {
+		t.Fatal("Prompt не вызван при обрыве клиента")
+	}
+	if b.promptCtxErr != nil {
+		t.Errorf("Prompt получил отменённый ctx (%v) — turn убит обрывом клиента; want неотменяемый", b.promptCtxErr)
+	}
+	if b.cancelCalled {
+		t.Error("обрыв клиента дёрнул Cancel — session/cancel шлётся только по явному Stop")
 	}
 }
