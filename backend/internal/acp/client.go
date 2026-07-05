@@ -73,6 +73,12 @@ type Options struct {
 	// _meta). Пусто — модель их не видит. Задаётся только в docker-режиме (путь сервера —
 	// внутри образа агента), см. registry.applyACPSpawnMode.
 	McpServers []acpsdk.McpServer
+	// PluginDirs — локальные плагины сессии (абсолютные пути внутри контейнера/хоста).
+	// Пробрасываются агенту через _meta.claudeCode.options.plugins ([{type:"local",path}]) —
+	// единственный канал загрузки плагина в Agent SDK (settings.json enabledPlugins SDK не
+	// читает, это CLI-концепт). brigade кладёт сюда per-session плагин brigade (skill preview,
+	// namespace /brigade:preview). Задаётся в docker-режиме при включённом preview.
+	PluginDirs []string
 }
 
 // Client управляет одной ACP-сессией: владеет subprocess'ом adapter'а, реализует
@@ -226,6 +232,7 @@ func (c *Client) handshake(ctx context.Context) error {
 			SessionId:  acpsdk.SessionId(c.opts.ForkFromSessionID),
 			Cwd:        c.opts.Cwd,
 			McpServers: toUnstableMcpServers(c.opts.McpServers),
+			Meta:       pluginsMeta(c.opts.PluginDirs),
 		})
 		if err != nil {
 			return fmt.Errorf("acp: fork session %s: %w", c.opts.ForkFromSessionID, err)
@@ -247,6 +254,7 @@ func (c *Client) handshake(ctx context.Context) error {
 			SessionId:  acpsdk.SessionId(c.opts.ResumeSessionID),
 			Cwd:        c.opts.Cwd,
 			McpServers: mcpServersOrEmpty(c.opts.McpServers),
+			Meta:       pluginsMeta(c.opts.PluginDirs),
 		}); err != nil {
 			log.Printf("acp: load session %s failed (%v), starting fresh session", c.opts.ResumeSessionID, err)
 		} else {
@@ -268,6 +276,7 @@ func (c *Client) handshake(ctx context.Context) error {
 	newSess, err := c.conn.NewSession(ctx, acpsdk.NewSessionRequest{
 		Cwd:        c.opts.Cwd,
 		McpServers: mcpServersOrEmpty(c.opts.McpServers),
+		Meta:       pluginsMeta(c.opts.PluginDirs),
 	})
 	if err != nil {
 		return fmt.Errorf("acp: new session: %w", err)

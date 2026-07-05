@@ -1,5 +1,5 @@
 ---
-name: brigade-preview
+name: preview
 description: Expose a dev server running in this session at a public preview URL. Use when the user asks to run, preview, or share the project's web app/dev server.
 ---
 

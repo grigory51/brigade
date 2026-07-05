@@ -538,12 +538,16 @@ func (r *Registry) installSkill(sess store.Session) {
 	}
 	dir := sess.Cwd
 	if sess.Mode == store.SessionModeDocker {
-		if home := r.homeHost(sess); home != "" {
-			// Скилл кладём в per-session рабочий каталог (cwd агента на хосте).
-			dir = filepath.Join(home, "workspace", sess.ID)
-		} else {
+		home := r.homeHost(sess)
+		if home == "" {
 			return // фича home выключена — скилл класть некуда (эфемерный контейнер)
 		}
+		// Скилл кладём в per-session рабочий каталог (cwd агента на хосте).
+		dir = filepath.Join(home, "workspace", sess.ID)
+		// Убираем стейл-копию прежней схемы: раньше скилл ставился в ОБЩИЙ workspace
+		// (<home>/workspace/.claude/skills), и при cwd=<id> Claude Code находил его вверх
+		// по дереву вторым — отсюда дубль в slash-меню.
+		_ = os.RemoveAll(filepath.Join(home, "workspace", ".claude", "skills", "brigade-preview"))
 	}
 	if err := preview.InstallSkill(dir); err != nil {
 		log.Printf("session: install preview skill %s: %v", sess.ID, err)
@@ -581,6 +585,13 @@ func (r *Registry) applyACPSpawnMode(ctx context.Context, opts *acp.Options, ses
 	// applyACPSpawnMode вызывается из spawnFor, Fork и restoreOne. Local-режим (ранний
 	// return выше) MCP не получает — путь сервера контейнерный.
 	opts.McpServers = []acpsdk.McpServer{acp.BrigadeMCPServer()}
+	// Плагин brigade (skill preview, /brigade:preview) грузим в агента через
+	// _meta.claudeCode.options.plugins: путь — per-session .claude/plugins/brigade внутри
+	// контейнера (sess.Cwd — контейнерный путь). Только при включённом preview — тогда
+	// installSkill раскладывает плагин; иначе его нет.
+	if r.previews.Config().Enabled {
+		opts.PluginDirs = []string{sess.Cwd + "/" + preview.PluginDirRel}
+	}
 	return nil
 }
 
