@@ -7,7 +7,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { Link, Outlet, useNavigate, useParams } from "react-router-dom";
+import {
+  Link,
+  Outlet,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 import { ConnectError } from "@connectrpc/connect";
 import {
   Archive,
@@ -96,7 +102,14 @@ export function SessionLayout() {
   const navigate = useNavigate();
   // activeId — сессия, открытая сейчас в области контента (/s/:sessionId). Нужна, чтобы
   // удаление текущей сессии увело с её (теперь несуществующего) маршрута на пустой экран.
-  const { sessionId: activeId } = useParams<{ sessionId: string }>();
+  const location = useLocation();
+  // activeId — открытая ЖИВАЯ сессия (роут /s/:id): к ней относятся topbar, вспом.
+  // терминал и оверлеи. На /archive/:id тот же параметр sessionId есть, но это
+  // readonly-просмотр архива — там ни topbar'а, ни терминала быть не должно.
+  const { sessionId: routeSessionId } = useParams<{ sessionId: string }>();
+  const activeId = location.pathname.startsWith("/archive")
+    ? undefined
+    : routeSessionId;
   const [sessions, setSessions] = useState<Session[]>([]);
   const [state, setState] = useState<LoadState>("loading");
   const [createOpen, setCreateOpen] = useState(false);
@@ -107,6 +120,12 @@ export function SessionLayout() {
   // удаления). Блокируется только сама удаляемая сессия (пункт списка + её контент,
   // если она открыта) — остальной UI живёт, можно перейти к другой сессии.
   const [deletingIds, setDeletingIds] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
+  // archivingIds — сессии, архивация которых сейчас идёт. Как deletingIds: архивация
+  // делает recap-turn (несколько секунд) и останавливает контейнер, поэтому её надо
+  // показать блокирующим оверлеем открытой сессии, а не молчаливым фоном.
+  const [archivingIds, setArchivingIds] = useState<ReadonlySet<string>>(
     new Set(),
   );
 
@@ -205,14 +224,17 @@ export function SessionLayout() {
 
   const onArchive = useCallback(
     async (id: string) => {
-      // Архивация зовёт агента за recap (несколько секунд) — держим busy-состояние.
-      setBusyId(id);
+      // Архивация зовёт агента за recap (несколько секунд) и останавливает контейнер —
+      // как удаление, показываем блокирующий оверлей открытой сессии (archivingIds),
+      // иначе recap-turn лишь мигает индикатором «агент в фоне» и сессия молча исчезает.
+      setArchivingIds((prev) => new Set(prev).add(id));
       try {
         await sessionClient.archive({ sessionId: id });
         setSessions((prev) => prev.filter((s) => s.id !== id));
         toast.success("Сессия в архиве");
+        // Уводим на страницу архива — там уже есть карточка с пересказом.
         if (window.location.pathname.endsWith(`/${id}`)) {
-          navigate("/sessions");
+          navigate("/archive");
         }
       } catch (err) {
         toast.error(
@@ -221,7 +243,11 @@ export function SessionLayout() {
             : "Не удалось архивировать сессию",
         );
       } finally {
-        setBusyId(null);
+        setArchivingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
       }
     },
     [navigate],
@@ -341,8 +367,13 @@ export function SessionLayout() {
                           key={s.id}
                           session={s}
                           depth={depth}
-                          busy={busyId === s.id || deletingIds.has(s.id)}
+                          busy={
+                            busyId === s.id ||
+                            deletingIds.has(s.id) ||
+                            archivingIds.has(s.id)
+                          }
                           deleting={deletingIds.has(s.id)}
+                          archiving={archivingIds.has(s.id)}
                           onOpen={() => navigate(sessionRoute(s.id))}
                           onDelete={() => void onDelete(s.id)}
                           onRename={(name) => void onRename(s.id, name)}
@@ -356,6 +387,18 @@ export function SessionLayout() {
             </SidebarContent>
 
             <SidebarFooter>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => navigate("/archive")}
+                    isActive={location.pathname.startsWith("/archive")}
+                    tooltip="Архив"
+                  >
+                    <Archive className="size-4" />
+                    Архив
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
               <UserMenu />
             </SidebarFooter>
             <SidebarRail />
@@ -380,6 +423,20 @@ export function SessionLayout() {
                       <div className="font-medium">Сессия удаляется…</div>
                       <div className="text-muted-foreground text-xs">
                         Останавливаем агента и освобождаем ресурсы.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {activeId && archivingIds.has(activeId) && (
+                <div className="bg-background/60 absolute inset-0 z-40 flex items-center justify-center backdrop-blur-sm">
+                  <div className="bg-background flex items-center gap-3 rounded-lg border px-5 py-4 shadow-lg">
+                    <Loader2 className="text-muted-foreground size-5 animate-spin" />
+                    <div className="text-sm">
+                      <div className="font-medium">Сессия архивируется…</div>
+                      <div className="text-muted-foreground text-xs">
+                        Агент готовит пересказ, сохраняем историю и
+                        останавливаем контейнер.
                       </div>
                     </div>
                   </div>
@@ -421,6 +478,7 @@ function SessionItem({
   depth = 0,
   busy,
   deleting = false,
+  archiving = false,
   onOpen,
   onDelete,
   onRename,
@@ -431,12 +489,16 @@ function SessionItem({
   depth?: number;
   busy: boolean;
   deleting?: boolean;
+  archiving?: boolean;
   onOpen: () => void;
   onDelete: () => void;
   onRename: (name: string) => void;
   onFork: () => void;
   onArchive: () => void;
 }) {
+  // locked — сессия в необратимой операции (удаление/архивация): её нельзя открывать,
+  // переименовывать, а контент блокирован оверлеем.
+  const locked = deleting || archiving;
   const { sessionId } = useParams<{ sessionId: string }>();
   const active = sessionId === session.id;
   const KindIcon = session.kind === SessionKind.ACP ? MessagesSquare : Terminal;
@@ -497,14 +559,18 @@ function SessionItem({
     <SidebarMenuItem>
       <SidebarMenuButton
         isActive={active}
-        // Удаляемую сессию не открываем: её контент уже блокирован оверлеем.
-        onClick={deleting ? undefined : onOpen}
+        // Сессию в необратимой операции не открываем: её контент уже блокирован оверлеем.
+        onClick={locked ? undefined : onOpen}
         onDoubleClick={(e) => {
           e.stopPropagation();
-          if (!deleting) startEdit();
+          if (!locked) startEdit();
         }}
         tooltip={label}
-        className={deleting ? "pr-20 opacity-60" : "pr-20"}
+        // Правый паддинг под ряд hover-иконок: у ACP их 4 (архив/ветка/переименовать/
+        // удалить), у CLI — 2 (переименовать/удалить), поэтому места нужно больше.
+        className={`${
+          session.kind === SessionKind.ACP ? "pr-28" : "pr-16"
+        }${locked ? " opacity-60" : ""}`}
         // Ветки визуально вкладываются под родителя (см. ordered в SessionLayout).
         style={depth > 0 ? { paddingLeft: `${8 + depth * 16}px` } : undefined}
       >
@@ -527,9 +593,18 @@ function SessionItem({
             if (!busy) onArchive();
           }}
           aria-label="Архивировать сессию"
-          className="right-[5.25rem] text-sidebar-foreground/60 hover:text-sidebar-foreground"
+          // showOnHover прячет кнопку без наведения — на время архивации спиннер виден.
+          className={
+            archiving
+              ? "right-[5.25rem] text-sidebar-foreground/60 opacity-100"
+              : "right-[5.25rem] text-sidebar-foreground/60 hover:text-sidebar-foreground"
+          }
         >
-          <Archive className="size-4" />
+          {archiving ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Archive className="size-4" />
+          )}
         </SidebarMenuAction>
       )}
       {session.kind === SessionKind.ACP && (
@@ -627,10 +702,6 @@ function UserMenu() {
               {user?.username ?? "—"}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => navigate("/archive")}>
-              <Archive className="size-4" />
-              Архив
-            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => navigate("/settings")}>
               <Settings className="size-4" />
               Настройки
