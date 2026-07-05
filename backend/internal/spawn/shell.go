@@ -54,10 +54,11 @@ func StartLocalShell(ctx context.Context, cwd string) (ShellHandle, error) {
 const shellMarkEnv = "BRIGADE_SHELL_MARK"
 
 // SpawnShell запускает интерактивный шелл внутри контейнера сессии через docker exec.
-// Контейнер отыскивается по label brigade.session.id (работает и для CLI-, и для
-// ACP-контейнеров) и должен быть запущен — exec в остановленный контейнер невозможен.
-func (s *DockerSpawner) SpawnShell(ctx context.Context, sessionLabel string) (ShellHandle, error) {
-	id, err := s.findBySessionLabel(ctx, sessionLabel)
+// Контейнер отыскивается по label brigade.session.id (legacy CLI, ACP) либо как общий
+// контейнер пользователя (shared CLI); он должен быть запущен — exec в остановленный
+// контейнер невозможен.
+func (s *DockerSpawner) SpawnShell(ctx context.Context, sessionLabel, userID string) (ShellHandle, error) {
+	id, err := s.findSessionOrUserContainer(ctx, sessionLabel, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -121,24 +122,30 @@ func (h *execShellHandle) Resize(cols, rows uint16) error {
 // Terminate закрывает attach-соединение и убивает процессы шелла внутри контейнера.
 // Docker API не умеет завершать exec-процесс, а разрыв attach его не трогает (pty
 // exec-инстанса держит демон) — без явного kill осиротевшие шеллы копились бы в
-// контейнере. Процессы находятся по маркеру shellMarkEnv в /proc/*/environ: под него
-// попадает сам шелл и всё, что пользователь из него запустил (окружение наследуется).
-// Контейнер сессии продолжает работать.
+// контейнере. Контейнер сессии продолжает работать.
 func (h *execShellHandle) Terminate(ctx context.Context) error {
 	h.hijacked.Close()
+	return killByEnvMark(ctx, h.cli, h.containerID, shellMarkEnv, h.mark)
+}
 
+// killByEnvMark убивает внутри контейнера все процессы, в окружении которых есть
+// envKey=value: сам целевой процесс и его дети (окружение наследуется). Это обходной
+// путь завершения exec-процессов — Docker API их убивать не умеет. Запускается
+// detach-exec'ом со скриптом по /proc/*/environ; отсутствие совпадений — штатный
+// исход (процесс уже завершился).
+func killByEnvMark(ctx context.Context, cli *client.Client, containerID, envKey, value string) error {
 	script := fmt.Sprintf(
 		`for p in /proc/[0-9]*; do grep -qa %s=%s "$p/environ" 2>/dev/null && kill -9 "${p#/proc/}" 2>/dev/null; done; true`,
-		shellMarkEnv, h.mark)
-	execResp, err := h.cli.ContainerExecCreate(ctx, h.containerID, container.ExecOptions{
+		envKey, value)
+	execResp, err := cli.ContainerExecCreate(ctx, containerID, container.ExecOptions{
 		Detach: true,
 		Cmd:    []string{"/bin/sh", "-c", script},
 	})
 	if err != nil {
-		return fmt.Errorf("spawn: shell cleanup create: %w", err)
+		return fmt.Errorf("spawn: mark cleanup create: %w", err)
 	}
-	if err := h.cli.ContainerExecStart(ctx, execResp.ID, container.ExecStartOptions{Detach: true}); err != nil {
-		return fmt.Errorf("spawn: shell cleanup start: %w", err)
+	if err := cli.ContainerExecStart(ctx, execResp.ID, container.ExecStartOptions{Detach: true}); err != nil {
+		return fmt.Errorf("spawn: mark cleanup start: %w", err)
 	}
 	return nil
 }

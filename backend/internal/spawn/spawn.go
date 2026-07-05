@@ -32,6 +32,15 @@ type Spec struct {
 	// brigade.session.id для docker-контейнера и для сопоставления при Reattach.
 	SessionID string
 
+	// UserID — владелец сессии. В docker-режиме CLI непустой UserID включает схему
+	// «общий контейнер на пользователя»: сессия запускается docker exec'ом в
+	// долгоживущем контейнере brigade-user-<UserID> (label brigade.user.id), а не в
+	// собственном контейнере. Контейнер переживает отдельные сессии — Claude
+	// привязывает авторизацию к контейнеру (fingerprint), и контейнер-на-сессию
+	// сбрасывал логин, несмотря на общий home. Пусто — legacy-схема (контейнер на
+	// сессию). local-режим поле игнорирует.
+	UserID string
+
 	// AgentType — тип агента (например, "claude-code-cli"). Зарезервировано для
 	// выбора команды/образа; текущие реализации запускают `claude`.
 	AgentType string
@@ -81,10 +90,19 @@ type Persisted struct {
 	ContainerLabel string
 
 	// Cwd, Env, Image — параметры запуска, нужные local-режиму для resume
-	// (docker-режим переиспользует уже существующий контейнер и их игнорирует).
+	// (legacy docker-режим переиспользует уже существующий контейнер и их игнорирует;
+	// shared docker-режим использует Env для нового exec'а).
 	Cwd   string
 	Env   []string
 	Image string
+
+	// UserID, HomeHost, Hostname — параметры общего per-user контейнера (docker CLI,
+	// shared-схема): по UserID контейнер находится/пересоздаётся, HomeHost/Hostname
+	// сохраняют авторизацию Claude при пересоздании. Для legacy-сессий (непустой
+	// ContainerLabel) игнорируются.
+	UserID   string
+	HomeHost string
+	Hostname string
 }
 
 // Handle — управление запущенным агентом.

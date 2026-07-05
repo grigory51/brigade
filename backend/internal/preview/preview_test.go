@@ -160,7 +160,7 @@ type fakeIPs struct {
 	calls int
 }
 
-func (f *fakeIPs) ContainerIP(context.Context, string) (string, error) {
+func (f *fakeIPs) ContainerIP(context.Context, string, string) (string, error) {
 	f.calls++
 	return f.ip, nil
 }

@@ -45,10 +45,13 @@ var (
 )
 
 // live — живая сессия в памяти. Для CLI заполнено handle, для ACP — client; второе
-// поле в каждом случае nil. owner фиксирует владельца для проверки доступа из WS.
+// поле в каждом случае nil. owner фиксирует владельца для проверки доступа из WS;
+// mode нужен учёту docker-CLI сессий пользователя (общий контейнер удаляется, когда
+// закрыта последняя — см. releaseUserContainerIfIdle).
 type live struct {
 	owner  string
 	kind   store.SessionKind
+	mode   store.SessionMode
 	handle spawn.Handle // CLI-режим
 	client *acp.Client  // ACP-режим
 }
@@ -78,6 +81,12 @@ type Registry struct {
 	// параллельного teardown одной сессии (повторный клик «удалить», двойной запрос):
 	// второй вызов получает ErrTeardownInProgress, не дублируя terminate.
 	tearingDown map[string]struct{}
+	// userLocks сериализует операции над общим per-user контейнером CLI-сессий
+	// (docker): создание при спавне и удаление при закрытии последней сессии. Без
+	// лока create/remove гонялись бы (новая сессия видит контейнер → release его
+	// удаляет → exec в удалённый контейнер). Доступ к map — под mu; сами локи
+	// держатся дольше (на время docker-вызовов).
+	userLocks map[string]*sync.Mutex
 }
 
 // NewRegistry собирает реестр. spawner соответствует режиму инстанса (mode); mode
@@ -95,6 +104,55 @@ func NewRegistry(st *store.Store, spawner spawn.Spawner, mode store.SessionMode,
 		previews:      previews,
 		live:          make(map[string]*live),
 		tearingDown:   make(map[string]struct{}),
+		userLocks:     make(map[string]*sync.Mutex),
+	}
+}
+
+// lockUser берёт per-user лок операций над общим контейнером пользователя и
+// возвращает функцию освобождения. Локи живут в map навсегда (пользователей мало,
+// утечка незначима) — упрощение против reference counting.
+func (r *Registry) lockUser(userID string) (unlock func()) {
+	r.mu.Lock()
+	l, ok := r.userLocks[userID]
+	if !ok {
+		l = &sync.Mutex{}
+		r.userLocks[userID] = l
+	}
+	r.mu.Unlock()
+	l.Lock()
+	return l.Unlock
+}
+
+// releaseUserContainerIfIdle удаляет общий per-user контейнер CLI-сессий, если живых
+// docker-CLI сессий пользователя не осталось. Вызывается после снятия сессии с учёта
+// (Stop/Delete/выход агента/провал восстановления). Под per-user локом: параллельный
+// спавн новой сессии либо дождётся удаления и создаст контейнер заново, либо успеет
+// первым — тогда счётчик не нулевой и удаление не выполняется. no-op вне docker-режима.
+func (r *Registry) releaseUserContainerIfIdle(userID string) {
+	ds, ok := r.spawner.(*spawn.DockerSpawner)
+	if !ok {
+		return
+	}
+	unlock := r.lockUser(userID)
+	defer unlock()
+
+	r.mu.Lock()
+	inUse := false
+	for _, lv := range r.live {
+		if lv.owner == userID && lv.kind == store.SessionKindCLI && lv.mode == store.SessionModeDocker {
+			inUse = true
+			break
+		}
+	}
+	r.mu.Unlock()
+	if inUse {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := ds.RemoveUserContainer(ctx, userID); err != nil {
+		log.Printf("session: release user container %s: %v", userID, err)
 	}
 }
 
@@ -286,14 +344,20 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 		// смонтированный ~/.claude (интерактивный claude не берёт CLAUDE_CODE_OAUTH_TOKEN
 		// из env); токен в env кладём как запасной путь. Намеренно НЕ используем
 		// ANTHROPIC_API_KEY: подписочный токен и API-ключ — разные модели доступа.
+		// UserID включает shared-схему docker-спавна (общий контейнер на пользователя):
+		// авторизация Claude привязана к контейнеру, контейнер-на-сессию сбрасывал её.
+		// Спавн и удаление общего контейнера сериализуются per-user локом.
+		unlock := r.lockUser(sess.UserID)
 		handle, err := r.spawner.Spawn(ctx, spawn.Spec{
-			SessionID:      sess.ID,
-			AgentType:      sess.AgentType,
-			Cwd:            sess.Cwd,
-			Env:            r.agentEnv(sess, token),
-			HomeHost:       r.homeHost(sess),
-			Hostname:       r.userHostname(ctx, sess.UserID),
+			SessionID: sess.ID,
+			UserID:    sess.UserID,
+			AgentType: sess.AgentType,
+			Cwd:       sess.Cwd,
+			Env:       r.agentEnv(sess, token),
+			HomeHost:  r.homeHost(sess),
+			Hostname:  r.userHostname(ctx, sess.UserID),
 		})
+		unlock()
 		if err != nil {
 			return nil, "", "", fmt.Errorf("session: spawn cli: %w", err)
 		}
@@ -301,7 +365,7 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 		// набрал /quit), помечаем сессию stopped и убираем её из реестра, чтобы
 		// переподключение не находило мёртвый Handle.
 		go r.watchExit(sess.ID, handle)
-		lv := &live{owner: sess.UserID, kind: sess.Kind, handle: handle}
+		lv := &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, handle: handle}
 		return lv, handle.AgentSessionID(), handle.ContainerLabel(), nil
 
 	case store.SessionKindACP:
@@ -320,7 +384,7 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 			// того, подключился ли уже WS-клиент (события буферизуются клиентом ACP).
 			go func() { _, _ = client.Prompt(context.WithoutCancel(ctx), prompt, nil) }()
 		}
-		lv := &live{owner: sess.UserID, kind: sess.Kind, client: client}
+		lv := &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, client: client}
 		return lv, client.SessionID(), "", nil
 
 	default:
@@ -451,9 +515,11 @@ func (r *Registry) watchExit(sessionID string, handle spawn.Handle) {
 
 	r.mu.Lock()
 	owned := false
+	var owner string
 	if lv, ok := r.live[sessionID]; ok && lv.handle == handle {
 		delete(r.live, sessionID)
 		owned = true
+		owner = lv.owner
 	}
 	r.mu.Unlock()
 
@@ -468,6 +534,9 @@ func (r *Registry) watchExit(sessionID string, handle spawn.Handle) {
 	if err := r.store.UpdateSessionStatus(context.Background(), sessionID, store.SessionStatusStopped); err != nil {
 		log.Printf("session: mark stopped %s failed: %v", sessionID, err)
 	}
+	// Агент вышел сам (например, /quit в последней сессии) — общий per-user контейнер
+	// мог остаться без сессий.
+	r.releaseUserContainerIfIdle(owner)
 }
 
 // Handle реализует termws.HandleProvider: отдаёт Handle CLI-сессии её владельцу.
@@ -498,7 +567,7 @@ func (r *Registry) Shell(ctx context.Context, sessionID, userID string) (termws.
 		if !ok {
 			return nil, fmt.Errorf("session: docker shell without DockerSpawner")
 		}
-		return ds.SpawnShell(ctx, sess.ID)
+		return ds.SpawnShell(ctx, sess.ID, sess.UserID)
 	default:
 		return spawn.StartLocalShell(ctx, sess.Cwd)
 	}
@@ -599,7 +668,7 @@ func (r *Registry) Fork(ctx context.Context, sessionID, userID string) (store.Se
 	sess.AgentSessionID = client.SessionID()
 
 	r.mu.Lock()
-	r.live[sess.ID] = &live{owner: userID, kind: sess.Kind, client: client}
+	r.live[sess.ID] = &live{owner: userID, kind: sess.Kind, mode: sess.Mode, client: client}
 	r.mu.Unlock()
 
 	log.Printf("session: forked %s -> %s (agent %s -> %s)",
@@ -640,6 +709,8 @@ func (r *Registry) Stop(ctx context.Context, sessionID, userID string) error {
 		cancel()
 	}
 	r.previews.Drop(sessionID)
+	// Последняя docker-CLI сессия пользователя закрыта → общий контейнер не нужен.
+	r.releaseUserContainerIfIdle(userID)
 	log.Printf("session: stopped %s by user=%s", sessionID, userID)
 	return r.store.UpdateSessionStatus(ctx, sessionID, store.SessionStatusStopped)
 }
@@ -662,6 +733,8 @@ func (r *Registry) Delete(ctx context.Context, sessionID, userID string) error {
 		cancel()
 	}
 	r.previews.Drop(sessionID)
+	// Последняя docker-CLI сессия пользователя закрыта → общий контейнер не нужен.
+	r.releaseUserContainerIfIdle(userID)
 	log.Printf("session: deleted %s by user=%s", sessionID, userID)
 	return r.store.DeleteSession(ctx, sessionID)
 }
@@ -683,12 +756,21 @@ func (r *Registry) RestoreAll(ctx context.Context) error {
 		return err
 	}
 
+	cliUsers := make(map[string]struct{})
 	for _, sess := range sessions {
+		if sess.Kind == store.SessionKindCLI && sess.Mode == store.SessionModeDocker {
+			cliUsers[sess.UserID] = struct{}{}
+		}
 		if err := r.restoreOne(ctx, sess); err != nil {
 			log.Printf("session: восстановление %s (%s/%s) не удалось: %v",
 				sess.ID, sess.Mode, sess.Kind, err)
 			_ = r.store.UpdateSessionStatus(ctx, sess.ID, store.SessionStatusFailed)
 		}
+	}
+	// Свип общих per-user контейнеров: если все docker-CLI сессии пользователя не
+	// восстановились (failed/stopped), его контейнер остался без сессий — удаляем.
+	for userID := range cliUsers {
+		r.releaseUserContainerIfIdle(userID)
 	}
 	return nil
 }
@@ -704,24 +786,31 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 		// объективно мертва — помечаем её stopped, а не пытаемся (заведомо неудачно)
 		// переподключиться. Это штатный исход, не ошибка восстановления.
 		//
-		// В docker-режиме агент живёт в отдельном контейнере, переживающем рестарт
-		// бэкенда, а Reattach переподключается по label brigade.session.id и не требует
-		// agent_session_id. Поэтому здесь пустой id не повод считать сессию мёртвой.
+		// В docker-режиме агент живёт в контейнере, переживающем рестарт бэкенда.
+		// Legacy-схема (непустой container_label) переподключается по label
+		// brigade.session.id без agent_session_id; shared-схема (пустой label)
+		// перезапускает `claude --resume <agent_session_id>` exec'ом в общем
+		// контейнере пользователя — id обязателен и задан при спавне (--session-id).
 		if sess.Mode == store.SessionModeLocal && sess.AgentSessionID == "" {
 			return r.store.UpdateSessionStatus(ctx, sess.ID, store.SessionStatusStopped)
 		}
+		unlock := r.lockUser(sess.UserID)
 		handle, err := r.spawner.Reattach(ctx, spawn.Persisted{
 			SessionID:      sess.ID,
 			AgentSessionID: sess.AgentSessionID,
 			ContainerLabel: sess.ContainerLabel,
 			Cwd:            sess.Cwd,
 			Env:            r.agentEnv(sess, r.userClaudeToken(ctx, sess.UserID)),
+			UserID:         sess.UserID,
+			HomeHost:       r.homeHost(sess),
+			Hostname:       r.userHostname(ctx, sess.UserID),
 		})
+		unlock()
 		if err != nil {
 			return fmt.Errorf("reattach cli: %w", err)
 		}
 		r.mu.Lock()
-		r.live[sess.ID] = &live{owner: sess.UserID, kind: sess.Kind, handle: handle}
+		r.live[sess.ID] = &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, handle: handle}
 		r.mu.Unlock()
 		// Следим за завершением восстановленного агента, как и при первичном спавне.
 		go r.watchExit(sess.ID, handle)
@@ -752,7 +841,7 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 			return fmt.Errorf("persist acp resume: %w", err)
 		}
 		r.mu.Lock()
-		r.live[sess.ID] = &live{owner: sess.UserID, kind: sess.Kind, client: client}
+		r.live[sess.ID] = &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, client: client}
 		r.mu.Unlock()
 		return nil
 

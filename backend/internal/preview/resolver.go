@@ -19,10 +19,11 @@ type SessionSource interface {
 	GetSession(ctx context.Context, id string) (store.Session, error)
 }
 
-// ContainerIPs резолвит IP контейнера сессии. Удовлетворяется spawn.DockerSpawner;
-// nil в local-режиме сервиса (docker-сессий тогда не бывает).
+// ContainerIPs резолвит IP контейнера, обслуживающего сессию: собственный контейнер
+// сессии (legacy CLI, ACP) либо общий per-user контейнер (shared CLI) — поэтому нужен
+// и userID. Удовлетворяется spawn.DockerSpawner; nil в local-режиме сервиса.
 type ContainerIPs interface {
-	ContainerIP(ctx context.Context, sessionID string) (string, error)
+	ContainerIP(ctx context.Context, sessionID, userID string) (string, error)
 }
 
 // Resolver превращает пару (sessionID, port) из hostname запроса в upstream-URL.
@@ -63,7 +64,7 @@ func (r *Resolver) Resolve(ctx context.Context, sessionID string, port int) (*ur
 
 	host := "127.0.0.1"
 	if sess.Mode == store.SessionModeDocker {
-		ip, err := r.containerIP(ctx, sessionID)
+		ip, err := r.containerIP(ctx, sessionID, sess.UserID)
 		if err != nil {
 			return nil, err
 		}
@@ -73,7 +74,7 @@ func (r *Resolver) Resolve(ctx context.Context, sessionID string, port int) (*ur
 }
 
 // containerIP возвращает IP контейнера сессии с кэшированием (TTL ipCacheTTL).
-func (r *Resolver) containerIP(ctx context.Context, sessionID string) (string, error) {
+func (r *Resolver) containerIP(ctx context.Context, sessionID, userID string) (string, error) {
 	if r.docker == nil {
 		return "", fmt.Errorf("preview: docker session %s without docker spawner", sessionID)
 	}
@@ -85,7 +86,7 @@ func (r *Resolver) containerIP(ctx context.Context, sessionID string) (string, e
 		return entry.ip, nil
 	}
 
-	ip, err := r.docker.ContainerIP(ctx, sessionID)
+	ip, err := r.docker.ContainerIP(ctx, sessionID, userID)
 	if err != nil {
 		return "", fmt.Errorf("preview: container ip %s: %w", sessionID, err)
 	}
