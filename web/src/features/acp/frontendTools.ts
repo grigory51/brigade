@@ -1,34 +1,10 @@
-// Контракт кастомного frontend-сниппета: имя, описание и JSON Schema аргументов.
-// Передаётся агенту через RunAgentInput.tools[] (его регистрирует AcpToolUI), вызов
-// агентом транслируется в TOOL_CALL_* и рендерится карточкой в AcpThread.
-export type FrontendToolSpec = {
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-};
+// Имена кастомных UI-инструментов, которые brigade рендерит своими карточками. Сами
+// инструменты доставляются модели MCP-сервером сессии (docker/claude-agent/mcp/
+// brigade-tools.mjs), поэтому до клиента они доходят с префиксом mcp__brigade__; в
+// ToolFallback имя сопоставляется по «голому» виду (bareToolName). См. AcpThread.tsx.
 
-// Демонстрационный кастомный сниппет.
-export const DEMO_FRONTEND_TOOLS: FrontendToolSpec[] = [
-  {
-    name: "show_choice",
-    description:
-      "Показать пользователю карточку с заголовком и набором вариантов выбора.",
-    parameters: {
-      type: "object",
-      properties: {
-        title: { type: "string", description: "Заголовок карточки" },
-        options: {
-          type: "array",
-          items: { type: "string" },
-          description: "Варианты, которые увидит пользователь",
-        },
-      },
-      required: ["title", "options"],
-    },
-  },
-];
+// RENDER_UI_TOOL_NAME — generative UI от агента (рендер — RenderUiCard → A2uiSurface).
+export const RENDER_UI_TOOL_NAME = "render_ui";
 
-// Имена сниппетов, для которых есть собственный рендер.
-export const FRONTEND_TOOL_NAMES = new Set(
-  DEMO_FRONTEND_TOOLS.map((t) => t.name),
-);
+// FRONTEND_TOOL_NAMES — инструменты, которые рисует SnippetCard (простой рендер по имени).
+export const FRONTEND_TOOL_NAMES = new Set(["show_choice"]);

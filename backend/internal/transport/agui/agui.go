@@ -84,8 +84,6 @@ type Bindable interface {
 	// Cancel просит агента отменить текущий turn (session/cancel). Идемпотентно,
 	// безопасно без активного turn'а.
 	Cancel(ctx context.Context) error
-	// SetFrontendTools обновляет реестр кастомных инструментов сессии.
-	SetFrontendTools(tools []acp.FrontendTool)
 	// FinishStreams закрывает открытые потоковые сообщения перед завершением
 	// replay-прогона, чтобы RUN_FINISHED не уходил поверх незакрытого сообщения.
 	FinishStreams()
@@ -110,13 +108,13 @@ type Bindable interface {
 var _ Bindable = (*acp.Client)(nil)
 
 // runAgentInput — подмножество канонического RunAgentInput (@ag-ui/core), которое
-// использует brigade. Остальные поля (state, context, forwardedProps) принимаются, но
-// в текущем режиме не интерпретируются.
+// использует brigade. Остальные поля (state, context, forwardedProps, tools) принимаются,
+// но в текущем режиме не интерпретируются: кастомные инструменты агент получает через
+// MCP-сервер сессии (см. acp.BrigadeMCPServer), а не из tools[].
 type runAgentInput struct {
 	ThreadID string         `json:"threadId"`
 	RunID    string         `json:"runId"`
 	Messages []inputMessage `json:"messages"`
-	Tools    []inputTool    `json:"tools"`
 }
 
 // inputMessage — сообщение из RunAgentInput. Для prompt берётся текст последнего
@@ -125,14 +123,6 @@ type inputMessage struct {
 	ID      string `json:"id"`
 	Role    string `json:"role"`
 	Content string `json:"content"`
-}
-
-// inputTool — описание frontend-tool из RunAgentInput.tools[]. parameters — JSON Schema
-// входных параметров инструмента.
-type inputTool struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Parameters  map[string]any `json:"parameters"`
 }
 
 // PermissionStore связывает (threadId,id) запроса разрешения с каналом ответа. Общий для
@@ -250,21 +240,4 @@ func accessToken(r *http.Request) string {
 		return c.Value
 	}
 	return ""
-}
-
-// toFrontendTools преобразует tools[] из RunAgentInput в реестр acp.FrontendTool.
-// parameters канонического Tool соответствует InputSchema (JSON Schema параметров).
-func toFrontendTools(tools []inputTool) []acp.FrontendTool {
-	if len(tools) == 0 {
-		return nil
-	}
-	out := make([]acp.FrontendTool, 0, len(tools))
-	for _, t := range tools {
-		out = append(out, acp.FrontendTool{
-			Name:        t.Name,
-			Description: t.Description,
-			InputSchema: t.Parameters,
-		})
-	}
-	return out
 }

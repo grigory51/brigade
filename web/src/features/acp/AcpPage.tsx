@@ -15,7 +15,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { AcpThread } from "./AcpThread";
-import { AcpToolUI } from "./AcpToolUI";
 import {
   useAcpRuntime,
   type AgentStatus,
@@ -64,10 +63,6 @@ function AcpSessionInner({
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      {/* Регистрация frontend-tool show_choice в model-context рантайма; уходит в
-          RunAgentInput.tools[] при следующем прогоне. */}
-      <AcpToolUI />
-
       <div className="relative flex h-full flex-col">
         <div className="min-h-0 flex-1">
           <AcpThread

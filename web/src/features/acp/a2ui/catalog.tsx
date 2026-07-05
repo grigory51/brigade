@@ -1,10 +1,20 @@
 import { z } from "zod";
 import { Catalog, DynamicValueSchema } from "@a2ui/web_core/v0_9";
 import {
+  basicCatalog,
   createComponentImplementation,
   type ReactComponentImplementation,
 } from "@a2ui/react/v0_9";
 import { FileDiffBlock } from "../tools/DiffCard";
+
+// basicCatalog — стандартный каталог A2UI (18 компонентов: Text/Card/Column/Row/Button/
+// TextField/… с интерактивностью из коробки). Используется generative-UI от агента
+// (frontend-tool render_ui): поверхность создаётся с этим каталогом (BASIC_CATALOG_ID),
+// компоненты рисуются нативно. Подключается к MessageProcessor рядом с cardsCatalog
+// (см. useAcpRuntime); поверхности разных каталогов не пересекаются по catalogId.
+export { basicCatalog };
+export const BASIC_CATALOG_ID =
+  "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json";
 
 // Каталог карточек brigade для A2UI-рендера. Идентификатор согласован с бэкендом
 // (backend/internal/a2ui.CardsCatalogID): сервер описывает поверхность с этим

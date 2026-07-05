@@ -5,14 +5,13 @@ import {
   ExportedMessageRepository,
   type ThreadHistoryAdapter,
 } from "@assistant-ui/react";
-import { MessageProcessor } from "@a2ui/web_core/v0_9";
+import { MessageProcessor, type A2uiClientAction } from "@a2ui/web_core/v0_9";
 import type { ReactComponentImplementation } from "@a2ui/react/v0_9";
 import { useAuth } from "@/features/auth/AuthContext";
 import { refreshSession, acpClient } from "@/api/client";
 import type { AcpConfigOption } from "@/api/gen/brigade/v1/acp_pb";
-import { DEMO_FRONTEND_TOOLS } from "./frontendTools";
 import type { PlanEntry } from "./PlanPanel";
-import { cardsCatalog } from "./a2ui/catalog";
+import { cardsCatalog, basicCatalog } from "./a2ui/catalog";
 
 // Потоковый turn ACP идёт по SSE в формате @ag-ui/client — единственная сырая
 // HTTP-ручка. Управляющие вызовы (история/статус/workflow/отмена/опции/permission) —
@@ -37,13 +36,11 @@ type HistoryMessage = {
   result?: string;
 };
 
-// toAgUiHistoryMessage переводит серверное сообщение истории в форму, понятную
-// fromAgUiMessages: tool_call — в assistant-сообщение с tool-call-частью (канонический
-// снапшот-формат @assistant-ui/react-ag-ui), остальные роли — как есть. result всегда
-// определён (пустая строка): часть без result агрегатор считает ещё выполняющейся и
-// рисовал бы вечный спиннер.
-function toAgUiHistoryMessage(m: HistoryMessage): unknown {
-  if (m.role !== "tool_call") return m;
+// toToolCallPart строит tool-call-часть (канонический снапшот-формат @assistant-ui/
+// react-ag-ui) из серверного сообщения истории role="tool_call". result всегда определён
+// (пустая строка): часть без result агрегатор считает ещё выполняющейся и рисовал бы
+// вечный спиннер.
+function toToolCallPart(m: HistoryMessage): unknown {
   let args: unknown = {};
   try {
     args = m.argsText ? JSON.parse(m.argsText) : {};
@@ -51,19 +48,51 @@ function toAgUiHistoryMessage(m: HistoryMessage): unknown {
     // Невалидный/обрезанный JSON аргументов — карточка покажет сырой argsText.
   }
   return {
-    id: m.id,
-    role: "assistant",
-    content: [
-      {
-        type: "tool-call",
-        toolCallId: m.id,
-        toolName: m.toolName || "tool",
-        args,
-        argsText: m.argsText ?? "{}",
-        result: m.result ?? "",
-      },
-    ],
+    type: "tool-call",
+    toolCallId: m.id,
+    toolName: m.toolName || "tool",
+    args,
+    argsText: m.argsText ?? "{}",
+    result: m.result ?? "",
   };
+}
+
+// assembleHistory переводит историю в AG-UI-снапшот, склеивая ПОДРЯД идущие tool_call'ы в
+// одно assistant-сообщение с несколькими tool-call-частями. Иначе каждый вызов стал бы
+// отдельным сообщением и рисовался своим блоком «1 tool call»; собранные в одно сообщение
+// подряд идущие вызовы клиент схлопывает в единый разворачивающийся блок «N tool calls»
+// (MessagePrimitive.GroupedParts группирует смежные tool-call-части). Текст (user/
+// assistant) проходит как есть и разрывает серию — так группа отражает фактическую
+// последовательность turn'а.
+function assembleHistory(messages: HistoryMessage[]): unknown[] {
+  const out: unknown[] = [];
+  let group: { id: string; role: string; content: unknown[] } | null = null;
+  for (const m of messages) {
+    if (m.role === "tool_call") {
+      if (group) {
+        group.content.push(toToolCallPart(m));
+      } else {
+        group = { id: m.id, role: "assistant", content: [toToolCallPart(m)] };
+        out.push(group);
+      }
+    } else {
+      group = null;
+      out.push(m);
+    }
+  }
+  return out;
+}
+
+// formatA2uiAction превращает действие пользователя из A2UI-поверхности (клик Button,
+// submit формы render_ui) в текст user-реплики агенту. name — имя события из разметки,
+// context — сопутствующие значения (в т.ч. поля ввода через path-биндинги). Формат
+// читаем и для модели, и в ленте как обычное сообщение.
+function formatA2uiAction(action: A2uiClientAction): string {
+  const ctx =
+    action.context && Object.keys(action.context).length > 0
+      ? " " + JSON.stringify(action.context)
+      : "";
+  return `Действие в интерфейсе: ${action.name}${ctx}`;
 }
 
 // PendingPermission — активный запрос разрешения (human-in-the-loop). Бэкенд шлёт его
@@ -170,11 +199,23 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
   const [workflows, setWorkflows] = useState<WorkflowInfo[]>([]);
   const [a2uiVersion, setA2uiVersion] = useState(0);
 
+  // actionRef — обработчик действий пользователя из A2UI-поверхностей (клик Button, submit
+  // формы render_ui). Держим в ref: процессор создаётся раньше runtime, а обработчику
+  // нужен runtime.thread.append — он проводится ниже, после создания runtime.
+  const actionRef = useRef<(action: A2uiClientAction) => void>(() => {});
+
   // Процессор A2UI-поверхностей живёт вместе с сессией: бэкенд шлёт поставки
-  // server→client сообщений CUSTOM-событием a2ui, процессор интерпретирует их и держит
-  // модели поверхностей (surfaceId = toolCallId карточки).
+  // server→client сообщений CUSTOM-событием a2ui, а render_ui — клиентски (RenderUiCard);
+  // процессор интерпретирует их и держит модели поверхностей (surfaceId = toolCallId).
+  // Каталоги: cardsCatalog (diff от бэкенда) + basicCatalog (generative UI агента);
+  // поверхности выбирают каталог по catalogId, surfaceId не пересекаются. Второй аргумент —
+  // глобальный actionHandler: действия со всех интерактивных поверхностей уходят в actionRef.
   const a2uiProcessor = useMemo(
-    () => new MessageProcessor<ReactComponentImplementation>([cardsCatalog]),
+    () =>
+      new MessageProcessor<ReactComponentImplementation>(
+        [cardsCatalog, basicCatalog],
+        (action) => actionRef.current(action),
+      ),
     // Новая сессия — новый процессор с чистыми поверхностями.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sessionId],
@@ -200,8 +241,8 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
   // страницы токена в памяти нет, и аутентификацию несёт httpOnly-cookie brigade_access,
   // которую бэкенд принимает как fallback к Bearer. При 401 (истёк access-токен) один раз
   // обновляем сессию через Refresh (refresh-cookie) и повторяем запрос — иначе долгий
-  // SSE-прогон оборвался бы по таймауту access-токена. frontend-tools в
-  // RunAgentInput.tools[] кладёт сам рантайм из model-context (через AcpToolUI).
+  // SSE-прогон оборвался бы по таймауту access-токена. Кастомные UI-инструменты
+  // (render_ui, show_choice) агент получает не из tools[], а MCP-сервером сессии.
   const agent = useMemo(() => {
     // useBearer=false на повторе: после Refresh актуальный access лежит в cookie, а
     // токен в памяти устарел — повтор идёт по обновлённой cookie.
@@ -365,7 +406,7 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
           result: m.result,
         }));
         return ExportedMessageRepository.fromArray(
-          fromAgUiMessages(raw.map(toAgUiHistoryMessage), {
+          fromAgUiMessages(assembleHistory(raw), {
             showThinking: true,
           }),
         );
@@ -390,6 +431,20 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
       void acpClient.cancel({ threadId: sessionId }).catch(() => {});
     },
   });
+
+  // Проводим обработчик A2UI-действий (замыкает круг интерактивных поверхностей
+  // render_ui): клик по Button / submit формы приходит в actionHandler процессора →
+  // actionRef → сюда. Отправляем агенту новой user-репликой (append запускает прогон),
+  // чтобы он продолжил диалог с учётом выбора. Значения полей ввода несёт action.context
+  // (через {path:"/поле"}-биндинги в разметке). Через ref: процессор создан выше runtime.
+  useEffect(() => {
+    actionRef.current = (action) => {
+      void runtime.thread.append({
+        role: "user",
+        content: [{ type: "text", text: formatA2uiAction(action) }],
+      });
+    };
+  }, [runtime]);
 
   // resolvePermission отправляет решение пользователя и снимает диалог. Доставка
   // best-effort: бэкенд отвечает пустым в любом случае.
@@ -429,10 +484,6 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
     workflows,
   };
 }
-
-// DEMO_FRONTEND_TOOLS реэкспортируем как контракт инструментов RunAgentInput.tools[]:
-// прогон передаёт их агенту, бэкенд транслирует вызовы в TOOL_CALL_*.
-export { DEMO_FRONTEND_TOOLS };
 
 // configOptionsFromProto переводит опции из типизированного ответа AcpService (уже
 // нормализованы бэкендом из union-формата ACP) в ConfigOption UI-слоя, применяя политику

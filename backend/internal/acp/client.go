@@ -66,6 +66,12 @@ type Options struct {
 	// Используется локальным subprocess'ом (spawnLocalProc); контейнерный процесс
 	// получает окружение через spawn.Spec.Env.
 	ExtraEnv []string
+	// McpServers — статические MCP-серверы сессии (session/new mcpServers). brigade
+	// кладёт сюда свой MCP-сервер кастомных UI-инструментов (см. BrigadeMCPServer):
+	// это единственный канал, которым модель получает эти тулы (сток-адаптер игнорирует
+	// _meta). Пусто — модель их не видит. Задаётся только в docker-режиме (путь сервера —
+	// внутри образа агента), см. registry.applyACPSpawnMode.
+	McpServers []acpsdk.McpServer
 }
 
 // Client управляет одной ACP-сессией: владеет subprocess'ом adapter'а, реализует
@@ -137,13 +143,16 @@ type Client struct {
 	// привязку только если её номер ещё актуален, чтобы закрытие старого сеанса не
 	// затёрло привязку нового.
 	bindGen uint64
-	// frontendTools — реестр кастомных сниппетов, присланный фронтом. Пробрасывается
-	// агенту при Prompt.
-	frontendTools []FrontendTool
-
 	// stream отслеживает открытые потоковые сообщения (текст/размышление) для
 	// расстановки START/END вокруг чанков по смене messageId. Доступ — под mu.
 	stream streamState
+	// turnMsgID — messageId первого ассистентского сообщения текущего turn'а. Все
+	// tool call'ы turn'а получают его как parentMessageId (TOOL_CALL_START), чтобы
+	// клиентский агрегатор собрал их в единый блок «N tool calls» (см. translate.go и
+	// agui.Event.ParentMessageID). Сбрасывается в начале каждого turn'а (Prompt); пусто,
+	// пока в turn'е не появилось ни одного ассистентского сообщения (тогда вызовы
+	// группируются по смежности). Доступ — под mu.
+	turnMsgID string
 	// toolCalls — состояние tool call'ов по toolCallId: агент шлёт несколько
 	// tool_call_update на один вызов, а клиент требует ровно один TOOL_CALL_END и хранит
 	// один результат. Здесь копится содержательный результат (diff «липнет» — статусная
@@ -215,7 +224,7 @@ func (c *Client) handshake(ctx context.Context) error {
 		forkResp, err := c.conn.UnstableForkSession(ctx, acpsdk.UnstableForkSessionRequest{
 			SessionId:  acpsdk.SessionId(c.opts.ForkFromSessionID),
 			Cwd:        c.opts.Cwd,
-			McpServers: []acpsdk.UnstableMcpServer{},
+			McpServers: toUnstableMcpServers(c.opts.McpServers),
 		})
 		if err != nil {
 			return fmt.Errorf("acp: fork session %s: %w", c.opts.ForkFromSessionID, err)
@@ -236,7 +245,7 @@ func (c *Client) handshake(ctx context.Context) error {
 		if loadResp, err := c.conn.LoadSession(ctx, acpsdk.LoadSessionRequest{
 			SessionId:  acpsdk.SessionId(c.opts.ResumeSessionID),
 			Cwd:        c.opts.Cwd,
-			McpServers: []acpsdk.McpServer{},
+			McpServers: mcpServersOrEmpty(c.opts.McpServers),
 		}); err != nil {
 			log.Printf("acp: load session %s failed (%v), starting fresh session", c.opts.ResumeSessionID, err)
 		} else {
@@ -257,7 +266,7 @@ func (c *Client) handshake(ctx context.Context) error {
 
 	newSess, err := c.conn.NewSession(ctx, acpsdk.NewSessionRequest{
 		Cwd:        c.opts.Cwd,
-		McpServers: []acpsdk.McpServer{},
+		McpServers: mcpServersOrEmpty(c.opts.McpServers),
 	})
 	if err != nil {
 		return fmt.Errorf("acp: new session: %w", err)
@@ -553,18 +562,10 @@ func (c *Client) recordUserMessage(text string) {
 	c.appendHistoryLocked(agui.Event{Type: agui.EventTextMessageEnd, MessageID: id})
 }
 
-// SetFrontendTools обновляет реестр кастомных сниппетов. Вызывается транспортом при
-// получении {type:"frontend_tools"}. Тулы применяются к следующему Prompt.
-func (c *Client) SetFrontendTools(tools []FrontendTool) {
-	c.mu.Lock()
-	c.frontendTools = tools
-	c.mu.Unlock()
-}
-
 // Prompt отправляет агенту пользовательский ввод и блокируется до конца turn'а.
-// Реестр frontend-tools пробрасывается агенту через _meta запроса: adapter добавляет
-// их в доступные агенту tools, после чего tool_use по ним приходит обратно как
-// tool_call → транслируется в AG-UI TOOL_CALL_* → фронт рендерит свой компонент.
+// Кастомные UI-инструменты (render_ui, show_choice) агент получает не отсюда, а через
+// MCP-сервер сессии (см. acp.BrigadeMCPServer); их tool_use приходит обратно как
+// tool_call → транслируется в AG-UI TOOL_CALL_* → фронт рендерит компонент.
 //
 // События turn'а (текст, tool calls, план) доставляются асинхронно через SessionUpdate
 // в привязанный sink. Lifecycle прогона (RUN_STARTED/RUN_FINISHED/RUN_ERROR) эмитит не
@@ -585,8 +586,10 @@ func (c *Client) Prompt(ctx context.Context, text string, onTurnStart func()) (s
 	defer c.promptMu.Unlock()
 
 	c.mu.Lock()
-	tools := c.frontendTools
 	c.promptActive = true
+	// Новый turn — сбрасываем якорь группировки tool call'ов: его задаст первое
+	// ассистентское сообщение этого turn'а (см. translate.go, turnMsgID).
+	c.turnMsgID = ""
 	// Записываем пользовательскую реплику в историю (без доставки в живой sink: фронт
 	// уже отрисовал её оптимистично при отправке). Без этого user-сообщения текущего
 	// процесса не попадали бы в AcpService.GetHistory — их эмитит лишь session/load при
@@ -612,12 +615,6 @@ func (c *Client) Prompt(ctx context.Context, text string, onTurnStart func()) (s
 	req := acpsdk.PromptRequest{
 		SessionId: c.sessionID,
 		Prompt:    []acpsdk.ContentBlock{acpsdk.TextBlock(text)},
-	}
-	// Контракт frontend-tools пробрасывается в зарезервированном _meta: имена и
-	// JSON Schema компонентов фронта. Adapter трактует их как дополнительно доступные
-	// агенту инструменты. Поле _meta — штатная точка расширения ACP.
-	if len(tools) > 0 {
-		req.Meta = map[string]any{"brigade.frontendTools": tools}
 	}
 
 	resp, err := c.conn.Prompt(ctx, req)

@@ -1,0 +1,10 @@
+{
+  "name": "brigade-mcp-tools",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "brigade stdio MCP server exposing custom UI tools (render_ui, show_choice) to the coding agent.",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}

@@ -29,6 +29,13 @@ type toolCallState struct {
 	open bool
 	// name — заголовок вызова; нужен для переоткрытия START при reconnect (Bind).
 	name string
+	// argsJSON — сериализованный ввод вызова (rawInput). Копится из ToolCall и
+	// ToolCallUpdate: адаптер шлёт полный снимок ввода, причём для MCP-инструментов
+	// начальный ToolCall.RawInput пуст ({}), а реальные аргументы приходят обновлением.
+	// Latest-non-empty wins; эмитится ОДНИМ TOOL_CALL_ARGS при закрытии вызова, потому
+	// что канон трактует TOOL_CALL_ARGS как append-дельту — повторная отправка снимка
+	// склеила бы {..}{..} в невалидный JSON (см. closeToolCallEvents).
+	argsJSON string
 	// result — последний содержательный результат вызова.
 	result string
 	// isDiff — result несёт структурный diff: он важнее статусных строк и не
@@ -80,24 +87,25 @@ func (c *Client) translateUpdate(u acpsdk.SessionUpdate) []agui.Event {
 		if c.toolCalls == nil {
 			c.toolCalls = make(map[string]*toolCallState)
 		}
-		c.toolCalls[id] = &toolCallState{open: true, name: tc.Title}
+		st := &toolCallState{open: true, name: tc.Title}
+		if tc.RawInput != nil {
+			st.argsJSON = rawJSON(tc.RawInput)
+		}
+		c.toolCalls[id] = st
 
+		// START эмитим сразу; аргументы (TOOL_CALL_ARGS) — при закрытии вызова одним
+		// фрагментом из накопленного argsJSON. Причина: адаптер отдаёт ввод полным
+		// снимком (а для MCP-инструментов начальный RawInput пуст — реальные аргументы
+		// приходят ToolCallUpdate), тогда как канон трактует TOOL_CALL_ARGS как
+		// append-дельту. Один снимок при закрытии — единственный корректный вариант
+		// (см. closeToolCallEvents, toolCallState.argsJSON).
 		evts := c.finishStreams()
 		evts = append(evts, agui.Event{
-			Type:         agui.EventToolCallStart,
-			ToolCallID:   id,
-			ToolCallName: tc.Title,
+			Type:            agui.EventToolCallStart,
+			ToolCallID:      id,
+			ToolCallName:    tc.Title,
+			ParentMessageID: c.turnMsgID,
 		})
-		// Аргументы tool call отдаются строкой-фрагментом JSON (TOOL_CALL_ARGS.delta):
-		// канон ждёт здесь сериализованный ввод, а не объект. RawInput — сырой JSON
-		// инструмента; передаём его одним фрагментом.
-		if tc.RawInput != nil {
-			evts = append(evts, agui.Event{
-				Type:       agui.EventToolCallArgs,
-				ToolCallID: id,
-				Delta:      rawJSON(tc.RawInput),
-			})
-		}
 		return evts
 
 	case u.ToolCallUpdate != nil:
@@ -118,6 +126,12 @@ func (c *Client) translateUpdate(u acpsdk.SessionUpdate) []agui.Event {
 				c.toolCalls = make(map[string]*toolCallState)
 			}
 			c.toolCalls[id] = st
+		}
+
+		// Копим ввод: для MCP-инструментов аргументы приходят именно здесь (начальный
+		// ToolCall.RawInput был пуст). Latest-non-nil wins; эмитится при закрытии.
+		if tu.RawInput != nil {
+			st.argsJSON = rawJSON(tu.RawInput)
 		}
 
 		// Копим содержательный результат. Diff «липнет»: статусная строка
@@ -288,6 +302,13 @@ func (c *Client) streamText(id, delta string) []agui.Event {
 		}
 		c.stream.textID = id
 		evts = append(evts, agui.Event{Type: agui.EventTextMessageStart, MessageID: id, Role: "assistant"})
+		// Первое текстовое сообщение turn'а — якорь группировки tool call'ов: к нему
+		// клиентский агрегатор привяжет все вызовы turn'а (parentMessageId), собрав их в
+		// один блок. Якорь — именно текстовое сообщение: агрегатор кластеризует вызовы
+		// вокруг text-части (reasoning для этого не годится).
+		if c.turnMsgID == "" {
+			c.turnMsgID = id
+		}
 	}
 	evts = append(evts, agui.Event{
 		Type:      agui.EventTextMessageContent,
@@ -364,7 +385,17 @@ func (c *Client) closeReasoning() []agui.Event {
 // A2UI-каталогом рендерит поверхность; клиент без него игнорирует CUSTOM и падает
 // обратно на RESULT с diff-JSON.
 func closeToolCallEvents(id string, st *toolCallState) []agui.Event {
-	evts := []agui.Event{{Type: agui.EventToolCallEnd, ToolCallID: id}}
+	var evts []agui.Event
+	// Аргументы вызова — одним фрагментом перед END (см. toolCallState.argsJSON): к моменту
+	// закрытия накоплен полный снимок ввода, в т.ч. для MCP-инструментов.
+	if st.argsJSON != "" {
+		evts = append(evts, agui.Event{
+			Type:       agui.EventToolCallArgs,
+			ToolCallID: id,
+			Delta:      st.argsJSON,
+		})
+	}
+	evts = append(evts, agui.Event{Type: agui.EventToolCallEnd, ToolCallID: id})
 	if st.result != "" {
 		evts = append(evts, agui.Event{
 			Type:       agui.EventToolCallResult,

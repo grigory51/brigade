@@ -24,6 +24,16 @@ RUN apt-get update \
 RUN npm install -g @anthropic-ai/claude-code "@agentclientprotocol/claude-agent-acp@^0.54.1" \
     && npm cache clean --force
 
+# brigade MCP-сервер кастомных UI-инструментов (render_ui, show_choice). Сток-адаптер
+# игнорирует кастомный _meta, но пробрасывает ACP mcpServers в Claude Agent SDK; SDK
+# стартует этот сервер как stdio-subprocess. Кладём в фиксированный путь и ставим
+# зависимости рядом со скриптом, чтобы резолв @modelcontextprotocol/sdk не зависел от cwd
+# сессии. Каталог root-owned, читаем пользователем agent.
+COPY mcp/ /opt/brigade-mcp/
+RUN cd /opt/brigade-mcp \
+    && npm install --omit=dev \
+    && npm cache clean --force
+
 # Непривилегированный пользователь: агент исполняет произвольные команды.
 # uid ФИКСИРОВАН (1001): brigade создаёт персональный home на хосте и chown'ит его на
 # этот uid, чтобы bind-mount был writable агентом (иначе root-owned mount → EACCES при

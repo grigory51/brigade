@@ -58,10 +58,6 @@ func (rn *run) serve(in runAgentInput) {
 	h.Set("Connection", "keep-alive")
 	rn.w.WriteHeader(http.StatusOK)
 
-	// Реестр frontend-tools из RunAgentInput.tools[] пробрасывается агенту перед turn'ом:
-	// adapter добавляет их в доступные tools, после чего tool_use по ним приходит обратно.
-	rn.bindable.SetFrontendTools(toFrontendTools(in.Tools))
-
 	// RUN_STARTED обязан быть первым событием потока: клиент @ag-ui/client отклоняет run,
 	// если первым приходит что-либо иное. Поэтому открываем поток до Bind, не после.
 	rn.send(agui.Event{Type: agui.EventRunStarted, ThreadId: rn.threadID, RunId: rn.runID})

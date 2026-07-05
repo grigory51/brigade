@@ -59,7 +59,6 @@ func (b *fakeBindable) Cancel(ctx context.Context) error {
 	return b.cancelErr
 }
 
-func (b *fakeBindable) SetFrontendTools(tools []acp.FrontendTool) {}
 func (b *fakeBindable) FinishStreams() {
 	b.finishCalled = true
 	b.calls = append(b.calls, "FinishStreams")

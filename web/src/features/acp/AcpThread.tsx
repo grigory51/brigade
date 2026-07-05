@@ -1,11 +1,13 @@
-import { createContext, useContext } from "react";
+import { useContext } from "react";
 import { Loader2, Wrench, ChevronRight } from "lucide-react";
 import { type ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { A2uiSurface } from "@a2ui/react/v0_9";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Thread } from "@/components/assistant-ui/thread";
-import { FRONTEND_TOOL_NAMES } from "./frontendTools";
+import { FRONTEND_TOOL_NAMES, RENDER_UI_TOOL_NAME } from "./frontendTools";
+import { A2uiContext } from "./a2ui/context";
+import { RenderUiCard } from "./a2ui/renderUi";
 import type {
   AvailableCommand,
   A2uiState,
@@ -16,12 +18,6 @@ import { DiffCard } from "./tools/DiffCard";
 import { TerminalCard } from "./tools/TerminalCard";
 import { FileCard } from "./tools/FileCard";
 import { PlanPanel, type PlanEntry } from "./PlanPanel";
-
-// A2uiContext доносит процессор A2UI-поверхностей до ToolFallback внутри Thread:
-// карточка с готовой поверхностью (surfaceId = toolCallId) рендерится A2UI-рендерером,
-// version в значении контекста заставляет потребителей ре-рендериться при появлении
-// новых поверхностей.
-const A2uiContext = createContext<A2uiState | null>(null);
 
 // AcpThread — лента ACP-чата на готовом компоненте Thread из assistant-ui registry
 // (src/components/assistant-ui/thread.tsx). Здесь — только подключение наших
@@ -58,17 +54,35 @@ export function AcpThread({
 // содержимому результата (структурный diff) и человекочитаемому имени инструмента от
 // ACP-адаптера («Terminal», «Read File»); всё прочее — generic-блок с раскрывающимися
 // аргументами и результатом.
+// bareToolName снимает MCP-префикс `mcp__<server>__` с имени инструмента. Кастомные тулы
+// brigade доставляются модели MCP-сервером (см. backend acp.BrigadeMCPServer), поэтому до
+// клиента доходит имя вида `mcp__brigade__render_ui`; матчим по «голому» имени, а не по
+// полному (устойчиво к имени сервера) и не по человекочитаемому title (адаптер отдаёт сырое
+// имя). Не-MCP тулы (Terminal, Read File) остаются как есть.
+function bareToolName(name: string): string {
+  return name.replace(/^mcp__.*?__/, "");
+}
+
 const ToolFallback: ToolCallMessagePartComponent = (props) => {
+  const a2ui = useContext(A2uiContext);
+  const toolName = bareToolName(props.toolName);
+
+  // render_ui — generative UI от агента: строит и рендерит собственную A2UI-поверхность
+  // (со скелетоном при стриминге и error boundary на невалидные пропсы). Обрабатывается
+  // до generic-lookup, поэтому его поверхность идёт только через RenderUiCard.
+  if (toolName === RENDER_UI_TOOL_NAME) {
+    return <RenderUiCard {...props} />;
+  }
+
   // A2UI-поверхность карточки (бэкенд синтезирует её из ACP-событий, surfaceId =
   // toolCallId) имеет приоритет: один серверный формат описания рендерится нативным
   // каталогом платформы. Без поверхности — фолбэк на локальные React-карточки.
-  const a2ui = useContext(A2uiContext);
   const surface = a2ui?.processor.model.surfacesMap.get(props.toolCallId);
   if (surface) {
     return <A2uiSurface surface={surface} />;
   }
 
-  if (FRONTEND_TOOL_NAMES.has(props.toolName)) {
+  if (FRONTEND_TOOL_NAMES.has(toolName)) {
     return <SnippetCard {...props} />;
   }
 

@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	acpsdk "github.com/coder/acp-go-sdk"
 	"github.com/google/uuid"
 
 	"github.com/grigory51/brigade/backend/internal/acp"
@@ -523,6 +524,11 @@ func (r *Registry) applyACPSpawnMode(ctx context.Context, opts *acp.Options, ses
 	// Агент живёт внутри контейнера: cwd — путь внутри него (per-session
 	// ~/workspace/<id> в смонтированном home), не путь хоста.
 	opts.Cwd = sess.Cwd
+	// Кастомные UI-инструменты (render_ui, show_choice) модель получает stdio MCP-сервером,
+	// запечённым в образ агента (путь — внутри контейнера). Одна точка на create/fork/restore:
+	// applyACPSpawnMode вызывается из spawnFor, Fork и restoreOne. Local-режим (ранний
+	// return выше) MCP не получает — путь сервера контейнерный.
+	opts.McpServers = []acpsdk.McpServer{acp.BrigadeMCPServer()}
 	return nil
 }
 

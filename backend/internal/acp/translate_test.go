@@ -314,7 +314,8 @@ func TestTranslateUsageUpdateNoCost(t *testing.T) {
 }
 
 // TestTranslateToolCall проверяет tool_call: перед стартом закрываются открытые потоки
-// (finishStreams), затем TOOL_CALL_START и TOOL_CALL_ARGS при наличии RawInput.
+// (finishStreams), затем TOOL_CALL_START. Аргументы (RawInput) эмитятся не на старте, а
+// одним TOOL_CALL_ARGS при закрытии вызова — см. toolCallState.argsJSON.
 func TestTranslateToolCall(t *testing.T) {
 	c := &Client{}
 	// Откроем текстовый поток, чтобы убедиться, что он закрывается перед tool call.
@@ -327,12 +328,50 @@ func TestTranslateToolCall(t *testing.T) {
 	assertShapes(t, got, []eventShape{
 		{Type: agui.EventTextMessageEnd, MessageID: "m1"},
 		{Type: agui.EventToolCallStart, ToolCallID: "tc-1"},
-		{Type: agui.EventToolCallArgs, ToolCallID: "tc-1", Delta: `{"path":"/tmp/x"}`},
 	})
 	// TOOL_CALL_START несёт имя инструмента в отдельном поле.
 	if got[1].ToolCallName != "Read file" {
 		t.Errorf("ToolCallName = %q, want %q", got[1].ToolCallName, "Read file")
 	}
+
+	// Аргументы приходят при закрытии вызова: TOOL_CALL_ARGS с накопленным вводом, затем END.
+	done := acpsdk.ToolCallStatusCompleted
+	got = c.translateUpdate(acpsdk.UpdateToolCall("tc-1", acpsdk.WithUpdateStatus(done)))
+	assertShapes(t, got, []eventShape{
+		{Type: agui.EventToolCallArgs, ToolCallID: "tc-1", Delta: `{"path":"/tmp/x"}`},
+		{Type: agui.EventToolCallEnd, ToolCallID: "tc-1"},
+	})
+}
+
+// TestTranslateToolCallMCPInput проверяет доставку аргументов MCP-инструмента: начальный
+// ToolCall.RawInput пуст, реальный ввод приходит ToolCallUpdate.RawInput (полным снимком)
+// и эмитится одним TOOL_CALL_ARGS при закрытии. Без этого аргументы render_ui/show_choice
+// (доставляемых MCP-сервером) терялись бы — карточка получала бы пустой {}.
+func TestTranslateToolCallMCPInput(t *testing.T) {
+	c := &Client{}
+	got := c.translateUpdate(acpsdk.StartToolCall(
+		"tc-m", "mcp__brigade__render_ui",
+		acpsdk.WithStartRawInput(map[string]any{}),
+	))
+	assertShapes(t, got, []eventShape{
+		{Type: agui.EventToolCallStart, ToolCallID: "tc-m"},
+	})
+
+	// Ввод приезжает обновлением — снимок целиком (не дельта).
+	got = c.translateUpdate(acpsdk.UpdateToolCall(
+		"tc-m",
+		acpsdk.WithUpdateRawInput(map[string]any{"components": []any{map[string]any{"id": "root"}}}),
+	))
+	if len(got) != 0 {
+		t.Fatalf("update с вводом: %d событий, want 0 (эмит при закрытии)", len(got))
+	}
+
+	done := acpsdk.ToolCallStatusCompleted
+	got = c.translateUpdate(acpsdk.UpdateToolCall("tc-m", acpsdk.WithUpdateStatus(done)))
+	assertShapes(t, got, []eventShape{
+		{Type: agui.EventToolCallArgs, ToolCallID: "tc-m", Delta: `{"components":[{"id":"root"}]}`},
+		{Type: agui.EventToolCallEnd, ToolCallID: "tc-m"},
+	})
 }
 
 // TestTranslateToolCallNoInput проверяет tool_call без RawInput: только START (ARGS не
