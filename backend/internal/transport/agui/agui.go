@@ -51,6 +51,25 @@ type ClientProvider interface {
 	Bindable(sessionID, userID string) (b Bindable, ok bool)
 }
 
+// WorkflowInfo — состояние workflow-запуска харнесса агента для панели фоновых задач
+// (wire-форма session.WorkflowInfo; поля см. там).
+type WorkflowInfo struct {
+	RunID           string `json:"runId"`
+	Name            string `json:"name"`
+	AgentsStarted   int    `json:"agentsStarted"`
+	AgentsDone      int    `json:"agentsDone"`
+	Done            bool   `json:"done"`
+	Active          bool   `json:"active"`
+	LastActivitySec int64  `json:"lastActivitySec"`
+}
+
+// WorkflowLister отдаёт workflow-запуски харнесса агента сессии. Удовлетворяется
+// обвязкой session.Registry (см. cmd/brigade aguiProvider). ok=false — сессия
+// неизвестна, не ACP или чужая.
+type WorkflowLister interface {
+	SessionWorkflows(ctx context.Context, sessionID, userID string) ([]WorkflowInfo, bool)
+}
+
 // Bindable — ACP-клиент сессии, к которому транспорт подключает текущий SSE-поток.
 // Реализуется *acp.Client напрямую.
 type Bindable interface {
@@ -161,12 +180,13 @@ func (p *permissionStore) deliver(key, decision string) bool {
 
 // Mux собирает HTTP-обработчики AG-UI и регистрирует их в переданном ServeMux под
 // /api/ag-ui/run и /api/ag-ui/permission. permissionStore разделяется обоими.
-func Mux(mux *http.ServeMux, verifier TokenVerifier, provider ClientProvider) {
+func Mux(mux *http.ServeMux, verifier TokenVerifier, provider ClientProvider, workflows WorkflowLister) {
 	perms := newPermissionStore()
 	mux.Handle("POST /api/ag-ui/run", runHandler(verifier, provider, perms))
 	mux.Handle("POST /api/ag-ui/permission", permissionHandler(verifier, perms))
 	mux.Handle("GET /api/ag-ui/history", historyHandler(verifier, provider))
 	mux.Handle("GET /api/ag-ui/status", statusHandler(verifier, provider))
+	mux.Handle("GET /api/ag-ui/workflows", workflowsHandler(verifier, workflows))
 	mux.Handle("POST /api/ag-ui/cancel", cancelHandler(verifier, provider))
 	mux.Handle("POST /api/ag-ui/config", configHandler(verifier, provider))
 }
@@ -289,6 +309,37 @@ func statusHandler(verifier TokenVerifier, provider ClientProvider) http.Handler
 			Generating bool `json:"generating"`
 			Seq        int  `json:"seq"`
 		}{Generating: generating, Seq: seq})
+	})
+}
+
+// workflowsHandler обслуживает GET /api/ag-ui/workflows?threadId=<id>: отдаёт
+// workflow-запуски харнесса агента для панели фоновых задач. Воркфлоу выполняется в
+// харнесе между turn'ами и не эмитит ACP-событий — единственный источник его
+// состояния — файлы, которые харнесс пишет в ~/.claude сессии (см. session.Workflows).
+func workflowsHandler(verifier TokenVerifier, workflows WorkflowLister) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := verifier.Verify(accessToken(r))
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		threadID := r.URL.Query().Get("threadId")
+		if threadID == "" {
+			http.Error(w, "threadId required", http.StatusBadRequest)
+			return
+		}
+
+		list, ok := workflows.SessionWorkflows(r.Context(), threadID, userID)
+		if !ok {
+			http.Error(w, "session not found", http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(struct {
+			Workflows []WorkflowInfo `json:"workflows"`
+		}{Workflows: list})
 	})
 }
 

@@ -20,6 +20,10 @@ const HISTORY_URL = "/api/ag-ui/history";
 const CONFIG_URL = "/api/ag-ui/config";
 const STATUS_URL = "/api/ag-ui/status";
 const CANCEL_URL = "/api/ag-ui/cancel";
+const WORKFLOWS_URL = "/api/ag-ui/workflows";
+// WORKFLOWS_POLL_MS — интервал опроса workflow-запусков. Реже статуса: endpoint читает
+// файлы харнесса с диска, а состояние воркфлоу меняется медленно (минуты).
+const WORKFLOWS_POLL_MS = 5000;
 // STATUS_POLL_MS — интервал поллинга состояния сессии. Компромисс: достаточно часто для
 // живого индикатора фоновой работы, но без заметной нагрузки (запрос дешёвый, без стрима).
 const STATUS_POLL_MS = 2000;
@@ -90,6 +94,20 @@ export type AcpRuntime = {
   setConfigOption: (configId: string, value: string) => Promise<void>;
   status: AgentStatus;
   refreshStatus: () => void;
+  workflows: WorkflowInfo[];
+};
+
+// WorkflowInfo — workflow-запуск харнесса агента (GET /api/ag-ui/workflows): оркестрация
+// субагентов, выполняющаяся в фоне между turn'ами и не эмитящая ACP-событий. Панель
+// фоновых задач — единственная поверхность её видимости.
+export type WorkflowInfo = {
+  runId: string;
+  name: string;
+  agentsStarted: number;
+  agentsDone: number;
+  done: boolean;
+  active: boolean;
+  lastActivitySec: number;
 };
 
 // AgentStatus — лёгкий снимок состояния сессии (GET /api/ag-ui/status). generating:
@@ -114,6 +132,7 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
     seq: 0,
     tick: 0,
   });
+  const [workflows, setWorkflows] = useState<WorkflowInfo[]>([]);
   const [a2uiVersion, setA2uiVersion] = useState(0);
 
   // Процессор A2UI-поверхностей живёт вместе с сессией: бэкенд шлёт поставки
@@ -249,6 +268,32 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
     };
   }, [sessionId]);
 
+  // Поллинг workflow-запусков харнесса (панель фоновых задач). Отдельно от /status:
+  // другой темп и источник (файлы харнесса). Ошибки проглатываем — фоновый опрос.
+  useEffect(() => {
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const res = await fetch(
+          `${WORKFLOWS_URL}?threadId=${encodeURIComponent(sessionId)}`,
+          { credentials: "include", headers: authHeaders(tokenRef.current()) },
+        );
+        if (!res.ok) return;
+        const data = (await res.json()) as { workflows?: WorkflowInfo[] };
+        if (stopped) return;
+        setWorkflows(Array.isArray(data.workflows) ? data.workflows : []);
+      } catch {
+        // Транзиентный сбой — следующий тик повторит.
+      }
+    };
+    void tick();
+    const id = window.setInterval(tick, WORKFLOWS_POLL_MS);
+    return () => {
+      stopped = true;
+      window.clearInterval(id);
+    };
+  }, [sessionId]);
+
   // history-адаптер восстанавливает прошлые turn'ы при открытии треда. load() забирает
   // историю чата массивом сообщений (GET /api/ag-ui/history) и отдаёт её рантайму с
   // корректными ролями. Это вместо прежнего SSE-replay: агрегатор @ag-ui/react-ag-ui
@@ -358,6 +403,7 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
     setConfigOption: setConfigOptionRef.current,
     status,
     refreshStatus: refreshStatusStable,
+    workflows,
   };
 }
 

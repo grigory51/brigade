@@ -4,7 +4,7 @@ import {
   useComposer,
 } from "@assistant-ui/react";
 import { useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { CheckIcon, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,6 +20,7 @@ import {
   useAcpRuntime,
   type AgentStatus,
   type PendingPermission,
+  type WorkflowInfo,
 } from "./useAcpRuntime";
 
 // AcpSession монтируется из SessionGuard только при найденной сессии — иначе
@@ -58,6 +59,7 @@ function AcpSessionInner({
     setConfigOption,
     status,
     refreshStatus,
+    workflows,
   } = useAcpRuntime(sessionId);
 
   return (
@@ -83,6 +85,7 @@ function AcpSessionInner({
           onReload={onReload}
           refreshStatus={refreshStatus}
         />
+        <WorkflowsPanel workflows={workflows} />
       </div>
 
       <PermissionDialog
@@ -197,6 +200,50 @@ function BackgroundActivity({
       </div>
     </div>
   );
+}
+
+// WorkflowsPanel — панель фоновых workflow-запусков харнесса (deep-research и т.п.):
+// они выполняются между turn'ами, ACP-событий не эмитят, и без панели пользователь не
+// видит, что в сессии вообще что-то происходит. Показываются активные запуски (прогресс
+// по субагентам) и только что завершившиеся (короткое окно, чтобы увидеть финал).
+function WorkflowsPanel({ workflows }: { workflows: WorkflowInfo[] }) {
+  const shown = workflows.filter(
+    (wf) => wf.active || (wf.done && wf.lastActivitySec < 120),
+  );
+  if (shown.length === 0) return null;
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-40 z-10 flex flex-col items-center gap-1">
+      {shown.map((wf) => (
+        <div
+          key={wf.runId}
+          className="bg-muted/90 text-muted-foreground flex max-w-[90%] items-center gap-2 rounded-full border px-3 py-1.5 text-xs shadow-sm backdrop-blur"
+        >
+          {wf.done ? (
+            <CheckIcon className="size-3.5 shrink-0 text-green-600" />
+          ) : (
+            <Loader2 className="size-3.5 shrink-0 animate-spin" />
+          )}
+          <span className="truncate font-medium">{wf.name}</span>
+          <span className="shrink-0">
+            {wf.done
+              ? "завершён"
+              : `агентов ${wf.agentsDone}/${wf.agentsStarted}`}
+          </span>
+          {!wf.done && (
+            <span className="shrink-0 opacity-70">
+              · {formatAgo(wf.lastActivitySec)}
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// formatAgo — компактное «сколько назад» для панели: секунды до минуты, дальше минуты.
+function formatAgo(sec: number): string {
+  if (sec < 60) return `${sec}с назад`;
+  return `${Math.floor(sec / 60)}м назад`;
 }
 
 // PermissionDialog — human-in-the-loop: показывает запрос разрешения от агента и

@@ -97,7 +97,7 @@ func main() {
 	// AG-UI (канонический protocol поверх SSE). В отличие от WS-режима аутентификация —
 	// Bearer access-JWT на каждый запрос, а не одноразовый тикет; threadId трактуется как
 	// идентификатор сессии. POST /api/ag-ui/{run,permission}.
-	aguitransport.Mux(mux, jwtVerifier{jwt: authSvc.JWT()}, aguiProvider{registry: registry})
+	aguitransport.Mux(mux, jwtVerifier{jwt: authSvc.JWT()}, aguiProvider{registry: registry}, aguiProvider{registry: registry})
 
 	// Регистрация preview агентом (curl из скилла): Bearer — HMAC-токен сессии из
 	// окружения агента, не JWT пользователя.
@@ -229,4 +229,26 @@ func (p aguiProvider) Bindable(sessionID, userID string) (aguitransport.Bindable
 		return nil, false
 	}
 	return c, true
+}
+
+// SessionWorkflows отдаёт workflow-запуски харнесса для панели фоновых задач,
+// конвертируя session.WorkflowInfo в wire-форму транспорта.
+func (p aguiProvider) SessionWorkflows(ctx context.Context, sessionID, userID string) ([]aguitransport.WorkflowInfo, bool) {
+	list, ok := p.registry.Workflows(ctx, sessionID, userID)
+	if !ok {
+		return nil, false
+	}
+	out := make([]aguitransport.WorkflowInfo, len(list))
+	for i, wf := range list {
+		out[i] = aguitransport.WorkflowInfo{
+			RunID:           wf.RunID,
+			Name:            wf.Name,
+			AgentsStarted:   wf.AgentsStarted,
+			AgentsDone:      wf.AgentsDone,
+			Done:            wf.Done,
+			Active:          wf.Active,
+			LastActivitySec: wf.LastActivitySec,
+		}
+	}
+	return out, true
 }
