@@ -6,17 +6,17 @@ import "testing"
 // получает решение, и второй ответ, пришедший до чтения из канала, отклоняется —
 // неблокирующая отправка защищает от повторного ответа на ещё не прочитанное решение.
 func TestPermissionDeliverOnce(t *testing.T) {
-	p := newPermissionStore()
-	ch, release := p.register("k")
+	p := NewPermissionStore()
+	ch, release := p.Register("k")
 	defer release()
 
-	if !p.deliver("k", "allow") {
+	if !p.Deliver("k", "allow") {
 		t.Fatal("первый deliver: ok = false, want true")
 	}
 
 	// Второй ответ приходит, пока решение ещё в буфере (резолвер не прочитал): канал
 	// занят, неблокирующая отправка не должна ни блокироваться, ни паниковать — false.
-	if p.deliver("k", "reject") {
+	if p.Deliver("k", "reject") {
 		t.Fatal("повторный deliver до чтения: ok = true, want false")
 	}
 
@@ -29,11 +29,11 @@ func TestPermissionDeliverOnce(t *testing.T) {
 // TestPermissionDeliverAfterRelease проверяет, что доставка снятого (release) ожидания
 // отклоняется — резолвер уже не ждёт ответа.
 func TestPermissionDeliverAfterRelease(t *testing.T) {
-	p := newPermissionStore()
-	_, release := p.register("k")
+	p := NewPermissionStore()
+	_, release := p.Register("k")
 	release()
 
-	if p.deliver("k", "allow") {
+	if p.Deliver("k", "allow") {
 		t.Fatal("deliver после release: ok = true, want false")
 	}
 }
@@ -41,8 +41,8 @@ func TestPermissionDeliverAfterRelease(t *testing.T) {
 // TestPermissionDeliverUnknownKey проверяет, что доставка незарегистрированного ключа
 // (опоздавший/повторный ответ) — не ошибка и не паника, просто false.
 func TestPermissionDeliverUnknownKey(t *testing.T) {
-	p := newPermissionStore()
-	if p.deliver("missing", "allow") {
+	p := NewPermissionStore()
+	if p.Deliver("missing", "allow") {
 		t.Fatal("deliver незарегистрированного ключа: ok = true, want false")
 	}
 }

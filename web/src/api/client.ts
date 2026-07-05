@@ -8,6 +8,7 @@ import { createConnectTransport } from "@connectrpc/connect-web";
 import { AuthService } from "./gen/brigade/v1/auth_connect";
 import { SessionService } from "./gen/brigade/v1/session_connect";
 import { AgentService } from "./gen/brigade/v1/agent_connect";
+import { AcpService } from "./gen/brigade/v1/acp_connect";
 
 // refreshOnUnauthenticated — Connect-интерсептор тихого обновления access-токена.
 // Короткий access-токен (минуты) живёт в httpOnly-cookie; при его истечении вызов
@@ -67,6 +68,9 @@ const refreshClient = createPromiseClient(AuthService, refreshTransport);
 export const authClient = createPromiseClient(AuthService, transport);
 export const sessionClient = createPromiseClient(SessionService, transport);
 export const agentClient = createPromiseClient(AgentService, transport);
+// acpClient — управляющие вызовы ACP-чата (история/статус/workflow/отмена/опции/
+// permission-ответ). Потоковый turn идёт мимо Connect (AG-UI SSE, см. useAcpRuntime).
+export const acpClient = createPromiseClient(AcpService, transport);
 
 // refreshSession принудительно обновляет токены через Refresh (refresh-токен берётся из
 // httpOnly-cookie). Используется неконнектовыми путями (AG-UI/SSE поверх обычного fetch),

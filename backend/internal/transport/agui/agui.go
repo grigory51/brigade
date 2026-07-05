@@ -135,19 +135,22 @@ type inputTool struct {
 	Parameters  map[string]any `json:"parameters"`
 }
 
-// permissionStore связывает (threadId,id) запроса разрешения с каналом ответа. Общий для
-// /run (резолвер регистрирует ожидание) и /permission (доставляет решение клиента).
-type permissionStore struct {
+// PermissionStore связывает (threadId,id) запроса разрешения с каналом ответа. Общий для
+// SSE-прогона /run (резолвер регистрирует ожидание через Register) и Connect-метода
+// AcpService.ResolvePermission (доставляет решение клиента через Deliver). Создаётся в
+// main и передаётся обоим потребителям.
+type PermissionStore struct {
 	mu      sync.Mutex
 	pending map[string]chan string
 }
 
-func newPermissionStore() *permissionStore {
-	return &permissionStore{pending: make(map[string]chan string)}
+// NewPermissionStore создаёт пустой стор ожиданий permission-flow.
+func NewPermissionStore() *PermissionStore {
+	return &PermissionStore{pending: make(map[string]chan string)}
 }
 
-// register заводит ожидание ответа по ключу и возвращает канал и функцию снятия.
-func (p *permissionStore) register(key string) (<-chan string, func()) {
+// Register заводит ожидание ответа по ключу и возвращает канал и функцию снятия.
+func (p *PermissionStore) Register(key string) (<-chan string, func()) {
 	ch := make(chan string, 1)
 	p.mu.Lock()
 	p.pending[key] = ch
@@ -159,9 +162,9 @@ func (p *permissionStore) register(key string) (<-chan string, func()) {
 	}
 }
 
-// deliver доставляет решение ожидающему резолверу. ok=false, если ожидания с таким
+// Deliver доставляет решение ожидающему резолверу. ok=false, если ожидания с таким
 // ключом нет (повтор, опоздавший ответ).
-func (p *permissionStore) deliver(key, decision string) bool {
+func (p *PermissionStore) Deliver(key, decision string) bool {
 	p.mu.Lock()
 	ch, ok := p.pending[key]
 	p.mu.Unlock()
@@ -178,210 +181,23 @@ func (p *permissionStore) deliver(key, decision string) bool {
 	}
 }
 
-// Mux собирает HTTP-обработчики AG-UI и регистрирует их в переданном ServeMux под
-// /api/ag-ui/run и /api/ag-ui/permission. permissionStore разделяется обоими.
-func Mux(mux *http.ServeMux, verifier TokenVerifier, provider ClientProvider, workflows WorkflowLister) {
-	perms := newPermissionStore()
+// PermissionKey строит ключ ожидания разрешения из threadId и id запроса. Общий формат
+// для регистрации (резолвер /run) и доставки (AcpService.ResolvePermission).
+func PermissionKey(threadID, id string) string { return threadID + "\x00" + id }
+
+// Mux регистрирует единственный сырой HTTP-эндпоинт AG-UI — потоковый прогон turn'а
+// POST /api/ag-ui/run. Он остаётся вне ConnectRPC: это SSE в формате стороннего
+// @ag-ui/client, который Connect выразить не может. Управляющие ручки ACP (история,
+// статус, workflow, отмена, опции, ответ на разрешение) — в brigade.v1.AcpService.
+// perms разделяется с AcpService.ResolvePermission (создаётся в main).
+func Mux(mux *http.ServeMux, verifier TokenVerifier, provider ClientProvider, perms *PermissionStore) {
 	mux.Handle("POST /api/ag-ui/run", runHandler(verifier, provider, perms))
-	mux.Handle("POST /api/ag-ui/permission", permissionHandler(verifier, perms))
-	mux.Handle("GET /api/ag-ui/history", historyHandler(verifier, provider))
-	mux.Handle("GET /api/ag-ui/status", statusHandler(verifier, provider))
-	mux.Handle("GET /api/ag-ui/workflows", workflowsHandler(verifier, workflows))
-	mux.Handle("POST /api/ag-ui/cancel", cancelHandler(verifier, provider))
-	mux.Handle("POST /api/ag-ui/config", configHandler(verifier, provider))
-}
-
-// configHandler обслуживает POST /api/ag-ui/config: устанавливает значение
-// конфигурационной опции сессии (модель, режим прав, усилие) и возвращает актуальный
-// полный набор опций {configOptions: [...]}.
-func configHandler(verifier TokenVerifier, provider ClientProvider) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := verifier.Verify(accessToken(r))
-		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		var body struct {
-			ThreadID string `json:"threadId"`
-			ConfigID string `json:"configId"`
-			Value    string `json:"value"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil ||
-			body.ThreadID == "" || body.ConfigID == "" || body.Value == "" {
-			http.Error(w, "threadId, configId and value are required", http.StatusBadRequest)
-			return
-		}
-
-		bindable, ok := provider.Bindable(body.ThreadID, userID)
-		if !ok {
-			http.Error(w, "session not found", http.StatusNotFound)
-			return
-		}
-
-		opts, err := bindable.SetConfigOption(r.Context(), body.ConfigID, body.Value)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(struct {
-			ConfigOptions []acpsdk.SessionConfigOption `json:"configOptions"`
-		}{ConfigOptions: opts})
-	})
-}
-
-// historyHandler обслуживает GET /api/ag-ui/history?threadId=<id>: отдаёт историю чата
-// сессии массивом сообщений {id, role, content}. Используется ThreadHistoryAdapter
-// фронта для восстановления прошлых turn'ов при открытии треда (assistant-ui
-// складывает их с корректными ролями, в отличие от SSE-replay, который склеивает поток
-// одного run'а в единственное assistant-сообщение).
-func historyHandler(verifier TokenVerifier, provider ClientProvider) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := verifier.Verify(accessToken(r))
-		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		threadID := r.URL.Query().Get("threadId")
-		if threadID == "" {
-			http.Error(w, "threadId required", http.StatusBadRequest)
-			return
-		}
-
-		bindable, ok := provider.Bindable(threadID, userID)
-		if !ok {
-			http.Error(w, "session not found", http.StatusNotFound)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		// Пустые история/команды сериализуются как [], а не null: фронт ожидает массивы.
-		msgs := bindable.Messages()
-		if msgs == nil {
-			msgs = []acp.Message{}
-		}
-		cmds := bindable.Commands()
-		if cmds == nil {
-			cmds = []aguimodel.AvailableCommand{}
-		}
-		opts := bindable.ConfigOptions()
-		if opts == nil {
-			opts = []acpsdk.SessionConfigOption{}
-		}
-		_ = json.NewEncoder(w).Encode(struct {
-			Messages      []acp.Message                `json:"messages"`
-			Commands      []aguimodel.AvailableCommand `json:"commands"`
-			ConfigOptions []acpsdk.SessionConfigOption `json:"configOptions"`
-		}{Messages: msgs, Commands: cmds, ConfigOptions: opts})
-	})
-}
-
-// statusHandler обслуживает GET /api/ag-ui/status?threadId=<id>: отдаёт лёгкий снимок
-// состояния сессии {generating, seq}. Фронт поллит его, пока тред открыт: generating
-// зажигает индикатор «агент работает в фоне» (для turn'ов без активного /run — agent
-// wakeup после завершения Workflow/задачи), а рост seq сигналит о новых сообщениях в
-// ленте, по которому фронт перечитывает историю. Дёшев (без стрима, без Bind).
-func statusHandler(verifier TokenVerifier, provider ClientProvider) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := verifier.Verify(accessToken(r))
-		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		threadID := r.URL.Query().Get("threadId")
-		if threadID == "" {
-			http.Error(w, "threadId required", http.StatusBadRequest)
-			return
-		}
-
-		bindable, ok := provider.Bindable(threadID, userID)
-		if !ok {
-			http.Error(w, "session not found", http.StatusNotFound)
-			return
-		}
-
-		generating, seq := bindable.Status()
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(struct {
-			Generating bool `json:"generating"`
-			Seq        int  `json:"seq"`
-		}{Generating: generating, Seq: seq})
-	})
-}
-
-// workflowsHandler обслуживает GET /api/ag-ui/workflows?threadId=<id>: отдаёт
-// workflow-запуски харнесса агента для панели фоновых задач. Воркфлоу выполняется в
-// харнесе между turn'ами и не эмитит ACP-событий — единственный источник его
-// состояния — файлы, которые харнесс пишет в ~/.claude сессии (см. session.Workflows).
-func workflowsHandler(verifier TokenVerifier, workflows WorkflowLister) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := verifier.Verify(accessToken(r))
-		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		threadID := r.URL.Query().Get("threadId")
-		if threadID == "" {
-			http.Error(w, "threadId required", http.StatusBadRequest)
-			return
-		}
-
-		list, ok := workflows.SessionWorkflows(r.Context(), threadID, userID)
-		if !ok {
-			http.Error(w, "session not found", http.StatusNotFound)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(struct {
-			Workflows []WorkflowInfo `json:"workflows"`
-		}{Workflows: list})
-	})
-}
-
-// cancelHandler обслуживает POST /api/ag-ui/cancel: просит агента отменить текущий turn
-// сессии (session/cancel). Тело — {threadId}. Отдельная от /run точка отмены нужна
-// потому, что клиентский Stop не обрывает HTTP-запрос /run (см. корень бага в
-// acp.Client.Cancel), а фоновый wakeup-turn вообще не имеет активного /run. Ответ 204 в
-// любом исходе доставки (fire-and-forget); 404 — неизвестная сессия, 502 — ошибка отправки.
-func cancelHandler(verifier TokenVerifier, provider ClientProvider) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := verifier.Verify(accessToken(r))
-		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		var body struct {
-			ThreadID string `json:"threadId"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ThreadID == "" {
-			http.Error(w, "threadId required", http.StatusBadRequest)
-			return
-		}
-
-		bindable, ok := provider.Bindable(body.ThreadID, userID)
-		if !ok {
-			http.Error(w, "session not found", http.StatusNotFound)
-			return
-		}
-
-		if err := bindable.Cancel(r.Context()); err != nil {
-			http.Error(w, "cancel failed", http.StatusBadGateway)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
 }
 
 // runHandler обслуживает POST /api/ag-ui/run: парсит RunAgentInput, аутентифицирует
 // пользователя по Bearer, привязывает ACP-клиента сессии к SSE-потоку и прогоняет
 // turn агента, эмитя канонический поток событий.
-func runHandler(verifier TokenVerifier, provider ClientProvider, perms *permissionStore) http.Handler {
+func runHandler(verifier TokenVerifier, provider ClientProvider, perms *PermissionStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := verifier.Verify(accessToken(r))
 		if !ok {
@@ -420,31 +236,6 @@ func runHandler(verifier TokenVerifier, provider ClientProvider, perms *permissi
 	})
 }
 
-// permissionHandler обслуживает POST /api/ag-ui/permission: доставляет решение клиента
-// ожидающему резолверу /run. Тело — {threadId, id, decision}.
-func permissionHandler(verifier TokenVerifier, perms *permissionStore) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := verifier.Verify(accessToken(r)); !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		var body struct {
-			ThreadID string `json:"threadId"`
-			ID       string `json:"id"`
-			Decision string `json:"decision"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "invalid body", http.StatusBadRequest)
-			return
-		}
-		// Доставка best-effort: отсутствие ожидания (опоздавший/повторный ответ) — не
-		// ошибка клиента, отвечаем 204 в обоих случаях.
-		perms.deliver(permissionKey(body.ThreadID, body.ID), body.Decision)
-		w.WriteHeader(http.StatusNoContent)
-	})
-}
-
 // accessToken извлекает access-JWT из запроса: сперва из заголовка
 // Authorization: Bearer <token> (мобильный клиент), затем из httpOnly-cookie
 // brigade_access (web-клиент). Браузер не может выставить кастомный заголовок и
@@ -460,9 +251,6 @@ func accessToken(r *http.Request) string {
 	}
 	return ""
 }
-
-// permissionKey строит ключ ожидания разрешения из threadId и id запроса.
-func permissionKey(threadID, id string) string { return threadID + "\x00" + id }
 
 // toFrontendTools преобразует tools[] из RunAgentInput в реестр acp.FrontendTool.
 // parameters канонического Tool соответствует InputSchema (JSON Schema параметров).

@@ -19,7 +19,7 @@ type run struct {
 	flusher http.Flusher
 
 	bindable Bindable
-	perms    *permissionStore
+	perms    *PermissionStore
 
 	threadID string
 	runID    string
@@ -30,7 +30,7 @@ type run struct {
 	writeMu sync.Mutex
 }
 
-func newRun(ctx context.Context, w http.ResponseWriter, flusher http.Flusher, bindable Bindable, perms *permissionStore, threadID, runID string) *run {
+func newRun(ctx context.Context, w http.ResponseWriter, flusher http.Flusher, bindable Bindable, perms *PermissionStore, threadID, runID string) *run {
 	ctx, cancel := context.WithCancel(ctx)
 	return &run{
 		ctx:      ctx,
@@ -160,8 +160,8 @@ func (rn *run) send(evt agui.Event) error {
 // либо до отмены ctx (клиент закрыл поток / turn свёрнут). Возвращает выбранный OptionID;
 // при отмене — ошибку (исход cancelled на стороне ACP-вызова).
 func (rn *run) resolvePermission(ctx context.Context, req agui.PermissionRequest) (string, error) {
-	key := permissionKey(rn.threadID, req.ID)
-	ch, release := rn.perms.register(key)
+	key := PermissionKey(rn.threadID, req.ID)
+	ch, release := rn.perms.Register(key)
 	defer release()
 
 	if err := rn.sink(agui.Event{Type: agui.EventPermissionRequest, Permission: &req}); err != nil {

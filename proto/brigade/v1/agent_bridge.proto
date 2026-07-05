@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package brigade.v1;
+
+// AgentBridgeService — вызовы ИЗ сессии в brigade: их делает агент/скилл изнутри
+// контейнера сессии, а не веб-клиент пользователя. Авторизация — per-session HMAC-токен
+// (BRIGADE_PREVIEW_TOKEN в окружении агента), не пользовательский JWT, поэтому сервис
+// регистрируется без JWT-интерсептора и проверяет токен сам.
+//
+// Вызывается обычным curl'ом по Connect-протоколу (POST /brigade.v1.AgentBridgeService/
+// Method, Content-Type: application/json, тело — JSON запроса) — Connect-клиент не нужен.
+// Сюда добавляются будущие фичи взаимодействия «сессия → brigade».
+service AgentBridgeService {
+  // RegisterPreview фиксирует dev-сервер сессии для показа ссылки в UI. session_id и
+  // порт задаёт вызывающий; ответ — публичный URL.
+  rpc RegisterPreview(RegisterPreviewRequest) returns (RegisterPreviewResponse) {}
+}
+
+message RegisterPreviewRequest {
+  string session_id = 1;
+  int32 port = 2;
+  string name = 3;
+}
+
+message RegisterPreviewResponse {
+  string url = 1;
+}

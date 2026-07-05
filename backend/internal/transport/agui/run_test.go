@@ -90,7 +90,7 @@ func (r *flushRecorder) Flush()                 {}
 // serveInput прогоняет run.serve на фейковом Bindable и возвращает тело SSE-потока.
 func serveInput(b *fakeBindable, in runAgentInput) string {
 	rec := newFlushRecorder()
-	perms := newPermissionStore()
+	perms := NewPermissionStore()
 	newRun(context.Background(), rec, rec, b, perms, "t", "r").serve(in)
 	return rec.body.String()
 }

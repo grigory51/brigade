@@ -8,19 +8,16 @@ import {
 import { MessageProcessor } from "@a2ui/web_core/v0_9";
 import type { ReactComponentImplementation } from "@a2ui/react/v0_9";
 import { useAuth } from "@/features/auth/AuthContext";
-import { refreshSession } from "@/api/client";
+import { refreshSession, acpClient } from "@/api/client";
+import type { AcpConfigOption } from "@/api/gen/brigade/v1/acp_pb";
 import { DEMO_FRONTEND_TOOLS } from "./frontendTools";
 import type { PlanEntry } from "./PlanPanel";
 import { cardsCatalog } from "./a2ui/catalog";
 
-// Эндпоинты канонического AG-UI на бэкенде (тот же origin, что и SPA).
+// Потоковый turn ACP идёт по SSE в формате @ag-ui/client — единственная сырая
+// HTTP-ручка. Управляющие вызовы (история/статус/workflow/отмена/опции/permission) —
+// через acpClient (ConnectRPC, brigade.v1.AcpService).
 const RUN_URL = "/api/ag-ui/run";
-const PERMISSION_URL = "/api/ag-ui/permission";
-const HISTORY_URL = "/api/ag-ui/history";
-const CONFIG_URL = "/api/ag-ui/config";
-const STATUS_URL = "/api/ag-ui/status";
-const CANCEL_URL = "/api/ag-ui/cancel";
-const WORKFLOWS_URL = "/api/ag-ui/workflows";
 // WORKFLOWS_POLL_MS — интервал опроса workflow-запусков. Реже статуса: endpoint читает
 // файлы харнесса с диска, а состояние воркфлоу меняется медленно (минуты).
 const WORKFLOWS_POLL_MS = 5000;
@@ -272,19 +269,11 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
     let stopped = false;
     const tick = async () => {
       try {
-        const res = await fetch(
-          `${STATUS_URL}?threadId=${encodeURIComponent(sessionId)}`,
-          { credentials: "include", headers: authHeaders(tokenRef.current()) },
-        );
-        if (!res.ok) return;
-        const data = (await res.json()) as {
-          generating?: boolean;
-          seq?: number;
-        };
+        const data = await acpClient.getStatus({ threadId: sessionId });
         if (stopped) return;
         setStatus((prev) => ({
-          generating: Boolean(data.generating),
-          seq: typeof data.seq === "number" ? data.seq : 0,
+          generating: data.generating,
+          seq: Number(data.seq),
           tick: prev.tick + 1,
         }));
       } catch {
@@ -312,14 +301,19 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
     let stopped = false;
     const tick = async () => {
       try {
-        const res = await fetch(
-          `${WORKFLOWS_URL}?threadId=${encodeURIComponent(sessionId)}`,
-          { credentials: "include", headers: authHeaders(tokenRef.current()) },
-        );
-        if (!res.ok) return;
-        const data = (await res.json()) as { workflows?: WorkflowInfo[] };
+        const data = await acpClient.listWorkflows({ threadId: sessionId });
         if (stopped) return;
-        setWorkflows(Array.isArray(data.workflows) ? data.workflows : []);
+        setWorkflows(
+          data.workflows.map((wf) => ({
+            runId: wf.runId,
+            name: wf.name,
+            agentsStarted: wf.agentsStarted,
+            agentsDone: wf.agentsDone,
+            done: wf.done,
+            active: wf.active,
+            lastActivitySec: Number(wf.lastActivitySec),
+          })),
+        );
       } catch {
         // Транзиентный сбой — следующий тик повторит.
       }
@@ -341,39 +335,35 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
   const history = useMemo<ThreadHistoryAdapter>(
     () => ({
       load: async () => {
-        const get = () =>
-          fetch(`${HISTORY_URL}?threadId=${encodeURIComponent(sessionId)}`, {
-            credentials: "include",
-            headers: authHeaders(tokenRef.current()),
-          });
-        let res = await get();
-        // 401 — истёкший access-токен (например, вкладка открыта после долгого
-        // простоя). Обновляем сессию и повторяем: молчаливый возврат пустой истории
-        // выглядел бы как потеря ленты.
-        if (res.status === 401) {
-          try {
-            await refreshSession();
-            res = await get();
-          } catch {
-            // refresh не удался — вернём пустую историю, роутер уведёт на /login.
-          }
+        let data;
+        try {
+          // 401 (истёкший access-токен) обрабатывает интерсептор acpClient: тихо
+          // обновляет сессию и повторяет вызов. Прочие ошибки — пустая история.
+          data = await acpClient.getHistory({ threadId: sessionId });
+        } catch {
+          return { messages: [] };
         }
-        if (!res.ok) return { messages: [] };
-        const data = (await res.json()) as {
-          messages?: HistoryMessage[];
-          commands?: unknown;
-          configOptions?: unknown;
-        };
-        // Команды агента и конфигурационные опции приходят тем же запросом: при
-        // открытии треда SSE-прогон не стартует, поэтому CUSTOM-события не приходят.
-        setCommands(toCommands({ commands: data.commands }));
-        setConfigOptions(toConfigOptions(data.configOptions));
-        // Бэкенд отдаёт историю в форме AG-UI-сообщений ({id, role, content}).
-        // fromAgUiMessages переводит их в сообщения assistant-ui (с поддержкой
-        // tool-call/reasoning, если они появятся), а ExportedMessageRepository.fromArray
-        // выстраивает линейную цепочку parentId — это идиоматичный путь восстановления
-        // истории для AG-UI-рантайма (см. assistant-ui docs: ag-ui/runtime-options).
-        const raw = Array.isArray(data.messages) ? data.messages : [];
+        // Команды агента и конфигурационные опции приходят тем же вызовом: при открытии
+        // треда SSE-прогон не стартует, поэтому CUSTOM-события не приходят.
+        setCommands(
+          data.commands.map((c) => ({
+            name: c.name,
+            description: c.description,
+            hint: c.hint || undefined,
+          })),
+        );
+        setConfigOptions(configOptionsFromProto(data.configOptions));
+        // Сообщения приводим к AG-UI-снапшоту (tool_call → assistant с tool-call-частью),
+        // fromAgUiMessages переводит в формат assistant-ui, ExportedMessageRepository
+        // выстраивает линейную цепочку parentId (см. assistant-ui: ag-ui/runtime-options).
+        const raw: HistoryMessage[] = data.messages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          toolName: m.toolName || undefined,
+          argsText: m.argsText || undefined,
+          result: m.result,
+        }));
         return ExportedMessageRepository.fromArray(
           fromAgUiMessages(raw.map(toAgUiHistoryMessage), {
             showThinking: true,
@@ -397,39 +387,32 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
     // обрываем HTTP/ctx, чтобы весь хвост turn'а пришёл под серверным turn-барьером и не
     // слипся со следующим прогоном (см. backend acp.Client.Cancel/Prompt). Best-effort.
     onCancel: () => {
-      void fetch(CANCEL_URL, {
-        method: "POST",
-        credentials: "include",
-        headers: authHeaders(tokenRef.current()),
-        body: JSON.stringify({ threadId: sessionId }),
-      });
+      void acpClient.cancel({ threadId: sessionId }).catch(() => {});
     },
   });
 
-  // resolvePermission отправляет решение пользователя отдельным POST с Bearer и
-  // снимает диалог. Доставка best-effort: бэкенд отвечает 204 в любом случае.
+  // resolvePermission отправляет решение пользователя и снимает диалог. Доставка
+  // best-effort: бэкенд отвечает пустым в любом случае.
   const resolvePermission = useRef((id: string, decision: string) => {
-    void fetch(PERMISSION_URL, {
-      method: "POST",
-      credentials: "include",
-      headers: authHeaders(tokenRef.current()),
-      body: JSON.stringify({ threadId: sessionId, id, decision }),
-    });
+    void acpClient
+      .resolvePermission({ threadId: sessionId, id, decision })
+      .catch(() => {});
     setPermission((cur) => (cur && cur.id === id ? null : cur));
   }).current;
 
   // setConfigOption меняет значение опции сессии (модель, режим, усилие) и обновляет
   // локальный снимок из ответа бэкенда.
   const setConfigOptionRef = useRef(async (configId: string, value: string) => {
-    const res = await fetch(CONFIG_URL, {
-      method: "POST",
-      credentials: "include",
-      headers: authHeaders(tokenRef.current()),
-      body: JSON.stringify({ threadId: sessionId, configId, value }),
-    });
-    if (!res.ok) return;
-    const data = (await res.json()) as { configOptions?: unknown };
-    setConfigOptions(toConfigOptions(data.configOptions));
+    try {
+      const data = await acpClient.setConfigOption({
+        threadId: sessionId,
+        configId,
+        value,
+      });
+      setConfigOptions(configOptionsFromProto(data.configOptions));
+    } catch {
+      // Ошибка смены опции — оставляем прежний снимок.
+    }
   });
 
   return {
@@ -451,10 +434,28 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
 // прогон передаёт их агенту, бэкенд транслирует вызовы в TOOL_CALL_*.
 export { DEMO_FRONTEND_TOOLS };
 
-function authHeaders(token: string | null): Record<string, string> {
-  const h: Record<string, string> = { "Content-Type": "application/json" };
-  if (token) h.Authorization = `Bearer ${token}`;
-  return h;
+// configOptionsFromProto переводит опции из типизированного ответа AcpService (уже
+// нормализованы бэкендом из union-формата ACP) в ConfigOption UI-слоя, применяя политику
+// скрытия небезопасных значений (bypassPermissions). Пустые category/description proto3
+// (строка по умолчанию) приводятся к undefined.
+function configOptionsFromProto(opts: AcpConfigOption[]): ConfigOption[] {
+  return opts.map((o) => {
+    const category = o.category || undefined;
+    const hidden = category ? HIDDEN_CONFIG_VALUES[category] : undefined;
+    return {
+      id: o.id,
+      name: o.name || o.id,
+      category,
+      currentValue: o.currentValue,
+      options: o.options
+        .filter((v) => !hidden?.has(v.value))
+        .map((v) => ({
+          value: v.value,
+          name: v.name || v.value,
+          description: v.description || undefined,
+        })),
+    };
+  });
 }
 
 // toPermission нормализует value события permission_request в PendingPermission.

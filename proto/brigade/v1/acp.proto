@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package brigade.v1;
+
+import "brigade/v1/auth.proto";
+
+// AcpService — управляющие вызовы ACP-чата (режим AG-UI): история, состояние агента,
+// фоновые workflow, отмена хода, опции сессии, ответ на запрос разрешения. Это
+// собственные request/response ручки brigade — они ходят через ConnectRPC (типизация,
+// единая авторизация). Потоковый turn идёт отдельно по SSE (POST /api/ag-ui/run,
+// формат @ag-ui/client), который Connect выразить не может, — он и остаётся сырым HTTP.
+//
+// thread_id во всех методах — идентификатор brigade-сессии.
+service AcpService {
+  // GetHistory отдаёт ленту чата массивом сообщений плюс снимки команд и опций сессии
+  // (при открытии треда SSE-прогон не стартует, поэтому CUSTOM-события не приходят).
+  rpc GetHistory(GetHistoryRequest) returns (GetHistoryResponse) {}
+  // GetStatus — лёгкий снимок состояния: генерирует ли агент сейчас (в т.ч. фоновый
+  // turn без активного /run) и монотонный seq ленты для детекта новых сообщений.
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse) {}
+  // ListWorkflows — workflow-запуски харнесса агента (deep-research и т.п.) для панели
+  // фоновых задач: они выполняются между turn'ами и ACP-событий не эмитят.
+  rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse) {}
+  // Cancel просит агента отменить текущий turn (session/cancel). Идемпотентно.
+  rpc Cancel(CancelRequest) returns (Empty) {}
+  // SetConfigOption меняет опцию сессии (модель, режим прав, усилие) и возвращает
+  // актуальный набор опций.
+  rpc SetConfigOption(SetConfigOptionRequest) returns (SetConfigOptionResponse) {}
+  // ResolvePermission доставляет решение пользователя ожидающему permission-flow
+  // текущего прогона. Best-effort: если ожидания нет (повтор, опоздание) — no-op.
+  rpc ResolvePermission(ResolvePermissionRequest) returns (Empty) {}
+}
+
+// AcpMessage — сообщение ленты чата. role: user | assistant | system | tool_call.
+// Для role=tool_call заполнены tool_name/args_text/result (карточка инструмента).
+message AcpMessage {
+  string id = 1;
+  string role = 2;
+  string content = 3;
+  string tool_name = 4;
+  string args_text = 5;
+  string result = 6;
+}
+
+// AcpCommand — slash-команда агента для автокомплита composer'а.
+message AcpCommand {
+  string name = 1;
+  string description = 2;
+  string hint = 3;
+}
+
+// AcpConfigOptionValue — вариант значения опции сессии.
+message AcpConfigOptionValue {
+  string value = 1;
+  string name = 2;
+  string description = 3;
+}
+
+// AcpConfigOption — конфигурационная опция сессии (модель, режим прав, усилие).
+message AcpConfigOption {
+  string id = 1;
+  string name = 2;
+  string category = 3;
+  string current_value = 4;
+  repeated AcpConfigOptionValue options = 5;
+}
+
+// AcpWorkflow — состояние workflow-запуска харнесса агента.
+message AcpWorkflow {
+  string run_id = 1;
+  string name = 2;
+  int32 agents_started = 3;
+  int32 agents_done = 4;
+  bool done = 5;
+  bool active = 6;
+  int64 last_activity_sec = 7;
+}
+
+message GetHistoryRequest {
+  string thread_id = 1;
+}
+
+message GetHistoryResponse {
+  repeated AcpMessage messages = 1;
+  repeated AcpCommand commands = 2;
+  repeated AcpConfigOption config_options = 3;
+}
+
+message GetStatusRequest {
+  string thread_id = 1;
+}
+
+message GetStatusResponse {
+  bool generating = 1;
+  int64 seq = 2;
+}
+
+message ListWorkflowsRequest {
+  string thread_id = 1;
+}
+
+message ListWorkflowsResponse {
+  repeated AcpWorkflow workflows = 1;
+}
+
+message CancelRequest {
+  string thread_id = 1;
+}
+
+message SetConfigOptionRequest {
+  string thread_id = 1;
+  string config_id = 2;
+  string value = 3;
+}
+
+message SetConfigOptionResponse {
+  repeated AcpConfigOption config_options = 1;
+}
+
+message ResolvePermissionRequest {
+  string thread_id = 1;
+  string id = 2;
+  string decision = 3;
+}

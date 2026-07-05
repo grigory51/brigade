@@ -1,9 +1,7 @@
 package preview
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -107,40 +105,8 @@ func TestRegisterUpsertAndDrop(t *testing.T) {
 	}
 }
 
-func TestRegisterHandler(t *testing.T) {
-	s := NewService(testConfig(), []byte("secret"))
-	mux := http.NewServeMux()
-	mux.Handle("POST /api/preview/{sessionId}/register", s.RegisterHandler())
-
-	do := func(token string, body any) *httptest.ResponseRecorder {
-		b, _ := json.Marshal(body)
-		req := httptest.NewRequest(http.MethodPost, "/api/preview/"+testSessionID+"/register", bytes.NewReader(b))
-		req.Header.Set("Authorization", "Bearer "+token)
-		w := httptest.NewRecorder()
-		mux.ServeHTTP(w, req)
-		return w
-	}
-
-	if w := do("wrong", map[string]any{"port": 3000}); w.Code != http.StatusUnauthorized {
-		t.Fatalf("wrong token: code %d, want 401", w.Code)
-	}
-	if w := do(s.TokenFor(testSessionID), map[string]any{"port": 0}); w.Code != http.StatusBadRequest {
-		t.Fatalf("bad port: code %d, want 400", w.Code)
-	}
-
-	w := do(s.TokenFor(testSessionID), map[string]any{"port": 3000, "name": "vite"})
-	if w.Code != http.StatusOK {
-		t.Fatalf("register: code %d, body %s", w.Code, w.Body)
-	}
-	var resp map[string]string
-	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	if want := testConfig().PublicURL(testSessionID, 3000); resp["url"] != want {
-		t.Fatalf("url = %q, want %q", resp["url"], want)
-	}
-	if len(s.List(testSessionID)) != 1 {
-		t.Fatal("preview was not registered")
-	}
-}
+// Регистрация preview агентом теперь идёт через brigade.v1.AgentBridgeService
+// (transport/connect) — HTTP-хендлер удалён; тест доставки/HMAC живёт там.
 
 // fakeSessions — SessionSource для тестов резолвера и прокси.
 type fakeSessions struct {

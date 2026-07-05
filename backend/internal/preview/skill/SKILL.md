@@ -24,13 +24,15 @@ from the user's browser at a deterministic preview URL — no port forwarding ne
    - `http://abc-{port}.localhost:10000` → `http://abc-3000.localhost:10000`
    - `https://preview.example.com/?id=abc-{port}` → `https://preview.example.com/?id=abc-3000`
 
-3. Register the port so the link shows up in the brigade UI:
+3. Register the port so the link shows up in the brigade UI. This calls the
+   `brigade.v1.AgentBridgeService/RegisterPreview` ConnectRPC method — plain
+   `POST` with a JSON body, no client library needed:
 
    ```sh
-   curl -sf -X POST "$BRIGADE_API_URL/api/preview/$BRIGADE_SESSION_ID/register" \
+   curl -sf -X POST "$BRIGADE_API_URL/brigade.v1.AgentBridgeService/RegisterPreview" \
      -H "Authorization: Bearer $BRIGADE_PREVIEW_TOKEN" \
      -H "Content-Type: application/json" \
-     -d '{"port": 3000, "name": "vite"}'
+     -d "{\"sessionId\": \"$BRIGADE_SESSION_ID\", \"port\": 3000, \"name\": \"vite\"}"
    ```
 
    The response contains the final URL: `{"url": "..."}`.

@@ -78,30 +78,37 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	// ConnectRPC-хендлеры. auth.Interceptor кладёт пользователя в контекст из Bearer
-	// или cookie; обязательность авторизации проверяет сам хендлер.
+	// ConnectRPC — основной API-слой brigade (типизированные unary-вызовы). Interceptor
+	// кладёт пользователя в контекст из Bearer или cookie; обязательность авторизации
+	// проверяет сам хендлер.
 	interceptors := connect.WithInterceptors(authSvc.Interceptor())
+	prov := aguiProvider{registry: registry}
+	// perms разделяется SSE-прогоном /run (резолвер регистрирует ожидание) и
+	// AcpService.ResolvePermission (доставляет решение) — создаётся здесь.
+	perms := aguitransport.NewPermissionStore()
+
 	mux.Handle(brigadev1connect.NewAuthServiceHandler(connectsvc.NewAuthService(authSvc), interceptors))
 	mux.Handle(brigadev1connect.NewSessionServiceHandler(connectsvc.NewSessionService(registry, tickets, previewSvc), interceptors))
 	mux.Handle(brigadev1connect.NewAgentServiceHandler(connectsvc.NewAgentService(), interceptors))
+	// AcpService — управляющие вызовы ACP-чата (история/статус/workflow/отмена/опции/
+	// permission-ответ). JWT-авторизация, как у прочих пользовательских сервисов.
+	mux.Handle(brigadev1connect.NewAcpServiceHandler(connectsvc.NewAcpService(prov, prov, perms), interceptors))
+	// AgentBridgeService — вызовы ИЗ сессии (скилл в контейнере). БЕЗ JWT-интерсептора:
+	// авторизация — per-session HMAC-токен, проверяется в самом хендлере.
+	mux.Handle(brigadev1connect.NewAgentBridgeServiceHandler(connectsvc.NewAgentBridgeService(previewSvc)))
 
 	// WS-терминал (Go 1.22 method+path routing). Аутентификация — по одноразовому
-	// тикету в query; реестр отдаёт живой Handle сессии её владельцу. ACP-режим идёт не
-	// по WS, а по каноническому AG-UI (SSE, см. ниже).
+	// тикету в query; реестр отдаёт живой Handle сессии её владельцу.
 	mux.Handle("/ws/terminal/{sessionId}", termws.Handler(tickets, registry))
 
 	// WS вспомогательного шелла: параллельный терминал рядом с любой сессией (осмотр
 	// рабочей директории руками). Шелл спавнится на подключение и живёт до его разрыва.
 	mux.Handle("/ws/shell/{sessionId}", termws.ShellHandler(tickets, registry))
 
-	// AG-UI (канонический protocol поверх SSE). В отличие от WS-режима аутентификация —
-	// Bearer access-JWT на каждый запрос, а не одноразовый тикет; threadId трактуется как
-	// идентификатор сессии. POST /api/ag-ui/{run,permission}.
-	aguitransport.Mux(mux, jwtVerifier{jwt: authSvc.JWT()}, aguiProvider{registry: registry}, aguiProvider{registry: registry})
-
-	// Регистрация preview агентом (curl из скилла): Bearer — HMAC-токен сессии из
-	// окружения агента, не JWT пользователя.
-	mux.Handle("POST /api/preview/{sessionId}/register", previewSvc.RegisterHandler())
+	// AG-UI потоковый turn: POST /api/ag-ui/run по SSE в формате стороннего @ag-ui/client.
+	// Единственная сырая HTTP-ручка ACP — Connect не выражает этот потоковый протокол;
+	// управляющие ручки живут в AcpService выше. Аутентификация — Bearer/cookie на запрос.
+	aguitransport.Mux(mux, jwtVerifier{jwt: authSvc.JWT()}, prov, perms)
 
 	// Встроенный SPA-фронтенд обслуживает все прочие пути.
 	webHandler, err := web.Handler()

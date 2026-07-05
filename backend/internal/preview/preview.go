@@ -14,11 +14,8 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"log"
 	"net"
-	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -183,47 +180,6 @@ func (s *Service) Drop(sessionID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.bySession, sessionID)
-}
-
-// registerRequest — тело POST /api/preview/{sessionId}/register.
-type registerRequest struct {
-	Port int    `json:"port"`
-	Name string `json:"name"`
-}
-
-// RegisterHandler — HTTP-эндпоинт регистрации preview агентом. Обычный HTTP + JSON
-// (не Connect): вызывающая сторона — curl из скилла. Аутентификация — Bearer
-// HMAC-токен сессии (BRIGADE_PREVIEW_TOKEN в окружении агента).
-func (s *Service) RegisterHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sessionID := r.PathValue("sessionId")
-		if sessionID == "" {
-			http.Error(w, "sessionId is required", http.StatusBadRequest)
-			return
-		}
-
-		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if !ok || !s.VerifyToken(sessionID, strings.TrimSpace(token)) {
-			http.Error(w, "invalid preview token", http.StatusUnauthorized)
-			return
-		}
-
-		var req registerRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid JSON body", http.StatusBadRequest)
-			return
-		}
-		if req.Port < 1 || req.Port > 65535 {
-			http.Error(w, "port out of range", http.StatusBadRequest)
-			return
-		}
-
-		reg := s.Register(sessionID, req.Port, req.Name)
-		log.Printf("preview: registered session=%s port=%d name=%q", sessionID, req.Port, req.Name)
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"url": reg.URL})
-	})
 }
 
 // SplitHostPort отделяет порт от хоста запроса, не считая его отсутствие ошибкой.
