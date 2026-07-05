@@ -101,6 +101,10 @@ func (s *AcpService) Cancel(ctx context.Context, req *connect.Request[v1.CancelR
 	if err := b.Cancel(ctx); err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
+	// Сворачиваем висящие запросы разрешения сессии: turn идёт на неотменяемом контексте
+	// (WithoutCancel), поэтому неотвеченный permission иначе держал бы его бесконечно.
+	// Явный Stop — надёжный разрыв (см. run.resolvePermission, PermissionStore.CancelPending).
+	s.perms.CancelPending(req.Msg.ThreadId)
 	return connect.NewResponse(&v1.Empty{}), nil
 }
 

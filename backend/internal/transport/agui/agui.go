@@ -131,19 +131,32 @@ type inputMessage struct {
 // main и передаётся обоим потребителям.
 type PermissionStore struct {
 	mu      sync.Mutex
-	pending map[string]chan string
+	pending map[string]*pendingPermission
+}
+
+// pendingPermission — ожидание ответа на один запрос разрешения: канал доставки решения,
+// тред (для переотправки/отмены по сессии) и полезная нагрузка запроса (чтобы показать
+// диалог заново на reconnect).
+type pendingPermission struct {
+	ch       chan string
+	threadID string
+	req      aguimodel.PermissionRequest
 }
 
 // NewPermissionStore создаёт пустой стор ожиданий permission-flow.
 func NewPermissionStore() *PermissionStore {
-	return &PermissionStore{pending: make(map[string]chan string)}
+	return &PermissionStore{pending: make(map[string]*pendingPermission)}
 }
 
-// Register заводит ожидание ответа по ключу и возвращает канал и функцию снятия.
-func (p *PermissionStore) Register(key string) (<-chan string, func()) {
+// Register заводит ожидание ответа и запоминает полезную нагрузку запроса (для
+// переотправки клиенту при reconnect — см. run.serve). Возвращает канал решения и функцию
+// снятия. Пустая строка в канале — сигнал отмены (CancelPending), не валидное решение
+// (реальный OptionID непустой).
+func (p *PermissionStore) Register(threadID, id string, req aguimodel.PermissionRequest) (<-chan string, func()) {
+	key := PermissionKey(threadID, id)
 	ch := make(chan string, 1)
 	p.mu.Lock()
-	p.pending[key] = ch
+	p.pending[key] = &pendingPermission{ch: ch, threadID: threadID, req: req}
 	p.mu.Unlock()
 	return ch, func() {
 		p.mu.Lock()
@@ -156,7 +169,7 @@ func (p *PermissionStore) Register(key string) (<-chan string, func()) {
 // ключом нет (повтор, опоздавший ответ).
 func (p *PermissionStore) Deliver(key, decision string) bool {
 	p.mu.Lock()
-	ch, ok := p.pending[key]
+	pp, ok := p.pending[key]
 	p.mu.Unlock()
 	if !ok {
 		return false
@@ -164,10 +177,41 @@ func (p *PermissionStore) Deliver(key, decision string) bool {
 	// Канал буферизован на 1 и читается ровно один раз; неблокирующая отправка защищает
 	// от повторного ответа на уже разрешённый запрос.
 	select {
-	case ch <- decision:
+	case pp.ch <- decision:
 		return true
 	default:
 		return false
+	}
+}
+
+// Pending возвращает ещё не отвеченные запросы разрешения треда. Нужен для переотправки
+// диалога клиенту при reconnect: turn пережил обрыв (WithoutCancel) и всё ещё ждёт ответа,
+// но исходное CUSTOM-событие ушло в оборвавшийся поток.
+func (p *PermissionStore) Pending(threadID string) []aguimodel.PermissionRequest {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var out []aguimodel.PermissionRequest
+	for _, pp := range p.pending {
+		if pp.threadID == threadID {
+			out = append(out, pp.req)
+		}
+	}
+	return out
+}
+
+// CancelPending сворачивает все висящие запросы разрешения треда (пустой строкой —
+// сигнал отмены). Надёжный разрыв на явный Stop: turn на неотменяемом контексте
+// (WithoutCancel) иначе висел бы на неотвеченном permission бесконечно.
+func (p *PermissionStore) CancelPending(threadID string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, pp := range p.pending {
+		if pp.threadID == threadID {
+			select {
+			case pp.ch <- "":
+			default:
+			}
+		}
 	}
 }
 

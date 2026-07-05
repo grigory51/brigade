@@ -76,6 +76,14 @@ func (rn *run) serve(in runAgentInput) {
 		unbind := rn.bindable.Bind(rn.sink, rn.resolvePermission)
 		defer unbind()
 		rn.bindable.FinishStreams()
+		// Переотправляем висящие запросы разрешения: turn пережил обрыв (Prompt на
+		// WithoutCancel) и всё ещё ждёт ответа, но исходный диалог ушёл в оборвавшийся
+		// поток. По этим CUSTOM-событиям клиент покажет диалог заново — пользователь
+		// ответит, и turn продолжится (см. resolvePermission, PermissionStore.Pending).
+		for _, req := range rn.perms.Pending(rn.threadID) {
+			req := req
+			_ = rn.sink(agui.Event{Type: agui.EventPermissionRequest, Permission: &req})
+		}
 		rn.send(agui.Event{
 			Type:     agui.EventRunFinished,
 			ThreadId: rn.threadID,
@@ -165,25 +173,35 @@ func (rn *run) send(evt agui.Event) error {
 }
 
 // resolvePermission реализует acp.PermissionResolver: отдаёт клиенту запрос разрешения
-// (через sink → CUSTOM) и блокируется до ответа POST /api/ag-ui/permission с тем же id
-// либо до отмены ctx (клиент закрыл поток / turn свёрнут). Возвращает выбранный OptionID;
-// при отмене — ошибку (исход cancelled на стороне ACP-вызова).
+// (через sink → CUSTOM) и блокируется до ответа (AcpService.ResolvePermission с тем же id)
+// либо до отмены. Возвращает выбранный OptionID; при отмене — ошибку (исход cancelled).
+//
+// Обрыв клиента НЕ отменяет ожидание (не селектим на rn.ctx): turn идёт на неотменяемом
+// контексте (Prompt через WithoutCancel), поэтому permission переживает дисконнект —
+// запрос остаётся в сторе, а на reconnect переотправляется диалог (см. serve replay-ветку).
+// Иначе Write и прочие действия, требующие подтверждения, молча срывались бы при обрыве
+// «в дороге». Надёжный разрыв висящего ожидания даёт явный Stop: AcpService.Cancel зовёт
+// PermissionStore.CancelPending, доставляя пустую строку (не валидный OptionID).
 func (rn *run) resolvePermission(ctx context.Context, req agui.PermissionRequest) (string, error) {
-	key := PermissionKey(rn.threadID, req.ID)
-	ch, release := rn.perms.Register(key)
+	ch, release := rn.perms.Register(rn.threadID, req.ID, req)
 	defer release()
 
-	if err := rn.sink(agui.Event{Type: agui.EventPermissionRequest, Permission: &req}); err != nil {
-		return "", err
-	}
+	// Доставка диалога best-effort: ошибка записи (клиент отвалился) НЕ отменяет ожидание.
+	_ = rn.sink(agui.Event{Type: agui.EventPermissionRequest, Permission: &req})
 
 	select {
 	case decision := <-ch:
+		// Пустая строка — сигнал отмены (CancelPending на явный Stop); реальный OptionID
+		// непустой. Трактуем как cancelled на стороне ACP-вызова.
+		if decision == "" {
+			return "", context.Canceled
+		}
 		return decision, nil
 	case <-ctx.Done():
+		// Страховка: закрытие ACP-сессии / смерть соединения свёртывает ожидание, даже
+		// если ни ответа, ни явной отмены не пришло. Обрыв HTTP-клиента сюда НЕ попадает
+		// (ctx — контекст ACP-запроса, не клиентского соединения).
 		return "", ctx.Err()
-	case <-rn.ctx.Done():
-		return "", rn.ctx.Err()
 	}
 }
 
