@@ -33,25 +33,59 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// MemoryServiceListTopicsProcedure is the fully-qualified name of the MemoryService's ListTopics
+	// RPC.
+	MemoryServiceListTopicsProcedure = "/brigade.v1.MemoryService/ListTopics"
+	// MemoryServiceGetTopicProcedure is the fully-qualified name of the MemoryService's GetTopic RPC.
+	MemoryServiceGetTopicProcedure = "/brigade.v1.MemoryService/GetTopic"
+	// MemoryServiceCreateTopicProcedure is the fully-qualified name of the MemoryService's CreateTopic
+	// RPC.
+	MemoryServiceCreateTopicProcedure = "/brigade.v1.MemoryService/CreateTopic"
+	// MemoryServiceUpdateTopicOverviewProcedure is the fully-qualified name of the MemoryService's
+	// UpdateTopicOverview RPC.
+	MemoryServiceUpdateTopicOverviewProcedure = "/brigade.v1.MemoryService/UpdateTopicOverview"
+	// MemoryServiceCreateNoteProcedure is the fully-qualified name of the MemoryService's CreateNote
+	// RPC.
+	MemoryServiceCreateNoteProcedure = "/brigade.v1.MemoryService/CreateNote"
+	// MemoryServiceUpdateNoteProcedure is the fully-qualified name of the MemoryService's UpdateNote
+	// RPC.
+	MemoryServiceUpdateNoteProcedure = "/brigade.v1.MemoryService/UpdateNote"
+	// MemoryServiceMoveNoteProcedure is the fully-qualified name of the MemoryService's MoveNote RPC.
+	MemoryServiceMoveNoteProcedure = "/brigade.v1.MemoryService/MoveNote"
+	// MemoryServiceDeleteNoteProcedure is the fully-qualified name of the MemoryService's DeleteNote
+	// RPC.
+	MemoryServiceDeleteNoteProcedure = "/brigade.v1.MemoryService/DeleteNote"
 	// MemoryServiceListNotesProcedure is the fully-qualified name of the MemoryService's ListNotes RPC.
 	MemoryServiceListNotesProcedure = "/brigade.v1.MemoryService/ListNotes"
 	// MemoryServiceGetNoteProcedure is the fully-qualified name of the MemoryService's GetNote RPC.
 	MemoryServiceGetNoteProcedure = "/brigade.v1.MemoryService/GetNote"
-	// MemoryServiceCreateNoteProcedure is the fully-qualified name of the MemoryService's CreateNote
-	// RPC.
-	MemoryServiceCreateNoteProcedure = "/brigade.v1.MemoryService/CreateNote"
 )
 
 // MemoryServiceClient is a client for the brigade.v1.MemoryService service.
 type MemoryServiceClient interface {
-	// ListNotes — заметки пользователя, при непустом query — фильтр по подстроке
-	// (title/body/tags), сортировка от новых к старым.
+	// ListTopics — все темы пользователя (с производными count/updated и парой последних
+	// заметок для карточки-«полки»). query пуст — все; иначе фильтр по имени/обзору/заметкам.
+	ListTopics(context.Context, *connect.Request[v1.ListTopicsRequest]) (*connect.Response[v1.ListTopicsResponse], error)
+	// GetTopic — тема с полным обзором и всеми её заметками (для экрана темы).
+	GetTopic(context.Context, *connect.Request[v1.GetTopicRequest]) (*connect.Response[v1.GetTopicResponse], error)
+	// CreateTopic — новая тема (имя + цвет). initial (буква аватара) выводится из имени.
+	CreateTopic(context.Context, *connect.Request[v1.CreateTopicRequest]) (*connect.Response[v1.CreateTopicResponse], error)
+	// UpdateTopicOverview — перезаписать synthesis темы (ручное редактирование обзора).
+	UpdateTopicOverview(context.Context, *connect.Request[v1.UpdateTopicOverviewRequest]) (*connect.Response[v1.UpdateTopicOverviewResponse], error)
+	// CreateNote — создать заметку в теме/подтеме (write .md → commit → push синхронно).
+	// session пуст — заметка создана из UI, а не сессией; from — человекочитаемый провенанс.
+	CreateNote(context.Context, *connect.Request[v1.CreateNoteRequest]) (*connect.Response[v1.CreateNoteResponse], error)
+	// UpdateNote — правка полей заметки (title/body/type/sub) на месте.
+	UpdateNote(context.Context, *connect.Request[v1.UpdateNoteRequest]) (*connect.Response[v1.UpdateNoteResponse], error)
+	// MoveNote — перенос заметки в другую тему и/или подтему (перекладывает файл).
+	MoveNote(context.Context, *connect.Request[v1.MoveNoteRequest]) (*connect.Response[v1.MoveNoteResponse], error)
+	// DeleteNote — удалить заметку (rm .md → commit → push).
+	DeleteNote(context.Context, *connect.Request[v1.DeleteNoteRequest]) (*connect.Response[v1.DeleteNoteResponse], error)
+	// --- legacy, плоский доступ (мобильный клиент/обратная совместимость) ---
+	// ListNotes — все заметки пользователя плоским списком (без группировки по темам).
 	ListNotes(context.Context, *connect.Request[v1.ListNotesRequest]) (*connect.Response[v1.ListNotesResponse], error)
 	// GetNote — одна заметка по id.
 	GetNote(context.Context, *connect.Request[v1.GetNoteRequest]) (*connect.Response[v1.GetNoteResponse], error)
-	// CreateNote — создать заметку (write .md → commit → push синхронно). session пуст —
-	// заметка создана из UI/мобилы, а не сессией.
-	CreateNote(context.Context, *connect.Request[v1.CreateNoteRequest]) (*connect.Response[v1.CreateNoteResponse], error)
 }
 
 // NewMemoryServiceClient constructs a client for the brigade.v1.MemoryService service. By default,
@@ -65,6 +99,54 @@ func NewMemoryServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 	baseURL = strings.TrimRight(baseURL, "/")
 	memoryServiceMethods := v1.File_brigade_v1_memory_proto.Services().ByName("MemoryService").Methods()
 	return &memoryServiceClient{
+		listTopics: connect.NewClient[v1.ListTopicsRequest, v1.ListTopicsResponse](
+			httpClient,
+			baseURL+MemoryServiceListTopicsProcedure,
+			connect.WithSchema(memoryServiceMethods.ByName("ListTopics")),
+			connect.WithClientOptions(opts...),
+		),
+		getTopic: connect.NewClient[v1.GetTopicRequest, v1.GetTopicResponse](
+			httpClient,
+			baseURL+MemoryServiceGetTopicProcedure,
+			connect.WithSchema(memoryServiceMethods.ByName("GetTopic")),
+			connect.WithClientOptions(opts...),
+		),
+		createTopic: connect.NewClient[v1.CreateTopicRequest, v1.CreateTopicResponse](
+			httpClient,
+			baseURL+MemoryServiceCreateTopicProcedure,
+			connect.WithSchema(memoryServiceMethods.ByName("CreateTopic")),
+			connect.WithClientOptions(opts...),
+		),
+		updateTopicOverview: connect.NewClient[v1.UpdateTopicOverviewRequest, v1.UpdateTopicOverviewResponse](
+			httpClient,
+			baseURL+MemoryServiceUpdateTopicOverviewProcedure,
+			connect.WithSchema(memoryServiceMethods.ByName("UpdateTopicOverview")),
+			connect.WithClientOptions(opts...),
+		),
+		createNote: connect.NewClient[v1.CreateNoteRequest, v1.CreateNoteResponse](
+			httpClient,
+			baseURL+MemoryServiceCreateNoteProcedure,
+			connect.WithSchema(memoryServiceMethods.ByName("CreateNote")),
+			connect.WithClientOptions(opts...),
+		),
+		updateNote: connect.NewClient[v1.UpdateNoteRequest, v1.UpdateNoteResponse](
+			httpClient,
+			baseURL+MemoryServiceUpdateNoteProcedure,
+			connect.WithSchema(memoryServiceMethods.ByName("UpdateNote")),
+			connect.WithClientOptions(opts...),
+		),
+		moveNote: connect.NewClient[v1.MoveNoteRequest, v1.MoveNoteResponse](
+			httpClient,
+			baseURL+MemoryServiceMoveNoteProcedure,
+			connect.WithSchema(memoryServiceMethods.ByName("MoveNote")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteNote: connect.NewClient[v1.DeleteNoteRequest, v1.DeleteNoteResponse](
+			httpClient,
+			baseURL+MemoryServiceDeleteNoteProcedure,
+			connect.WithSchema(memoryServiceMethods.ByName("DeleteNote")),
+			connect.WithClientOptions(opts...),
+		),
 		listNotes: connect.NewClient[v1.ListNotesRequest, v1.ListNotesResponse](
 			httpClient,
 			baseURL+MemoryServiceListNotesProcedure,
@@ -77,20 +159,61 @@ func NewMemoryServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(memoryServiceMethods.ByName("GetNote")),
 			connect.WithClientOptions(opts...),
 		),
-		createNote: connect.NewClient[v1.CreateNoteRequest, v1.CreateNoteResponse](
-			httpClient,
-			baseURL+MemoryServiceCreateNoteProcedure,
-			connect.WithSchema(memoryServiceMethods.ByName("CreateNote")),
-			connect.WithClientOptions(opts...),
-		),
 	}
 }
 
 // memoryServiceClient implements MemoryServiceClient.
 type memoryServiceClient struct {
-	listNotes  *connect.Client[v1.ListNotesRequest, v1.ListNotesResponse]
-	getNote    *connect.Client[v1.GetNoteRequest, v1.GetNoteResponse]
-	createNote *connect.Client[v1.CreateNoteRequest, v1.CreateNoteResponse]
+	listTopics          *connect.Client[v1.ListTopicsRequest, v1.ListTopicsResponse]
+	getTopic            *connect.Client[v1.GetTopicRequest, v1.GetTopicResponse]
+	createTopic         *connect.Client[v1.CreateTopicRequest, v1.CreateTopicResponse]
+	updateTopicOverview *connect.Client[v1.UpdateTopicOverviewRequest, v1.UpdateTopicOverviewResponse]
+	createNote          *connect.Client[v1.CreateNoteRequest, v1.CreateNoteResponse]
+	updateNote          *connect.Client[v1.UpdateNoteRequest, v1.UpdateNoteResponse]
+	moveNote            *connect.Client[v1.MoveNoteRequest, v1.MoveNoteResponse]
+	deleteNote          *connect.Client[v1.DeleteNoteRequest, v1.DeleteNoteResponse]
+	listNotes           *connect.Client[v1.ListNotesRequest, v1.ListNotesResponse]
+	getNote             *connect.Client[v1.GetNoteRequest, v1.GetNoteResponse]
+}
+
+// ListTopics calls brigade.v1.MemoryService.ListTopics.
+func (c *memoryServiceClient) ListTopics(ctx context.Context, req *connect.Request[v1.ListTopicsRequest]) (*connect.Response[v1.ListTopicsResponse], error) {
+	return c.listTopics.CallUnary(ctx, req)
+}
+
+// GetTopic calls brigade.v1.MemoryService.GetTopic.
+func (c *memoryServiceClient) GetTopic(ctx context.Context, req *connect.Request[v1.GetTopicRequest]) (*connect.Response[v1.GetTopicResponse], error) {
+	return c.getTopic.CallUnary(ctx, req)
+}
+
+// CreateTopic calls brigade.v1.MemoryService.CreateTopic.
+func (c *memoryServiceClient) CreateTopic(ctx context.Context, req *connect.Request[v1.CreateTopicRequest]) (*connect.Response[v1.CreateTopicResponse], error) {
+	return c.createTopic.CallUnary(ctx, req)
+}
+
+// UpdateTopicOverview calls brigade.v1.MemoryService.UpdateTopicOverview.
+func (c *memoryServiceClient) UpdateTopicOverview(ctx context.Context, req *connect.Request[v1.UpdateTopicOverviewRequest]) (*connect.Response[v1.UpdateTopicOverviewResponse], error) {
+	return c.updateTopicOverview.CallUnary(ctx, req)
+}
+
+// CreateNote calls brigade.v1.MemoryService.CreateNote.
+func (c *memoryServiceClient) CreateNote(ctx context.Context, req *connect.Request[v1.CreateNoteRequest]) (*connect.Response[v1.CreateNoteResponse], error) {
+	return c.createNote.CallUnary(ctx, req)
+}
+
+// UpdateNote calls brigade.v1.MemoryService.UpdateNote.
+func (c *memoryServiceClient) UpdateNote(ctx context.Context, req *connect.Request[v1.UpdateNoteRequest]) (*connect.Response[v1.UpdateNoteResponse], error) {
+	return c.updateNote.CallUnary(ctx, req)
+}
+
+// MoveNote calls brigade.v1.MemoryService.MoveNote.
+func (c *memoryServiceClient) MoveNote(ctx context.Context, req *connect.Request[v1.MoveNoteRequest]) (*connect.Response[v1.MoveNoteResponse], error) {
+	return c.moveNote.CallUnary(ctx, req)
+}
+
+// DeleteNote calls brigade.v1.MemoryService.DeleteNote.
+func (c *memoryServiceClient) DeleteNote(ctx context.Context, req *connect.Request[v1.DeleteNoteRequest]) (*connect.Response[v1.DeleteNoteResponse], error) {
+	return c.deleteNote.CallUnary(ctx, req)
 }
 
 // ListNotes calls brigade.v1.MemoryService.ListNotes.
@@ -103,21 +226,31 @@ func (c *memoryServiceClient) GetNote(ctx context.Context, req *connect.Request[
 	return c.getNote.CallUnary(ctx, req)
 }
 
-// CreateNote calls brigade.v1.MemoryService.CreateNote.
-func (c *memoryServiceClient) CreateNote(ctx context.Context, req *connect.Request[v1.CreateNoteRequest]) (*connect.Response[v1.CreateNoteResponse], error) {
-	return c.createNote.CallUnary(ctx, req)
-}
-
 // MemoryServiceHandler is an implementation of the brigade.v1.MemoryService service.
 type MemoryServiceHandler interface {
-	// ListNotes — заметки пользователя, при непустом query — фильтр по подстроке
-	// (title/body/tags), сортировка от новых к старым.
+	// ListTopics — все темы пользователя (с производными count/updated и парой последних
+	// заметок для карточки-«полки»). query пуст — все; иначе фильтр по имени/обзору/заметкам.
+	ListTopics(context.Context, *connect.Request[v1.ListTopicsRequest]) (*connect.Response[v1.ListTopicsResponse], error)
+	// GetTopic — тема с полным обзором и всеми её заметками (для экрана темы).
+	GetTopic(context.Context, *connect.Request[v1.GetTopicRequest]) (*connect.Response[v1.GetTopicResponse], error)
+	// CreateTopic — новая тема (имя + цвет). initial (буква аватара) выводится из имени.
+	CreateTopic(context.Context, *connect.Request[v1.CreateTopicRequest]) (*connect.Response[v1.CreateTopicResponse], error)
+	// UpdateTopicOverview — перезаписать synthesis темы (ручное редактирование обзора).
+	UpdateTopicOverview(context.Context, *connect.Request[v1.UpdateTopicOverviewRequest]) (*connect.Response[v1.UpdateTopicOverviewResponse], error)
+	// CreateNote — создать заметку в теме/подтеме (write .md → commit → push синхронно).
+	// session пуст — заметка создана из UI, а не сессией; from — человекочитаемый провенанс.
+	CreateNote(context.Context, *connect.Request[v1.CreateNoteRequest]) (*connect.Response[v1.CreateNoteResponse], error)
+	// UpdateNote — правка полей заметки (title/body/type/sub) на месте.
+	UpdateNote(context.Context, *connect.Request[v1.UpdateNoteRequest]) (*connect.Response[v1.UpdateNoteResponse], error)
+	// MoveNote — перенос заметки в другую тему и/или подтему (перекладывает файл).
+	MoveNote(context.Context, *connect.Request[v1.MoveNoteRequest]) (*connect.Response[v1.MoveNoteResponse], error)
+	// DeleteNote — удалить заметку (rm .md → commit → push).
+	DeleteNote(context.Context, *connect.Request[v1.DeleteNoteRequest]) (*connect.Response[v1.DeleteNoteResponse], error)
+	// --- legacy, плоский доступ (мобильный клиент/обратная совместимость) ---
+	// ListNotes — все заметки пользователя плоским списком (без группировки по темам).
 	ListNotes(context.Context, *connect.Request[v1.ListNotesRequest]) (*connect.Response[v1.ListNotesResponse], error)
 	// GetNote — одна заметка по id.
 	GetNote(context.Context, *connect.Request[v1.GetNoteRequest]) (*connect.Response[v1.GetNoteResponse], error)
-	// CreateNote — создать заметку (write .md → commit → push синхронно). session пуст —
-	// заметка создана из UI/мобилы, а не сессией.
-	CreateNote(context.Context, *connect.Request[v1.CreateNoteRequest]) (*connect.Response[v1.CreateNoteResponse], error)
 }
 
 // NewMemoryServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -127,6 +260,54 @@ type MemoryServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewMemoryServiceHandler(svc MemoryServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	memoryServiceMethods := v1.File_brigade_v1_memory_proto.Services().ByName("MemoryService").Methods()
+	memoryServiceListTopicsHandler := connect.NewUnaryHandler(
+		MemoryServiceListTopicsProcedure,
+		svc.ListTopics,
+		connect.WithSchema(memoryServiceMethods.ByName("ListTopics")),
+		connect.WithHandlerOptions(opts...),
+	)
+	memoryServiceGetTopicHandler := connect.NewUnaryHandler(
+		MemoryServiceGetTopicProcedure,
+		svc.GetTopic,
+		connect.WithSchema(memoryServiceMethods.ByName("GetTopic")),
+		connect.WithHandlerOptions(opts...),
+	)
+	memoryServiceCreateTopicHandler := connect.NewUnaryHandler(
+		MemoryServiceCreateTopicProcedure,
+		svc.CreateTopic,
+		connect.WithSchema(memoryServiceMethods.ByName("CreateTopic")),
+		connect.WithHandlerOptions(opts...),
+	)
+	memoryServiceUpdateTopicOverviewHandler := connect.NewUnaryHandler(
+		MemoryServiceUpdateTopicOverviewProcedure,
+		svc.UpdateTopicOverview,
+		connect.WithSchema(memoryServiceMethods.ByName("UpdateTopicOverview")),
+		connect.WithHandlerOptions(opts...),
+	)
+	memoryServiceCreateNoteHandler := connect.NewUnaryHandler(
+		MemoryServiceCreateNoteProcedure,
+		svc.CreateNote,
+		connect.WithSchema(memoryServiceMethods.ByName("CreateNote")),
+		connect.WithHandlerOptions(opts...),
+	)
+	memoryServiceUpdateNoteHandler := connect.NewUnaryHandler(
+		MemoryServiceUpdateNoteProcedure,
+		svc.UpdateNote,
+		connect.WithSchema(memoryServiceMethods.ByName("UpdateNote")),
+		connect.WithHandlerOptions(opts...),
+	)
+	memoryServiceMoveNoteHandler := connect.NewUnaryHandler(
+		MemoryServiceMoveNoteProcedure,
+		svc.MoveNote,
+		connect.WithSchema(memoryServiceMethods.ByName("MoveNote")),
+		connect.WithHandlerOptions(opts...),
+	)
+	memoryServiceDeleteNoteHandler := connect.NewUnaryHandler(
+		MemoryServiceDeleteNoteProcedure,
+		svc.DeleteNote,
+		connect.WithSchema(memoryServiceMethods.ByName("DeleteNote")),
+		connect.WithHandlerOptions(opts...),
+	)
 	memoryServiceListNotesHandler := connect.NewUnaryHandler(
 		MemoryServiceListNotesProcedure,
 		svc.ListNotes,
@@ -139,20 +320,28 @@ func NewMemoryServiceHandler(svc MemoryServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(memoryServiceMethods.ByName("GetNote")),
 		connect.WithHandlerOptions(opts...),
 	)
-	memoryServiceCreateNoteHandler := connect.NewUnaryHandler(
-		MemoryServiceCreateNoteProcedure,
-		svc.CreateNote,
-		connect.WithSchema(memoryServiceMethods.ByName("CreateNote")),
-		connect.WithHandlerOptions(opts...),
-	)
 	return "/brigade.v1.MemoryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case MemoryServiceListTopicsProcedure:
+			memoryServiceListTopicsHandler.ServeHTTP(w, r)
+		case MemoryServiceGetTopicProcedure:
+			memoryServiceGetTopicHandler.ServeHTTP(w, r)
+		case MemoryServiceCreateTopicProcedure:
+			memoryServiceCreateTopicHandler.ServeHTTP(w, r)
+		case MemoryServiceUpdateTopicOverviewProcedure:
+			memoryServiceUpdateTopicOverviewHandler.ServeHTTP(w, r)
+		case MemoryServiceCreateNoteProcedure:
+			memoryServiceCreateNoteHandler.ServeHTTP(w, r)
+		case MemoryServiceUpdateNoteProcedure:
+			memoryServiceUpdateNoteHandler.ServeHTTP(w, r)
+		case MemoryServiceMoveNoteProcedure:
+			memoryServiceMoveNoteHandler.ServeHTTP(w, r)
+		case MemoryServiceDeleteNoteProcedure:
+			memoryServiceDeleteNoteHandler.ServeHTTP(w, r)
 		case MemoryServiceListNotesProcedure:
 			memoryServiceListNotesHandler.ServeHTTP(w, r)
 		case MemoryServiceGetNoteProcedure:
 			memoryServiceGetNoteHandler.ServeHTTP(w, r)
-		case MemoryServiceCreateNoteProcedure:
-			memoryServiceCreateNoteHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -162,14 +351,42 @@ func NewMemoryServiceHandler(svc MemoryServiceHandler, opts ...connect.HandlerOp
 // UnimplementedMemoryServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedMemoryServiceHandler struct{}
 
+func (UnimplementedMemoryServiceHandler) ListTopics(context.Context, *connect.Request[v1.ListTopicsRequest]) (*connect.Response[v1.ListTopicsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.MemoryService.ListTopics is not implemented"))
+}
+
+func (UnimplementedMemoryServiceHandler) GetTopic(context.Context, *connect.Request[v1.GetTopicRequest]) (*connect.Response[v1.GetTopicResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.MemoryService.GetTopic is not implemented"))
+}
+
+func (UnimplementedMemoryServiceHandler) CreateTopic(context.Context, *connect.Request[v1.CreateTopicRequest]) (*connect.Response[v1.CreateTopicResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.MemoryService.CreateTopic is not implemented"))
+}
+
+func (UnimplementedMemoryServiceHandler) UpdateTopicOverview(context.Context, *connect.Request[v1.UpdateTopicOverviewRequest]) (*connect.Response[v1.UpdateTopicOverviewResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.MemoryService.UpdateTopicOverview is not implemented"))
+}
+
+func (UnimplementedMemoryServiceHandler) CreateNote(context.Context, *connect.Request[v1.CreateNoteRequest]) (*connect.Response[v1.CreateNoteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.MemoryService.CreateNote is not implemented"))
+}
+
+func (UnimplementedMemoryServiceHandler) UpdateNote(context.Context, *connect.Request[v1.UpdateNoteRequest]) (*connect.Response[v1.UpdateNoteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.MemoryService.UpdateNote is not implemented"))
+}
+
+func (UnimplementedMemoryServiceHandler) MoveNote(context.Context, *connect.Request[v1.MoveNoteRequest]) (*connect.Response[v1.MoveNoteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.MemoryService.MoveNote is not implemented"))
+}
+
+func (UnimplementedMemoryServiceHandler) DeleteNote(context.Context, *connect.Request[v1.DeleteNoteRequest]) (*connect.Response[v1.DeleteNoteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.MemoryService.DeleteNote is not implemented"))
+}
+
 func (UnimplementedMemoryServiceHandler) ListNotes(context.Context, *connect.Request[v1.ListNotesRequest]) (*connect.Response[v1.ListNotesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.MemoryService.ListNotes is not implemented"))
 }
 
 func (UnimplementedMemoryServiceHandler) GetNote(context.Context, *connect.Request[v1.GetNoteRequest]) (*connect.Response[v1.GetNoteResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.MemoryService.GetNote is not implemented"))
-}
-
-func (UnimplementedMemoryServiceHandler) CreateNote(context.Context, *connect.Request[v1.CreateNoteRequest]) (*connect.Response[v1.CreateNoteResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.MemoryService.CreateNote is not implemented"))
 }

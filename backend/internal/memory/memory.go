@@ -59,7 +59,7 @@ type SettingsSource interface {
 	GetUserSettings(ctx context.Context, userID string) (store.UserSettings, error)
 }
 
-// Note — одна заметка памяти.
+// Note — одна заметка памяти (живёт внутри темы/подтемы).
 type Note struct {
 	ID      string
 	Title   string
@@ -69,10 +69,29 @@ type Note struct {
 	Session string
 	Created string // дата ISO (YYYY-MM-DD)
 	Updated string
-	Layer   string // semantic | episodic
+	Layer   string // semantic | episodic (legacy-слой, в темо-UI не используется)
+	TopicID string // тема-владелец; выводится из пути файла ("general" — legacy/«Общее»)
+	Sub     string // подтема внутри темы
+	From    string // человекочитаемый провенанс («чат: …», «вручную»)
 }
 
-// frontmatter — YAML-заголовок .md-файла (round-trip модель хранения).
+// Topic — тема памяти («блокнот»): обзор-synthesis + заметки по подтемам. Производные поля
+// (NoteCount/ChatCount/Recent) заполняются при чтении, в _topic.md не хранятся.
+type Topic struct {
+	ID        string
+	Name      string
+	Color     string
+	Initial   string
+	Synthesis string
+	Subs      []string
+	Created   string
+	Updated   string
+	NoteCount int
+	ChatCount int
+	Recent    []Note
+}
+
+// frontmatter — YAML-заголовок .md-файла заметки (round-trip модель хранения).
 type frontmatter struct {
 	ID      string   `yaml:"id"`
 	Title   string   `yaml:"title"`
@@ -80,8 +99,38 @@ type frontmatter struct {
 	Layer   string   `yaml:"layer"`
 	Tags    []string `yaml:"tags,omitempty"`
 	Session string   `yaml:"session,omitempty"`
+	Sub     string   `yaml:"sub,omitempty"`
+	From    string   `yaml:"from,omitempty"`
 	Created string   `yaml:"created"`
 	Updated string   `yaml:"updated"`
+}
+
+// topicFrontmatter — YAML-заголовок _topic.md (мета темы; тело файла = synthesis-обзор).
+type topicFrontmatter struct {
+	ID      string   `yaml:"id"`
+	Name    string   `yaml:"name"`
+	Color   string   `yaml:"color"`
+	Initial string   `yaml:"initial"`
+	Subs    []string `yaml:"subs,omitempty"`
+	Created string   `yaml:"created"`
+	Updated string   `yaml:"updated"`
+}
+
+// generalTopicID — виртуальная тема «Общее»: собирает legacy-заметки (созданные до тем,
+// лежат в <type>s/ и sessions/) и заметки без явной темы.
+const generalTopicID = "general"
+
+const generalTopicName = "Общее"
+
+// topicColors — палитра акцентов тем (из дизайн-хендоффа). Новой теме без явного цвета
+// назначается по кругу (детерминированно от числа существующих тем).
+var topicColors = []string{
+	"#c96442", // терракот
+	"#d9a441", // янтарь
+	"#6fa564", // зелёный
+	"#7c9fd6", // синий
+	"#b98cd1", // фиолетовый
+	"#a8a49a", // нейтральный
 }
 
 // Service — ядро памяти: пер-юзерные git-хранилища + чтение/запись заметок.
@@ -122,7 +171,7 @@ func (s *Service) Create(ctx context.Context, userID string, n Note) (Note, stri
 	if err := os.WriteFile(abs, renderNote(n), 0o644); err != nil {
 		return Note{}, "", fmt.Errorf("memory: write %s: %w", rel, err)
 	}
-	sha, err := s.commitPushLocked(ctx, sp, rel, "memory: note "+n.ID)
+	sha, err := s.commitPushLocked(ctx, sp, "memory: note "+n.ID, rel)
 	if err != nil {
 		return Note{}, "", err
 	}
@@ -138,10 +187,11 @@ func (s *Service) List(ctx context.Context, userID, query string) ([]Note, error
 	if err != nil {
 		return nil, err
 	}
-	notes, err := scan(sp.repoDir)
+	files, err := scanNotes(sp.repoDir)
 	if err != nil {
 		return nil, err
 	}
+	notes := notesOf(files)
 	q := strings.ToLower(strings.TrimSpace(query))
 	if q != "" {
 		filtered := notes[:0]
@@ -169,16 +219,434 @@ func (s *Service) Get(ctx context.Context, userID, id string) (Note, error) {
 	if err != nil {
 		return Note{}, err
 	}
-	notes, err := scan(sp.repoDir)
+	files, err := scanNotes(sp.repoDir)
 	if err != nil {
 		return Note{}, err
 	}
-	for _, n := range notes {
-		if n.ID == id {
-			return n, nil
+	for _, f := range files {
+		if f.ID == id {
+			return f.Note, nil
 		}
 	}
 	return Note{}, ErrNotFound
+}
+
+// --- темы ---
+
+// ListTopics возвращает темы пользователя с производными (count/updated/chats/recent),
+// отсортированные от свежих к старым. При непустом query — фильтр по имени/обзору/заметкам.
+func (s *Service) ListTopics(ctx context.Context, userID, query string) ([]Topic, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sp, err := s.prepareLocked(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	files, err := scanNotes(sp.repoDir)
+	if err != nil {
+		return nil, err
+	}
+	metas, err := scanTopics(sp.repoDir)
+	if err != nil {
+		return nil, err
+	}
+	topics := assembleTopics(metas, files)
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q != "" {
+		filtered := topics[:0]
+		for _, t := range topics {
+			if topicMatches(t, q) {
+				filtered = append(filtered, t)
+			}
+		}
+		topics = filtered
+	}
+	sort.Slice(topics, func(i, j int) bool {
+		if topics[i].Updated != topics[j].Updated {
+			return topics[i].Updated > topics[j].Updated
+		}
+		return topics[i].Name < topics[j].Name
+	})
+	return topics, nil
+}
+
+// GetTopic возвращает тему с полным обзором и все её заметки (от свежих к старым).
+func (s *Service) GetTopic(ctx context.Context, userID, id string) (Topic, []Note, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sp, err := s.prepareLocked(ctx, userID)
+	if err != nil {
+		return Topic{}, nil, err
+	}
+	files, err := scanNotes(sp.repoDir)
+	if err != nil {
+		return Topic{}, nil, err
+	}
+	metas, err := scanTopics(sp.repoDir)
+	if err != nil {
+		return Topic{}, nil, err
+	}
+	var notes []Note
+	for _, f := range files {
+		if f.TopicID == id {
+			notes = append(notes, f.Note)
+		}
+	}
+	topic, found := Topic{}, false
+	for _, m := range metas {
+		if m.ID == id {
+			topic, found = m, true
+			break
+		}
+	}
+	if !found {
+		if len(notes) == 0 {
+			return Topic{}, nil, ErrNotFound
+		}
+		topic = virtualTopicMeta(id) // тема без _topic.md (напр. «Общее» из legacy-заметок)
+	}
+	deriveTopic(&topic, notes)
+	return topic, notes, nil
+}
+
+// CreateTopic создаёт тему (имя + цвет). id выводится из имени (уникализируется суффиксом),
+// initial — заглавная первая буква, стартовая подтема — «Общее».
+func (s *Service) CreateTopic(ctx context.Context, userID, name, color string) (Topic, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return Topic{}, fmt.Errorf("memory: topic name required")
+	}
+	sp, err := s.prepareLocked(ctx, userID)
+	if err != nil {
+		return Topic{}, err
+	}
+	metas, err := scanTopics(sp.repoDir)
+	if err != nil {
+		return Topic{}, err
+	}
+	taken := make(map[string]bool, len(metas))
+	for _, m := range metas {
+		taken[m.ID] = true
+	}
+	id := uniqueTopicID(topicSlug(name), taken)
+	if color == "" {
+		color = topicColors[len(metas)%len(topicColors)]
+	}
+	today := time.Now().Format("2006-01-02")
+	t := Topic{
+		ID: id, Name: name, Color: color, Initial: initialOf(name),
+		Subs: []string{"Общее"}, Created: today, Updated: today,
+	}
+	rel := filepath.Join("topics", id, topicMetaFile)
+	abs := filepath.Join(sp.repoDir, rel)
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		return Topic{}, fmt.Errorf("memory: mkdir topic: %w", err)
+	}
+	if err := os.WriteFile(abs, renderTopic(t), 0o644); err != nil {
+		return Topic{}, fmt.Errorf("memory: write topic: %w", err)
+	}
+	if _, err := s.commitPushLocked(ctx, sp, "memory: topic "+id, rel); err != nil {
+		return Topic{}, err
+	}
+	return t, nil
+}
+
+// UpdateTopicOverview перезаписывает synthesis-обзор темы. Для виртуальной «Общее» (или темы
+// без _topic.md) — материализует _topic.md.
+func (s *Service) UpdateTopicOverview(ctx context.Context, userID, id, synthesis string) (Topic, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sp, err := s.prepareLocked(ctx, userID)
+	if err != nil {
+		return Topic{}, err
+	}
+	metas, err := scanTopics(sp.repoDir)
+	if err != nil {
+		return Topic{}, err
+	}
+	topic := Topic{}
+	for _, m := range metas {
+		if m.ID == id {
+			topic = m
+			break
+		}
+	}
+	if topic.ID == "" {
+		topic = virtualTopicMeta(id) // материализуем ранее виртуальную тему
+	}
+	topic.Synthesis = strings.TrimSpace(synthesis)
+	topic.Updated = time.Now().Format("2006-01-02")
+	if topic.Created == "" {
+		topic.Created = topic.Updated
+	}
+	rel := filepath.Join("topics", id, topicMetaFile)
+	abs := filepath.Join(sp.repoDir, rel)
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		return Topic{}, fmt.Errorf("memory: mkdir topic: %w", err)
+	}
+	if err := os.WriteFile(abs, renderTopic(topic), 0o644); err != nil {
+		return Topic{}, fmt.Errorf("memory: write topic: %w", err)
+	}
+	if _, err := s.commitPushLocked(ctx, sp, "memory: overview "+id, rel); err != nil {
+		return Topic{}, err
+	}
+	return topic, nil
+}
+
+// --- правки заметок ---
+
+// UpdateNote меняет поля заметки на месте (title/body/type/sub). Пустые title/body/type
+// оставляют прежнее значение; sub применяется как есть (пустой — снять подтему).
+func (s *Service) UpdateNote(ctx context.Context, userID, id, title, body, ntype, sub string) (Note, string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sp, err := s.prepareLocked(ctx, userID)
+	if err != nil {
+		return Note{}, "", err
+	}
+	f, err := s.findFileLocked(sp, id)
+	if err != nil {
+		return Note{}, "", err
+	}
+	n := f.Note
+	if title != "" {
+		n.Title = title
+	}
+	if body != "" {
+		n.Body = body
+	}
+	if ntype != "" {
+		n.Type = strings.ToLower(strings.TrimSpace(ntype))
+		if !noteTypes[n.Type] {
+			n.Type = f.Type
+		}
+	}
+	n.Sub = strings.TrimSpace(sub)
+	n.Updated = time.Now().Format("2006-01-02")
+	abs := filepath.Join(sp.repoDir, f.Rel)
+	if err := os.WriteFile(abs, renderNote(n), 0o644); err != nil {
+		return Note{}, "", fmt.Errorf("memory: write %s: %w", f.Rel, err)
+	}
+	sha, err := s.commitPushLocked(ctx, sp, "memory: update "+id, f.Rel)
+	if err != nil {
+		return Note{}, "", err
+	}
+	return n, sha, nil
+}
+
+// MoveNote переносит заметку в другую тему и/или подтему. При смене темы файл перекладывается
+// (topics/<to>/<id>.md), старый путь удаляется; в пределах темы меняется только подтема.
+func (s *Service) MoveNote(ctx context.Context, userID, id, toTopic, toSub string) (Note, string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sp, err := s.prepareLocked(ctx, userID)
+	if err != nil {
+		return Note{}, "", err
+	}
+	f, err := s.findFileLocked(sp, id)
+	if err != nil {
+		return Note{}, "", err
+	}
+	n := f.Note
+	if toTopic != "" {
+		n.TopicID = toTopic
+	}
+	n.Sub = strings.TrimSpace(toSub)
+	n.Updated = time.Now().Format("2006-01-02")
+	newRel := notePath(n)
+	newAbs := filepath.Join(sp.repoDir, newRel)
+	if err := os.MkdirAll(filepath.Dir(newAbs), 0o755); err != nil {
+		return Note{}, "", fmt.Errorf("memory: mkdir: %w", err)
+	}
+	if err := os.WriteFile(newAbs, renderNote(n), 0o644); err != nil {
+		return Note{}, "", fmt.Errorf("memory: write %s: %w", newRel, err)
+	}
+	rels := []string{newRel}
+	if newRel != f.Rel {
+		if err := os.Remove(filepath.Join(sp.repoDir, f.Rel)); err != nil && !os.IsNotExist(err) {
+			return Note{}, "", fmt.Errorf("memory: remove %s: %w", f.Rel, err)
+		}
+		rels = append(rels, f.Rel)
+	}
+	sha, err := s.commitPushLocked(ctx, sp, "memory: move "+id, rels...)
+	if err != nil {
+		return Note{}, "", err
+	}
+	return n, sha, nil
+}
+
+// DeleteNote удаляет заметку (rm .md → commit → push).
+func (s *Service) DeleteNote(ctx context.Context, userID, id string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sp, err := s.prepareLocked(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	f, err := s.findFileLocked(sp, id)
+	if err != nil {
+		return "", err
+	}
+	if err := os.Remove(filepath.Join(sp.repoDir, f.Rel)); err != nil && !os.IsNotExist(err) {
+		return "", fmt.Errorf("memory: remove %s: %w", f.Rel, err)
+	}
+	return s.commitPushLocked(ctx, sp, "memory: delete "+id, f.Rel)
+}
+
+// findFileLocked ищет заметку по id в рабочей копии, возвращая её вместе с путём.
+func (s *Service) findFileLocked(sp space, id string) (noteFile, error) {
+	files, err := scanNotes(sp.repoDir)
+	if err != nil {
+		return noteFile{}, err
+	}
+	for _, f := range files {
+		if f.ID == id {
+			return f, nil
+		}
+	}
+	return noteFile{}, ErrNotFound
+}
+
+// --- агрегация тем ---
+
+// assembleTopics собирает темы: мета из _topic.md + виртуальные темы для заметок без меты
+// (в т.ч. «Общее» из legacy). Заполняет производные поля.
+func assembleTopics(metas []Topic, files []noteFile) []Topic {
+	byID := map[string]*Topic{}
+	var order []string
+	for i := range metas {
+		m := metas[i]
+		byID[m.ID] = &m
+		order = append(order, m.ID)
+	}
+	notesByTopic := map[string][]Note{}
+	for _, f := range files {
+		notesByTopic[f.TopicID] = append(notesByTopic[f.TopicID], f.Note)
+	}
+	// Темы без _topic.md, но с заметками (legacy «Общее» или каталог без меты) — синтезируем.
+	for tid := range notesByTopic {
+		if _, ok := byID[tid]; !ok {
+			t := virtualTopicMeta(tid)
+			byID[tid] = &t
+			order = append(order, tid)
+		}
+	}
+	out := make([]Topic, 0, len(order))
+	for _, tid := range order {
+		t := byID[tid]
+		deriveTopic(t, notesByTopic[tid])
+		out = append(out, *t)
+	}
+	return out
+}
+
+// deriveTopic заполняет производные поля темы из её заметок (count/chats/updated/recent),
+// дополняя список подтем теми, что реально встречаются в заметках.
+func deriveTopic(t *Topic, notes []Note) {
+	sort.Slice(notes, func(i, j int) bool {
+		if notes[i].Updated != notes[j].Updated {
+			return notes[i].Updated > notes[j].Updated
+		}
+		return notes[i].ID > notes[j].ID
+	})
+	t.NoteCount = len(notes)
+	sessions := map[string]bool{}
+	for _, n := range notes {
+		if n.Session != "" {
+			sessions[n.Session] = true
+		}
+		if n.Updated > t.Updated {
+			t.Updated = n.Updated
+		}
+	}
+	t.ChatCount = len(sessions)
+	t.Subs = mergeSubs(t.Subs, notes)
+	if len(notes) > 2 {
+		t.Recent = append([]Note(nil), notes[:2]...)
+	} else {
+		t.Recent = append([]Note(nil), notes...)
+	}
+}
+
+// mergeSubs объединяет подтемы из меты с подтемами, реально встречающимися в заметках,
+// сохраняя порядок (мета → новые из заметок).
+func mergeSubs(base []string, notes []Note) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, s := range base {
+		if s != "" && !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	for _, n := range notes {
+		if n.Sub != "" && !seen[n.Sub] {
+			seen[n.Sub] = true
+			out = append(out, n.Sub)
+		}
+	}
+	return out
+}
+
+// virtualTopicMeta синтезирует мету темы без _topic.md: «Общее» для generalTopicID, иначе
+// имя = id (каталог topics/<id>/ без меты).
+func virtualTopicMeta(id string) Topic {
+	if id == generalTopicID {
+		return Topic{ID: generalTopicID, Name: generalTopicName, Color: "#a8a49a", Initial: "О"}
+	}
+	return Topic{ID: id, Name: id, Color: "#a8a49a", Initial: initialOf(id)}
+}
+
+// topicMatches — попадает ли тема под поисковую подстроку (имя/обзор/заголовки-тела заметок).
+func topicMatches(t Topic, q string) bool {
+	if strings.Contains(strings.ToLower(t.Name), q) || strings.Contains(strings.ToLower(t.Synthesis), q) {
+		return true
+	}
+	for _, n := range t.Recent {
+		if strings.Contains(strings.ToLower(n.Title), q) || strings.Contains(strings.ToLower(n.Body), q) {
+			return true
+		}
+	}
+	return false
+}
+
+// topicSlugRe оставляет буквы (в т.ч. кириллицу) и цифры, остальное — в дефис.
+var topicSlugRe = regexp.MustCompile(`[^\p{L}\p{N}]+`)
+
+// topicSlug приводит имя темы к id (unicode-буквы сохраняются, поэтому кириллица не теряется).
+func topicSlug(name string) string {
+	s := topicSlugRe.ReplaceAllString(strings.ToLower(name), "-")
+	s = strings.Trim(s, "-")
+	if s == "" || s == generalTopicID {
+		return "topic-" + s
+	}
+	if len(s) > 60 {
+		s = strings.Trim(s[:60], "-")
+	}
+	return s
+}
+
+// uniqueTopicID добавляет числовой суффикс, если id уже занят.
+func uniqueTopicID(id string, taken map[string]bool) string {
+	if !taken[id] {
+		return id
+	}
+	for i := 2; ; i++ {
+		cand := fmt.Sprintf("%s-%d", id, i)
+		if !taken[cand] {
+			return cand
+		}
+	}
+}
+
+// initialOf — заглавная первая буква имени (аватар темы); пусто → «•».
+func initialOf(name string) string {
+	for _, r := range strings.TrimSpace(name) {
+		return strings.ToUpper(string(r))
+	}
+	return "•"
 }
 
 // prepareLocked резолвит настройки пользователя, материализует SSH-ключ и поднимает рабочую
@@ -232,11 +700,12 @@ func (s *Service) configIdentityLocked(ctx context.Context, sp space) error {
 	return err
 }
 
-// commitPushLocked коммитит rel и синхронно пушит. При отклонении push (кто-то опередил)
-// делает pull --rebase и повторяет push один раз. Возвращает SHA HEAD.
-func (s *Service) commitPushLocked(ctx context.Context, sp space, rel, msg string) (string, error) {
+// commitPushLocked стейджит rels (add -A — учитывает создание, изменение и удаление),
+// коммитит и синхронно пушит. При отклонении push (кто-то опередил) делает pull --rebase и
+// повторяет push один раз. Возвращает SHA HEAD.
+func (s *Service) commitPushLocked(ctx context.Context, sp space, msg string, rels ...string) (string, error) {
 	dir, key := sp.repoDir, sp.keyPath
-	if _, err := s.git(ctx, dir, key, "add", "--", rel); err != nil {
+	if _, err := s.git(ctx, dir, key, append([]string{"add", "-A", "--"}, rels...)...); err != nil {
 		return "", err
 	}
 	// commit может сообщить «nothing to commit» (перезапись идентичным содержимым) — это не
@@ -302,9 +771,19 @@ func writeKey(path, content string) error {
 	return nil
 }
 
-// scan читает все *.md рабочей копии в заметки (пропуская .git).
-func scan(dir string) ([]Note, error) {
-	var notes []Note
+// topicMetaFile — имя файла-меты темы в каталоге topics/<id>/ (frontmatter + synthesis).
+const topicMetaFile = "_topic.md"
+
+// noteFile — заметка вместе с её путём относительно корня репо (нужен для update/move/delete).
+type noteFile struct {
+	Note
+	Rel string
+}
+
+// scanNotes читает все *.md рабочей копии в заметки (пропуская .git и меты тем _topic.md),
+// проставляя TopicID из пути файла.
+func scanNotes(dir string) ([]noteFile, error) {
+	var out []noteFile
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -315,7 +794,7 @@ func scan(dir string) ([]Note, error) {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(d.Name(), ".md") {
+		if !strings.HasSuffix(d.Name(), ".md") || d.Name() == topicMetaFile {
 			return nil
 		}
 		data, err := os.ReadFile(path)
@@ -326,13 +805,60 @@ func scan(dir string) ([]Note, error) {
 		if !ok {
 			return nil // файл без валидного frontmatter — не заметка (README и т.п.)
 		}
-		notes = append(notes, n)
+		rel, _ := filepath.Rel(dir, path)
+		n.TopicID = topicIDFromRel(rel)
+		out = append(out, noteFile{Note: n, Rel: rel})
 		return nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("memory: scan: %w", err)
 	}
-	return notes, nil
+	return out, nil
+}
+
+// notesOf извлекает голые Note из noteFile-среза.
+func notesOf(files []noteFile) []Note {
+	notes := make([]Note, len(files))
+	for i, f := range files {
+		notes[i] = f.Note
+	}
+	return notes
+}
+
+// topicIDFromRel выводит id темы из пути заметки: topics/<id>/<note>.md → <id>; всё
+// остальное (legacy <type>s/, sessions/) → виртуальная «Общее».
+func topicIDFromRel(rel string) string {
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	if len(parts) >= 3 && parts[0] == "topics" {
+		return parts[1]
+	}
+	return generalTopicID
+}
+
+// scanTopics читает мету всех реальных тем (topics/<id>/_topic.md). Виртуальная «Общее»
+// сюда не входит — она синтезируется в ListTopics поверх legacy-заметок.
+func scanTopics(dir string) ([]Topic, error) {
+	entries, err := os.ReadDir(filepath.Join(dir, "topics"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("memory: read topics: %w", err)
+	}
+	var out []Topic
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, "topics", e.Name(), topicMetaFile))
+		if err != nil {
+			continue // каталог без _topic.md — не тема
+		}
+		if t, ok := parseTopic(data); ok {
+			out = append(out, t)
+		}
+	}
+	return out, nil
 }
 
 // --- сериализация заметки ---
@@ -364,8 +890,8 @@ func parseNote(data []byte) (Note, bool) {
 	return Note{
 		ID: fm.ID, Title: fm.Title, Type: fm.Type, Tags: fm.Tags,
 		Session: fm.Session, Created: fm.Created, Updated: fm.Updated,
-		Layer: layer,
-		Body:  strings.TrimRight(string(body), "\n"),
+		Layer: layer, Sub: fm.Sub, From: fm.From,
+		Body: strings.TrimRight(string(body), "\n"),
 	}, true
 }
 
@@ -373,7 +899,8 @@ func parseNote(data []byte) (Note, bool) {
 func renderNote(n Note) []byte {
 	fm := frontmatter{
 		ID: n.ID, Title: n.Title, Type: n.Type, Layer: n.Layer, Tags: n.Tags,
-		Session: n.Session, Created: n.Created, Updated: n.Updated,
+		Session: n.Session, Sub: n.Sub, From: n.From,
+		Created: n.Created, Updated: n.Updated,
 	}
 	head, _ := yaml.Marshal(fm)
 	var b bytes.Buffer
@@ -381,6 +908,45 @@ func renderNote(n Note) []byte {
 	b.Write(head)
 	b.WriteString("---\n\n")
 	b.WriteString(strings.TrimRight(n.Body, "\n"))
+	b.WriteByte('\n')
+	return b.Bytes()
+}
+
+// parseTopic разбирает _topic.md: frontmatter (мета) + тело (synthesis-обзор).
+func parseTopic(data []byte) (Topic, bool) {
+	if !bytes.HasPrefix(data, fmDelim) {
+		return Topic{}, false
+	}
+	rest := data[len(fmDelim):]
+	end := bytes.Index(rest, []byte("\n---"))
+	if end < 0 {
+		return Topic{}, false
+	}
+	var fm topicFrontmatter
+	if err := yaml.Unmarshal(rest[:end], &fm); err != nil || fm.ID == "" {
+		return Topic{}, false
+	}
+	body := rest[end+len("\n---"):]
+	body = bytes.TrimLeft(body, "\n")
+	return Topic{
+		ID: fm.ID, Name: fm.Name, Color: fm.Color, Initial: fm.Initial,
+		Subs: fm.Subs, Created: fm.Created, Updated: fm.Updated,
+		Synthesis: strings.TrimRight(string(body), "\n"),
+	}, true
+}
+
+// renderTopic сериализует тему в _topic.md (frontmatter + тело=synthesis).
+func renderTopic(t Topic) []byte {
+	fm := topicFrontmatter{
+		ID: t.ID, Name: t.Name, Color: t.Color, Initial: t.Initial,
+		Subs: t.Subs, Created: t.Created, Updated: t.Updated,
+	}
+	head, _ := yaml.Marshal(fm)
+	var b bytes.Buffer
+	b.Write(fmDelim)
+	b.Write(head)
+	b.WriteString("---\n\n")
+	b.WriteString(strings.TrimRight(t.Synthesis, "\n"))
 	b.WriteByte('\n')
 	return b.Bytes()
 }
@@ -406,6 +972,10 @@ func normalize(n Note) Note {
 	case !noteTypes[n.Type]:
 		n.Type = defaultType
 	}
+	if n.TopicID == "" {
+		n.TopicID = generalTopicID
+	}
+	n.Sub = strings.TrimSpace(n.Sub)
 	today := time.Now().Format("2006-01-02")
 	if n.Created == "" {
 		n.Created = today
@@ -430,14 +1000,16 @@ func slug(title string) string {
 	return s
 }
 
-// notePath — путь файла заметки относительно корня репо. Эпизодические (саммари сессий)
-// складываются в sessions/, семантические факты — в <type>s/ (idea → ideas/ и т.п.).
+// notePath — путь файла заметки относительно корня репо. Новые заметки живут внутри темы:
+// topics/<topicID>/<id>.md. Пустой TopicID → виртуальная «Общее» (topics/general/). Legacy
+// плоские заметки (<type>s/, sessions/) на старых путях только читаются, не перезаписываются
+// сюда — их переносит в тему явный MoveNote.
 func notePath(n Note) string {
-	dir := n.Type + "s"
-	if n.Layer == layerEpisodic {
-		dir = "sessions"
+	topic := n.TopicID
+	if topic == "" {
+		topic = generalTopicID
 	}
-	return filepath.Join(dir, n.ID+".md")
+	return filepath.Join("topics", topic, n.ID+".md")
 }
 
 // matches — попадает ли заметка под поисковую подстроку (уже в нижнем регистре).

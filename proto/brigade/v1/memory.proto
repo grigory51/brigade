@@ -2,39 +2,157 @@ syntax = "proto3";
 
 package brigade.v1;
 
-// MemoryService — личная память пользователя: атомарные markdown-заметки в git-репо.
-// Источник истины — .md-файлы (frontmatter + тело), durability делегирована git-remote.
-// Это КАНОНИЧЕСКИЙ пользовательский API памяти (JWT): зовётся из web, мобильного клиента
-// и любого JWT-клиента; умеет и читать, и создавать. Параллельный вход из сессии
-// (агент/skill внутри контейнера, per-session HMAC-токен) — AgentBridgeService.
-// CreateMemoryNote поверх того же ядра.
+// MemoryService — личная память пользователя, организованная вокруг ТЕМ (topic-центрично).
+// Тема — «блокнот»: связный обзор «своими словами» (synthesis, собирается агентом или
+// правится вручную) + заметки, сгруппированные по подтемам. Источник истины — .md-файлы
+// в git-репо (тема = каталог `topics/<id>/`, обзор — `_topic.md`, заметки — `<noteId>.md`),
+// durability делегирована git-remote. Это КАНОНИЧЕСКИЙ пользовательский API памяти (JWT):
+// web, мобильный клиент, любой JWT-клиент. Параллельный вход из сессии (агент/skill,
+// per-session HMAC) — AgentBridgeService поверх того же ядра.
 service MemoryService {
-  // ListNotes — заметки пользователя, при непустом query — фильтр по подстроке
-  // (title/body/tags), сортировка от новых к старым.
+  // ListTopics — все темы пользователя (с производными count/updated и парой последних
+  // заметок для карточки-«полки»). query пуст — все; иначе фильтр по имени/обзору/заметкам.
+  rpc ListTopics(ListTopicsRequest) returns (ListTopicsResponse) {}
+  // GetTopic — тема с полным обзором и всеми её заметками (для экрана темы).
+  rpc GetTopic(GetTopicRequest) returns (GetTopicResponse) {}
+  // CreateTopic — новая тема (имя + цвет). initial (буква аватара) выводится из имени.
+  rpc CreateTopic(CreateTopicRequest) returns (CreateTopicResponse) {}
+  // UpdateTopicOverview — перезаписать synthesis темы (ручное редактирование обзора).
+  rpc UpdateTopicOverview(UpdateTopicOverviewRequest) returns (UpdateTopicOverviewResponse) {}
+
+  // CreateNote — создать заметку в теме/подтеме (write .md → commit → push синхронно).
+  // session пуст — заметка создана из UI, а не сессией; from — человекочитаемый провенанс.
+  rpc CreateNote(CreateNoteRequest) returns (CreateNoteResponse) {}
+  // UpdateNote — правка полей заметки (title/body/type/sub) на месте.
+  rpc UpdateNote(UpdateNoteRequest) returns (UpdateNoteResponse) {}
+  // MoveNote — перенос заметки в другую тему и/или подтему (перекладывает файл).
+  rpc MoveNote(MoveNoteRequest) returns (MoveNoteResponse) {}
+  // DeleteNote — удалить заметку (rm .md → commit → push).
+  rpc DeleteNote(DeleteNoteRequest) returns (DeleteNoteResponse) {}
+
+  // --- legacy, плоский доступ (мобильный клиент/обратная совместимость) ---
+  // ListNotes — все заметки пользователя плоским списком (без группировки по темам).
   rpc ListNotes(ListNotesRequest) returns (ListNotesResponse) {}
   // GetNote — одна заметка по id.
   rpc GetNote(GetNoteRequest) returns (GetNoteResponse) {}
-  // CreateNote — создать заметку (write .md → commit → push синхронно). session пуст —
-  // заметка создана из UI/мобилы, а не сессией.
-  rpc CreateNote(CreateNoteRequest) returns (CreateNoteResponse) {}
 }
 
-// Note — одна заметка памяти.
+// Topic — тема памяти («блокнот»).
+message Topic {
+  string id = 1;
+  string name = 2;
+  string color = 3;              // hex акцента (из палитры тем)
+  string initial = 4;            // буква/цифра аватара (выводится из name)
+  string synthesis = 5;          // markdown-обзор «О чём эта тема» (может быть пустым)
+  repeated string subs = 6;      // подтемы (порядок значим; первая — дефолтная)
+  int32 note_count = 7;          // производное: число заметок
+  string updated = 8;            // производное: самая свежая дата (тема/заметки)
+  int32 chat_count = 9;          // производное: уникальных сессий-источников
+  repeated Note recent = 10;     // производное: 1-2 последних заметки (для карточки полки)
+}
+
+// Note — одна заметка памяти (живёт внутри темы/подтемы).
 message Note {
   string id = 1;
   string title = 2;
-  string body = 3;              // markdown
-  string type = 4;             // idea|decision|insight|todo|question|reference
+  string body = 3;               // markdown
+  string type = 4;               // idea|decision|insight|todo|question|reference
   repeated string tags = 5;
-  string session = 6;          // провенанс: id сессии-источника (пусто — создано из UI)
-  string created = 7;          // дата ISO (YYYY-MM-DD)
+  string session = 6;            // провенанс: id сессии-источника (пусто — из UI)
+  string created = 7;            // дата ISO (YYYY-MM-DD)
   string updated = 8;
-  // layer — слой памяти: semantic (атомарный факт, дефолт) | episodic (саммари сессии).
-  string layer = 9;
+  string layer = 9;              // legacy-слой: semantic|episodic (в темо-UI не используется)
+  string topic_id = 10;          // тема-владелец ("general" — виртуальная «Общее» для legacy)
+  string sub = 11;               // подтема внутри темы
+  string from = 12;              // человекочитаемый провенанс («чат: …», «вручную»)
+}
+
+message ListTopicsRequest {
+  string query = 1;              // пусто — все темы
+}
+
+message ListTopicsResponse {
+  repeated Topic topics = 1;
+}
+
+message GetTopicRequest {
+  string id = 1;
+}
+
+message GetTopicResponse {
+  Topic topic = 1;
+  repeated Note notes = 2;       // все заметки темы (клиент группирует по sub)
+}
+
+message CreateTopicRequest {
+  string name = 1;
+  string color = 2;              // hex из палитры (пусто — назначит сервер)
+}
+
+message CreateTopicResponse {
+  Topic topic = 1;
+}
+
+message UpdateTopicOverviewRequest {
+  string id = 1;
+  string synthesis = 2;
+}
+
+message UpdateTopicOverviewResponse {
+  Topic topic = 1;
+}
+
+message CreateNoteRequest {
+  string title = 1;
+  string body = 2;
+  string type = 3;
+  repeated string tags = 4;
+  string session = 5;            // опционально: провенанс
+  string layer = 6;              // legacy: semantic (дефолт) | episodic
+  string topic_id = 7;           // тема-владелец (пусто — «Общее»)
+  string sub = 8;                // подтема (пусто — дефолтная тема темы)
+  string from = 9;               // человекочитаемый провенанс
+}
+
+message CreateNoteResponse {
+  Note note = 1;
+  string commit_sha = 2;         // доказательство durability (заметка запушена)
+}
+
+message UpdateNoteRequest {
+  string id = 1;
+  string title = 2;
+  string body = 3;
+  string type = 4;
+  string sub = 5;
+}
+
+message UpdateNoteResponse {
+  Note note = 1;
+  string commit_sha = 2;
+}
+
+message MoveNoteRequest {
+  string id = 1;
+  string to_topic_id = 2;
+  string to_sub = 3;
+}
+
+message MoveNoteResponse {
+  Note note = 1;
+  string commit_sha = 2;
+}
+
+message DeleteNoteRequest {
+  string id = 1;
+}
+
+message DeleteNoteResponse {
+  string commit_sha = 1;
 }
 
 message ListNotesRequest {
-  string query = 1;            // пусто — все заметки
+  string query = 1;              // пусто — все заметки
 }
 
 message ListNotesResponse {
@@ -47,18 +165,4 @@ message GetNoteRequest {
 
 message GetNoteResponse {
   Note note = 1;
-}
-
-message CreateNoteRequest {
-  string title = 1;
-  string body = 2;
-  string type = 3;
-  repeated string tags = 4;
-  string session = 5;          // опционально: провенанс
-  string layer = 6;            // semantic (дефолт) | episodic
-}
-
-message CreateNoteResponse {
-  Note note = 1;
-  string commit_sha = 2;       // доказательство durability (заметка запушена)
 }

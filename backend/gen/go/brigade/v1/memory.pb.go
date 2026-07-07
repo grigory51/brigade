@@ -21,26 +21,145 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Note — одна заметка памяти.
+// Topic — тема памяти («блокнот»).
+type Topic struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Color         string                 `protobuf:"bytes,3,opt,name=color,proto3" json:"color,omitempty"`                           // hex акцента (из палитры тем)
+	Initial       string                 `protobuf:"bytes,4,opt,name=initial,proto3" json:"initial,omitempty"`                       // буква/цифра аватара (выводится из name)
+	Synthesis     string                 `protobuf:"bytes,5,opt,name=synthesis,proto3" json:"synthesis,omitempty"`                   // markdown-обзор «О чём эта тема» (может быть пустым)
+	Subs          []string               `protobuf:"bytes,6,rep,name=subs,proto3" json:"subs,omitempty"`                             // подтемы (порядок значим; первая — дефолтная)
+	NoteCount     int32                  `protobuf:"varint,7,opt,name=note_count,json=noteCount,proto3" json:"note_count,omitempty"` // производное: число заметок
+	Updated       string                 `protobuf:"bytes,8,opt,name=updated,proto3" json:"updated,omitempty"`                       // производное: самая свежая дата (тема/заметки)
+	ChatCount     int32                  `protobuf:"varint,9,opt,name=chat_count,json=chatCount,proto3" json:"chat_count,omitempty"` // производное: уникальных сессий-источников
+	Recent        []*Note                `protobuf:"bytes,10,rep,name=recent,proto3" json:"recent,omitempty"`                        // производное: 1-2 последних заметки (для карточки полки)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Topic) Reset() {
+	*x = Topic{}
+	mi := &file_brigade_v1_memory_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Topic) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Topic) ProtoMessage() {}
+
+func (x *Topic) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_memory_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Topic.ProtoReflect.Descriptor instead.
+func (*Topic) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *Topic) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Topic) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Topic) GetColor() string {
+	if x != nil {
+		return x.Color
+	}
+	return ""
+}
+
+func (x *Topic) GetInitial() string {
+	if x != nil {
+		return x.Initial
+	}
+	return ""
+}
+
+func (x *Topic) GetSynthesis() string {
+	if x != nil {
+		return x.Synthesis
+	}
+	return ""
+}
+
+func (x *Topic) GetSubs() []string {
+	if x != nil {
+		return x.Subs
+	}
+	return nil
+}
+
+func (x *Topic) GetNoteCount() int32 {
+	if x != nil {
+		return x.NoteCount
+	}
+	return 0
+}
+
+func (x *Topic) GetUpdated() string {
+	if x != nil {
+		return x.Updated
+	}
+	return ""
+}
+
+func (x *Topic) GetChatCount() int32 {
+	if x != nil {
+		return x.ChatCount
+	}
+	return 0
+}
+
+func (x *Topic) GetRecent() []*Note {
+	if x != nil {
+		return x.Recent
+	}
+	return nil
+}
+
+// Note — одна заметка памяти (живёт внутри темы/подтемы).
 type Note struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Id      string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Title   string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
-	Body    string                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"` // markdown
-	Type    string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"` // idea|decision|insight|todo|question|reference
-	Tags    []string               `protobuf:"bytes,5,rep,name=tags,proto3" json:"tags,omitempty"`
-	Session string                 `protobuf:"bytes,6,opt,name=session,proto3" json:"session,omitempty"` // провенанс: id сессии-источника (пусто — создано из UI)
-	Created string                 `protobuf:"bytes,7,opt,name=created,proto3" json:"created,omitempty"` // дата ISO (YYYY-MM-DD)
-	Updated string                 `protobuf:"bytes,8,opt,name=updated,proto3" json:"updated,omitempty"`
-	// layer — слой памяти: semantic (атомарный факт, дефолт) | episodic (саммари сессии).
-	Layer         string `protobuf:"bytes,9,opt,name=layer,proto3" json:"layer,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Body          string                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"` // markdown
+	Type          string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"` // idea|decision|insight|todo|question|reference
+	Tags          []string               `protobuf:"bytes,5,rep,name=tags,proto3" json:"tags,omitempty"`
+	Session       string                 `protobuf:"bytes,6,opt,name=session,proto3" json:"session,omitempty"` // провенанс: id сессии-источника (пусто — из UI)
+	Created       string                 `protobuf:"bytes,7,opt,name=created,proto3" json:"created,omitempty"` // дата ISO (YYYY-MM-DD)
+	Updated       string                 `protobuf:"bytes,8,opt,name=updated,proto3" json:"updated,omitempty"`
+	Layer         string                 `protobuf:"bytes,9,opt,name=layer,proto3" json:"layer,omitempty"`                     // legacy-слой: semantic|episodic (в темо-UI не используется)
+	TopicId       string                 `protobuf:"bytes,10,opt,name=topic_id,json=topicId,proto3" json:"topic_id,omitempty"` // тема-владелец ("general" — виртуальная «Общее» для legacy)
+	Sub           string                 `protobuf:"bytes,11,opt,name=sub,proto3" json:"sub,omitempty"`                        // подтема внутри темы
+	From          string                 `protobuf:"bytes,12,opt,name=from,proto3" json:"from,omitempty"`                      // человекочитаемый провенанс («чат: …», «вручную»)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Note) Reset() {
 	*x = Note{}
-	mi := &file_brigade_v1_memory_proto_msgTypes[0]
+	mi := &file_brigade_v1_memory_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -52,7 +171,7 @@ func (x *Note) String() string {
 func (*Note) ProtoMessage() {}
 
 func (x *Note) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_memory_proto_msgTypes[0]
+	mi := &file_brigade_v1_memory_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -65,7 +184,7 @@ func (x *Note) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Note.ProtoReflect.Descriptor instead.
 func (*Note) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{0}
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Note) GetId() string {
@@ -131,28 +250,49 @@ func (x *Note) GetLayer() string {
 	return ""
 }
 
-type ListNotesRequest struct {
+func (x *Note) GetTopicId() string {
+	if x != nil {
+		return x.TopicId
+	}
+	return ""
+}
+
+func (x *Note) GetSub() string {
+	if x != nil {
+		return x.Sub
+	}
+	return ""
+}
+
+func (x *Note) GetFrom() string {
+	if x != nil {
+		return x.From
+	}
+	return ""
+}
+
+type ListTopicsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"` // пусто — все заметки
+	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"` // пусто — все темы
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListNotesRequest) Reset() {
-	*x = ListNotesRequest{}
-	mi := &file_brigade_v1_memory_proto_msgTypes[1]
+func (x *ListTopicsRequest) Reset() {
+	*x = ListTopicsRequest{}
+	mi := &file_brigade_v1_memory_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListNotesRequest) String() string {
+func (x *ListTopicsRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListNotesRequest) ProtoMessage() {}
+func (*ListTopicsRequest) ProtoMessage() {}
 
-func (x *ListNotesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_memory_proto_msgTypes[1]
+func (x *ListTopicsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_memory_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -163,40 +303,40 @@ func (x *ListNotesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListNotesRequest.ProtoReflect.Descriptor instead.
-func (*ListNotesRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{1}
+// Deprecated: Use ListTopicsRequest.ProtoReflect.Descriptor instead.
+func (*ListTopicsRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *ListNotesRequest) GetQuery() string {
+func (x *ListTopicsRequest) GetQuery() string {
 	if x != nil {
 		return x.Query
 	}
 	return ""
 }
 
-type ListNotesResponse struct {
+type ListTopicsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Notes         []*Note                `protobuf:"bytes,1,rep,name=notes,proto3" json:"notes,omitempty"`
+	Topics        []*Topic               `protobuf:"bytes,1,rep,name=topics,proto3" json:"topics,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListNotesResponse) Reset() {
-	*x = ListNotesResponse{}
-	mi := &file_brigade_v1_memory_proto_msgTypes[2]
+func (x *ListTopicsResponse) Reset() {
+	*x = ListTopicsResponse{}
+	mi := &file_brigade_v1_memory_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListNotesResponse) String() string {
+func (x *ListTopicsResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListNotesResponse) ProtoMessage() {}
+func (*ListTopicsResponse) ProtoMessage() {}
 
-func (x *ListNotesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_memory_proto_msgTypes[2]
+func (x *ListTopicsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_memory_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -207,40 +347,40 @@ func (x *ListNotesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListNotesResponse.ProtoReflect.Descriptor instead.
-func (*ListNotesResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{2}
+// Deprecated: Use ListTopicsResponse.ProtoReflect.Descriptor instead.
+func (*ListTopicsResponse) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *ListNotesResponse) GetNotes() []*Note {
+func (x *ListTopicsResponse) GetTopics() []*Topic {
 	if x != nil {
-		return x.Notes
+		return x.Topics
 	}
 	return nil
 }
 
-type GetNoteRequest struct {
+type GetTopicRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetNoteRequest) Reset() {
-	*x = GetNoteRequest{}
-	mi := &file_brigade_v1_memory_proto_msgTypes[3]
+func (x *GetTopicRequest) Reset() {
+	*x = GetTopicRequest{}
+	mi := &file_brigade_v1_memory_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetNoteRequest) String() string {
+func (x *GetTopicRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetNoteRequest) ProtoMessage() {}
+func (*GetTopicRequest) ProtoMessage() {}
 
-func (x *GetNoteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_memory_proto_msgTypes[3]
+func (x *GetTopicRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_memory_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -251,40 +391,41 @@ func (x *GetNoteRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetNoteRequest.ProtoReflect.Descriptor instead.
-func (*GetNoteRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{3}
+// Deprecated: Use GetTopicRequest.ProtoReflect.Descriptor instead.
+func (*GetTopicRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *GetNoteRequest) GetId() string {
+func (x *GetTopicRequest) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-type GetNoteResponse struct {
+type GetTopicResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Note          *Note                  `protobuf:"bytes,1,opt,name=note,proto3" json:"note,omitempty"`
+	Topic         *Topic                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
+	Notes         []*Note                `protobuf:"bytes,2,rep,name=notes,proto3" json:"notes,omitempty"` // все заметки темы (клиент группирует по sub)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetNoteResponse) Reset() {
-	*x = GetNoteResponse{}
-	mi := &file_brigade_v1_memory_proto_msgTypes[4]
+func (x *GetTopicResponse) Reset() {
+	*x = GetTopicResponse{}
+	mi := &file_brigade_v1_memory_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetNoteResponse) String() string {
+func (x *GetTopicResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetNoteResponse) ProtoMessage() {}
+func (*GetTopicResponse) ProtoMessage() {}
 
-func (x *GetNoteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_memory_proto_msgTypes[4]
+func (x *GetTopicResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_memory_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -295,14 +436,213 @@ func (x *GetNoteResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetNoteResponse.ProtoReflect.Descriptor instead.
-func (*GetNoteResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{4}
+// Deprecated: Use GetTopicResponse.ProtoReflect.Descriptor instead.
+func (*GetTopicResponse) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *GetNoteResponse) GetNote() *Note {
+func (x *GetTopicResponse) GetTopic() *Topic {
 	if x != nil {
-		return x.Note
+		return x.Topic
+	}
+	return nil
+}
+
+func (x *GetTopicResponse) GetNotes() []*Note {
+	if x != nil {
+		return x.Notes
+	}
+	return nil
+}
+
+type CreateTopicRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Color         string                 `protobuf:"bytes,2,opt,name=color,proto3" json:"color,omitempty"` // hex из палитры (пусто — назначит сервер)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateTopicRequest) Reset() {
+	*x = CreateTopicRequest{}
+	mi := &file_brigade_v1_memory_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateTopicRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateTopicRequest) ProtoMessage() {}
+
+func (x *CreateTopicRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_memory_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateTopicRequest.ProtoReflect.Descriptor instead.
+func (*CreateTopicRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *CreateTopicRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CreateTopicRequest) GetColor() string {
+	if x != nil {
+		return x.Color
+	}
+	return ""
+}
+
+type CreateTopicResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Topic         *Topic                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateTopicResponse) Reset() {
+	*x = CreateTopicResponse{}
+	mi := &file_brigade_v1_memory_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateTopicResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateTopicResponse) ProtoMessage() {}
+
+func (x *CreateTopicResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_memory_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateTopicResponse.ProtoReflect.Descriptor instead.
+func (*CreateTopicResponse) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *CreateTopicResponse) GetTopic() *Topic {
+	if x != nil {
+		return x.Topic
+	}
+	return nil
+}
+
+type UpdateTopicOverviewRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Synthesis     string                 `protobuf:"bytes,2,opt,name=synthesis,proto3" json:"synthesis,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateTopicOverviewRequest) Reset() {
+	*x = UpdateTopicOverviewRequest{}
+	mi := &file_brigade_v1_memory_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateTopicOverviewRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateTopicOverviewRequest) ProtoMessage() {}
+
+func (x *UpdateTopicOverviewRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_memory_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateTopicOverviewRequest.ProtoReflect.Descriptor instead.
+func (*UpdateTopicOverviewRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *UpdateTopicOverviewRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *UpdateTopicOverviewRequest) GetSynthesis() string {
+	if x != nil {
+		return x.Synthesis
+	}
+	return ""
+}
+
+type UpdateTopicOverviewResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Topic         *Topic                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateTopicOverviewResponse) Reset() {
+	*x = UpdateTopicOverviewResponse{}
+	mi := &file_brigade_v1_memory_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateTopicOverviewResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateTopicOverviewResponse) ProtoMessage() {}
+
+func (x *UpdateTopicOverviewResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_memory_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateTopicOverviewResponse.ProtoReflect.Descriptor instead.
+func (*UpdateTopicOverviewResponse) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *UpdateTopicOverviewResponse) GetTopic() *Topic {
+	if x != nil {
+		return x.Topic
 	}
 	return nil
 }
@@ -313,15 +653,18 @@ type CreateNoteRequest struct {
 	Body          string                 `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
 	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
 	Tags          []string               `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty"`
-	Session       string                 `protobuf:"bytes,5,opt,name=session,proto3" json:"session,omitempty"` // опционально: провенанс
-	Layer         string                 `protobuf:"bytes,6,opt,name=layer,proto3" json:"layer,omitempty"`     // semantic (дефолт) | episodic
+	Session       string                 `protobuf:"bytes,5,opt,name=session,proto3" json:"session,omitempty"`                // опционально: провенанс
+	Layer         string                 `protobuf:"bytes,6,opt,name=layer,proto3" json:"layer,omitempty"`                    // legacy: semantic (дефолт) | episodic
+	TopicId       string                 `protobuf:"bytes,7,opt,name=topic_id,json=topicId,proto3" json:"topic_id,omitempty"` // тема-владелец (пусто — «Общее»)
+	Sub           string                 `protobuf:"bytes,8,opt,name=sub,proto3" json:"sub,omitempty"`                        // подтема (пусто — дефолтная тема темы)
+	From          string                 `protobuf:"bytes,9,opt,name=from,proto3" json:"from,omitempty"`                      // человекочитаемый провенанс
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateNoteRequest) Reset() {
 	*x = CreateNoteRequest{}
-	mi := &file_brigade_v1_memory_proto_msgTypes[5]
+	mi := &file_brigade_v1_memory_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -333,7 +676,7 @@ func (x *CreateNoteRequest) String() string {
 func (*CreateNoteRequest) ProtoMessage() {}
 
 func (x *CreateNoteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_memory_proto_msgTypes[5]
+	mi := &file_brigade_v1_memory_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -346,7 +689,7 @@ func (x *CreateNoteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateNoteRequest.ProtoReflect.Descriptor instead.
 func (*CreateNoteRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{5}
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CreateNoteRequest) GetTitle() string {
@@ -391,6 +734,27 @@ func (x *CreateNoteRequest) GetLayer() string {
 	return ""
 }
 
+func (x *CreateNoteRequest) GetTopicId() string {
+	if x != nil {
+		return x.TopicId
+	}
+	return ""
+}
+
+func (x *CreateNoteRequest) GetSub() string {
+	if x != nil {
+		return x.Sub
+	}
+	return ""
+}
+
+func (x *CreateNoteRequest) GetFrom() string {
+	if x != nil {
+		return x.From
+	}
+	return ""
+}
+
 type CreateNoteResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Note          *Note                  `protobuf:"bytes,1,opt,name=note,proto3" json:"note,omitempty"`
@@ -401,7 +765,7 @@ type CreateNoteResponse struct {
 
 func (x *CreateNoteResponse) Reset() {
 	*x = CreateNoteResponse{}
-	mi := &file_brigade_v1_memory_proto_msgTypes[6]
+	mi := &file_brigade_v1_memory_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -413,7 +777,7 @@ func (x *CreateNoteResponse) String() string {
 func (*CreateNoteResponse) ProtoMessage() {}
 
 func (x *CreateNoteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_memory_proto_msgTypes[6]
+	mi := &file_brigade_v1_memory_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -426,7 +790,7 @@ func (x *CreateNoteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateNoteResponse.ProtoReflect.Descriptor instead.
 func (*CreateNoteResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{6}
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CreateNoteResponse) GetNote() *Note {
@@ -443,12 +807,530 @@ func (x *CreateNoteResponse) GetCommitSha() string {
 	return ""
 }
 
+type UpdateNoteRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Body          string                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
+	Type          string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
+	Sub           string                 `protobuf:"bytes,5,opt,name=sub,proto3" json:"sub,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateNoteRequest) Reset() {
+	*x = UpdateNoteRequest{}
+	mi := &file_brigade_v1_memory_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateNoteRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateNoteRequest) ProtoMessage() {}
+
+func (x *UpdateNoteRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_memory_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateNoteRequest.ProtoReflect.Descriptor instead.
+func (*UpdateNoteRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *UpdateNoteRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *UpdateNoteRequest) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *UpdateNoteRequest) GetBody() string {
+	if x != nil {
+		return x.Body
+	}
+	return ""
+}
+
+func (x *UpdateNoteRequest) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *UpdateNoteRequest) GetSub() string {
+	if x != nil {
+		return x.Sub
+	}
+	return ""
+}
+
+type UpdateNoteResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Note          *Note                  `protobuf:"bytes,1,opt,name=note,proto3" json:"note,omitempty"`
+	CommitSha     string                 `protobuf:"bytes,2,opt,name=commit_sha,json=commitSha,proto3" json:"commit_sha,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateNoteResponse) Reset() {
+	*x = UpdateNoteResponse{}
+	mi := &file_brigade_v1_memory_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateNoteResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateNoteResponse) ProtoMessage() {}
+
+func (x *UpdateNoteResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_memory_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateNoteResponse.ProtoReflect.Descriptor instead.
+func (*UpdateNoteResponse) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *UpdateNoteResponse) GetNote() *Note {
+	if x != nil {
+		return x.Note
+	}
+	return nil
+}
+
+func (x *UpdateNoteResponse) GetCommitSha() string {
+	if x != nil {
+		return x.CommitSha
+	}
+	return ""
+}
+
+type MoveNoteRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ToTopicId     string                 `protobuf:"bytes,2,opt,name=to_topic_id,json=toTopicId,proto3" json:"to_topic_id,omitempty"`
+	ToSub         string                 `protobuf:"bytes,3,opt,name=to_sub,json=toSub,proto3" json:"to_sub,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MoveNoteRequest) Reset() {
+	*x = MoveNoteRequest{}
+	mi := &file_brigade_v1_memory_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MoveNoteRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MoveNoteRequest) ProtoMessage() {}
+
+func (x *MoveNoteRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_memory_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MoveNoteRequest.ProtoReflect.Descriptor instead.
+func (*MoveNoteRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *MoveNoteRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *MoveNoteRequest) GetToTopicId() string {
+	if x != nil {
+		return x.ToTopicId
+	}
+	return ""
+}
+
+func (x *MoveNoteRequest) GetToSub() string {
+	if x != nil {
+		return x.ToSub
+	}
+	return ""
+}
+
+type MoveNoteResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Note          *Note                  `protobuf:"bytes,1,opt,name=note,proto3" json:"note,omitempty"`
+	CommitSha     string                 `protobuf:"bytes,2,opt,name=commit_sha,json=commitSha,proto3" json:"commit_sha,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MoveNoteResponse) Reset() {
+	*x = MoveNoteResponse{}
+	mi := &file_brigade_v1_memory_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MoveNoteResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MoveNoteResponse) ProtoMessage() {}
+
+func (x *MoveNoteResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_memory_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MoveNoteResponse.ProtoReflect.Descriptor instead.
+func (*MoveNoteResponse) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *MoveNoteResponse) GetNote() *Note {
+	if x != nil {
+		return x.Note
+	}
+	return nil
+}
+
+func (x *MoveNoteResponse) GetCommitSha() string {
+	if x != nil {
+		return x.CommitSha
+	}
+	return ""
+}
+
+type DeleteNoteRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteNoteRequest) Reset() {
+	*x = DeleteNoteRequest{}
+	mi := &file_brigade_v1_memory_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteNoteRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteNoteRequest) ProtoMessage() {}
+
+func (x *DeleteNoteRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_memory_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteNoteRequest.ProtoReflect.Descriptor instead.
+func (*DeleteNoteRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *DeleteNoteRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type DeleteNoteResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CommitSha     string                 `protobuf:"bytes,1,opt,name=commit_sha,json=commitSha,proto3" json:"commit_sha,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteNoteResponse) Reset() {
+	*x = DeleteNoteResponse{}
+	mi := &file_brigade_v1_memory_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteNoteResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteNoteResponse) ProtoMessage() {}
+
+func (x *DeleteNoteResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_memory_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteNoteResponse.ProtoReflect.Descriptor instead.
+func (*DeleteNoteResponse) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *DeleteNoteResponse) GetCommitSha() string {
+	if x != nil {
+		return x.CommitSha
+	}
+	return ""
+}
+
+type ListNotesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"` // пусто — все заметки
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListNotesRequest) Reset() {
+	*x = ListNotesRequest{}
+	mi := &file_brigade_v1_memory_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListNotesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListNotesRequest) ProtoMessage() {}
+
+func (x *ListNotesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_memory_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListNotesRequest.ProtoReflect.Descriptor instead.
+func (*ListNotesRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ListNotesRequest) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
+type ListNotesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Notes         []*Note                `protobuf:"bytes,1,rep,name=notes,proto3" json:"notes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListNotesResponse) Reset() {
+	*x = ListNotesResponse{}
+	mi := &file_brigade_v1_memory_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListNotesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListNotesResponse) ProtoMessage() {}
+
+func (x *ListNotesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_memory_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListNotesResponse.ProtoReflect.Descriptor instead.
+func (*ListNotesResponse) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ListNotesResponse) GetNotes() []*Note {
+	if x != nil {
+		return x.Notes
+	}
+	return nil
+}
+
+type GetNoteRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetNoteRequest) Reset() {
+	*x = GetNoteRequest{}
+	mi := &file_brigade_v1_memory_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetNoteRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetNoteRequest) ProtoMessage() {}
+
+func (x *GetNoteRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_memory_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetNoteRequest.ProtoReflect.Descriptor instead.
+func (*GetNoteRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *GetNoteRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type GetNoteResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Note          *Note                  `protobuf:"bytes,1,opt,name=note,proto3" json:"note,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetNoteResponse) Reset() {
+	*x = GetNoteResponse{}
+	mi := &file_brigade_v1_memory_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetNoteResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetNoteResponse) ProtoMessage() {}
+
+func (x *GetNoteResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_memory_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetNoteResponse.ProtoReflect.Descriptor instead.
+func (*GetNoteResponse) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *GetNoteResponse) GetNote() *Note {
+	if x != nil {
+		return x.Note
+	}
+	return nil
+}
+
 var File_brigade_v1_memory_proto protoreflect.FileDescriptor
 
 const file_brigade_v1_memory_proto_rawDesc = "" +
 	"\n" +
 	"\x17brigade/v1/memory.proto\x12\n" +
-	"brigade.v1\"\xcc\x01\n" +
+	"brigade.v1\"\x8f\x02\n" +
+	"\x05Topic\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
+	"\x05color\x18\x03 \x01(\tR\x05color\x12\x18\n" +
+	"\ainitial\x18\x04 \x01(\tR\ainitial\x12\x1c\n" +
+	"\tsynthesis\x18\x05 \x01(\tR\tsynthesis\x12\x12\n" +
+	"\x04subs\x18\x06 \x03(\tR\x04subs\x12\x1d\n" +
+	"\n" +
+	"note_count\x18\a \x01(\x05R\tnoteCount\x12\x18\n" +
+	"\aupdated\x18\b \x01(\tR\aupdated\x12\x1d\n" +
+	"\n" +
+	"chat_count\x18\t \x01(\x05R\tchatCount\x12(\n" +
+	"\x06recent\x18\n" +
+	" \x03(\v2\x10.brigade.v1.NoteR\x06recent\"\x8d\x02\n" +
 	"\x04Note\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x12\n" +
@@ -458,7 +1340,67 @@ const file_brigade_v1_memory_proto_rawDesc = "" +
 	"\asession\x18\x06 \x01(\tR\asession\x12\x18\n" +
 	"\acreated\x18\a \x01(\tR\acreated\x12\x18\n" +
 	"\aupdated\x18\b \x01(\tR\aupdated\x12\x14\n" +
-	"\x05layer\x18\t \x01(\tR\x05layer\"(\n" +
+	"\x05layer\x18\t \x01(\tR\x05layer\x12\x19\n" +
+	"\btopic_id\x18\n" +
+	" \x01(\tR\atopicId\x12\x10\n" +
+	"\x03sub\x18\v \x01(\tR\x03sub\x12\x12\n" +
+	"\x04from\x18\f \x01(\tR\x04from\")\n" +
+	"\x11ListTopicsRequest\x12\x14\n" +
+	"\x05query\x18\x01 \x01(\tR\x05query\"?\n" +
+	"\x12ListTopicsResponse\x12)\n" +
+	"\x06topics\x18\x01 \x03(\v2\x11.brigade.v1.TopicR\x06topics\"!\n" +
+	"\x0fGetTopicRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"c\n" +
+	"\x10GetTopicResponse\x12'\n" +
+	"\x05topic\x18\x01 \x01(\v2\x11.brigade.v1.TopicR\x05topic\x12&\n" +
+	"\x05notes\x18\x02 \x03(\v2\x10.brigade.v1.NoteR\x05notes\">\n" +
+	"\x12CreateTopicRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
+	"\x05color\x18\x02 \x01(\tR\x05color\">\n" +
+	"\x13CreateTopicResponse\x12'\n" +
+	"\x05topic\x18\x01 \x01(\v2\x11.brigade.v1.TopicR\x05topic\"J\n" +
+	"\x1aUpdateTopicOverviewRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1c\n" +
+	"\tsynthesis\x18\x02 \x01(\tR\tsynthesis\"F\n" +
+	"\x1bUpdateTopicOverviewResponse\x12'\n" +
+	"\x05topic\x18\x01 \x01(\v2\x11.brigade.v1.TopicR\x05topic\"\xd6\x01\n" +
+	"\x11CreateNoteRequest\x12\x14\n" +
+	"\x05title\x18\x01 \x01(\tR\x05title\x12\x12\n" +
+	"\x04body\x18\x02 \x01(\tR\x04body\x12\x12\n" +
+	"\x04type\x18\x03 \x01(\tR\x04type\x12\x12\n" +
+	"\x04tags\x18\x04 \x03(\tR\x04tags\x12\x18\n" +
+	"\asession\x18\x05 \x01(\tR\asession\x12\x14\n" +
+	"\x05layer\x18\x06 \x01(\tR\x05layer\x12\x19\n" +
+	"\btopic_id\x18\a \x01(\tR\atopicId\x12\x10\n" +
+	"\x03sub\x18\b \x01(\tR\x03sub\x12\x12\n" +
+	"\x04from\x18\t \x01(\tR\x04from\"Y\n" +
+	"\x12CreateNoteResponse\x12$\n" +
+	"\x04note\x18\x01 \x01(\v2\x10.brigade.v1.NoteR\x04note\x12\x1d\n" +
+	"\n" +
+	"commit_sha\x18\x02 \x01(\tR\tcommitSha\"s\n" +
+	"\x11UpdateNoteRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12\x12\n" +
+	"\x04body\x18\x03 \x01(\tR\x04body\x12\x12\n" +
+	"\x04type\x18\x04 \x01(\tR\x04type\x12\x10\n" +
+	"\x03sub\x18\x05 \x01(\tR\x03sub\"Y\n" +
+	"\x12UpdateNoteResponse\x12$\n" +
+	"\x04note\x18\x01 \x01(\v2\x10.brigade.v1.NoteR\x04note\x12\x1d\n" +
+	"\n" +
+	"commit_sha\x18\x02 \x01(\tR\tcommitSha\"X\n" +
+	"\x0fMoveNoteRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1e\n" +
+	"\vto_topic_id\x18\x02 \x01(\tR\ttoTopicId\x12\x15\n" +
+	"\x06to_sub\x18\x03 \x01(\tR\x05toSub\"W\n" +
+	"\x10MoveNoteResponse\x12$\n" +
+	"\x04note\x18\x01 \x01(\v2\x10.brigade.v1.NoteR\x04note\x12\x1d\n" +
+	"\n" +
+	"commit_sha\x18\x02 \x01(\tR\tcommitSha\"#\n" +
+	"\x11DeleteNoteRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"3\n" +
+	"\x12DeleteNoteResponse\x12\x1d\n" +
+	"\n" +
+	"commit_sha\x18\x01 \x01(\tR\tcommitSha\"(\n" +
 	"\x10ListNotesRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\";\n" +
 	"\x11ListNotesResponse\x12&\n" +
@@ -466,23 +1408,22 @@ const file_brigade_v1_memory_proto_rawDesc = "" +
 	"\x0eGetNoteRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"7\n" +
 	"\x0fGetNoteResponse\x12$\n" +
-	"\x04note\x18\x01 \x01(\v2\x10.brigade.v1.NoteR\x04note\"\x95\x01\n" +
-	"\x11CreateNoteRequest\x12\x14\n" +
-	"\x05title\x18\x01 \x01(\tR\x05title\x12\x12\n" +
-	"\x04body\x18\x02 \x01(\tR\x04body\x12\x12\n" +
-	"\x04type\x18\x03 \x01(\tR\x04type\x12\x12\n" +
-	"\x04tags\x18\x04 \x03(\tR\x04tags\x12\x18\n" +
-	"\asession\x18\x05 \x01(\tR\asession\x12\x14\n" +
-	"\x05layer\x18\x06 \x01(\tR\x05layer\"Y\n" +
-	"\x12CreateNoteResponse\x12$\n" +
-	"\x04note\x18\x01 \x01(\v2\x10.brigade.v1.NoteR\x04note\x12\x1d\n" +
+	"\x04note\x18\x01 \x01(\v2\x10.brigade.v1.NoteR\x04note2\xab\x06\n" +
+	"\rMemoryService\x12M\n" +
 	"\n" +
-	"commit_sha\x18\x02 \x01(\tR\tcommitSha2\xf0\x01\n" +
-	"\rMemoryService\x12J\n" +
+	"ListTopics\x12\x1d.brigade.v1.ListTopicsRequest\x1a\x1e.brigade.v1.ListTopicsResponse\"\x00\x12G\n" +
+	"\bGetTopic\x12\x1b.brigade.v1.GetTopicRequest\x1a\x1c.brigade.v1.GetTopicResponse\"\x00\x12P\n" +
+	"\vCreateTopic\x12\x1e.brigade.v1.CreateTopicRequest\x1a\x1f.brigade.v1.CreateTopicResponse\"\x00\x12h\n" +
+	"\x13UpdateTopicOverview\x12&.brigade.v1.UpdateTopicOverviewRequest\x1a'.brigade.v1.UpdateTopicOverviewResponse\"\x00\x12M\n" +
+	"\n" +
+	"CreateNote\x12\x1d.brigade.v1.CreateNoteRequest\x1a\x1e.brigade.v1.CreateNoteResponse\"\x00\x12M\n" +
+	"\n" +
+	"UpdateNote\x12\x1d.brigade.v1.UpdateNoteRequest\x1a\x1e.brigade.v1.UpdateNoteResponse\"\x00\x12G\n" +
+	"\bMoveNote\x12\x1b.brigade.v1.MoveNoteRequest\x1a\x1c.brigade.v1.MoveNoteResponse\"\x00\x12M\n" +
+	"\n" +
+	"DeleteNote\x12\x1d.brigade.v1.DeleteNoteRequest\x1a\x1e.brigade.v1.DeleteNoteResponse\"\x00\x12J\n" +
 	"\tListNotes\x12\x1c.brigade.v1.ListNotesRequest\x1a\x1d.brigade.v1.ListNotesResponse\"\x00\x12D\n" +
-	"\aGetNote\x12\x1a.brigade.v1.GetNoteRequest\x1a\x1b.brigade.v1.GetNoteResponse\"\x00\x12M\n" +
-	"\n" +
-	"CreateNote\x12\x1d.brigade.v1.CreateNoteRequest\x1a\x1e.brigade.v1.CreateNoteResponse\"\x00B\xa8\x01\n" +
+	"\aGetNote\x12\x1a.brigade.v1.GetNoteRequest\x1a\x1b.brigade.v1.GetNoteResponse\"\x00B\xa8\x01\n" +
 	"\x0ecom.brigade.v1B\vMemoryProtoP\x01Z@github.com/grigory51/brigade/backend/gen/go/brigade/v1;brigadev1\xa2\x02\x03BXX\xaa\x02\n" +
 	"Brigade.V1\xca\x02\n" +
 	"Brigade\\V1\xe2\x02\x16Brigade\\V1\\GPBMetadata\xea\x02\vBrigade::V1b\x06proto3"
@@ -499,31 +1440,68 @@ func file_brigade_v1_memory_proto_rawDescGZIP() []byte {
 	return file_brigade_v1_memory_proto_rawDescData
 }
 
-var file_brigade_v1_memory_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_brigade_v1_memory_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_brigade_v1_memory_proto_goTypes = []any{
-	(*Note)(nil),               // 0: brigade.v1.Note
-	(*ListNotesRequest)(nil),   // 1: brigade.v1.ListNotesRequest
-	(*ListNotesResponse)(nil),  // 2: brigade.v1.ListNotesResponse
-	(*GetNoteRequest)(nil),     // 3: brigade.v1.GetNoteRequest
-	(*GetNoteResponse)(nil),    // 4: brigade.v1.GetNoteResponse
-	(*CreateNoteRequest)(nil),  // 5: brigade.v1.CreateNoteRequest
-	(*CreateNoteResponse)(nil), // 6: brigade.v1.CreateNoteResponse
+	(*Topic)(nil),                       // 0: brigade.v1.Topic
+	(*Note)(nil),                        // 1: brigade.v1.Note
+	(*ListTopicsRequest)(nil),           // 2: brigade.v1.ListTopicsRequest
+	(*ListTopicsResponse)(nil),          // 3: brigade.v1.ListTopicsResponse
+	(*GetTopicRequest)(nil),             // 4: brigade.v1.GetTopicRequest
+	(*GetTopicResponse)(nil),            // 5: brigade.v1.GetTopicResponse
+	(*CreateTopicRequest)(nil),          // 6: brigade.v1.CreateTopicRequest
+	(*CreateTopicResponse)(nil),         // 7: brigade.v1.CreateTopicResponse
+	(*UpdateTopicOverviewRequest)(nil),  // 8: brigade.v1.UpdateTopicOverviewRequest
+	(*UpdateTopicOverviewResponse)(nil), // 9: brigade.v1.UpdateTopicOverviewResponse
+	(*CreateNoteRequest)(nil),           // 10: brigade.v1.CreateNoteRequest
+	(*CreateNoteResponse)(nil),          // 11: brigade.v1.CreateNoteResponse
+	(*UpdateNoteRequest)(nil),           // 12: brigade.v1.UpdateNoteRequest
+	(*UpdateNoteResponse)(nil),          // 13: brigade.v1.UpdateNoteResponse
+	(*MoveNoteRequest)(nil),             // 14: brigade.v1.MoveNoteRequest
+	(*MoveNoteResponse)(nil),            // 15: brigade.v1.MoveNoteResponse
+	(*DeleteNoteRequest)(nil),           // 16: brigade.v1.DeleteNoteRequest
+	(*DeleteNoteResponse)(nil),          // 17: brigade.v1.DeleteNoteResponse
+	(*ListNotesRequest)(nil),            // 18: brigade.v1.ListNotesRequest
+	(*ListNotesResponse)(nil),           // 19: brigade.v1.ListNotesResponse
+	(*GetNoteRequest)(nil),              // 20: brigade.v1.GetNoteRequest
+	(*GetNoteResponse)(nil),             // 21: brigade.v1.GetNoteResponse
 }
 var file_brigade_v1_memory_proto_depIdxs = []int32{
-	0, // 0: brigade.v1.ListNotesResponse.notes:type_name -> brigade.v1.Note
-	0, // 1: brigade.v1.GetNoteResponse.note:type_name -> brigade.v1.Note
-	0, // 2: brigade.v1.CreateNoteResponse.note:type_name -> brigade.v1.Note
-	1, // 3: brigade.v1.MemoryService.ListNotes:input_type -> brigade.v1.ListNotesRequest
-	3, // 4: brigade.v1.MemoryService.GetNote:input_type -> brigade.v1.GetNoteRequest
-	5, // 5: brigade.v1.MemoryService.CreateNote:input_type -> brigade.v1.CreateNoteRequest
-	2, // 6: brigade.v1.MemoryService.ListNotes:output_type -> brigade.v1.ListNotesResponse
-	4, // 7: brigade.v1.MemoryService.GetNote:output_type -> brigade.v1.GetNoteResponse
-	6, // 8: brigade.v1.MemoryService.CreateNote:output_type -> brigade.v1.CreateNoteResponse
-	6, // [6:9] is the sub-list for method output_type
-	3, // [3:6] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	1,  // 0: brigade.v1.Topic.recent:type_name -> brigade.v1.Note
+	0,  // 1: brigade.v1.ListTopicsResponse.topics:type_name -> brigade.v1.Topic
+	0,  // 2: brigade.v1.GetTopicResponse.topic:type_name -> brigade.v1.Topic
+	1,  // 3: brigade.v1.GetTopicResponse.notes:type_name -> brigade.v1.Note
+	0,  // 4: brigade.v1.CreateTopicResponse.topic:type_name -> brigade.v1.Topic
+	0,  // 5: brigade.v1.UpdateTopicOverviewResponse.topic:type_name -> brigade.v1.Topic
+	1,  // 6: brigade.v1.CreateNoteResponse.note:type_name -> brigade.v1.Note
+	1,  // 7: brigade.v1.UpdateNoteResponse.note:type_name -> brigade.v1.Note
+	1,  // 8: brigade.v1.MoveNoteResponse.note:type_name -> brigade.v1.Note
+	1,  // 9: brigade.v1.ListNotesResponse.notes:type_name -> brigade.v1.Note
+	1,  // 10: brigade.v1.GetNoteResponse.note:type_name -> brigade.v1.Note
+	2,  // 11: brigade.v1.MemoryService.ListTopics:input_type -> brigade.v1.ListTopicsRequest
+	4,  // 12: brigade.v1.MemoryService.GetTopic:input_type -> brigade.v1.GetTopicRequest
+	6,  // 13: brigade.v1.MemoryService.CreateTopic:input_type -> brigade.v1.CreateTopicRequest
+	8,  // 14: brigade.v1.MemoryService.UpdateTopicOverview:input_type -> brigade.v1.UpdateTopicOverviewRequest
+	10, // 15: brigade.v1.MemoryService.CreateNote:input_type -> brigade.v1.CreateNoteRequest
+	12, // 16: brigade.v1.MemoryService.UpdateNote:input_type -> brigade.v1.UpdateNoteRequest
+	14, // 17: brigade.v1.MemoryService.MoveNote:input_type -> brigade.v1.MoveNoteRequest
+	16, // 18: brigade.v1.MemoryService.DeleteNote:input_type -> brigade.v1.DeleteNoteRequest
+	18, // 19: brigade.v1.MemoryService.ListNotes:input_type -> brigade.v1.ListNotesRequest
+	20, // 20: brigade.v1.MemoryService.GetNote:input_type -> brigade.v1.GetNoteRequest
+	3,  // 21: brigade.v1.MemoryService.ListTopics:output_type -> brigade.v1.ListTopicsResponse
+	5,  // 22: brigade.v1.MemoryService.GetTopic:output_type -> brigade.v1.GetTopicResponse
+	7,  // 23: brigade.v1.MemoryService.CreateTopic:output_type -> brigade.v1.CreateTopicResponse
+	9,  // 24: brigade.v1.MemoryService.UpdateTopicOverview:output_type -> brigade.v1.UpdateTopicOverviewResponse
+	11, // 25: brigade.v1.MemoryService.CreateNote:output_type -> brigade.v1.CreateNoteResponse
+	13, // 26: brigade.v1.MemoryService.UpdateNote:output_type -> brigade.v1.UpdateNoteResponse
+	15, // 27: brigade.v1.MemoryService.MoveNote:output_type -> brigade.v1.MoveNoteResponse
+	17, // 28: brigade.v1.MemoryService.DeleteNote:output_type -> brigade.v1.DeleteNoteResponse
+	19, // 29: brigade.v1.MemoryService.ListNotes:output_type -> brigade.v1.ListNotesResponse
+	21, // 30: brigade.v1.MemoryService.GetNote:output_type -> brigade.v1.GetNoteResponse
+	21, // [21:31] is the sub-list for method output_type
+	11, // [11:21] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_brigade_v1_memory_proto_init() }
@@ -537,7 +1515,7 @@ func file_brigade_v1_memory_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_brigade_v1_memory_proto_rawDesc), len(file_brigade_v1_memory_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
