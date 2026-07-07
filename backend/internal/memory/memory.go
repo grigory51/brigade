@@ -1,13 +1,13 @@
 // Package memory — личная память пользователя: атомарные markdown-заметки в git-репо.
 //
 // Источник истины — .md-файлы (YAML-frontmatter + тело) в git working-copy на хосте;
-// durability делегирована git-remote (любому: GitHub / self-hosted / локальный bare).
-// SQLite-индекса нет: при личных объёмах read-path сканирует файлы клона напрямую (индекс
-// окупается лишь на масштабе — добавляется отдельно, без миграции модели).
+// durability делегирована git-remote. Репозиторий и креды — ПЕР-ЮЗЕРНЫЕ: каждый пользователь
+// приносит свой remote и SSH-ключ (настройки в store, значения зашифрованы), поэтому данные
+// и доступы изолированы — утечка ключа одного пользователя не открывает данные других.
+// SQLite-индекса нет: при личных объёмах read-path сканирует файлы клона напрямую.
 //
-// Все операции сериализованы одним мьютексом: запись редкая, git-команды на одном рабочем
-// дереве не параллелятся. Push синхронный внутри вызова — между commit и push данные живут
-// только на эфемерном диске, поэтому «сохранено» возвращается лишь после успешного push.
+// Все операции сериализованы одним мьютексом. ponytail: global lock — запись редкая; если
+// понадобится параллелизм между пользователями, разбить на per-user локи.
 package memory
 
 import (
@@ -25,10 +25,15 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/grigory51/brigade/backend/internal/store"
 )
 
-// ErrDisabled — фича выключена (не задан memory.remote).
+// ErrDisabled — у пользователя не настроена память (не задан memory-remote).
 var ErrDisabled = errors.New("memory: remote not configured")
+
+// ErrNotFound — заметка не найдена.
+var ErrNotFound = errors.New("memory: note not found")
 
 // noteTypes — допустимые типы заметок; неизвестный тип нормализуется в дефолтный.
 var noteTypes = map[string]bool{
@@ -38,15 +43,10 @@ var noteTypes = map[string]bool{
 
 const defaultType = "idea"
 
-// Config — параметры памяти.
-type Config struct {
-	// Remote — git-remote (источник истины). Пусто — фича выключена.
-	Remote string
-	// Dir — рабочая копия на хосте (git working clone). Ленивый clone на первом обращении.
-	Dir string
-	// SSHKey — путь к приватному SSH-ключу для git@-remote (без пароля). Пусто — SSH-настройки
-	// хоста (~/.ssh). Для https-remote игнорируется.
-	SSHKey string
+// SettingsSource отдаёт пер-юзерные настройки памяти (remote + SSH-ключ, уже
+// расшифрованные). Реализуется *store.Store.
+type SettingsSource interface {
+	GetUserSettings(ctx context.Context, userID string) (store.UserSettings, error)
 }
 
 // Note — одна заметка памяти.
@@ -72,35 +72,37 @@ type frontmatter struct {
 	Updated string   `yaml:"updated"`
 }
 
-// Service — ядро памяти: git-хранилище + чтение/запись заметок.
+// Service — ядро памяти: пер-юзерные git-хранилища + чтение/запись заметок.
 type Service struct {
-	cfg    Config
-	mu     sync.Mutex
-	cloned bool
+	baseDir  string          // корень пер-юзерных рабочих копий: <baseDir>/<userID>/...
+	settings SettingsSource  // источник пер-юзерных настроек (remote, ключ)
+	mu       sync.Mutex
 }
 
-// NewService собирает Service. Клон не создаётся до первого обращения (lazy).
-func NewService(cfg Config) *Service { return &Service{cfg: cfg} }
+// NewService собирает Service. baseDir — база пер-юзерных клонов; settings — источник
+// пер-юзерных настроек (store).
+func NewService(baseDir string, settings SettingsSource) *Service {
+	return &Service{baseDir: baseDir, settings: settings}
+}
 
-// Enabled — включена ли память (задан remote).
-func (s *Service) Enabled() bool { return s.cfg.Remote != "" }
+// space — разрешённое пер-юзерное окружение для git-операций.
+type space struct {
+	remote  string
+	repoDir string // рабочая копия: <baseDir>/<userID>/repo
+	keyPath string // путь к материализованному SSH-ключу ("" — ключа нет)
+}
 
-// Create записывает заметку, коммитит и синхронно пушит в remote. Возвращает
-// нормализованную заметку и SHA коммита.
-func (s *Service) Create(ctx context.Context, n Note) (Note, string, error) {
-	if !s.Enabled() {
-		return Note{}, "", ErrDisabled
-	}
+// Create записывает заметку в репозиторий пользователя, коммитит и синхронно пушит.
+func (s *Service) Create(ctx context.Context, userID string, n Note) (Note, string, error) {
 	n = normalize(n)
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.ensureCloneLocked(ctx); err != nil {
+	sp, err := s.prepareLocked(ctx, userID)
+	if err != nil {
 		return Note{}, "", err
 	}
-
 	rel := notePath(n)
-	abs := filepath.Join(s.cfg.Dir, rel)
+	abs := filepath.Join(sp.repoDir, rel)
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 		return Note{}, "", fmt.Errorf("memory: mkdir: %w", err)
 	}
@@ -108,26 +110,23 @@ func (s *Service) Create(ctx context.Context, n Note) (Note, string, error) {
 	if err := os.WriteFile(abs, renderNote(n), 0o644); err != nil {
 		return Note{}, "", fmt.Errorf("memory: write %s: %w", rel, err)
 	}
-
-	sha, err := s.commitPushLocked(ctx, rel, "memory: note "+n.ID)
+	sha, err := s.commitPushLocked(ctx, sp, rel, "memory: note "+n.ID)
 	if err != nil {
 		return Note{}, "", err
 	}
 	return n, sha, nil
 }
 
-// List возвращает заметки, при непустом query — отфильтрованные по подстроке
+// List возвращает заметки пользователя, при непустом query — отфильтрованные по подстроке
 // (title/body/tags, регистронезависимо), отсортированные от новых к старым.
-func (s *Service) List(ctx context.Context, query string) ([]Note, error) {
-	if !s.Enabled() {
-		return nil, ErrDisabled
-	}
+func (s *Service) List(ctx context.Context, userID, query string) ([]Note, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.ensureCloneLocked(ctx); err != nil {
+	sp, err := s.prepareLocked(ctx, userID)
+	if err != nil {
 		return nil, err
 	}
-	notes, err := s.scanLocked()
+	notes, err := scan(sp.repoDir)
 	if err != nil {
 		return nil, err
 	}
@@ -150,17 +149,15 @@ func (s *Service) List(ctx context.Context, query string) ([]Note, error) {
 	return notes, nil
 }
 
-// Get возвращает заметку по id (store.ErrNotFound-эквивалент — ErrNotFound ниже).
-func (s *Service) Get(ctx context.Context, id string) (Note, error) {
-	if !s.Enabled() {
-		return Note{}, ErrDisabled
-	}
+// Get возвращает заметку пользователя по id.
+func (s *Service) Get(ctx context.Context, userID, id string) (Note, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.ensureCloneLocked(ctx); err != nil {
+	sp, err := s.prepareLocked(ctx, userID)
+	if err != nil {
 		return Note{}, err
 	}
-	notes, err := s.scanLocked()
+	notes, err := scan(sp.repoDir)
 	if err != nil {
 		return Note{}, err
 	}
@@ -172,73 +169,131 @@ func (s *Service) Get(ctx context.Context, id string) (Note, error) {
 	return Note{}, ErrNotFound
 }
 
-// ErrNotFound — заметка не найдена.
-var ErrNotFound = errors.New("memory: note not found")
+// prepareLocked резолвит настройки пользователя, материализует SSH-ключ и поднимает рабочую
+// копию (ленивый clone; на существующем клоне синхронизирует origin — remote мог смениться).
+func (s *Service) prepareLocked(ctx context.Context, userID string) (space, error) {
+	set, err := s.settings.GetUserSettings(ctx, userID)
+	if err != nil {
+		return space{}, fmt.Errorf("memory: settings: %w", err)
+	}
+	if set.MemoryRemote == "" {
+		return space{}, ErrDisabled
+	}
+	userDir := filepath.Join(s.baseDir, userID)
+	sp := space{remote: set.MemoryRemote, repoDir: filepath.Join(userDir, "repo")}
+	if set.MemorySSHKey != "" {
+		sp.keyPath = filepath.Join(userDir, "id")
+		if err := writeKey(sp.keyPath, set.MemorySSHKey); err != nil {
+			return space{}, err
+		}
+	}
+	if err := s.ensureCloneLocked(ctx, sp); err != nil {
+		return space{}, err
+	}
+	return sp, nil
+}
 
-// ensureCloneLocked лениво поднимает рабочую копию: existing .git → используем, иначе
-// git clone --depth 1. --depth 1 роняет локальную историю (её видно из remote) — для
-// working-copy этого достаточно. Идентичность коммитов настраивается локально в клоне.
-func (s *Service) ensureCloneLocked(ctx context.Context) error {
-	if s.cloned {
-		return nil
+// ensureCloneLocked поднимает рабочую копию: existing .git → синхронизирует origin (remote
+// пользователя мог измениться) и идентичность; иначе git clone --depth 1.
+func (s *Service) ensureCloneLocked(ctx context.Context, sp space) error {
+	if isGitRepo(sp.repoDir) {
+		if _, err := s.git(ctx, sp.repoDir, sp.keyPath, "remote", "set-url", "origin", sp.remote); err != nil {
+			return err
+		}
+		return s.configIdentityLocked(ctx, sp)
 	}
-	if isGitRepo(s.cfg.Dir) {
-		s.cloned = true
-		return s.configIdentityLocked(ctx)
-	}
-	if err := os.MkdirAll(filepath.Dir(s.cfg.Dir), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(sp.repoDir), 0o755); err != nil {
 		return fmt.Errorf("memory: mkdir parent: %w", err)
 	}
-	if _, err := s.git(ctx, "", "clone", "--depth", "1", s.cfg.Remote, s.cfg.Dir); err != nil {
+	if _, err := s.git(ctx, "", sp.keyPath, "clone", "--depth", "1", sp.remote, sp.repoDir); err != nil {
 		return fmt.Errorf("memory: clone: %w", err)
 	}
-	s.cloned = true
-	return s.configIdentityLocked(ctx)
+	return s.configIdentityLocked(ctx, sp)
 }
 
 // configIdentityLocked задаёт локальную git-идентичность клона (нужна для commit).
-func (s *Service) configIdentityLocked(ctx context.Context) error {
-	if _, err := s.git(ctx, s.cfg.Dir, "config", "user.email", "brigade@localhost"); err != nil {
+func (s *Service) configIdentityLocked(ctx context.Context, sp space) error {
+	if _, err := s.git(ctx, sp.repoDir, sp.keyPath, "config", "user.email", "brigade@localhost"); err != nil {
 		return err
 	}
-	_, err := s.git(ctx, s.cfg.Dir, "config", "user.name", "brigade")
+	_, err := s.git(ctx, sp.repoDir, sp.keyPath, "config", "user.name", "brigade")
 	return err
 }
 
 // commitPushLocked коммитит rel и синхронно пушит. При отклонении push (кто-то опередил)
 // делает pull --rebase и повторяет push один раз. Возвращает SHA HEAD.
-func (s *Service) commitPushLocked(ctx context.Context, rel, msg string) (string, error) {
-	if _, err := s.git(ctx, s.cfg.Dir, "add", "--", rel); err != nil {
+func (s *Service) commitPushLocked(ctx context.Context, sp space, rel, msg string) (string, error) {
+	dir, key := sp.repoDir, sp.keyPath
+	if _, err := s.git(ctx, dir, key, "add", "--", rel); err != nil {
 		return "", err
 	}
 	// commit может сообщить «nothing to commit» (перезапись идентичным содержимым) — это не
 	// ошибка: используем текущий HEAD.
-	if out, err := s.git(ctx, s.cfg.Dir, "commit", "-m", msg); err != nil {
+	if out, err := s.git(ctx, dir, key, "commit", "-m", msg); err != nil {
 		if !bytes.Contains(out, []byte("nothing to commit")) {
 			return "", err
 		}
 	}
-	if _, err := s.git(ctx, s.cfg.Dir, "push", "origin", "HEAD"); err != nil {
+	if _, err := s.git(ctx, dir, key, "push", "origin", "HEAD"); err != nil {
 		// Опередили — интегрируем remote и пробуем ещё раз (атомарные пофайловые заметки
 		// делают реальный конфликт редким; при нём rebase упадёт и вернёт ошибку наверх).
-		if _, perr := s.git(ctx, s.cfg.Dir, "pull", "--rebase", "origin", "HEAD"); perr != nil {
+		if _, perr := s.git(ctx, dir, key, "pull", "--rebase", "origin", "HEAD"); perr != nil {
 			return "", perr
 		}
-		if _, err := s.git(ctx, s.cfg.Dir, "push", "origin", "HEAD"); err != nil {
+		if _, err := s.git(ctx, dir, key, "push", "origin", "HEAD"); err != nil {
 			return "", err
 		}
 	}
-	out, err := s.git(ctx, s.cfg.Dir, "rev-parse", "HEAD")
+	out, err := s.git(ctx, dir, key, "rev-parse", "HEAD")
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
 }
 
-// scanLocked читает все *.md рабочей копии в заметки (пропуская .git).
-func (s *Service) scanLocked() ([]Note, error) {
+// git выполняет git-команду в dir (пусто — без рабочего каталога). Интерактивный запрос
+// кредов отключён (GIT_TERMINAL_PROMPT=0). При заданном keyPath подставляет GIT_SSH_COMMAND
+// для доступа по git@-remote указанным ключом.
+func (s *Service) git(ctx context.Context, dir, keyPath string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	env := append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	if keyPath != "" {
+		// IdentitiesOnly — не предлагать чужие ключи из ssh-agent; accept-new — доверяем host
+		// key при первом коннекте (TOFU) и отвергаем при его смене.
+		env = append(env, fmt.Sprintf(
+			"GIT_SSH_COMMAND=ssh -i %q -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new",
+			keyPath))
+	}
+	cmd.Env = env
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return out, fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, bytes.TrimSpace(out))
+	}
+	return out, nil
+}
+
+// writeKey материализует приватный SSH-ключ в файл с правами 0600 (каталог 0700), гарантируя
+// завершающий перевод строки (иначе некоторые парсеры ключа привередничают).
+func writeKey(path, content string) error {
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("memory: mkdir key dir: %w", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		return fmt.Errorf("memory: write key: %w", err)
+	}
+	return nil
+}
+
+// scan читает все *.md рабочей копии в заметки (пропуская .git).
+func scan(dir string) ([]Note, error) {
 	var notes []Note
-	err := filepath.WalkDir(s.cfg.Dir, func(path string, d os.DirEntry, err error) error {
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -368,30 +423,4 @@ func matches(n Note, q string) bool {
 func isGitRepo(dir string) bool {
 	info, err := os.Stat(filepath.Join(dir, ".git"))
 	return err == nil && info.IsDir()
-}
-
-// git выполняет git-команду в dir (пусто — без рабочего каталога). Интерактивный запрос
-// кредов отключён (GIT_TERMINAL_PROMPT=0) — недоступный remote падает сразу. При заданном
-// SSHKey подставляет GIT_SSH_COMMAND для доступа по git@-remote указанным ключом.
-func (s *Service) git(ctx context.Context, dir string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "git", args...)
-	if dir != "" {
-		cmd.Dir = dir
-	}
-	env := append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	if s.cfg.SSHKey != "" {
-		// IdentitiesOnly — не предлагать чужие ключи из ssh-agent (иначе можно упереться в
-		// MaxAuthTries); accept-new — доверяем host key при первом коннекте (TOFU) и
-		// отвергаем при его смене. ponytail: TOFU достаточно для автоматизации; для строгой
-		// проверки заранее засей known_hosts хоста — тогда accept-new ничего не добавит.
-		env = append(env, fmt.Sprintf(
-			"GIT_SSH_COMMAND=ssh -i %q -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new",
-			s.cfg.SSHKey))
-	}
-	cmd.Env = env
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return out, fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, bytes.TrimSpace(out))
-	}
-	return out, nil
 }

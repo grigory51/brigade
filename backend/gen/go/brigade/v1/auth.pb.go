@@ -413,6 +413,116 @@ func (x *SetClaudeTokenRequest) GetToken() string {
 	return ""
 }
 
+// MemorySettings — состояние настроек личной памяти пользователя. remote (его собственный
+// git-репозиторий заметок) показывается в UI; значение SSH-ключа наружу НЕ отдаётся —
+// только флаг key_set.
+type MemorySettings struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Remote        string                 `protobuf:"bytes,1,opt,name=remote,proto3" json:"remote,omitempty"`
+	KeySet        bool                   `protobuf:"varint,2,opt,name=key_set,json=keySet,proto3" json:"key_set,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MemorySettings) Reset() {
+	*x = MemorySettings{}
+	mi := &file_brigade_v1_auth_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MemorySettings) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MemorySettings) ProtoMessage() {}
+
+func (x *MemorySettings) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_auth_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MemorySettings.ProtoReflect.Descriptor instead.
+func (*MemorySettings) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *MemorySettings) GetRemote() string {
+	if x != nil {
+		return x.Remote
+	}
+	return ""
+}
+
+func (x *MemorySettings) GetKeySet() bool {
+	if x != nil {
+		return x.KeySet
+	}
+	return false
+}
+
+// SetMemorySettingsRequest — установка настроек памяти. remote перезаписывается всегда
+// (пустой отключает память у пользователя). ssh_key: пустой СОХРАНЯЕТ прежний ключ (правка
+// remote не стирает ключ); задать новый — прислать непустой.
+type SetMemorySettingsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Remote        string                 `protobuf:"bytes,1,opt,name=remote,proto3" json:"remote,omitempty"`
+	SshKey        string                 `protobuf:"bytes,2,opt,name=ssh_key,json=sshKey,proto3" json:"ssh_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetMemorySettingsRequest) Reset() {
+	*x = SetMemorySettingsRequest{}
+	mi := &file_brigade_v1_auth_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetMemorySettingsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetMemorySettingsRequest) ProtoMessage() {}
+
+func (x *SetMemorySettingsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_auth_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetMemorySettingsRequest.ProtoReflect.Descriptor instead.
+func (*SetMemorySettingsRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *SetMemorySettingsRequest) GetRemote() string {
+	if x != nil {
+		return x.Remote
+	}
+	return ""
+}
+
+func (x *SetMemorySettingsRequest) GetSshKey() string {
+	if x != nil {
+		return x.SshKey
+	}
+	return ""
+}
+
 var File_brigade_v1_auth_proto protoreflect.FileDescriptor
 
 const file_brigade_v1_auth_proto_rawDesc = "" +
@@ -438,14 +548,22 @@ const file_brigade_v1_auth_proto_rawDesc = "" +
 	"\x0eClaudeSettings\x12\x1b\n" +
 	"\ttoken_set\x18\x01 \x01(\bR\btokenSet\"-\n" +
 	"\x15SetClaudeTokenRequest\x12\x14\n" +
-	"\x05token\x18\x01 \x01(\tR\x05token2\x8b\x03\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\"A\n" +
+	"\x0eMemorySettings\x12\x16\n" +
+	"\x06remote\x18\x01 \x01(\tR\x06remote\x12\x17\n" +
+	"\akey_set\x18\x02 \x01(\bR\x06keySet\"K\n" +
+	"\x18SetMemorySettingsRequest\x12\x16\n" +
+	"\x06remote\x18\x01 \x01(\tR\x06remote\x12\x17\n" +
+	"\assh_key\x18\x02 \x01(\tR\x06sshKey2\xaa\x04\n" +
 	"\vAuthService\x12>\n" +
 	"\x05Login\x12\x18.brigade.v1.LoginRequest\x1a\x19.brigade.v1.LoginResponse\"\x00\x12D\n" +
 	"\aRefresh\x12\x1a.brigade.v1.RefreshRequest\x1a\x1b.brigade.v1.RefreshResponse\"\x00\x12+\n" +
 	"\x02Me\x12\x11.brigade.v1.Empty\x1a\x10.brigade.v1.User\"\x00\x120\n" +
 	"\x06Logout\x12\x11.brigade.v1.Empty\x1a\x11.brigade.v1.Empty\"\x00\x12D\n" +
 	"\x11GetClaudeSettings\x12\x11.brigade.v1.Empty\x1a\x1a.brigade.v1.ClaudeSettings\"\x00\x12Q\n" +
-	"\x0eSetClaudeToken\x12!.brigade.v1.SetClaudeTokenRequest\x1a\x1a.brigade.v1.ClaudeSettings\"\x00B\xa6\x01\n" +
+	"\x0eSetClaudeToken\x12!.brigade.v1.SetClaudeTokenRequest\x1a\x1a.brigade.v1.ClaudeSettings\"\x00\x12D\n" +
+	"\x11GetMemorySettings\x12\x11.brigade.v1.Empty\x1a\x1a.brigade.v1.MemorySettings\"\x00\x12W\n" +
+	"\x11SetMemorySettings\x12$.brigade.v1.SetMemorySettingsRequest\x1a\x1a.brigade.v1.MemorySettings\"\x00B\xa6\x01\n" +
 	"\x0ecom.brigade.v1B\tAuthProtoP\x01Z@github.com/grigory51/brigade/backend/gen/go/brigade/v1;brigadev1\xa2\x02\x03BXX\xaa\x02\n" +
 	"Brigade.V1\xca\x02\n" +
 	"Brigade\\V1\xe2\x02\x16Brigade\\V1\\GPBMetadata\xea\x02\vBrigade::V1b\x06proto3"
@@ -462,16 +580,18 @@ func file_brigade_v1_auth_proto_rawDescGZIP() []byte {
 	return file_brigade_v1_auth_proto_rawDescData
 }
 
-var file_brigade_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_brigade_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_brigade_v1_auth_proto_goTypes = []any{
-	(*Empty)(nil),                 // 0: brigade.v1.Empty
-	(*User)(nil),                  // 1: brigade.v1.User
-	(*LoginRequest)(nil),          // 2: brigade.v1.LoginRequest
-	(*LoginResponse)(nil),         // 3: brigade.v1.LoginResponse
-	(*RefreshRequest)(nil),        // 4: brigade.v1.RefreshRequest
-	(*RefreshResponse)(nil),       // 5: brigade.v1.RefreshResponse
-	(*ClaudeSettings)(nil),        // 6: brigade.v1.ClaudeSettings
-	(*SetClaudeTokenRequest)(nil), // 7: brigade.v1.SetClaudeTokenRequest
+	(*Empty)(nil),                    // 0: brigade.v1.Empty
+	(*User)(nil),                     // 1: brigade.v1.User
+	(*LoginRequest)(nil),             // 2: brigade.v1.LoginRequest
+	(*LoginResponse)(nil),            // 3: brigade.v1.LoginResponse
+	(*RefreshRequest)(nil),           // 4: brigade.v1.RefreshRequest
+	(*RefreshResponse)(nil),          // 5: brigade.v1.RefreshResponse
+	(*ClaudeSettings)(nil),           // 6: brigade.v1.ClaudeSettings
+	(*SetClaudeTokenRequest)(nil),    // 7: brigade.v1.SetClaudeTokenRequest
+	(*MemorySettings)(nil),           // 8: brigade.v1.MemorySettings
+	(*SetMemorySettingsRequest)(nil), // 9: brigade.v1.SetMemorySettingsRequest
 }
 var file_brigade_v1_auth_proto_depIdxs = []int32{
 	1, // 0: brigade.v1.LoginResponse.user:type_name -> brigade.v1.User
@@ -481,14 +601,18 @@ var file_brigade_v1_auth_proto_depIdxs = []int32{
 	0, // 4: brigade.v1.AuthService.Logout:input_type -> brigade.v1.Empty
 	0, // 5: brigade.v1.AuthService.GetClaudeSettings:input_type -> brigade.v1.Empty
 	7, // 6: brigade.v1.AuthService.SetClaudeToken:input_type -> brigade.v1.SetClaudeTokenRequest
-	3, // 7: brigade.v1.AuthService.Login:output_type -> brigade.v1.LoginResponse
-	5, // 8: brigade.v1.AuthService.Refresh:output_type -> brigade.v1.RefreshResponse
-	1, // 9: brigade.v1.AuthService.Me:output_type -> brigade.v1.User
-	0, // 10: brigade.v1.AuthService.Logout:output_type -> brigade.v1.Empty
-	6, // 11: brigade.v1.AuthService.GetClaudeSettings:output_type -> brigade.v1.ClaudeSettings
-	6, // 12: brigade.v1.AuthService.SetClaudeToken:output_type -> brigade.v1.ClaudeSettings
-	7, // [7:13] is the sub-list for method output_type
-	1, // [1:7] is the sub-list for method input_type
+	0, // 7: brigade.v1.AuthService.GetMemorySettings:input_type -> brigade.v1.Empty
+	9, // 8: brigade.v1.AuthService.SetMemorySettings:input_type -> brigade.v1.SetMemorySettingsRequest
+	3, // 9: brigade.v1.AuthService.Login:output_type -> brigade.v1.LoginResponse
+	5, // 10: brigade.v1.AuthService.Refresh:output_type -> brigade.v1.RefreshResponse
+	1, // 11: brigade.v1.AuthService.Me:output_type -> brigade.v1.User
+	0, // 12: brigade.v1.AuthService.Logout:output_type -> brigade.v1.Empty
+	6, // 13: brigade.v1.AuthService.GetClaudeSettings:output_type -> brigade.v1.ClaudeSettings
+	6, // 14: brigade.v1.AuthService.SetClaudeToken:output_type -> brigade.v1.ClaudeSettings
+	8, // 15: brigade.v1.AuthService.GetMemorySettings:output_type -> brigade.v1.MemorySettings
+	8, // 16: brigade.v1.AuthService.SetMemorySettings:output_type -> brigade.v1.MemorySettings
+	9, // [9:17] is the sub-list for method output_type
+	1, // [1:9] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
 	1, // [1:1] is the sub-list for extension extendee
 	0, // [0:1] is the sub-list for field type_name
@@ -505,7 +629,7 @@ func file_brigade_v1_auth_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_brigade_v1_auth_proto_rawDesc), len(file_brigade_v1_auth_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

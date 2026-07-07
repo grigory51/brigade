@@ -19,6 +19,7 @@ import (
 	"github.com/grigory51/brigade/backend/internal/config"
 	"github.com/grigory51/brigade/backend/internal/memory"
 	"github.com/grigory51/brigade/backend/internal/preview"
+	"github.com/grigory51/brigade/backend/internal/secret"
 	"github.com/grigory51/brigade/backend/internal/session"
 	"github.com/grigory51/brigade/backend/internal/spawn"
 	"github.com/grigory51/brigade/backend/internal/store"
@@ -37,7 +38,10 @@ func main() {
 		log.Fatalf("brigade: config: %v", err)
 	}
 
-	st, err := store.Open(cfg.SQLitePath)
+	// Шифрование секретных полей БД (токен Claude, ключ памяти) ключом из jwt.secret.
+	fieldCipher := secret.NewCipher(cfg.JWT.Secret)
+
+	st, err := store.Open(cfg.SQLitePath, fieldCipher)
 	if err != nil {
 		log.Fatalf("brigade: store: %v", err)
 	}
@@ -66,9 +70,9 @@ func main() {
 	// preview) — зависимые компоненты не проверяют nil.
 	previewSvc := preview.NewService(previewConfig(cfg), []byte(cfg.JWT.Secret))
 
-	// Личная память: заметки в git-репо (источник истины — файлы, durability — remote).
-	// Сервис создаётся всегда; выключен, если не задан memory.remote (Enabled()==false).
-	memorySvc := memory.NewService(memory.Config{Remote: cfg.Memory.Remote, Dir: cfg.Memory.Dir, SSHKey: cfg.Memory.SSHKey})
+	// Личная память: пер-юзерные git-репозитории заметок. Настройки/креды — из store
+	// (per-user), базовый каталог рабочих копий — из конфига.
+	memorySvc := memory.NewService(cfg.Memory.Dir, st)
 
 	// Реестр живых сессий поверх store и спавнера. Режим фиксируется в каждой сессии;
 	// подписочный токен Claude берётся per-user из store при создании сессии.
@@ -104,7 +108,7 @@ func main() {
 	mux.Handle(brigadev1connect.NewMemoryServiceHandler(connectsvc.NewMemoryService(memorySvc), interceptors))
 	// AgentBridgeService — вызовы ИЗ сессии (скилл в контейнере). БЕЗ JWT-интерсептора:
 	// авторизация — per-session HMAC-токен, проверяется в самом хендлере.
-	mux.Handle(brigadev1connect.NewAgentBridgeServiceHandler(connectsvc.NewAgentBridgeService(previewSvc, memorySvc)))
+	mux.Handle(brigadev1connect.NewAgentBridgeServiceHandler(connectsvc.NewAgentBridgeService(previewSvc, memorySvc, st)))
 
 	// WS-терминал (Go 1.22 method+path routing). Аутентификация — по одноразовому
 	// тикету в query; реестр отдаёт живой Handle сессии её владельцу.

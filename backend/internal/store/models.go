@@ -40,10 +40,14 @@ type User struct {
 }
 
 // UserSettings — персональные настройки пользователя. ClaudeToken — подписочный
-// токен Claude Code; хранится как секрет и наружу (в API) не отдаётся.
+// токен Claude Code; MemoryRemote/MemorySSHKey — git-репо личной памяти и приватный
+// SSH-ключ к нему. Всё — секреты: в БД шифруются, наружу (в API) значения не отдаются
+// (только флаги «задано»). GetUserSettings возвращает их уже расшифрованными.
 type UserSettings struct {
-	UserID      string
-	ClaudeToken string
+	UserID       string
+	ClaudeToken  string
+	MemoryRemote string
+	MemorySSHKey string
 }
 
 // Session — сессия агента. Поля agent_session_id и container_label несут

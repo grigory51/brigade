@@ -6,6 +6,7 @@ import { authClient } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
   CardContent,
@@ -130,6 +131,129 @@ export function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <MemoryCard />
     </div>
+  );
+}
+
+/**
+ * MemoryCard — раздел «Память»: приватный git-репозиторий заметок пользователя и SSH-ключ
+ * к нему. Репозиторий и ключ ПЕР-ЮЗЕРНЫЕ; ключ на сервере шифруется и наружу не отдаётся
+ * (только флаг «задан»). Пустой ключ при сохранении оставляет прежний.
+ */
+function MemoryCard() {
+  const [keySet, setKeySet] = useState<boolean | null>(null); // null = загрузка
+  const [remote, setRemote] = useState("");
+  const [keyDraft, setKeyDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    authClient
+      .getMemorySettings({})
+      .then((r) => {
+        if (!alive) return;
+        setRemote(r.remote);
+        setKeySet(r.keySet);
+      })
+      .catch(() => {
+        if (alive) setKeySet(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const save = useCallback(async () => {
+    setSaving(true);
+    try {
+      const res = await authClient.setMemorySettings({
+        remote: remote.trim(),
+        sshKey: keyDraft,
+      });
+      setRemote(res.remote);
+      setKeySet(res.keySet);
+      setKeyDraft(""); // ключ из UI сразу убираем — он больше не показывается
+      toast.success("Настройки памяти сохранены");
+    } catch (err) {
+      toast.error(
+        err instanceof ConnectError
+          ? err.rawMessage
+          : "Не удалось сохранить настройки памяти",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }, [remote, keyDraft]);
+
+  return (
+    <Card className="mt-4">
+      <CardHeader>
+        <CardTitle>Память</CardTitle>
+        <CardDescription>
+          Ваш приватный git-репозиторий заметок и SSH-ключ к нему (для{" "}
+          <code className="text-xs">git@</code>-remote). Данные изолированы: репозиторий и
+          доступ у каждого пользователя свои. Ключ после сохранения не отображается.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {keySet === null ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            Загрузка…
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 text-sm">
+            {keySet ? (
+              <>
+                <Check className="size-4 text-success" />
+                <span className="text-muted-foreground">SSH-ключ задан</span>
+              </>
+            ) : (
+              <span className="text-muted-foreground">SSH-ключ не задан</span>
+            )}
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <Label htmlFor="memory-remote">Git-remote</Label>
+          <Input
+            id="memory-remote"
+            placeholder="git@gitlab.com:you/brigade-memory.git"
+            autoComplete="off"
+            value={remote}
+            onChange={(e) => setRemote(e.target.value)}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="memory-key">
+            {keySet ? "Новый SSH-ключ" : "SSH-ключ (приватный, без пароля)"}
+          </Label>
+          <Textarea
+            id="memory-key"
+            rows={4}
+            placeholder={
+              keySet
+                ? "Оставьте пустым, чтобы не менять"
+                : "-----BEGIN OPENSSH PRIVATE KEY-----"
+            }
+            autoComplete="off"
+            className="font-mono text-xs"
+            value={keyDraft}
+            onChange={(e) => setKeyDraft(e.target.value)}
+          />
+        </div>
+
+        <Button
+          onClick={() => void save()}
+          disabled={saving || (!remote.trim() && !keyDraft.trim())}
+        >
+          {saving && <Loader2 className="size-4 animate-spin" />}
+          Сохранить
+        </Button>
+      </CardContent>
+    </Card>
   );
 }

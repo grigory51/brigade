@@ -339,3 +339,97 @@ export class SetClaudeTokenRequest extends Message<SetClaudeTokenRequest> {
   }
 }
 
+/**
+ * MemorySettings — состояние настроек личной памяти пользователя. remote (его собственный
+ * git-репозиторий заметок) показывается в UI; значение SSH-ключа наружу НЕ отдаётся —
+ * только флаг key_set.
+ *
+ * @generated from message brigade.v1.MemorySettings
+ */
+export class MemorySettings extends Message<MemorySettings> {
+  /**
+   * @generated from field: string remote = 1;
+   */
+  remote = "";
+
+  /**
+   * @generated from field: bool key_set = 2;
+   */
+  keySet = false;
+
+  constructor(data?: PartialMessage<MemorySettings>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.MemorySettings";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "remote", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "key_set", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): MemorySettings {
+    return new MemorySettings().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): MemorySettings {
+    return new MemorySettings().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): MemorySettings {
+    return new MemorySettings().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: MemorySettings | PlainMessage<MemorySettings> | undefined, b: MemorySettings | PlainMessage<MemorySettings> | undefined): boolean {
+    return proto3.util.equals(MemorySettings, a, b);
+  }
+}
+
+/**
+ * SetMemorySettingsRequest — установка настроек памяти. remote перезаписывается всегда
+ * (пустой отключает память у пользователя). ssh_key: пустой СОХРАНЯЕТ прежний ключ (правка
+ * remote не стирает ключ); задать новый — прислать непустой.
+ *
+ * @generated from message brigade.v1.SetMemorySettingsRequest
+ */
+export class SetMemorySettingsRequest extends Message<SetMemorySettingsRequest> {
+  /**
+   * @generated from field: string remote = 1;
+   */
+  remote = "";
+
+  /**
+   * @generated from field: string ssh_key = 2;
+   */
+  sshKey = "";
+
+  constructor(data?: PartialMessage<SetMemorySettingsRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.SetMemorySettingsRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "remote", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "ssh_key", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SetMemorySettingsRequest {
+    return new SetMemorySettingsRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SetMemorySettingsRequest {
+    return new SetMemorySettingsRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SetMemorySettingsRequest {
+    return new SetMemorySettingsRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SetMemorySettingsRequest | PlainMessage<SetMemorySettingsRequest> | undefined, b: SetMemorySettingsRequest | PlainMessage<SetMemorySettingsRequest> | undefined): boolean {
+    return proto3.util.equals(SetMemorySettingsRequest, a, b);
+  }
+}
+

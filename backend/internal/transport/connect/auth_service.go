@@ -123,6 +123,38 @@ func (s *AuthService) SetClaudeToken(ctx context.Context, req *connect.Request[v
 	return connect.NewResponse(&v1.ClaudeSettings{TokenSet: strings.TrimSpace(req.Msg.Token) != ""}), nil
 }
 
+// GetMemorySettings возвращает настройки личной памяти текущего пользователя (remote +
+// флаг key_set; значение ключа не раскрывается).
+func (s *AuthService) GetMemorySettings(ctx context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.MemorySettings], error) {
+	u, ok := auth.UserFromContext(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
+	}
+	remote, keySet, err := s.svc.MemorySettings(ctx, u.ID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&v1.MemorySettings{Remote: remote, KeySet: keySet}), nil
+}
+
+// SetMemorySettings задаёт git-remote и SSH-ключ памяти текущего пользователя. Пустой
+// ssh_key сохраняет прежний ключ. Возвращает актуальное состояние (перечитывает его, чтобы
+// key_set корректно отражал сохранение прежнего ключа).
+func (s *AuthService) SetMemorySettings(ctx context.Context, req *connect.Request[v1.SetMemorySettingsRequest]) (*connect.Response[v1.MemorySettings], error) {
+	u, ok := auth.UserFromContext(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
+	}
+	if err := s.svc.SetMemorySettings(ctx, u.ID, strings.TrimSpace(req.Msg.Remote), strings.TrimSpace(req.Msg.SshKey)); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	remote, keySet, err := s.svc.MemorySettings(ctx, u.ID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&v1.MemorySettings{Remote: remote, KeySet: keySet}), nil
+}
+
 // userToProto переводит доменного пользователя auth в proto-сообщение.
 func userToProto(u auth.User) *v1.User {
 	return &v1.User{Id: u.ID, Username: u.Username}

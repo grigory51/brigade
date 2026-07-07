@@ -25,10 +25,11 @@ func NewMemoryService(mem *memory.Service) *MemoryService {
 
 // ListNotes возвращает заметки пользователя (с опциональным поиском по подстроке).
 func (s *MemoryService) ListNotes(ctx context.Context, req *connect.Request[v1.ListNotesRequest]) (*connect.Response[v1.ListNotesResponse], error) {
-	if _, err := requireUser(ctx); err != nil {
+	userID, err := requireUser(ctx)
+	if err != nil {
 		return nil, err
 	}
-	notes, err := s.memory.List(ctx, req.Msg.Query)
+	notes, err := s.memory.List(ctx, userID, req.Msg.Query)
 	if err != nil {
 		return nil, memoryError(err)
 	}
@@ -41,10 +42,11 @@ func (s *MemoryService) ListNotes(ctx context.Context, req *connect.Request[v1.L
 
 // GetNote возвращает одну заметку по id.
 func (s *MemoryService) GetNote(ctx context.Context, req *connect.Request[v1.GetNoteRequest]) (*connect.Response[v1.GetNoteResponse], error) {
-	if _, err := requireUser(ctx); err != nil {
+	userID, err := requireUser(ctx)
+	if err != nil {
 		return nil, err
 	}
-	n, err := s.memory.Get(ctx, req.Msg.Id)
+	n, err := s.memory.Get(ctx, userID, req.Msg.Id)
 	if err != nil {
 		return nil, memoryError(err)
 	}
@@ -54,10 +56,11 @@ func (s *MemoryService) GetNote(ctx context.Context, req *connect.Request[v1.Get
 // CreateNote создаёт заметку из UI/мобилы (session-провенанс пробрасывается как есть —
 // из пользовательского API он обычно пуст).
 func (s *MemoryService) CreateNote(ctx context.Context, req *connect.Request[v1.CreateNoteRequest]) (*connect.Response[v1.CreateNoteResponse], error) {
-	if _, err := requireUser(ctx); err != nil {
+	userID, err := requireUser(ctx)
+	if err != nil {
 		return nil, err
 	}
-	n, sha, err := s.memory.Create(ctx, memory.Note{
+	n, sha, err := s.memory.Create(ctx, userID, memory.Note{
 		Title:   req.Msg.Title,
 		Body:    req.Msg.Body,
 		Type:    req.Msg.Type,

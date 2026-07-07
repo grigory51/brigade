@@ -15,7 +15,7 @@ const testSessionID = "8c19e13f-1d52-42bb-88ed-443704e83af6"
 
 func newBridge() (*AgentBridgeService, *preview.Service) {
 	p := preview.NewService(preview.Config{Enabled: true, Domain: "localhost", Scheme: "http", ListenPort: 10000}, []byte("secret"))
-	return NewAgentBridgeService(p, memory.NewService(memory.Config{})), p
+	return NewAgentBridgeService(p, memory.NewService("", nil), nil), p
 }
 
 func registerReq(sessionID, token string, port int32) *connect.Request[v1.RegisterPreviewRequest] {

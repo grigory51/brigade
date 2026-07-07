@@ -70,7 +70,7 @@ func (h *fakeHandle) isTerminated() bool {
 // тесты регистрируют живые объекты напрямую, не проходя через реальный спавн.
 func newTestRegistry(t *testing.T) *Registry {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"), nil)
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}

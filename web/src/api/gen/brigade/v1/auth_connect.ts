@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ClaudeSettings, Empty, LoginRequest, LoginResponse, RefreshRequest, RefreshResponse, SetClaudeTokenRequest, User } from "./auth_pb.js";
+import { ClaudeSettings, Empty, LoginRequest, LoginResponse, MemorySettings, RefreshRequest, RefreshResponse, SetClaudeTokenRequest, SetMemorySettingsRequest, User } from "./auth_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -74,6 +74,30 @@ export const AuthService = {
       name: "SetClaudeToken",
       I: SetClaudeTokenRequest,
       O: ClaudeSettings,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * GetMemorySettings возвращает настройки личной памяти пользователя (remote + флаг
+     * key_set; значение ключа не раскрывается).
+     *
+     * @generated from rpc brigade.v1.AuthService.GetMemorySettings
+     */
+    getMemorySettings: {
+      name: "GetMemorySettings",
+      I: Empty,
+      O: MemorySettings,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * SetMemorySettings задаёт git-remote и SSH-ключ личной памяти. Возвращает обновлённое
+     * состояние.
+     *
+     * @generated from rpc brigade.v1.AuthService.SetMemorySettings
+     */
+    setMemorySettings: {
+      name: "SetMemorySettings",
+      I: SetMemorySettingsRequest,
+      O: MemorySettings,
       kind: MethodKind.Unary,
     },
   }

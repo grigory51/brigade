@@ -59,18 +59,13 @@ type Config struct {
 	Memory  MemoryConfig  `koanf:"memory"`
 }
 
-// MemoryConfig — личная память пользователя (git-репо заметок). Источник истины — файлы,
-// durability — git-remote. Пустой remote выключает фичу.
+// MemoryConfig — личная память пользователя (git-репо заметок). Источник истины — файлы.
+// Репозиторий и креды — ПЕР-ЮЗЕРНЫЕ (задаются в настройках, хранятся в БД зашифрованными);
+// здесь только базовый каталог рабочих копий.
 type MemoryConfig struct {
-	// Remote — git-remote заметок (любой: GitHub / self-hosted / локальный bare).
-	// Env: BRIGADE_MEMORY__REMOTE. Пусто — фича выключена.
-	Remote string `koanf:"remote"`
-	// Dir — рабочая копия на хосте (git working clone). Env: BRIGADE_MEMORY__DIR.
-	// Пусто при включённой памяти → дефолт <home>/.brigade/memory.
+	// Dir — база пер-юзерных рабочих копий: <Dir>/<userID>/... Env: BRIGADE_MEMORY__DIR.
+	// Пусто → дефолт <home>/.brigade/memory.
 	Dir string `koanf:"dir"`
-	// SSHKey — путь к приватному SSH-ключу для доступа к remote по git@-URL (без пароля).
-	// Env: BRIGADE_MEMORY__SSH_KEY. Пусто — git использует SSH-настройки хоста (~/.ssh).
-	SSHKey string `koanf:"ssh_key"`
 }
 
 // PreviewConfig — публикация dev-серверов сессий через встроенный L7-прокси.
@@ -257,34 +252,20 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	// Память включена ⇔ задан remote. Рабочую копию нормализуем к абсолютному пути (её
+	// Личная память: база пер-юзерных рабочих копий. Нормализуем к абсолютному пути (её
 	// подкаталоги — git working tree, относительный путь ненадёжен). Дефолт — под $HOME.
-	if c.Memory.Remote != "" {
-		if c.Memory.Dir == "" {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return fmt.Errorf("config: resolve home for memory.dir: %w", err)
-			}
-			c.Memory.Dir = filepath.Join(home, ".brigade", "memory")
-		}
-		abs, err := filepath.Abs(c.Memory.Dir)
+	// remote/ключ — пер-юзерные (в БД), в конфиге их нет.
+	if c.Memory.Dir == "" {
+		home, err := os.UserHomeDir()
 		if err != nil {
-			return fmt.Errorf("config: resolve memory.dir %q: %w", c.Memory.Dir, err)
+			return fmt.Errorf("config: resolve home for memory.dir: %w", err)
 		}
+		c.Memory.Dir = filepath.Join(home, ".brigade", "memory")
+	}
+	if abs, err := filepath.Abs(c.Memory.Dir); err != nil {
+		return fmt.Errorf("config: resolve memory.dir %q: %w", c.Memory.Dir, err)
+	} else {
 		c.Memory.Dir = abs
-
-		// SSH-ключ (если задан) — абсолютный путь; проверяем существование на старте,
-		// чтобы неверный путь падал сразу, а не при первом push.
-		if c.Memory.SSHKey != "" {
-			keyAbs, err := filepath.Abs(c.Memory.SSHKey)
-			if err != nil {
-				return fmt.Errorf("config: resolve memory.ssh_key %q: %w", c.Memory.SSHKey, err)
-			}
-			if _, err := os.Stat(keyAbs); err != nil {
-				return fmt.Errorf("config: memory.ssh_key %q: %w", keyAbs, err)
-			}
-			c.Memory.SSHKey = keyAbs
-		}
 	}
 
 	return nil

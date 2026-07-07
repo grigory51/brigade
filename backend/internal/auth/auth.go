@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/grigory51/brigade/backend/internal/secret"
 )
 
 // Ошибки уровня сервиса. Возвращаются доменными методами и транслируются
@@ -48,18 +50,20 @@ type TokenPair struct {
 type Service struct {
 	db         *sql.DB
 	jwt        *JWT
+	cipher     *secret.Cipher
 	refreshTTL time.Duration
 	now        func() time.Time
 }
 
 // NewService собирает сервис авторизации.
 //
-// db — пул соединений store; secret — ключ подписи JWT; accessTTL/refreshTTL —
-// сроки жизни access- и refresh-токенов соответственно.
-func NewService(db *sql.DB, secret string, accessTTL, refreshTTL time.Duration) *Service {
+// db — пул соединений store; secret — ключ подписи JWT (и производный ключ шифрования
+// секретных настроек); accessTTL/refreshTTL — сроки жизни access- и refresh-токенов.
+func NewService(db *sql.DB, serverSecret string, accessTTL, refreshTTL time.Duration) *Service {
 	return &Service{
 		db:         db,
-		jwt:        NewJWT(secret, accessTTL),
+		jwt:        NewJWT(serverSecret, accessTTL),
+		cipher:     secret.NewCipher(serverSecret),
 		refreshTTL: refreshTTL,
 		now:        time.Now,
 	}
@@ -179,14 +183,50 @@ func (s *Service) ClaudeTokenSet(ctx context.Context, userID string) (bool, erro
 }
 
 // SetClaudeToken задаёт (или очищает пустым значением) подписочный токен Claude
-// пользователя.
+// пользователя. Значение шифруется перед записью.
 func (s *Service) SetClaudeToken(ctx context.Context, userID, token string) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO user_settings (user_id, claude_token, updated_at) VALUES (?, ?, ?)
 		 ON CONFLICT(user_id) DO UPDATE SET claude_token = excluded.claude_token, updated_at = excluded.updated_at`,
-		userID, token, s.now().Unix())
+		userID, s.cipher.Encrypt(token), s.now().Unix())
 	if err != nil {
 		return fmt.Errorf("auth: set claude token: %w", err)
+	}
+	return nil
+}
+
+// MemorySettings возвращает состояние настроек памяти пользователя: git-remote (для показа
+// в UI — это его собственный репозиторий) и флаг «SSH-ключ задан». Само значение ключа
+// наружу не отдаётся.
+func (s *Service) MemorySettings(ctx context.Context, userID string) (remote string, keySet bool, err error) {
+	var encRemote, encKey string
+	e := s.db.QueryRowContext(ctx,
+		`SELECT memory_remote, memory_ssh_key FROM user_settings WHERE user_id = ?`, userID).
+		Scan(&encRemote, &encKey)
+	if errors.Is(e, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if e != nil {
+		return "", false, fmt.Errorf("auth: query memory settings: %w", e)
+	}
+	return s.cipher.Decrypt(encRemote), encKey != "", nil
+}
+
+// SetMemorySettings задаёт git-remote личной памяти и (опционально) приватный SSH-ключ.
+// remote перезаписывается всегда (пустой — отключает память у пользователя); пустой sshKey
+// СОХРАНЯЕТ прежний ключ (чтобы правка remote не стирала ключ) — очистка ключа делается
+// отдельно. Оба значения шифруются перед записью.
+func (s *Service) SetMemorySettings(ctx context.Context, userID, remote, sshKey string) error {
+	// CASE сохраняет существующий ключ, когда новый пуст (excluded.memory_ssh_key = '').
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO user_settings (user_id, memory_remote, memory_ssh_key, updated_at) VALUES (?, ?, ?, ?)
+		 ON CONFLICT(user_id) DO UPDATE SET
+		   memory_remote = excluded.memory_remote,
+		   memory_ssh_key = CASE WHEN excluded.memory_ssh_key = '' THEN user_settings.memory_ssh_key ELSE excluded.memory_ssh_key END,
+		   updated_at = excluded.updated_at`,
+		userID, s.cipher.Encrypt(remote), s.cipher.Encrypt(sshKey), s.now().Unix())
+	if err != nil {
+		return fmt.Errorf("auth: set memory settings: %w", err)
 	}
 	return nil
 }

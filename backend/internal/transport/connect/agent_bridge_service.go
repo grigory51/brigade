@@ -11,11 +11,19 @@ import (
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
 	"github.com/grigory51/brigade/backend/internal/memory"
 	"github.com/grigory51/brigade/backend/internal/preview"
+	"github.com/grigory51/brigade/backend/internal/store"
 )
 
 // errSessionNotFound — общая для ACP/bridge ошибка «сессия недоступна» (неизвестна,
 // чужая или не в нужном режиме). Детали наружу не раскрываются.
 var errSessionNotFound = errors.New("session not found")
+
+// sessionOwner резолвит владельца сессии по её id — чтобы запись из сессии шла в память
+// ВЛАДЕЛЬЦА сессии (HMAC-токен подтверждает доступ к сессии, а не личность пользователя).
+// Реализуется *store.Store.
+type sessionOwner interface {
+	GetSession(ctx context.Context, id string) (store.Session, error)
+}
 
 // AgentBridgeService реализует brigade.v1.AgentBridgeService — вызовы ИЗ сессии
 // (агент/скилл внутри контейнера), а не от веб-клиента. Регистрируется БЕЗ
@@ -24,11 +32,12 @@ var errSessionNotFound = errors.New("session not found")
 type AgentBridgeService struct {
 	previews *preview.Service
 	memory   *memory.Service
+	sessions sessionOwner
 }
 
 // NewAgentBridgeService собирает реализацию AgentBridgeService.
-func NewAgentBridgeService(previews *preview.Service, mem *memory.Service) *AgentBridgeService {
-	return &AgentBridgeService{previews: previews, memory: mem}
+func NewAgentBridgeService(previews *preview.Service, mem *memory.Service, sessions sessionOwner) *AgentBridgeService {
+	return &AgentBridgeService{previews: previews, memory: mem, sessions: sessions}
 }
 
 // verifySession проверяет per-session HMAC-токен из заголовка Authorization против
@@ -50,7 +59,12 @@ func (s *AgentBridgeService) CreateMemoryNote(ctx context.Context, req *connect.
 	if err := s.verifySession(req, req.Msg.SessionId); err != nil {
 		return nil, err
 	}
-	n, sha, err := s.memory.Create(ctx, memory.Note{
+	// Заметка идёт в память ВЛАДЕЛЬЦА сессии — резолвим его по session_id.
+	sess, err := s.sessions.GetSession(ctx, req.Msg.SessionId)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, errSessionNotFound)
+	}
+	n, sha, err := s.memory.Create(ctx, sess.UserID, memory.Note{
 		Title:   req.Msg.Title,
 		Body:    req.Msg.Body,
 		Type:    req.Msg.Type,

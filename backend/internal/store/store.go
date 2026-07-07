@@ -11,18 +11,24 @@ import (
 	"github.com/pressly/goose/v3"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/grigory51/brigade/backend/internal/secret"
 )
 
 //go:embed migrations/*.sql
 var migrations embed.FS
 
-// Store — обёртка над пулом соединений к SQLite.
+// Store — обёртка над пулом соединений к SQLite. cipher шифрует/дешифрует секретные
+// колонки user_settings (токен Claude, ключ памяти); может быть nil (тесты) — тогда
+// значения проходят как есть.
 type Store struct {
-	db *sql.DB
+	db     *sql.DB
+	cipher *secret.Cipher
 }
 
 // Open открывает (создаёт при отсутствии) БД по указанному пути и прогоняет миграции.
-func Open(path string) (*Store, error) {
+// cipher используется для прозрачного шифрования секретных полей (nil — без шифрования).
+func Open(path string, cipher *secret.Cipher) (*Store, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("store: open %q: %w", path, err)
@@ -37,7 +43,7 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 
-	return &Store{db: db}, nil
+	return &Store{db: db, cipher: cipher}, nil
 }
 
 // DB возвращает низкоуровневый пул для доменных запросов.

@@ -47,6 +47,12 @@ const (
 	// AuthServiceSetClaudeTokenProcedure is the fully-qualified name of the AuthService's
 	// SetClaudeToken RPC.
 	AuthServiceSetClaudeTokenProcedure = "/brigade.v1.AuthService/SetClaudeToken"
+	// AuthServiceGetMemorySettingsProcedure is the fully-qualified name of the AuthService's
+	// GetMemorySettings RPC.
+	AuthServiceGetMemorySettingsProcedure = "/brigade.v1.AuthService/GetMemorySettings"
+	// AuthServiceSetMemorySettingsProcedure is the fully-qualified name of the AuthService's
+	// SetMemorySettings RPC.
+	AuthServiceSetMemorySettingsProcedure = "/brigade.v1.AuthService/SetMemorySettings"
 )
 
 // AuthServiceClient is a client for the brigade.v1.AuthService service.
@@ -62,6 +68,12 @@ type AuthServiceClient interface {
 	// SetClaudeToken задаёт (или очищает пустым значением) подписочный токен Claude
 	// пользователя. Возвращает обновлённое состояние (token_set).
 	SetClaudeToken(context.Context, *connect.Request[v1.SetClaudeTokenRequest]) (*connect.Response[v1.ClaudeSettings], error)
+	// GetMemorySettings возвращает настройки личной памяти пользователя (remote + флаг
+	// key_set; значение ключа не раскрывается).
+	GetMemorySettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.MemorySettings], error)
+	// SetMemorySettings задаёт git-remote и SSH-ключ личной памяти. Возвращает обновлённое
+	// состояние.
+	SetMemorySettings(context.Context, *connect.Request[v1.SetMemorySettingsRequest]) (*connect.Response[v1.MemorySettings], error)
 }
 
 // NewAuthServiceClient constructs a client for the brigade.v1.AuthService service. By default, it
@@ -111,6 +123,18 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("SetClaudeToken")),
 			connect.WithClientOptions(opts...),
 		),
+		getMemorySettings: connect.NewClient[v1.Empty, v1.MemorySettings](
+			httpClient,
+			baseURL+AuthServiceGetMemorySettingsProcedure,
+			connect.WithSchema(authServiceMethods.ByName("GetMemorySettings")),
+			connect.WithClientOptions(opts...),
+		),
+		setMemorySettings: connect.NewClient[v1.SetMemorySettingsRequest, v1.MemorySettings](
+			httpClient,
+			baseURL+AuthServiceSetMemorySettingsProcedure,
+			connect.WithSchema(authServiceMethods.ByName("SetMemorySettings")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -122,6 +146,8 @@ type authServiceClient struct {
 	logout            *connect.Client[v1.Empty, v1.Empty]
 	getClaudeSettings *connect.Client[v1.Empty, v1.ClaudeSettings]
 	setClaudeToken    *connect.Client[v1.SetClaudeTokenRequest, v1.ClaudeSettings]
+	getMemorySettings *connect.Client[v1.Empty, v1.MemorySettings]
+	setMemorySettings *connect.Client[v1.SetMemorySettingsRequest, v1.MemorySettings]
 }
 
 // Login calls brigade.v1.AuthService.Login.
@@ -154,6 +180,16 @@ func (c *authServiceClient) SetClaudeToken(ctx context.Context, req *connect.Req
 	return c.setClaudeToken.CallUnary(ctx, req)
 }
 
+// GetMemorySettings calls brigade.v1.AuthService.GetMemorySettings.
+func (c *authServiceClient) GetMemorySettings(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.MemorySettings], error) {
+	return c.getMemorySettings.CallUnary(ctx, req)
+}
+
+// SetMemorySettings calls brigade.v1.AuthService.SetMemorySettings.
+func (c *authServiceClient) SetMemorySettings(ctx context.Context, req *connect.Request[v1.SetMemorySettingsRequest]) (*connect.Response[v1.MemorySettings], error) {
+	return c.setMemorySettings.CallUnary(ctx, req)
+}
+
 // AuthServiceHandler is an implementation of the brigade.v1.AuthService service.
 type AuthServiceHandler interface {
 	Login(context.Context, *connect.Request[v1.LoginRequest]) (*connect.Response[v1.LoginResponse], error)
@@ -167,6 +203,12 @@ type AuthServiceHandler interface {
 	// SetClaudeToken задаёт (или очищает пустым значением) подписочный токен Claude
 	// пользователя. Возвращает обновлённое состояние (token_set).
 	SetClaudeToken(context.Context, *connect.Request[v1.SetClaudeTokenRequest]) (*connect.Response[v1.ClaudeSettings], error)
+	// GetMemorySettings возвращает настройки личной памяти пользователя (remote + флаг
+	// key_set; значение ключа не раскрывается).
+	GetMemorySettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.MemorySettings], error)
+	// SetMemorySettings задаёт git-remote и SSH-ключ личной памяти. Возвращает обновлённое
+	// состояние.
+	SetMemorySettings(context.Context, *connect.Request[v1.SetMemorySettingsRequest]) (*connect.Response[v1.MemorySettings], error)
 }
 
 // NewAuthServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -212,6 +254,18 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("SetClaudeToken")),
 		connect.WithHandlerOptions(opts...),
 	)
+	authServiceGetMemorySettingsHandler := connect.NewUnaryHandler(
+		AuthServiceGetMemorySettingsProcedure,
+		svc.GetMemorySettings,
+		connect.WithSchema(authServiceMethods.ByName("GetMemorySettings")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceSetMemorySettingsHandler := connect.NewUnaryHandler(
+		AuthServiceSetMemorySettingsProcedure,
+		svc.SetMemorySettings,
+		connect.WithSchema(authServiceMethods.ByName("SetMemorySettings")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/brigade.v1.AuthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AuthServiceLoginProcedure:
@@ -226,6 +280,10 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceGetClaudeSettingsHandler.ServeHTTP(w, r)
 		case AuthServiceSetClaudeTokenProcedure:
 			authServiceSetClaudeTokenHandler.ServeHTTP(w, r)
+		case AuthServiceGetMemorySettingsProcedure:
+			authServiceGetMemorySettingsHandler.ServeHTTP(w, r)
+		case AuthServiceSetMemorySettingsProcedure:
+			authServiceSetMemorySettingsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -257,4 +315,12 @@ func (UnimplementedAuthServiceHandler) GetClaudeSettings(context.Context, *conne
 
 func (UnimplementedAuthServiceHandler) SetClaudeToken(context.Context, *connect.Request[v1.SetClaudeTokenRequest]) (*connect.Response[v1.ClaudeSettings], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.SetClaudeToken is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) GetMemorySettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.MemorySettings], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.GetMemorySettings is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) SetMemorySettings(context.Context, *connect.Request[v1.SetMemorySettingsRequest]) (*connect.Response[v1.MemorySettings], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.SetMemorySettings is not implemented"))
 }

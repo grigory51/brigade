@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { ConnectError } from "@connectrpc/connect";
+import { Link } from "react-router-dom";
+import { Code, ConnectError } from "@connectrpc/connect";
 import { Loader2, NotebookPen, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { memoryClient } from "@/api/client";
@@ -39,6 +40,9 @@ export function MemoryPage() {
   const [notes, setNotes] = useState<Note[] | null>(null);
   const [query, setQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  // configured=false — у пользователя не задан git-репозиторий памяти (RPC вернул
+  // failed_precondition); показываем подсказку про Настройки вместо ошибки.
+  const [configured, setConfigured] = useState(true);
 
   useEffect(() => {
     let alive = true;
@@ -50,6 +54,10 @@ export function MemoryPage() {
       .catch((err) => {
         if (!alive) return;
         setNotes([]);
+        if (err instanceof ConnectError && err.code === Code.FailedPrecondition) {
+          setConfigured(false);
+          return;
+        }
         toast.error(
           err instanceof ConnectError
             ? err.rawMessage
@@ -77,6 +85,25 @@ export function MemoryPage() {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
         <Loader2 className="size-5 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!configured) {
+    return (
+      <div className="mx-auto h-full w-full max-w-4xl overflow-y-auto px-6 py-8">
+        <div className="mb-6 flex items-center gap-2">
+          <NotebookPen className="size-5 text-muted-foreground" />
+          <h1 className="text-lg font-semibold">Заметки</h1>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Память ещё не настроена. Укажите свой приватный git-репозиторий заметок и SSH-ключ
+          в{" "}
+          <Link to="/settings" className="underline hover:text-foreground">
+            Настройках → Память
+          </Link>
+          .
+        </p>
       </div>
     );
   }
