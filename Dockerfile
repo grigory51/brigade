@@ -24,8 +24,12 @@ RUN touch backend/internal/web/dist/.gitkeep \
     && cd backend && CGO_ENABLED=0 go build -trimpath -o /out/brigade ./cmd/brigade
 
 FROM alpine:3.21
-RUN apk add --no-cache ca-certificates \
-    && mkdir -p /data/workspace
+# git + openssh-client нужны фиче «личная память»: brigade шелл-аутит в git для
+# clone/commit/push рабочей копии заметок ПРЯМО В ЭТОМ серверном контейнере, а SSH-remote
+# (git@host:...) требует ssh. /root/.ssh — чтобы ssh (accept-new) мог сохранять known_hosts.
+RUN apk add --no-cache ca-certificates git openssh-client \
+    && mkdir -p /data/workspace /root/.ssh \
+    && chmod 700 /root/.ssh
 COPY --from=build /out/brigade /usr/local/bin/brigade
 COPY docker/config.container.yaml /etc/brigade/config.yaml
 
