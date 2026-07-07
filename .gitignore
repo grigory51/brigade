@@ -36,3 +36,6 @@ mobile/local.properties
 .idea/
 .claude/
 backend/workspace/
+
+# Архивы (дизайн-хендоффы, выгрузки) — не часть репозитория.
+*.zip
