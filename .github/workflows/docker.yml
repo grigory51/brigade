@@ -18,7 +18,7 @@ jobs:
             context: .
             dockerfile: Dockerfile
           - image: brigade-agent
-            context: docker/claude-agent
+            context: .
             dockerfile: docker/claude-agent/Dockerfile
     steps:
       - uses: actions/checkout@v4

@@ -1,0 +1,118 @@
+syntax = "proto3";
+
+package brigade.v1;
+
+import "brigade/v1/auth.proto";
+
+// AgentDaemonService — ВНУТРЕННИЙ контракт brigade ↔ демон `brigade acp-agent`.
+//
+// Демон — pid1 контейнера сессии: владеет ACP-адаптером (claude-agent-acp и т.п.),
+// транслирует ACP→AG-UI, журналит события с монотонным seq в durable-volume и отдаёт
+// resumable-поток. brigade — тонкий реплеебл-клиент (реализует Bindable поверх этого RPC),
+// переживает свой рестарт: переподключается и дочитывает журнал с последнего seq.
+//
+// Богатые полезные нагрузки (события AG-UI, сообщения, команды, config-опции) передаются
+// как JSON-байты — те же структуры, что уходят в SSE/AcpService, чтобы не дублировать всю
+// таксономию событий во втором proto. Скаляры (seq, generating, stop_reason) — типизированы.
+// Имена сообщений с префиксом Daemon — уникальность в пакете brigade.v1.
+//
+// Авторизация — per-session daemon-token в заголовке Authorization (несекретная capability
+// поговорить со своим демоном; проверяется хендлером демона). Секреты (OAuth-токен,
+// preview-env) НЕ в окружении контейнера, а приходят в Configure — демон кладёт их только
+// в env дочернего процесса адаптера, поэтому `/ws/shell` (docker exec) их не видит.
+service AgentDaemonService {
+  // Configure (пере)поднимает адаптер: секреты в env адаптера, resume_session_id непуст →
+  // session/load. Идемпотентна: на живой адаптер (reconnect) — no-op, адаптер не рестартуется.
+  rpc Configure(DaemonConfigureRequest) returns (DaemonConfigureResponse) {}
+  // StreamEvents отдаёт события журнала начиная с from_seq (реплей пропущенного) и далее
+  // live-tail. Server-streaming; у каждого события — свой seq для дедупа на переподключении.
+  rpc StreamEvents(DaemonStreamEventsRequest) returns (stream DaemonEvent) {}
+  // Prompt гонит turn (демон держит его на context.WithoutCancel — turn переживает обрыв
+  // brigade). Блокируется до конца turn'а, возвращает stop_reason.
+  rpc Prompt(DaemonPromptRequest) returns (DaemonPromptResponse) {}
+  // Cancel → session/cancel агенту + сворачивание висящих permission.
+  rpc Cancel(Empty) returns (Empty) {}
+  // FinishStreams закрывает открытые потоковые сообщения (перед RUN_FINISHED / после load).
+  rpc FinishStreams(Empty) returns (Empty) {}
+  // Status — идёт ли генерация и текущая длина журнала (seq).
+  rpc Status(Empty) returns (DaemonStatusResponse) {}
+  // GetMessages — проекция журнала в ленту сообщений (для GetHistory).
+  rpc GetMessages(Empty) returns (DaemonPayloadResponse) {}
+  // GetCommands / GetConfigOptions — последние снимки.
+  rpc GetCommands(Empty) returns (DaemonPayloadResponse) {}
+  rpc GetConfigOptions(Empty) returns (DaemonPayloadResponse) {}
+  rpc SetConfigOption(DaemonSetConfigOptionRequest) returns (DaemonPayloadResponse) {}
+  // ResolvePermission доставляет решение пользователя ожидающему turn'у (permission выдаётся
+  // событием PERMISSION_REQUEST в StreamEvents).
+  rpc ResolvePermission(DaemonResolvePermissionRequest) returns (Empty) {}
+  // Summarize — служебный turn для recap при архивации (свой сборщик, не в общий журнал).
+  rpc Summarize(DaemonSummarizeRequest) returns (DaemonSummarizeResponse) {}
+}
+
+message DaemonConfigureRequest {
+  // oauth_token → CLAUDE_CODE_OAUTH_TOKEN в env адаптера (не контейнера).
+  string oauth_token = 1;
+  // extra_env — прочие переменные адаптера (preview-env и т.п.), формат "KEY=VALUE".
+  repeated string extra_env = 2;
+  // adapter_command — команда адаптера (agent-agnostic), напр. "claude-agent-acp".
+  string adapter_command = 3;
+  string cwd = 4;
+  // resume_session_id — непусто → session/load существующей ACP-сессии.
+  string resume_session_id = 5;
+  repeated string plugin_dirs = 6;
+  // mcp_servers_json — JSON []acpsdk.McpServer (stdio MCP-серверы кастомных UI-тулов).
+  bytes mcp_servers_json = 7;
+  // fork_from_session_id — непусто → session/fork (ветка сессии). Взаимоисключимо с resume.
+  string fork_from_session_id = 8;
+}
+
+message DaemonConfigureResponse {
+  // session_id — ACP session id (brigade персистит как resume-поле).
+  string session_id = 1;
+}
+
+message DaemonStreamEventsRequest {
+  int64 from_seq = 1;
+}
+
+message DaemonEvent {
+  int64 seq = 1;
+  // agui_json — JSON одного agui.Event (в точности как уходит в SSE).
+  bytes agui_json = 2;
+}
+
+message DaemonPromptRequest {
+  string text = 1;
+}
+
+message DaemonPromptResponse {
+  string stop_reason = 1;
+}
+
+message DaemonStatusResponse {
+  bool generating = 1;
+  int64 seq = 2;
+}
+
+// DaemonPayloadResponse — обобщённый ответ с JSON-нагрузкой (messages / commands / config).
+message DaemonPayloadResponse {
+  bytes json = 1;
+}
+
+message DaemonSetConfigOptionRequest {
+  string config_id = 1;
+  string value = 2;
+}
+
+message DaemonResolvePermissionRequest {
+  string id = 1;
+  string decision = 2;
+}
+
+message DaemonSummarizeRequest {
+  string prompt = 1;
+}
+
+message DaemonSummarizeResponse {
+  string text = 1;
+}

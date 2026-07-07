@@ -31,11 +31,19 @@ type AgentProc interface {
 // локальный subprocess claude-agent-acp (см. spawnLocalProc).
 type ProcSpawner func(ctx context.Context) (AgentProc, error)
 
-// spawnLocalProc запускает claude-agent-acp локальным subprocess'ом (режим local).
+// spawnLocalProc запускает ACP-adapter локальным subprocess'ом. Команда адаптера —
+// opts.AdapterCommand (agent-agnostic: claude-agent-acp / codex-acp / …), по умолчанию
+// claude-agent-acp. Секреты (OAuth-токен, ExtraEnv) кладутся в env ЭТОГО процесса, не
+// наследуются посторонними exec'ами. Используется и демоном внутри контейнера, и
+// прямым local-режимом brigade.
 func spawnLocalProc(opts Options) (AgentProc, error) {
+	bin := opts.AdapterCommand
+	if bin == "" {
+		bin = adapterBinary
+	}
 	// Субпроцесс не привязываем к ctx вызова: его жизнь равна жизни сессии, а не
 	// вызову конструктора. Остановка — через Signal/Kill.
-	cmd := exec.Command(adapterBinary)
+	cmd := exec.Command(bin)
 	cmd.Dir = opts.Cwd
 	cmd.Stderr = os.Stderr
 	cmd.Env = append(append(os.Environ(), opts.ExtraEnv...), "CLAUDE_CODE_OAUTH_TOKEN="+opts.OAuthToken)
@@ -49,7 +57,7 @@ func spawnLocalProc(opts Options) (AgentProc, error) {
 		return nil, fmt.Errorf("acp: stdout pipe: %w", err)
 	}
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("acp: запуск %q: %w", adapterBinary, err)
+		return nil, fmt.Errorf("acp: запуск %q: %w", bin, err)
 	}
 	return &localProc{cmd: cmd, stdin: stdin, stdout: stdout}, nil
 }

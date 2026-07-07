@@ -5,16 +5,18 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 
 	"connectrpc.com/connect"
+	"github.com/spf13/cobra"
 
 	"github.com/grigory51/brigade/backend/gen/go/brigade/v1/brigadev1connect"
+	"github.com/grigory51/brigade/backend/internal/acpdaemon"
 	"github.com/grigory51/brigade/backend/internal/auth"
 	"github.com/grigory51/brigade/backend/internal/config"
 	"github.com/grigory51/brigade/backend/internal/memory"
@@ -30,10 +32,39 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", "config.yaml", "path to the YAML config file")
-	flag.Parse()
+	var configPath string
+	root := &cobra.Command{
+		Use:          "brigade",
+		Short:        "brigade — запуск кодинг-агентов в сессиях (сервер + встроенный фронтенд)",
+		SilenceUsage: true,
+		// Без подкоманды — запуск основного сервиса.
+		RunE: func(_ *cobra.Command, _ []string) error {
+			runServer(configPath)
+			return nil
+		},
+	}
+	root.Flags().StringVar(&configPath, "config", "config.yaml", "path to the YAML config file")
 
-	cfg, err := config.Load(*configPath)
+	// Субкоманда демона ACP: pid1 контейнера сессии, durable-relay адаптера
+	// (internal/acpdaemon). Тот же бинарь; конфиг демона — из env, без brigade-конфига.
+	root.AddCommand(&cobra.Command{
+		Use:   "acp-agent",
+		Short: "durable ACP-демон: pid1 контейнера сессии (конфиг из env)",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			os.Exit(acpdaemon.Main())
+			return nil
+		},
+	})
+
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+
+// runServer запускает основной сервис brigade: конфиг → SQLite → домены → HTTP-сервер
+// с ConnectRPC-хендлерами, WS-терминалом, AG-UI (SSE) и встроенным фронтендом.
+func runServer(configPath string) {
+	cfg, err := config.Load(configPath)
 	if err != nil {
 		log.Fatalf("brigade: config: %v", err)
 	}

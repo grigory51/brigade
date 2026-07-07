@@ -63,6 +63,10 @@ type Options struct {
 	// claude-agent-acp; docker-режим передаёт сюда фабрику контейнерного процесса
 	// (см. spawn.DockerACPSpawner).
 	SpawnProc ProcSpawner
+	// AdapterCommand — имя/путь бинаря ACP-адаптера для локального спавна (agent-agnostic).
+	// Пусто — дефолт claude-agent-acp. Используется демоном для запуска произвольного
+	// ACP-агента внутри контейнера.
+	AdapterCommand string
 	// ExtraEnv — дополнительные переменные окружения агента ("KEY=VALUE").
 	// Используется локальным subprocess'ом (spawnLocalProc); контейнерный процесс
 	// получает окружение через spawn.Spec.Env.
@@ -512,6 +516,30 @@ func (c *Client) Bind(sink EventSink, resolver PermissionResolver) (unbind func(
 		}
 		c.mu.Unlock()
 	}
+}
+
+// ReopenEvents возвращает START-события для открытых сейчас потоковых сообщений и tool
+// call'ов. Нужны новому подписчику, подключившемуся ПОСРЕДИ turn'а (reconnect через демон):
+// без переоткрытия последующие CONTENT/END пришли бы без START и клиент @ag-ui отверг бы их.
+// Зеркалит логику переоткрытия в Bind (для локального acp.Client это делает сам Bind).
+func (c *Client) ReopenEvents() []agui.Event {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var out []agui.Event
+	if c.stream.textID != "" {
+		out = append(out, agui.Event{Type: agui.EventTextMessageStart, MessageID: c.stream.textID, Role: "assistant"})
+	}
+	if c.stream.thoughtID != "" {
+		out = append(out,
+			agui.Event{Type: agui.EventReasoningStart, MessageID: c.stream.thoughtID},
+			agui.Event{Type: agui.EventReasoningMessageStart, MessageID: c.stream.thoughtID, Role: "reasoning"})
+	}
+	for id, st := range c.toolCalls {
+		if st.open {
+			out = append(out, agui.Event{Type: agui.EventToolCallStart, ToolCallID: id, ToolCallName: st.name})
+		}
+	}
+	return out
 }
 
 // emit доставляет событие текущему привязанному sink и сохраняет его в ленте сессии

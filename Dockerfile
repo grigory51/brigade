@@ -38,4 +38,4 @@ COPY docker/config.container.yaml /etc/brigade/config.yaml
 VOLUME /data
 EXPOSE 8080
 ENTRYPOINT ["brigade"]
-CMD ["-config", "/etc/brigade/config.yaml"]
+CMD ["--config", "/etc/brigade/config.yaml"]

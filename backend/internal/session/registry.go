@@ -31,6 +31,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/grigory51/brigade/backend/internal/acp"
+	"github.com/grigory51/brigade/backend/internal/acp/acpremote"
+	"github.com/grigory51/brigade/backend/internal/agui"
 	"github.com/grigory51/brigade/backend/internal/preview"
 	"github.com/grigory51/brigade/backend/internal/spawn"
 	"github.com/grigory51/brigade/backend/internal/store"
@@ -55,8 +57,37 @@ type live struct {
 	kind   store.SessionKind
 	mode   store.SessionMode
 	handle spawn.Handle // CLI-режим
-	client *acp.Client  // ACP-режим
+	client acpSession   // ACP-режим (локальный *acp.Client или *acpremote.Client к демону)
+	// teardown — доп. освобождение ресурсов при ЯВНОМ teardown (Stop/Delete/Archive), НЕ при
+	// close() (сворачивание реестра). Для docker-ACP это удаление контейнера демона:
+	// client.Close() (acpremote) лишь отцепляет поток, а контейнер должен пережить рестарт
+	// brigade и уйти только по явной остановке. nil — нет доп. действий.
+	teardown func(context.Context) error
 }
+
+// acpSession — живой ACP-объект сессии: локальный *acp.Client (adapter в процессе brigade,
+// local-режим) либо *acpremote.Client (adapter в durable-демоне контейнера, docker-режим).
+// Реестр работает с ACP-сессией только через этот интерфейс; он же — надмножество
+// transport/agui.Bindable (ACPClient отдаёт объект транспорту как Bindable).
+type acpSession interface {
+	Bind(sink acp.EventSink, resolver acp.PermissionResolver) (unbind func())
+	Prompt(ctx context.Context, text string, onTurnStart func()) (stopReason string, err error)
+	Cancel(ctx context.Context) error
+	FinishStreams()
+	Messages() []acp.Message
+	Commands() []agui.AvailableCommand
+	ConfigOptions() []acpsdk.SessionConfigOption
+	SetConfigOption(ctx context.Context, configID, value string) ([]acpsdk.SessionConfigOption, error)
+	Status() (generating bool, seq int)
+	SessionID() string
+	Summarize(ctx context.Context, prompt string) (string, error)
+	Close() error
+}
+
+var (
+	_ acpSession = (*acp.Client)(nil)
+	_ acpSession = (*acpremote.Client)(nil)
+)
 
 // Registry — реестр живых сессий поверх store и спавнера.
 //
@@ -461,13 +492,14 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 		return lv, handle.AgentSessionID(), handle.ContainerLabel(), nil
 
 	case store.SessionKindACP:
-		// local: acp.New сам поднимает adapter-subprocess; docker: adapter живёт в
-		// контейнере сессии, состояние агента — в персональном ~/.claude пользователя.
-		opts := acp.Options{Cwd: sess.Cwd, OAuthToken: token, ExtraEnv: r.previewEnv(sess)}
-		if err := r.applyACPSpawnMode(ctx, &opts, sess, token); err != nil {
-			return nil, "", "", err
+		if sess.Mode == store.SessionModeDocker {
+			// docker: durable-демон (`brigade acp-agent`) в контейнере сессии владеет
+			// адаптером и переживает рестарт brigade; brigade — acpremote-клиент к нему.
+			return r.spawnACPDaemon(ctx, sess, token, prompt, "", "")
 		}
-		client, err := acp.New(ctx, opts)
+		// local: acp.New сам поднимает adapter-subprocess в процессе brigade (без демона —
+		// он умрёт с brigade, restore пере-спавнит через session/load).
+		client, err := acp.New(ctx, acp.Options{Cwd: sess.Cwd, OAuthToken: token, ExtraEnv: r.previewEnv(sess)})
 		if err != nil {
 			return nil, "", "", fmt.Errorf("session: spawn acp: %w", err)
 		}
@@ -482,6 +514,71 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 	default:
 		return nil, "", "", fmt.Errorf("session: неизвестный kind %q", sess.Kind)
 	}
+}
+
+// spawnACPDaemon поднимает durable ACP-демон в контейнере сессии (docker-режим) и
+// возвращает acpremote-клиент к нему. Секреты (OAuth-токен, preview-env) уходят демону
+// через Configure — в env контейнера их НЕТ (не видны из /ws/shell docker exec).
+// resumeSessionID непуст → session/load существующей ACP-сессии (restore после смерти
+// контейнера при живом volume).
+func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token, prompt, resumeSessionID, forkFromSessionID string) (*live, string, string, error) {
+	ds, ok := r.spawner.(*spawn.DockerSpawner)
+	if !ok {
+		return nil, "", "", fmt.Errorf("session: docker-режим без DockerSpawner")
+	}
+	stateID, err := r.rootID(ctx, sess)
+	if err != nil {
+		return nil, "", "", err
+	}
+	daemonToken := r.previews.DaemonTokenFor(sess.ID)
+	addr, err := ds.ACP().StartDaemon(ctx, spawn.Spec{
+		SessionID: sess.ID,
+		Cwd:       sess.Cwd,
+		HomeHost:  r.homeHost(sess),
+		Hostname:  r.userHostname(ctx, sess.UserID),
+	}, stateID, daemonToken)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("session: start acp daemon: %w", err)
+	}
+
+	rc := acpremote.New(addr, daemonToken, "")
+	sid, err := rc.Configure(ctx, acpremote.ConfigureOptions{
+		OAuthToken:        token,
+		ExtraEnv:          r.previewEnv(sess), // preview-токен/URL — только адаптеру, не в env контейнера
+		Cwd:               sess.Cwd,
+		ResumeSessionID:   resumeSessionID,
+		ForkFromSessionID: forkFromSessionID,
+		McpServers:        []acpsdk.McpServer{acp.BrigadeMCPServer()},
+		PluginDirs:        r.acpPluginDirs(sess),
+	})
+	if err != nil {
+		return nil, "", "", fmt.Errorf("session: configure acp daemon: %w", err)
+	}
+
+	if prompt != "" {
+		go func() { _, _ = rc.Prompt(context.WithoutCancel(ctx), prompt, nil) }()
+	}
+	lv := &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, client: rc, teardown: r.acpDaemonTeardown(sess.ID)}
+	return lv, sid, "", nil
+}
+
+// acpPluginDirs — плагин-директории агента (per-session плагин brigade со скиллами), если
+// preview включён. Путь — внутри контейнера (cwd агента).
+func (r *Registry) acpPluginDirs(sess store.Session) []string {
+	if !r.previews.Config().Enabled {
+		return nil
+	}
+	return []string{sess.Cwd + "/" + preview.PluginDirRel}
+}
+
+// acpDaemonTeardown — замыкание удаления контейнера ACP-демона (для live.teardown, docker).
+// nil, если спавнер не docker.
+func (r *Registry) acpDaemonTeardown(sessionID string) func(context.Context) error {
+	ds, ok := r.spawner.(*spawn.DockerSpawner)
+	if !ok {
+		return nil
+	}
+	return func(ctx context.Context) error { return ds.ACP().RemoveContainer(ctx, sessionID) }
 }
 
 // agentEnv формирует переменные окружения агента: персональный подписочный токен
@@ -552,47 +649,6 @@ func (r *Registry) installSkill(sess store.Session) {
 	if err := preview.InstallSkill(dir); err != nil {
 		log.Printf("session: install preview skill %s: %v", sess.ID, err)
 	}
-}
-
-// applyACPSpawnMode настраивает способ запуска adapter'а под режим сессии: в
-// docker-режиме подставляет фабрику контейнерного процесса (adapter внутри контейнера
-// сессии), в local ничего не меняет (acp.New поднимет локальный subprocess). token —
-// персональный подписочный токен пользователя.
-func (r *Registry) applyACPSpawnMode(ctx context.Context, opts *acp.Options, sess store.Session, token string) error {
-	if sess.Mode != store.SessionModeDocker {
-		return nil
-	}
-	ds, ok := r.spawner.(*spawn.DockerSpawner)
-	if !ok {
-		return fmt.Errorf("session: docker-режим без DockerSpawner")
-	}
-	stateID, err := r.rootID(ctx, sess)
-	if err != nil {
-		return err
-	}
-	opts.SpawnProc = ds.ACP().SpawnProc(spawn.Spec{
-		SessionID: sess.ID,
-		Cwd:       sess.Cwd,
-		Env:       r.agentEnv(sess, token),
-		HomeHost:  r.homeHost(sess),
-		Hostname:  r.userHostname(ctx, sess.UserID),
-	}, stateID)
-	// Агент живёт внутри контейнера: cwd — путь внутри него (per-session
-	// ~/workspace/<id> в смонтированном home), не путь хоста.
-	opts.Cwd = sess.Cwd
-	// Кастомные UI-инструменты (render_ui, show_choice) модель получает stdio MCP-сервером,
-	// запечённым в образ агента (путь — внутри контейнера). Одна точка на create/fork/restore:
-	// applyACPSpawnMode вызывается из spawnFor, Fork и restoreOne. Local-режим (ранний
-	// return выше) MCP не получает — путь сервера контейнерный.
-	opts.McpServers = []acpsdk.McpServer{acp.BrigadeMCPServer()}
-	// Плагин brigade (skill preview, /brigade:preview) грузим в агента через
-	// _meta.claudeCode.options.plugins: путь — per-session .claude/plugins/brigade внутри
-	// контейнера (sess.Cwd — контейнерный путь). Только при включённом preview — тогда
-	// installSkill раскладывает плагин; иначе его нет.
-	if r.previews.Config().Enabled {
-		opts.PluginDirs = []string{sess.Cwd + "/" + preview.PluginDirRel}
-	}
-	return nil
 }
 
 // rootID возвращает идентификатор корневой сессии дерева (подъём по parent_id).
@@ -686,9 +742,9 @@ func (r *Registry) Shell(ctx context.Context, sessionID, userID string) (termws.
 }
 
 // ACPClient отдаёт живого ACP-клиента сессии её владельцу. Используется AG-UI-транспортом
-// (через адаптер): *acp.Client удовлетворяет его интерфейсу Bindable напрямую. ok=false,
-// если сессия неизвестна, не в ACP-режиме или принадлежит другому пользователю.
-func (r *Registry) ACPClient(sessionID, userID string) (*acp.Client, bool) {
+// (через адаптер): acpSession — надмножество Bindable. ok=false, если сессия неизвестна,
+// не в ACP-режиме или принадлежит другому пользователю.
+func (r *Registry) ACPClient(sessionID, userID string) (acpSession, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	lv, ok := r.live[sessionID]
@@ -755,32 +811,40 @@ func (r *Registry) Fork(ctx context.Context, sessionID, userID string) (store.Se
 
 	// Как и в Create: жизнь агента равна жизни сессии, спавн отвязывается от ctx запроса.
 	token := r.userClaudeToken(ctx, sess.UserID)
-	forkOpts := acp.Options{
-		Cwd:               sess.Cwd,
-		OAuthToken:        token,
-		ForkFromSessionID: src.AgentSessionID,
-		ExtraEnv:          r.previewEnv(sess),
-	}
-	if err := r.applyACPSpawnMode(ctx, &forkOpts, sess, token); err != nil {
-		_ = r.store.DeleteSession(ctx, sess.ID)
-		return store.Session{}, err
-	}
-	client, err := acp.New(context.WithoutCancel(ctx), forkOpts)
-	if err != nil {
-		// Ветка не создалась — запись убираем целиком, полусозданное состояние хуже ошибки.
-		_ = r.store.DeleteSession(ctx, sess.ID)
-		return store.Session{}, fmt.Errorf("session: fork acp: %w", err)
+	var lv *live
+	var sid string
+	if sess.Mode == store.SessionModeDocker {
+		// docker: ветка тоже через durable-демон (session/fork в Configure).
+		l, s, _, err := r.spawnACPDaemon(context.WithoutCancel(ctx), sess, token, "", "", src.AgentSessionID)
+		if err != nil {
+			_ = r.store.DeleteSession(ctx, sess.ID)
+			return store.Session{}, fmt.Errorf("session: fork acp: %w", err)
+		}
+		lv, sid = l, s
+	} else {
+		client, err := acp.New(context.WithoutCancel(ctx), acp.Options{
+			Cwd:               sess.Cwd,
+			OAuthToken:        token,
+			ForkFromSessionID: src.AgentSessionID,
+			ExtraEnv:          r.previewEnv(sess),
+		})
+		if err != nil {
+			// Ветка не создалась — запись убираем целиком, полусозданное состояние хуже ошибки.
+			_ = r.store.DeleteSession(ctx, sess.ID)
+			return store.Session{}, fmt.Errorf("session: fork acp: %w", err)
+		}
+		lv, sid = &live{owner: userID, kind: sess.Kind, mode: sess.Mode, client: client}, client.SessionID()
 	}
 
-	if err := r.store.UpdateSessionResume(ctx, sess.ID, client.SessionID(), ""); err != nil {
-		_ = client.Close()
+	if err := r.store.UpdateSessionResume(ctx, sess.ID, sid, ""); err != nil {
+		_ = lv.client.Close()
 		_ = r.store.DeleteSession(ctx, sess.ID)
 		return store.Session{}, err
 	}
-	sess.AgentSessionID = client.SessionID()
+	sess.AgentSessionID = sid
 
 	r.mu.Lock()
-	r.live[sess.ID] = &live{owner: userID, kind: sess.Kind, mode: sess.Mode, client: client}
+	r.live[sess.ID] = lv
 	r.mu.Unlock()
 
 	log.Printf("session: forked %s -> %s (agent %s -> %s)",
@@ -1026,25 +1090,44 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 		return nil
 
 	case store.SessionKindACP:
-		// Восстановление ACP: новый процесс adapter'а (local subprocess или контейнер) +
-		// session/load. В docker-режиме состояние агента живёт в named volume дерева
-		// сессий и переживает контейнеры — история восстанавливается так же, как в local.
 		token := r.userClaudeToken(ctx, sess.UserID)
-		restoreOpts := acp.Options{
+		if sess.Mode == store.SessionModeDocker {
+			// docker: демон и адаптер живут в контейнере и ПЕРЕЖИВАЮТ рестарт brigade.
+			// Восстановление = reconnect к живому демону (turn не прерывался). Если контейнер
+			// мёртв (перезагрузка хоста) — respawn демона + session/load из durable-volume.
+			var rc acpSession
+			sid := sess.AgentSessionID
+			if ds, ok := r.spawner.(*spawn.DockerSpawner); ok {
+				if addr, alive := ds.ACP().DaemonAddr(ctx, sess.ID); alive {
+					rc = acpremote.New(addr, r.previews.DaemonTokenFor(sess.ID), sess.AgentSessionID)
+				}
+			}
+			if rc == nil {
+				lv, newSid, _, err := r.spawnACPDaemon(ctx, sess, token, "", sess.AgentSessionID, "")
+				if err != nil {
+					return fmt.Errorf("restore acp daemon: %w", err)
+				}
+				rc, sid = lv.client, newSid
+			}
+			if err := r.store.UpdateSessionResume(ctx, sess.ID, sid, ""); err != nil {
+				_ = rc.Close()
+				return fmt.Errorf("persist acp resume: %w", err)
+			}
+			r.mu.Lock()
+			r.live[sess.ID] = &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, client: rc, teardown: r.acpDaemonTeardown(sess.ID)}
+			r.mu.Unlock()
+			return nil
+		}
+		// local: adapter-subprocess пере-спавнится + session/load (агент реплеит thread).
+		client, err := acp.New(ctx, acp.Options{
 			Cwd:             sess.Cwd,
 			OAuthToken:      token,
 			ResumeSessionID: sess.AgentSessionID,
 			ExtraEnv:        r.previewEnv(sess),
-		}
-		if err := r.applyACPSpawnMode(ctx, &restoreOpts, sess, token); err != nil {
-			return err
-		}
-		client, err := acp.New(ctx, restoreOpts)
+		})
 		if err != nil {
 			return fmt.Errorf("reattach acp: %w", err)
 		}
-		// agent_session_id мог измениться (adapter заводит новую ACP-сессию); фиксируем
-		// актуальный, чтобы последующий resume опирался на него.
 		if err := r.store.UpdateSessionResume(ctx, sess.ID, client.SessionID(), ""); err != nil {
 			_ = client.Close()
 			return fmt.Errorf("persist acp resume: %w", err)
@@ -1114,7 +1197,14 @@ func (l *live) terminate(ctx context.Context) error {
 		return l.handle.Terminate(ctx)
 	}
 	if l.client != nil {
-		return l.client.Close()
+		err := l.client.Close()
+		if l.teardown != nil {
+			// docker-ACP: удаляем контейнер демона (client.Close лишь отцепил поток).
+			if terr := l.teardown(ctx); terr != nil && err == nil {
+				err = terr
+			}
+		}
+		return err
 	}
 	return nil
 }

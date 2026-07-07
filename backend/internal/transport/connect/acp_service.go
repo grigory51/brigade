@@ -124,9 +124,18 @@ func (s *AcpService) SetConfigOption(ctx context.Context, req *connect.Request[v
 // ResolvePermission доставляет решение пользователя ожидающему резолверу /run.
 // Best-effort: отсутствие ожидания (повтор/опоздание) — не ошибка.
 func (s *AcpService) ResolvePermission(ctx context.Context, req *connect.Request[v1.ResolvePermissionRequest]) (*connect.Response[v1.Empty], error) {
-	if _, err := s.bindable(ctx, req.Msg.ThreadId); err != nil {
+	b, err := s.bindable(ctx, req.Msg.ThreadId)
+	if err != nil {
 		return nil, err
 	}
+	// docker-режим (durable-демон): ожидание permission живёт в демоне, а не в brigade —
+	// диалог пришёл фронту CUSTOM-событием через StreamEvents, ответ доставляем демону.
+	if rp, ok := b.(interface {
+		ResolvePermission(context.Context, string, string) error
+	}); ok {
+		_ = rp.ResolvePermission(ctx, req.Msg.Id, req.Msg.Decision)
+	}
+	// local-режим: доставка ожидающему резолверу /run (brigade PermissionStore).
 	s.perms.Deliver(agui.PermissionKey(req.Msg.ThreadId, req.Msg.Id), req.Msg.Decision)
 	return connect.NewResponse(&v1.Empty{}), nil
 }

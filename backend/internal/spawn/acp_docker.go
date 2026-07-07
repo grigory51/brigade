@@ -3,22 +3,26 @@ package spawn
 import (
 	"context"
 	"fmt"
-	"io"
-	"os"
+	"net/http"
 	"strings"
-	"sync"
+	"time"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/volume"
-	"github.com/docker/docker/pkg/stdcopy"
-
-	"github.com/grigory51/brigade/backend/internal/acp"
+	"github.com/docker/go-connections/nat"
 )
 
-// acpAdapterCommand — команда ACP-adapter'а внутри контейнера агента.
-const acpAdapterCommand = "claude-agent-acp"
+const (
+	// daemonPort — фиксированный порт Connect-сервера демона внутри контейнера сессии.
+	daemonPort = 8787
+	// brigadeBinPath — путь бинаря brigade в образе агента (COPY в Dockerfile); демон —
+	// это `brigade acp-agent`.
+	brigadeBinPath = "/usr/local/bin/brigade"
+	// daemonLogRel — путь журнала событий демона внутри контейнера (durable: home —
+	// bind-mount/volume). Относительно AgentHome.
+	daemonLogRel = "/.brigade/acp-events.jsonl"
+)
 
 // ACPVolumeName возвращает имя named volume home агента для сессии (fallback, когда
 // персональный home пользователя не задан — claude_home_dir пуст).
@@ -33,162 +37,160 @@ type DockerACPSpawner struct {
 // ACP создаёт фабрику контейнерных ACP-процессов поверх docker-клиента спавнера.
 func (s *DockerSpawner) ACP() *DockerACPSpawner { return &DockerACPSpawner{spawner: s} }
 
-// SpawnProc возвращает acp.ProcSpawner для сессии: контейнер с claude-agent-acp на
-// stdio (без TTY), рабочая директория сессии — bind-mount, состояние агента — named
-// volume по stateID. Контейнер удаляется по завершении (AutoRemove); volume переживает
-// его. stateID — идентификатор корневой сессии дерева: ветки (Fork) монтируют volume
-// родителя, иначе форкнутый агент не увидел бы исходную сессию.
-func (d *DockerACPSpawner) SpawnProc(spec Spec, stateID string) acp.ProcSpawner {
-	return func(ctx context.Context) (acp.AgentProc, error) {
-		return d.start(ctx, spec, stateID)
-	}
-}
-
-func (d *DockerACPSpawner) start(ctx context.Context, spec Spec, stateID string) (acp.AgentProc, error) {
+// StartDaemon создаёт контейнер сессии с durable ACP-демоном (`brigade acp-agent`, pid1) и
+// возвращает адрес его Connect-сервера для дозвона. Секретов в env контейнера НЕТ (они
+// придут в Configure и лягут только в env дочернего адаптера — `/ws/shell` их не видит):
+// в env только несекретная конфигурация демона. Контейнер БЕЗ AutoRemove — переживает
+// рестарт brigade; удаляется явно при teardown. token — per-session daemon-token.
+func (d *DockerACPSpawner) StartDaemon(ctx context.Context, spec Spec, stateID, token string) (string, error) {
 	cli := d.spawner.cli
-
 	image := spec.Image
 	if image == "" {
 		image = defaultImage
 	}
 
-	// Home агента (/home/agent) целиком:
-	//  - если задан персональный home пользователя (spec.HomeHost) — bind-mount с
-	//    хоста, общий для всех его сессий (CLI и ACP): авторизация Claude и рабочие
-	//    файлы (~/workspace) переживают сессии и видны везде;
-	//  - иначе fallback на named volume по дереву сессий (stateID).
 	var homeMount mount.Mount
 	if spec.HomeHost != "" {
 		homeMount = mount.Mount{Type: mount.TypeBind, Source: spec.HomeHost, Target: AgentHome}
 	} else {
 		volName := ACPVolumeName(stateID)
 		if _, err := cli.VolumeCreate(ctx, volume.CreateOptions{Name: volName}); err != nil {
-			return nil, fmt.Errorf("spawn: acp volume create: %w", err)
+			return "", fmt.Errorf("spawn: acp volume create: %w", err)
 		}
 		homeMount = mount.Mount{Type: mount.TypeVolume, Source: volName, Target: AgentHome}
 	}
 
+	daemonNatPort := nat.Port(fmt.Sprintf("%d/tcp", daemonPort))
 	cfg := &container.Config{
-		Image:    image,
-		Cmd:      []string{acpAdapterCommand},
-		Env:      spec.Env,
-		Hostname: spec.Hostname,
-		// Adapter говорит JSON-RPC по stdio: TTY недопустим (исказил бы поток),
-		// stdin держится открытым на всё время жизни.
-		Tty:          false,
-		OpenStdin:    true,
-		AttachStdin:  true,
-		AttachStdout: true,
-		AttachStderr: true,
+		Image: image,
+		// pid1 контейнера — демон brigade; адаптер он спавнит сам (Configure).
+		Cmd: []string{brigadeBinPath, "acp-agent"},
+		// Только несекретная конфигурация демона. Секреты (OAuth, preview-env) — в Configure.
+		Env: []string{
+			"BRIGADE_SESSION_ID=" + spec.SessionID,
+			fmt.Sprintf("BRIGADE_DAEMON_PORT=%d", daemonPort),
+			"BRIGADE_DAEMON_TOKEN=" + token,
+			"BRIGADE_DAEMON_LOG=" + AgentHome + daemonLogRel,
+		},
+		Hostname:     spec.Hostname,
 		WorkingDir:   specWorkdir(spec),
 		Labels:       map[string]string{labelSessionID: spec.SessionID},
+		ExposedPorts: nat.PortSet{daemonNatPort: struct{}{}},
 	}
 	initProcess := true
 	hostCfg := &container.HostConfig{
-		// Контейнер одноразов: состояние в volume, teardown не оставляет мусора.
-		AutoRemove: true,
-		// pid 1 — docker-init (tini), а не adapter: он реапит осиротевшие процессы
-		// (например, убитые шеллы /ws/shell и их детей), иначе в контейнере копились
-		// бы зомби.
-		Init: &initProcess,
-		// host.docker.internal резолвится в шлюз хоста и на Linux (host-gateway);
-		// используется, когда brigade — процесс на хосте (нет своей docker-сети).
+		AutoRemove:  false, // durable: контейнер переживает brigade, удаляется явным teardown
+		Init:        &initProcess,
 		ExtraHosts:  []string{"host.docker.internal:host-gateway"},
 		NetworkMode: d.spawner.netMode(),
 		Mounts:      []mount.Mount{homeMount},
+		// Публикуем порт демона на 127.0.0.1:<эфемерный> — для host-режима brigade (процесс на
+		// хосте не достаёт bridge-IP контейнера). В container-режиме (brigade на общей сети)
+		// используется прямой IP:port (см. daemonAddr).
+		PortBindings: nat.PortMap{daemonNatPort: []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: ""}}},
 	}
 
-	// Осиротевший контейнер сессии (нечистая смерть brigade — Close не отработал)
-	// держит имя и блокирует пересоздание. Убираем его: состояние живёт в volume,
-	// контейнер одноразов по контракту.
 	name := "brigade-acp-" + spec.SessionID
 	if err := cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true}); err != nil && !strings.Contains(err.Error(), "No such container") {
-		return nil, fmt.Errorf("spawn: acp remove stale container: %w", err)
+		return "", fmt.Errorf("spawn: acp remove stale container: %w", err)
 	}
-
 	created, err := cli.ContainerCreate(ctx, cfg, hostCfg, d.spawner.networkingConfig(), nil, name)
 	if err != nil {
-		return nil, fmt.Errorf("spawn: acp container create: %w", err)
+		return "", fmt.Errorf("spawn: acp container create: %w", err)
 	}
-
-	hijacked, err := cli.ContainerAttach(ctx, created.ID, container.AttachOptions{
-		Stream: true, Stdin: true, Stdout: true, Stderr: true,
-	})
-	if err != nil {
-		_ = cli.ContainerRemove(ctx, created.ID, container.RemoveOptions{Force: true})
-		return nil, fmt.Errorf("spawn: acp container attach: %w", err)
-	}
-
 	if err := cli.ContainerStart(ctx, created.ID, container.StartOptions{}); err != nil {
-		hijacked.Close()
 		_ = cli.ContainerRemove(ctx, created.ID, container.RemoveOptions{Force: true})
-		return nil, fmt.Errorf("spawn: acp container start: %w", err)
+		return "", fmt.Errorf("spawn: acp container start: %w", err)
 	}
 
-	p := &dockerACPProc{cli: cli, id: created.ID, hijacked: hijacked}
-	// Tty:false мультиплексирует stdout/stderr в один поток (stdcopy): демультиплексор
-	// раскладывает stdout adapter'а в pipe для JSON-RPC, stderr — в лог процесса brigade.
-	pr, pw := io.Pipe()
-	p.stdout = pr
-	go func() {
-		_, err := stdcopy.StdCopy(pw, os.Stderr, hijacked.Reader)
-		_ = pw.CloseWithError(err)
-	}()
-	return p, nil
+	addr, err := d.daemonAddr(ctx, spec.SessionID)
+	if err != nil {
+		return "", err
+	}
+	// Демон (Go-бинарь) поднимает листенер не мгновенно после старта контейнера — ждём
+	// готовности порта, иначе первый Configure упрётся в connection refused.
+	if err := waitDaemonReady(ctx, addr); err != nil {
+		return "", err
+	}
+	return addr, nil
 }
 
-// dockerACPProc — acp.AgentProc над контейнером adapter'а.
-type dockerACPProc struct {
-	cli      dockerAPI
-	id       string
-	hijacked types.HijackedResponse
-	stdout   io.Reader
-
-	waitOnce sync.Once
-	waitErr  error
-}
-
-// dockerAPI — подмножество docker-клиента, используемое процессом (сужение для тестов).
-type dockerAPI interface {
-	ContainerStop(ctx context.Context, containerID string, options container.StopOptions) error
-	ContainerKill(ctx context.Context, containerID, signal string) error
-	ContainerWait(ctx context.Context, containerID string, condition container.WaitCondition) (<-chan container.WaitResponse, <-chan error)
-}
-
-func (p *dockerACPProc) Stdin() io.WriteCloser { return stdinHalfCloser{p.hijacked} }
-func (p *dockerACPProc) Stdout() io.Reader     { return p.stdout }
-
-func (p *dockerACPProc) Signal() error {
-	timeout := dockerStopTimeoutSeconds
-	return p.cli.ContainerStop(context.Background(), p.id, container.StopOptions{Timeout: &timeout})
-}
-
-func (p *dockerACPProc) Kill() error {
-	return p.cli.ContainerKill(context.Background(), p.id, "KILL")
-}
-
-func (p *dockerACPProc) Wait() error {
-	p.waitOnce.Do(func() {
-		statusCh, errCh := p.cli.ContainerWait(context.Background(), p.id, container.WaitConditionNotRunning)
-		select {
-		case err := <-errCh:
-			// «No such container» после AutoRemove — штатный исход, не ошибка teardown.
-			if err != nil && !strings.Contains(err.Error(), "No such container") {
-				p.waitErr = err
-			}
-		case <-statusCh:
+// waitDaemonReady опрашивает HTTP-эндпоинт демона, пока тот не начнёт отвечать (любой
+// HTTP-статус), или до дедлайна ~15s / отмены ctx. Проба именно на уровне HTTP, а не TCP:
+// опубликованный порт принимает соединение через docker-proxy ещё до того, как процесс демона
+// внутри контейнера поднимет листенер, — сырой dial прошёл бы преждевременно, и первый
+// Configure упёрся бы в reset (unexpected EOF).
+func waitDaemonReady(ctx context.Context, addr string) error {
+	client := &http.Client{Timeout: time.Second}
+	deadline := time.Now().Add(15 * time.Second)
+	var lastErr error
+	for {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, addr, nil)
+		resp, err := client.Do(req)
+		if err == nil {
+			_ = resp.Body.Close()
+			return nil // демон ответил по HTTP — листенер поднят
 		}
-		p.hijacked.Close()
-	})
-	return p.waitErr
+		lastErr = err
+		if time.Now().After(deadline) {
+			return fmt.Errorf("spawn: daemon %s not ready: %w", addr, lastErr)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
 }
 
-// stdinHalfCloser закрывает только пишущую половину attach-соединения (CloseWrite):
-// adapter получает EOF на stdin, а stdout продолжает читаться до завершения процесса.
-type stdinHalfCloser struct {
-	hijacked types.HijackedResponse
+// DaemonAddr возвращает адрес демона живого контейнера сессии (для reconnect после рестарта
+// brigade). ok=false, если контейнера нет или он не запущен (нужен respawn через StartDaemon).
+func (d *DockerACPSpawner) DaemonAddr(ctx context.Context, sessionID string) (string, bool) {
+	addr, err := d.daemonAddr(ctx, sessionID)
+	if err != nil {
+		return "", false
+	}
+	return addr, true
 }
 
-func (s stdinHalfCloser) Write(b []byte) (int, error) { return s.hijacked.Conn.Write(b) }
+// daemonAddr резолвит http-адрес демона сессии в зависимости от режима brigade:
+//   - host-режим (brigade — процесс на хосте, selfNetwork пуст): опубликованный порт на
+//     127.0.0.1 (bridge-IP контейнера с хоста не роутится);
+//   - container-режим (brigade в контейнере на общей сети): прямой IP контейнера:daemonPort.
+func (d *DockerACPSpawner) daemonAddr(ctx context.Context, sessionID string) (string, error) {
+	id, err := d.spawner.findBySessionLabel(ctx, sessionID)
+	if err != nil {
+		return "", err
+	}
+	info, err := d.spawner.cli.ContainerInspect(ctx, id)
+	if err != nil {
+		return "", fmt.Errorf("spawn: container inspect: %w", err)
+	}
+	if d.spawner.selfNetwork == "" {
+		// host-режим: опубликованный порт на 127.0.0.1.
+		if info.NetworkSettings != nil {
+			if binds := info.NetworkSettings.Ports[nat.Port(fmt.Sprintf("%d/tcp", daemonPort))]; len(binds) > 0 && binds[0].HostPort != "" {
+				return fmt.Sprintf("http://127.0.0.1:%s", binds[0].HostPort), nil
+			}
+		}
+		return "", fmt.Errorf("spawn: daemon port for session %s not published", sessionID)
+	}
+	// container-режим: прямой IP на общей сети.
+	if info.NetworkSettings != nil {
+		for _, nw := range info.NetworkSettings.Networks {
+			if nw.IPAddress != "" {
+				return fmt.Sprintf("http://%s:%d", nw.IPAddress, daemonPort), nil
+			}
+		}
+	}
+	return "", fmt.Errorf("spawn: container %s has no network address", id)
+}
 
-func (s stdinHalfCloser) Close() error { return s.hijacked.CloseWrite() }
+// RemoveContainer удаляет контейнер сессии (явный teardown durable-демона).
+func (d *DockerACPSpawner) RemoveContainer(ctx context.Context, sessionID string) error {
+	id, err := d.spawner.findBySessionLabel(ctx, sessionID)
+	if err != nil {
+		return nil // контейнера нет — нечего удалять
+	}
+	return d.spawner.cli.ContainerRemove(ctx, id, container.RemoveOptions{Force: true})
+}

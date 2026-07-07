@@ -1,16 +1,32 @@
-# Образ агента brigade: Claude Code CLI + ACP-adapter.
+# Образ агента brigade: Claude Code CLI + ACP-adapter + бинарь brigade (демон).
 #
-#   docker build -t brigade/claude-agent:latest docker/claude-agent
+#   docker build -t brigade/claude-agent:latest -f docker/claude-agent/Dockerfile .
+#
+# ВАЖНО: контекст сборки — КОРЕНЬ репо (нужен backend/ для бинаря brigade), поэтому пути
+# COPY даны от корня (docker/claude-agent/...). CI собирает образ с context: "." .
 #
 # Один образ обслуживает оба режима сессий:
 #   - CLI: контейнер запускает `claude` в TTY (docker-режим spawn, attach к терминалу);
-#   - ACP: контейнер запускает `claude-agent-acp` со stdio JSON-RPC (без TTY).
+#   - ACP: контейнер запускает `brigade acp-agent` — durable-демон (pid1), который сам
+#     спавнит `claude-agent-acp` и переживает рестарт brigade (см. internal/acpdaemon).
 # Команда задаётся при создании контейнера, ENTRYPOINT намеренно не фиксируется.
 #
 # Весь home агента (/home/agent) brigade bind-mount'ит per-user с хоста: состояние
 # Claude (~/.claude, ~/.claude.json) и рабочие файлы (~/workspace) переживают
-# пересоздание контейнера и общие между контейнерами пользователя. Каталоги в образе
-# создаются как fallback для случая, когда home не смонтирован (claude_home_dir пуст).
+# пересоздание контейнера и общие между контейнерами пользователя.
+
+# Бинарь brigade (тот же, что сервер; режим `acp-agent` — демон). cgo-free (modernc sqlite),
+# статический — кладётся одной COPY. go:embed web/dist довольствуется .gitkeep (демону web
+# не нужен).
+FROM golang:1.26 AS brigade-build
+WORKDIR /src
+COPY backend/go.mod backend/go.sum ./backend/
+RUN cd backend && go mod download
+COPY backend/ ./backend/
+# Демону web не нужен, но go:embed all:dist требует непустой каталог; в build-контексте
+# dist исключён .dockerignore — кладём заглушку .gitkeep.
+RUN mkdir -p backend/internal/web/dist && touch backend/internal/web/dist/.gitkeep \
+    && cd backend && CGO_ENABLED=0 go build -trimpath -o /out/brigade ./cmd/brigade
 
 FROM node:22-slim
 
@@ -37,10 +53,13 @@ RUN npm install -g @anthropic-ai/claude-code "@agentclientprotocol/claude-agent-
 # стартует этот сервер как stdio-subprocess. Кладём в фиксированный путь и ставим
 # зависимости рядом со скриптом, чтобы резолв @modelcontextprotocol/sdk не зависел от cwd
 # сессии. Каталог root-owned, читаем пользователем agent.
-COPY mcp/ /opt/brigade-mcp/
+COPY docker/claude-agent/mcp/ /opt/brigade-mcp/
 RUN cd /opt/brigade-mcp \
     && npm install --omit=dev \
     && npm cache clean --force
+
+# Бинарь brigade — durable ACP-демон (`brigade acp-agent`, pid1 ACP-контейнеров).
+COPY --from=brigade-build /out/brigade /usr/local/bin/brigade
 
 # Непривилегированный пользователь: агент исполняет произвольные команды.
 # uid ФИКСИРОВАН (1001): brigade создаёт персональный home на хосте и chown'ит его на

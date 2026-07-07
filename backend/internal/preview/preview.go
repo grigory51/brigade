@@ -137,6 +137,17 @@ func (s *Service) VerifyToken(sessionID, token string) bool {
 	return hmac.Equal([]byte(want), []byte(token))
 }
 
+// DaemonTokenFor возвращает per-session capability-токен для общения brigade с ACP-демоном
+// сессии. Отдельный HMAC-контекст (не путать с preview/AgentBridge-токеном): этот токен
+// даёт лишь право говорить со своим демоном и намеренно кладётся в env контейнера
+// (несекретный), тогда как preview-токен (доступ к AgentBridge) — нет. Детерминирован:
+// brigade пересчитывает его на restore, персистить не нужно.
+func (s *Service) DaemonTokenFor(sessionID string) string {
+	mac := hmac.New(sha256.New, s.secret)
+	mac.Write([]byte("brigade-daemon:" + sessionID))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
 // Register фиксирует preview-эндпоинт сессии (upsert по порту) и возвращает запись
 // с публичным URL.
 func (s *Service) Register(sessionID string, port int, name string) Registered {
