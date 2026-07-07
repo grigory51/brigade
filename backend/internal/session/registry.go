@@ -974,6 +974,11 @@ func (r *Registry) RestoreAll(ctx context.Context) error {
 
 // restoreOne восстанавливает одну сессию и регистрирует её живой объект.
 func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
+	// Переустанавливаем скиллы перед респавном агента (как в Create): апгрейд brigade,
+	// добавивший новый скилл, должен долетать и в уже существующие сессии при рестарте, а
+	// не только в новые. Идемпотентно; для сессий, которые не респавнятся, — безвредно.
+	r.installSkill(sess)
+
 	switch sess.Kind {
 	case store.SessionKindCLI:
 		// В local-режиме восстановить CLI-сессию можно только через `claude --resume
