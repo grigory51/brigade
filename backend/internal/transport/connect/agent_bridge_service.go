@@ -3,11 +3,13 @@ package connectsvc
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strings"
 
 	"connectrpc.com/connect"
 
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
+	"github.com/grigory51/brigade/backend/internal/memory"
 	"github.com/grigory51/brigade/backend/internal/preview"
 )
 
@@ -21,29 +23,57 @@ var errSessionNotFound = errors.New("session not found")
 // по заголовку Authorization.
 type AgentBridgeService struct {
 	previews *preview.Service
+	memory   *memory.Service
 }
 
 // NewAgentBridgeService собирает реализацию AgentBridgeService.
-func NewAgentBridgeService(previews *preview.Service) *AgentBridgeService {
-	return &AgentBridgeService{previews: previews}
+func NewAgentBridgeService(previews *preview.Service, mem *memory.Service) *AgentBridgeService {
+	return &AgentBridgeService{previews: previews, memory: mem}
+}
+
+// verifySession проверяет per-session HMAC-токен из заголовка Authorization против
+// session_id тела. Общая авторизация для вызовов ИЗ сессии.
+func (s *AgentBridgeService) verifySession(req interface{ Header() http.Header }, sessionID string) error {
+	if sessionID == "" {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("session_id required"))
+	}
+	token, ok := strings.CutPrefix(req.Header().Get("Authorization"), "Bearer ")
+	if !ok || !s.previews.VerifyToken(sessionID, strings.TrimSpace(token)) {
+		return connect.NewError(connect.CodeUnauthenticated, errors.New("invalid preview token"))
+	}
+	return nil
+}
+
+// CreateMemoryNote сохраняет заметку в личную память (то же ядро, что MemoryService).
+// Авторизация — per-session HMAC-токен; session_id фиксируется как провенанс.
+func (s *AgentBridgeService) CreateMemoryNote(ctx context.Context, req *connect.Request[v1.CreateMemoryNoteRequest]) (*connect.Response[v1.CreateMemoryNoteResponse], error) {
+	if err := s.verifySession(req, req.Msg.SessionId); err != nil {
+		return nil, err
+	}
+	n, sha, err := s.memory.Create(ctx, memory.Note{
+		Title:   req.Msg.Title,
+		Body:    req.Msg.Body,
+		Type:    req.Msg.Type,
+		Tags:    req.Msg.Tags,
+		Session: req.Msg.SessionId,
+	})
+	if err != nil {
+		return nil, memoryError(err)
+	}
+	return connect.NewResponse(&v1.CreateMemoryNoteResponse{Id: n.ID, CommitSha: sha}), nil
 }
 
 // RegisterPreview фиксирует dev-сервер сессии (upsert по порту) и возвращает публичный
 // URL. Авторизация — Bearer HMAC-токен сессии (BRIGADE_PREVIEW_TOKEN); session_id из
 // тела должен соответствовать токену.
 func (s *AgentBridgeService) RegisterPreview(ctx context.Context, req *connect.Request[v1.RegisterPreviewRequest]) (*connect.Response[v1.RegisterPreviewResponse], error) {
-	sessionID := req.Msg.SessionId
-	if sessionID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("session_id required"))
-	}
-	token, ok := strings.CutPrefix(req.Header().Get("Authorization"), "Bearer ")
-	if !ok || !s.previews.VerifyToken(sessionID, strings.TrimSpace(token)) {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("invalid preview token"))
+	if err := s.verifySession(req, req.Msg.SessionId); err != nil {
+		return nil, err
 	}
 	if req.Msg.Port < 1 || req.Msg.Port > 65535 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("port out of range"))
 	}
 
-	reg := s.previews.Register(sessionID, int(req.Msg.Port), req.Msg.Name)
+	reg := s.previews.Register(req.Msg.SessionId, int(req.Msg.Port), req.Msg.Name)
 	return connect.NewResponse(&v1.RegisterPreviewResponse{Url: reg.URL}), nil
 }

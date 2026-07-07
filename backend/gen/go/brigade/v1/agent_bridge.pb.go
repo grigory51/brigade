@@ -125,6 +125,134 @@ func (x *RegisterPreviewResponse) GetUrl() string {
 	return ""
 }
 
+type CreateMemoryNoteRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Body          string                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
+	Type          string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"` // idea|decision|insight|todo|question|reference
+	Tags          []string               `protobuf:"bytes,5,rep,name=tags,proto3" json:"tags,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateMemoryNoteRequest) Reset() {
+	*x = CreateMemoryNoteRequest{}
+	mi := &file_brigade_v1_agent_bridge_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateMemoryNoteRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateMemoryNoteRequest) ProtoMessage() {}
+
+func (x *CreateMemoryNoteRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_agent_bridge_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateMemoryNoteRequest.ProtoReflect.Descriptor instead.
+func (*CreateMemoryNoteRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_agent_bridge_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *CreateMemoryNoteRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *CreateMemoryNoteRequest) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *CreateMemoryNoteRequest) GetBody() string {
+	if x != nil {
+		return x.Body
+	}
+	return ""
+}
+
+func (x *CreateMemoryNoteRequest) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *CreateMemoryNoteRequest) GetTags() []string {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
+}
+
+type CreateMemoryNoteResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	CommitSha     string                 `protobuf:"bytes,2,opt,name=commit_sha,json=commitSha,proto3" json:"commit_sha,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateMemoryNoteResponse) Reset() {
+	*x = CreateMemoryNoteResponse{}
+	mi := &file_brigade_v1_agent_bridge_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateMemoryNoteResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateMemoryNoteResponse) ProtoMessage() {}
+
+func (x *CreateMemoryNoteResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_agent_bridge_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateMemoryNoteResponse.ProtoReflect.Descriptor instead.
+func (*CreateMemoryNoteResponse) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_agent_bridge_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *CreateMemoryNoteResponse) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *CreateMemoryNoteResponse) GetCommitSha() string {
+	if x != nil {
+		return x.CommitSha
+	}
+	return ""
+}
+
 var File_brigade_v1_agent_bridge_proto protoreflect.FileDescriptor
 
 const file_brigade_v1_agent_bridge_proto_rawDesc = "" +
@@ -137,9 +265,21 @@ const file_brigade_v1_agent_bridge_proto_rawDesc = "" +
 	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\"+\n" +
 	"\x17RegisterPreviewResponse\x12\x10\n" +
-	"\x03url\x18\x01 \x01(\tR\x03url2r\n" +
+	"\x03url\x18\x01 \x01(\tR\x03url\"\x8a\x01\n" +
+	"\x17CreateMemoryNoteRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12\x12\n" +
+	"\x04body\x18\x03 \x01(\tR\x04body\x12\x12\n" +
+	"\x04type\x18\x04 \x01(\tR\x04type\x12\x12\n" +
+	"\x04tags\x18\x05 \x03(\tR\x04tags\"I\n" +
+	"\x18CreateMemoryNoteResponse\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
+	"\n" +
+	"commit_sha\x18\x02 \x01(\tR\tcommitSha2\xd3\x01\n" +
 	"\x12AgentBridgeService\x12\\\n" +
-	"\x0fRegisterPreview\x12\".brigade.v1.RegisterPreviewRequest\x1a#.brigade.v1.RegisterPreviewResponse\"\x00B\xad\x01\n" +
+	"\x0fRegisterPreview\x12\".brigade.v1.RegisterPreviewRequest\x1a#.brigade.v1.RegisterPreviewResponse\"\x00\x12_\n" +
+	"\x10CreateMemoryNote\x12#.brigade.v1.CreateMemoryNoteRequest\x1a$.brigade.v1.CreateMemoryNoteResponse\"\x00B\xad\x01\n" +
 	"\x0ecom.brigade.v1B\x10AgentBridgeProtoP\x01Z@github.com/grigory51/brigade/backend/gen/go/brigade/v1;brigadev1\xa2\x02\x03BXX\xaa\x02\n" +
 	"Brigade.V1\xca\x02\n" +
 	"Brigade\\V1\xe2\x02\x16Brigade\\V1\\GPBMetadata\xea\x02\vBrigade::V1b\x06proto3"
@@ -156,16 +296,20 @@ func file_brigade_v1_agent_bridge_proto_rawDescGZIP() []byte {
 	return file_brigade_v1_agent_bridge_proto_rawDescData
 }
 
-var file_brigade_v1_agent_bridge_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_brigade_v1_agent_bridge_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_brigade_v1_agent_bridge_proto_goTypes = []any{
-	(*RegisterPreviewRequest)(nil),  // 0: brigade.v1.RegisterPreviewRequest
-	(*RegisterPreviewResponse)(nil), // 1: brigade.v1.RegisterPreviewResponse
+	(*RegisterPreviewRequest)(nil),   // 0: brigade.v1.RegisterPreviewRequest
+	(*RegisterPreviewResponse)(nil),  // 1: brigade.v1.RegisterPreviewResponse
+	(*CreateMemoryNoteRequest)(nil),  // 2: brigade.v1.CreateMemoryNoteRequest
+	(*CreateMemoryNoteResponse)(nil), // 3: brigade.v1.CreateMemoryNoteResponse
 }
 var file_brigade_v1_agent_bridge_proto_depIdxs = []int32{
 	0, // 0: brigade.v1.AgentBridgeService.RegisterPreview:input_type -> brigade.v1.RegisterPreviewRequest
-	1, // 1: brigade.v1.AgentBridgeService.RegisterPreview:output_type -> brigade.v1.RegisterPreviewResponse
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
+	2, // 1: brigade.v1.AgentBridgeService.CreateMemoryNote:input_type -> brigade.v1.CreateMemoryNoteRequest
+	1, // 2: brigade.v1.AgentBridgeService.RegisterPreview:output_type -> brigade.v1.RegisterPreviewResponse
+	3, // 3: brigade.v1.AgentBridgeService.CreateMemoryNote:output_type -> brigade.v1.CreateMemoryNoteResponse
+	2, // [2:4] is the sub-list for method output_type
+	0, // [0:2] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -182,7 +326,7 @@ func file_brigade_v1_agent_bridge_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_brigade_v1_agent_bridge_proto_rawDesc), len(file_brigade_v1_agent_bridge_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

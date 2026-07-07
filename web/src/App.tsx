@@ -11,6 +11,7 @@ import { SessionLayout } from "./features/sessions/SessionLayout";
 import { SessionEmpty } from "./features/sessions/SessionEmpty";
 import { SessionPage } from "./features/sessions/SessionPage";
 import { ArchivePage, ArchiveSessionPage } from "./features/sessions/ArchivePage";
+import { MemoryPage } from "./features/memory/MemoryPage";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { RouteSpinner } from "./lib/RouteSpinner";
 
@@ -67,6 +68,7 @@ export function App() {
             <Route path="/s/:sessionId" element={<SessionPage />} />
             <Route path="/archive" element={<ArchivePage />} />
             <Route path="/archive/:sessionId" element={<ArchiveSessionPage />} />
+            <Route path="/memory" element={<MemoryPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/sessions" replace />} />

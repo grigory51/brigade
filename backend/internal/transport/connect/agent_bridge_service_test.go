@@ -7,6 +7,7 @@ import (
 	"connectrpc.com/connect"
 
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
+	"github.com/grigory51/brigade/backend/internal/memory"
 	"github.com/grigory51/brigade/backend/internal/preview"
 )
 
@@ -14,7 +15,7 @@ const testSessionID = "8c19e13f-1d52-42bb-88ed-443704e83af6"
 
 func newBridge() (*AgentBridgeService, *preview.Service) {
 	p := preview.NewService(preview.Config{Enabled: true, Domain: "localhost", Scheme: "http", ListenPort: 10000}, []byte("secret"))
-	return NewAgentBridgeService(p), p
+	return NewAgentBridgeService(p, memory.NewService(memory.Config{})), p
 }
 
 func registerReq(sessionID, token string, port int32) *connect.Request[v1.RegisterPreviewRequest] {

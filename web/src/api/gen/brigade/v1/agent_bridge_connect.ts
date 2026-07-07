@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { RegisterPreviewRequest, RegisterPreviewResponse } from "./agent_bridge_pb.js";
+import { CreateMemoryNoteRequest, CreateMemoryNoteResponse, RegisterPreviewRequest, RegisterPreviewResponse } from "./agent_bridge_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -31,6 +31,18 @@ export const AgentBridgeService = {
       name: "RegisterPreview",
       I: RegisterPreviewRequest,
       O: RegisterPreviewResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * CreateMemoryNote сохраняет заметку в личную память пользователя (см. MemoryService) —
+     * сессионный вход поверх того же ядра. session_id фиксируется как провенанс.
+     *
+     * @generated from rpc brigade.v1.AgentBridgeService.CreateMemoryNote
+     */
+    createMemoryNote: {
+      name: "CreateMemoryNote",
+      I: CreateMemoryNoteRequest,
+      O: CreateMemoryNoteResponse,
       kind: MethodKind.Unary,
     },
   }

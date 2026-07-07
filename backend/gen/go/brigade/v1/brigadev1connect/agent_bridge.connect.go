@@ -36,6 +36,9 @@ const (
 	// AgentBridgeServiceRegisterPreviewProcedure is the fully-qualified name of the
 	// AgentBridgeService's RegisterPreview RPC.
 	AgentBridgeServiceRegisterPreviewProcedure = "/brigade.v1.AgentBridgeService/RegisterPreview"
+	// AgentBridgeServiceCreateMemoryNoteProcedure is the fully-qualified name of the
+	// AgentBridgeService's CreateMemoryNote RPC.
+	AgentBridgeServiceCreateMemoryNoteProcedure = "/brigade.v1.AgentBridgeService/CreateMemoryNote"
 )
 
 // AgentBridgeServiceClient is a client for the brigade.v1.AgentBridgeService service.
@@ -43,6 +46,9 @@ type AgentBridgeServiceClient interface {
 	// RegisterPreview фиксирует dev-сервер сессии для показа ссылки в UI. session_id и
 	// порт задаёт вызывающий; ответ — публичный URL.
 	RegisterPreview(context.Context, *connect.Request[v1.RegisterPreviewRequest]) (*connect.Response[v1.RegisterPreviewResponse], error)
+	// CreateMemoryNote сохраняет заметку в личную память пользователя (см. MemoryService) —
+	// сессионный вход поверх того же ядра. session_id фиксируется как провенанс.
+	CreateMemoryNote(context.Context, *connect.Request[v1.CreateMemoryNoteRequest]) (*connect.Response[v1.CreateMemoryNoteResponse], error)
 }
 
 // NewAgentBridgeServiceClient constructs a client for the brigade.v1.AgentBridgeService service. By
@@ -62,12 +68,19 @@ func NewAgentBridgeServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(agentBridgeServiceMethods.ByName("RegisterPreview")),
 			connect.WithClientOptions(opts...),
 		),
+		createMemoryNote: connect.NewClient[v1.CreateMemoryNoteRequest, v1.CreateMemoryNoteResponse](
+			httpClient,
+			baseURL+AgentBridgeServiceCreateMemoryNoteProcedure,
+			connect.WithSchema(agentBridgeServiceMethods.ByName("CreateMemoryNote")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // agentBridgeServiceClient implements AgentBridgeServiceClient.
 type agentBridgeServiceClient struct {
-	registerPreview *connect.Client[v1.RegisterPreviewRequest, v1.RegisterPreviewResponse]
+	registerPreview  *connect.Client[v1.RegisterPreviewRequest, v1.RegisterPreviewResponse]
+	createMemoryNote *connect.Client[v1.CreateMemoryNoteRequest, v1.CreateMemoryNoteResponse]
 }
 
 // RegisterPreview calls brigade.v1.AgentBridgeService.RegisterPreview.
@@ -75,11 +88,19 @@ func (c *agentBridgeServiceClient) RegisterPreview(ctx context.Context, req *con
 	return c.registerPreview.CallUnary(ctx, req)
 }
 
+// CreateMemoryNote calls brigade.v1.AgentBridgeService.CreateMemoryNote.
+func (c *agentBridgeServiceClient) CreateMemoryNote(ctx context.Context, req *connect.Request[v1.CreateMemoryNoteRequest]) (*connect.Response[v1.CreateMemoryNoteResponse], error) {
+	return c.createMemoryNote.CallUnary(ctx, req)
+}
+
 // AgentBridgeServiceHandler is an implementation of the brigade.v1.AgentBridgeService service.
 type AgentBridgeServiceHandler interface {
 	// RegisterPreview фиксирует dev-сервер сессии для показа ссылки в UI. session_id и
 	// порт задаёт вызывающий; ответ — публичный URL.
 	RegisterPreview(context.Context, *connect.Request[v1.RegisterPreviewRequest]) (*connect.Response[v1.RegisterPreviewResponse], error)
+	// CreateMemoryNote сохраняет заметку в личную память пользователя (см. MemoryService) —
+	// сессионный вход поверх того же ядра. session_id фиксируется как провенанс.
+	CreateMemoryNote(context.Context, *connect.Request[v1.CreateMemoryNoteRequest]) (*connect.Response[v1.CreateMemoryNoteResponse], error)
 }
 
 // NewAgentBridgeServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -95,10 +116,18 @@ func NewAgentBridgeServiceHandler(svc AgentBridgeServiceHandler, opts ...connect
 		connect.WithSchema(agentBridgeServiceMethods.ByName("RegisterPreview")),
 		connect.WithHandlerOptions(opts...),
 	)
+	agentBridgeServiceCreateMemoryNoteHandler := connect.NewUnaryHandler(
+		AgentBridgeServiceCreateMemoryNoteProcedure,
+		svc.CreateMemoryNote,
+		connect.WithSchema(agentBridgeServiceMethods.ByName("CreateMemoryNote")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/brigade.v1.AgentBridgeService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AgentBridgeServiceRegisterPreviewProcedure:
 			agentBridgeServiceRegisterPreviewHandler.ServeHTTP(w, r)
+		case AgentBridgeServiceCreateMemoryNoteProcedure:
+			agentBridgeServiceCreateMemoryNoteHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -110,4 +139,8 @@ type UnimplementedAgentBridgeServiceHandler struct{}
 
 func (UnimplementedAgentBridgeServiceHandler) RegisterPreview(context.Context, *connect.Request[v1.RegisterPreviewRequest]) (*connect.Response[v1.RegisterPreviewResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AgentBridgeService.RegisterPreview is not implemented"))
+}
+
+func (UnimplementedAgentBridgeServiceHandler) CreateMemoryNote(context.Context, *connect.Request[v1.CreateMemoryNoteRequest]) (*connect.Response[v1.CreateMemoryNoteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AgentBridgeService.CreateMemoryNote is not implemented"))
 }

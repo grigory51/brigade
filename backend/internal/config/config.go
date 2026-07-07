@@ -5,6 +5,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -55,6 +56,21 @@ type Config struct {
 
 	Preview PreviewConfig `koanf:"preview"`
 	TLS     TLSConfig     `koanf:"tls"`
+	Memory  MemoryConfig  `koanf:"memory"`
+}
+
+// MemoryConfig — личная память пользователя (git-репо заметок). Источник истины — файлы,
+// durability — git-remote. Пустой remote выключает фичу.
+type MemoryConfig struct {
+	// Remote — git-remote заметок (любой: GitHub / self-hosted / локальный bare).
+	// Env: BRIGADE_MEMORY__REMOTE. Пусто — фича выключена.
+	Remote string `koanf:"remote"`
+	// Dir — рабочая копия на хосте (git working clone). Env: BRIGADE_MEMORY__DIR.
+	// Пусто при включённой памяти → дефолт <home>/.brigade/memory.
+	Dir string `koanf:"dir"`
+	// SSHKey — путь к приватному SSH-ключу для доступа к remote по git@-URL (без пароля).
+	// Env: BRIGADE_MEMORY__SSH_KEY. Пусто — git использует SSH-настройки хоста (~/.ssh).
+	SSHKey string `koanf:"ssh_key"`
 }
 
 // PreviewConfig — публикация dev-серверов сессий через встроенный L7-прокси.
@@ -238,6 +254,36 @@ func (c *Config) Validate() error {
 	if c.TLS.Addr != "" {
 		if c.TLS.CertFile == "" || c.TLS.KeyFile == "" {
 			return fmt.Errorf("config: tls.cert_file and tls.key_file are required when tls.addr is set")
+		}
+	}
+
+	// Память включена ⇔ задан remote. Рабочую копию нормализуем к абсолютному пути (её
+	// подкаталоги — git working tree, относительный путь ненадёжен). Дефолт — под $HOME.
+	if c.Memory.Remote != "" {
+		if c.Memory.Dir == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return fmt.Errorf("config: resolve home for memory.dir: %w", err)
+			}
+			c.Memory.Dir = filepath.Join(home, ".brigade", "memory")
+		}
+		abs, err := filepath.Abs(c.Memory.Dir)
+		if err != nil {
+			return fmt.Errorf("config: resolve memory.dir %q: %w", c.Memory.Dir, err)
+		}
+		c.Memory.Dir = abs
+
+		// SSH-ключ (если задан) — абсолютный путь; проверяем существование на старте,
+		// чтобы неверный путь падал сразу, а не при первом push.
+		if c.Memory.SSHKey != "" {
+			keyAbs, err := filepath.Abs(c.Memory.SSHKey)
+			if err != nil {
+				return fmt.Errorf("config: resolve memory.ssh_key %q: %w", c.Memory.SSHKey, err)
+			}
+			if _, err := os.Stat(keyAbs); err != nil {
+				return fmt.Errorf("config: memory.ssh_key %q: %w", keyAbs, err)
+			}
+			c.Memory.SSHKey = keyAbs
 		}
 	}
 

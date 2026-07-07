@@ -75,3 +75,23 @@ tls:
   addr: ""
   cert_file: ""
   key_file: ""
+
+# Личная память пользователя: атомарные markdown-заметки в git-репо. Источник истины —
+# .md-файлы (frontmatter + тело), durability делегирована git-remote (заметки переживают
+# удаление сессии и рестарт, история — в git log). Агент складывает фрагменты из сессии
+# через скилл /brigade:memory; дашборд — вкладка «Заметки». Пустой remote выключает фичу.
+memory:
+  # Git-remote заметок (источник истины). Любой: GitHub / self-hosted / локальный bare.
+  # HTTPS с токеном в URL (https://oauth2:<token>@host/ns/repo.git) ИЛИ SSH
+  # (git@host:ns/repo.git) — для SSH удобнее задать ssh_key ниже. Пусто — память выключена.
+  # Замечание по GitLab: push в защищённую ветку доступен Project Access Token (роль
+  # Maintainer, scope write_repository) или SSH deploy key с write; у deploy token scope
+  # write_repository НЕТ — им только clone. Проще снять protection с дефолтной ветки.
+  remote: ""
+  # Рабочая копия на хосте (git working clone, ленивый clone на первом обращении).
+  # Пусто при заданном remote → дефолт <home>/.brigade/memory.
+  dir: ""
+  # Приватный SSH-ключ для git@-remote (без пароля — интерактивный промпт отключён).
+  # Пусто — git берёт SSH-настройки хоста (~/.ssh). Host key при первом коннекте
+  # доверяется (accept-new) и фиксируется; для строгой проверки заранее засейте known_hosts.
+  ssh_key: ""

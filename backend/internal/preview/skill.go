@@ -11,6 +11,9 @@ import (
 //go:embed skill/SKILL.md
 var skillMD []byte
 
+//go:embed skill/memory/SKILL.md
+var memorySkillMD []byte
+
 //go:embed skill/plugin.json
 var pluginJSON []byte
 
@@ -23,16 +26,18 @@ const (
 	PluginDirRel      = ".claude/plugins/brigade"
 	pluginManifestRel = ".claude/plugins/brigade/.claude-plugin/plugin.json"
 	pluginSkillRel    = ".claude/plugins/brigade/skills/preview/SKILL.md"
+	pluginMemoryRel   = ".claude/plugins/brigade/skills/memory/SKILL.md"
 	settingsRel       = ".claude/settings.json"
 	// legacySkillDirRel — прежнее место установки (обычный проектный скилл /brigade-preview).
 	// Удаляется, чтобы он не дублировал скилл плагина в slash-меню.
 	legacySkillDirRel = ".claude/skills/brigade-preview"
 )
 
-// InstallSkill раскладывает per-session плагин brigade со скиллом preview в рабочую
-// директорию сессии и включает его в проектном .claude/settings.json (enabledPlugins).
-// Результат — вызов /brigade:preview. Идемпотентна (перезапись безопасна); мерж settings.json
-// сохраняет чужие ключи. Удаляет прежний обычный скилл brigade-preview из этой же директории.
+// InstallSkill раскладывает per-session плагин brigade со скиллами preview и memory в
+// рабочую директорию сессии и включает его в проектном .claude/settings.json
+// (enabledPlugins). Результат — вызовы /brigade:preview и /brigade:memory. Идемпотентна
+// (перезапись безопасна); мерж settings.json сохраняет чужие ключи. Удаляет прежний
+// обычный скилл brigade-preview из этой же директории.
 func InstallSkill(cwd string) error {
 	join := func(rel string) string { return filepath.Join(cwd, filepath.FromSlash(rel)) }
 
@@ -40,6 +45,13 @@ func InstallSkill(cwd string) error {
 		return err
 	}
 	if err := writeFile(join(pluginSkillRel), skillMD); err != nil {
+		return err
+	}
+	// Второй скилл того же плагина brigade — личная память (/brigade:memory). Скиллы
+	// авто-дискаверятся по директориям, enabledPlugins ниже включает плагин целиком.
+	// ponytail: ставится вместе с preview-скиллом; если память не сконфигурирована
+	// (memory.remote пуст), сам вызов CreateMemoryNote вернёт failed_precondition.
+	if err := writeFile(join(pluginMemoryRel), memorySkillMD); err != nil {
 		return err
 	}
 	if err := enablePlugin(join(settingsRel)); err != nil {

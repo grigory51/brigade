@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package brigade.v1;
+
+// MemoryService — личная память пользователя: атомарные markdown-заметки в git-репо.
+// Источник истины — .md-файлы (frontmatter + тело), durability делегирована git-remote.
+// Это КАНОНИЧЕСКИЙ пользовательский API памяти (JWT): зовётся из web, мобильного клиента
+// и любого JWT-клиента; умеет и читать, и создавать. Параллельный вход из сессии
+// (агент/skill внутри контейнера, per-session HMAC-токен) — AgentBridgeService.
+// CreateMemoryNote поверх того же ядра.
+service MemoryService {
+  // ListNotes — заметки пользователя, при непустом query — фильтр по подстроке
+  // (title/body/tags), сортировка от новых к старым.
+  rpc ListNotes(ListNotesRequest) returns (ListNotesResponse) {}
+  // GetNote — одна заметка по id.
+  rpc GetNote(GetNoteRequest) returns (GetNoteResponse) {}
+  // CreateNote — создать заметку (write .md → commit → push синхронно). session пуст —
+  // заметка создана из UI/мобилы, а не сессией.
+  rpc CreateNote(CreateNoteRequest) returns (CreateNoteResponse) {}
+}
+
+// Note — одна заметка памяти.
+message Note {
+  string id = 1;
+  string title = 2;
+  string body = 3;              // markdown
+  string type = 4;             // idea|decision|insight|todo|question|reference
+  repeated string tags = 5;
+  string session = 6;          // провенанс: id сессии-источника (пусто — создано из UI)
+  string created = 7;          // дата ISO (YYYY-MM-DD)
+  string updated = 8;
+}
+
+message ListNotesRequest {
+  string query = 1;            // пусто — все заметки
+}
+
+message ListNotesResponse {
+  repeated Note notes = 1;
+}
+
+message GetNoteRequest {
+  string id = 1;
+}
+
+message GetNoteResponse {
+  Note note = 1;
+}
+
+message CreateNoteRequest {
+  string title = 1;
+  string body = 2;
+  string type = 3;
+  repeated string tags = 4;
+  string session = 5;          // опционально: провенанс
+}
+
+message CreateNoteResponse {
+  Note note = 1;
+  string commit_sha = 2;       // доказательство durability (заметка запушена)
+}

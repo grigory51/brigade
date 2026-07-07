@@ -21,6 +21,7 @@ import {
   Loader2,
   LogOut,
   MessagesSquare,
+  NotebookPen,
   Pencil,
   Plus,
   RefreshCw,
@@ -388,6 +389,16 @@ export function SessionLayout() {
 
             <SidebarFooter>
               <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => navigate("/memory")}
+                    isActive={location.pathname.startsWith("/memory")}
+                    tooltip="Заметки"
+                  >
+                    <NotebookPen className="size-4" />
+                    Заметки
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     onClick={() => navigate("/archive")}
