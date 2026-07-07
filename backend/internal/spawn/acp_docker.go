@@ -19,9 +19,11 @@ const (
 	// brigadeBinPath — путь бинаря brigade в образе агента (COPY в Dockerfile); демон —
 	// это `brigade acp-agent`.
 	brigadeBinPath = "/usr/local/bin/brigade"
-	// daemonLogRel — путь журнала событий демона внутри контейнера (durable: home —
-	// bind-mount/volume). Относительно AgentHome.
-	daemonLogRel = "/.brigade/acp-events.jsonl"
+	// daemonLogDir — базовый каталог durable-журналов демона в home (относительно AgentHome).
+	// Журнал кладётся в per-session подкаталог: home может быть per-user bind-mount
+	// (<claudeHomeDir>/<userID>, общий для сессий юзера), и без session id журналы
+	// одновременных docker-ACP-сессий одного юзера легли бы в один файл.
+	daemonLogDir = "/.brigade"
 )
 
 // ACPVolumeName возвращает имя named volume home агента для сессии (fallback, когда
@@ -70,7 +72,7 @@ func (d *DockerACPSpawner) StartDaemon(ctx context.Context, spec Spec, stateID, 
 			"BRIGADE_SESSION_ID=" + spec.SessionID,
 			fmt.Sprintf("BRIGADE_DAEMON_PORT=%d", daemonPort),
 			"BRIGADE_DAEMON_TOKEN=" + token,
-			"BRIGADE_DAEMON_LOG=" + AgentHome + daemonLogRel,
+			"BRIGADE_DAEMON_LOG=" + AgentHome + daemonLogDir + "/" + spec.SessionID + "/acp-events.jsonl",
 		},
 		Hostname:     spec.Hostname,
 		WorkingDir:   specWorkdir(spec),
