@@ -23,15 +23,17 @@ const (
 
 // Note — одна заметка памяти.
 type Note struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
-	Body          string                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"` // markdown
-	Type          string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"` // idea|decision|insight|todo|question|reference
-	Tags          []string               `protobuf:"bytes,5,rep,name=tags,proto3" json:"tags,omitempty"`
-	Session       string                 `protobuf:"bytes,6,opt,name=session,proto3" json:"session,omitempty"` // провенанс: id сессии-источника (пусто — создано из UI)
-	Created       string                 `protobuf:"bytes,7,opt,name=created,proto3" json:"created,omitempty"` // дата ISO (YYYY-MM-DD)
-	Updated       string                 `protobuf:"bytes,8,opt,name=updated,proto3" json:"updated,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Id      string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Title   string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Body    string                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"` // markdown
+	Type    string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"` // idea|decision|insight|todo|question|reference
+	Tags    []string               `protobuf:"bytes,5,rep,name=tags,proto3" json:"tags,omitempty"`
+	Session string                 `protobuf:"bytes,6,opt,name=session,proto3" json:"session,omitempty"` // провенанс: id сессии-источника (пусто — создано из UI)
+	Created string                 `protobuf:"bytes,7,opt,name=created,proto3" json:"created,omitempty"` // дата ISO (YYYY-MM-DD)
+	Updated string                 `protobuf:"bytes,8,opt,name=updated,proto3" json:"updated,omitempty"`
+	// layer — слой памяти: semantic (атомарный факт, дефолт) | episodic (саммари сессии).
+	Layer         string `protobuf:"bytes,9,opt,name=layer,proto3" json:"layer,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -118,6 +120,13 @@ func (x *Note) GetCreated() string {
 func (x *Note) GetUpdated() string {
 	if x != nil {
 		return x.Updated
+	}
+	return ""
+}
+
+func (x *Note) GetLayer() string {
+	if x != nil {
+		return x.Layer
 	}
 	return ""
 }
@@ -305,6 +314,7 @@ type CreateNoteRequest struct {
 	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
 	Tags          []string               `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty"`
 	Session       string                 `protobuf:"bytes,5,opt,name=session,proto3" json:"session,omitempty"` // опционально: провенанс
+	Layer         string                 `protobuf:"bytes,6,opt,name=layer,proto3" json:"layer,omitempty"`     // semantic (дефолт) | episodic
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -374,6 +384,13 @@ func (x *CreateNoteRequest) GetSession() string {
 	return ""
 }
 
+func (x *CreateNoteRequest) GetLayer() string {
+	if x != nil {
+		return x.Layer
+	}
+	return ""
+}
+
 type CreateNoteResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Note          *Note                  `protobuf:"bytes,1,opt,name=note,proto3" json:"note,omitempty"`
@@ -431,7 +448,7 @@ var File_brigade_v1_memory_proto protoreflect.FileDescriptor
 const file_brigade_v1_memory_proto_rawDesc = "" +
 	"\n" +
 	"\x17brigade/v1/memory.proto\x12\n" +
-	"brigade.v1\"\xb6\x01\n" +
+	"brigade.v1\"\xcc\x01\n" +
 	"\x04Note\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x12\n" +
@@ -440,7 +457,8 @@ const file_brigade_v1_memory_proto_rawDesc = "" +
 	"\x04tags\x18\x05 \x03(\tR\x04tags\x12\x18\n" +
 	"\asession\x18\x06 \x01(\tR\asession\x12\x18\n" +
 	"\acreated\x18\a \x01(\tR\acreated\x12\x18\n" +
-	"\aupdated\x18\b \x01(\tR\aupdated\"(\n" +
+	"\aupdated\x18\b \x01(\tR\aupdated\x12\x14\n" +
+	"\x05layer\x18\t \x01(\tR\x05layer\"(\n" +
 	"\x10ListNotesRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\";\n" +
 	"\x11ListNotesResponse\x12&\n" +
@@ -448,13 +466,14 @@ const file_brigade_v1_memory_proto_rawDesc = "" +
 	"\x0eGetNoteRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"7\n" +
 	"\x0fGetNoteResponse\x12$\n" +
-	"\x04note\x18\x01 \x01(\v2\x10.brigade.v1.NoteR\x04note\"\x7f\n" +
+	"\x04note\x18\x01 \x01(\v2\x10.brigade.v1.NoteR\x04note\"\x95\x01\n" +
 	"\x11CreateNoteRequest\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x12\n" +
 	"\x04body\x18\x02 \x01(\tR\x04body\x12\x12\n" +
 	"\x04type\x18\x03 \x01(\tR\x04type\x12\x12\n" +
 	"\x04tags\x18\x04 \x03(\tR\x04tags\x12\x18\n" +
-	"\asession\x18\x05 \x01(\tR\asession\"Y\n" +
+	"\asession\x18\x05 \x01(\tR\asession\x12\x14\n" +
+	"\x05layer\x18\x06 \x01(\tR\x05layer\"Y\n" +
 	"\x12CreateNoteResponse\x12$\n" +
 	"\x04note\x18\x01 \x01(\v2\x10.brigade.v1.NoteR\x04note\x12\x1d\n" +
 	"\n" +

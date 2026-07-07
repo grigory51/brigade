@@ -29,6 +29,8 @@ message Note {
   string session = 6;          // провенанс: id сессии-источника (пусто — создано из UI)
   string created = 7;          // дата ISO (YYYY-MM-DD)
   string updated = 8;
+  // layer — слой памяти: semantic (атомарный факт, дефолт) | episodic (саммари сессии).
+  string layer = 9;
 }
 
 message ListNotesRequest {
@@ -53,6 +55,7 @@ message CreateNoteRequest {
   string type = 3;
   repeated string tags = 4;
   string session = 5;          // опционально: провенанс
+  string layer = 6;            // semantic (дефолт) | episodic
 }
 
 message CreateNoteResponse {

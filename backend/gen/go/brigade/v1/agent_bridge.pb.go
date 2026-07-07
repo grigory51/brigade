@@ -132,6 +132,7 @@ type CreateMemoryNoteRequest struct {
 	Body          string                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
 	Type          string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"` // idea|decision|insight|todo|question|reference
 	Tags          []string               `protobuf:"bytes,5,rep,name=tags,proto3" json:"tags,omitempty"`
+	Layer         string                 `protobuf:"bytes,6,opt,name=layer,proto3" json:"layer,omitempty"` // semantic (дефолт) | episodic (саммари сессии)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -201,6 +202,13 @@ func (x *CreateMemoryNoteRequest) GetTags() []string {
 	return nil
 }
 
+func (x *CreateMemoryNoteRequest) GetLayer() string {
+	if x != nil {
+		return x.Layer
+	}
+	return ""
+}
+
 type CreateMemoryNoteResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -265,14 +273,15 @@ const file_brigade_v1_agent_bridge_proto_rawDesc = "" +
 	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\"+\n" +
 	"\x17RegisterPreviewResponse\x12\x10\n" +
-	"\x03url\x18\x01 \x01(\tR\x03url\"\x8a\x01\n" +
+	"\x03url\x18\x01 \x01(\tR\x03url\"\xa0\x01\n" +
 	"\x17CreateMemoryNoteRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x12\n" +
 	"\x04body\x18\x03 \x01(\tR\x04body\x12\x12\n" +
 	"\x04type\x18\x04 \x01(\tR\x04type\x12\x12\n" +
-	"\x04tags\x18\x05 \x03(\tR\x04tags\"I\n" +
+	"\x04tags\x18\x05 \x03(\tR\x04tags\x12\x14\n" +
+	"\x05layer\x18\x06 \x01(\tR\x05layer\"I\n" +
 	"\x18CreateMemoryNoteResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +

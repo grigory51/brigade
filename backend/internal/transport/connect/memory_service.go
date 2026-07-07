@@ -66,6 +66,7 @@ func (s *MemoryService) CreateNote(ctx context.Context, req *connect.Request[v1.
 		Type:    req.Msg.Type,
 		Tags:    req.Msg.Tags,
 		Session: req.Msg.Session,
+		Layer:   req.Msg.Layer,
 	})
 	if err != nil {
 		return nil, memoryError(err)
@@ -78,6 +79,7 @@ func noteToProto(n memory.Note) *v1.Note {
 	return &v1.Note{
 		Id: n.ID, Title: n.Title, Body: n.Body, Type: n.Type,
 		Tags: n.Tags, Session: n.Session, Created: n.Created, Updated: n.Updated,
+		Layer: n.Layer,
 	}
 }
 

@@ -40,6 +40,8 @@ export function MemoryPage() {
   const [notes, setNotes] = useState<Note[] | null>(null);
   const [query, setQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  // layer — активный слой памяти: semantic (факты) | episodic (саммари сессий).
+  const [layer, setLayer] = useState<"semantic" | "episodic">("semantic");
   // configured=false — у пользователя не задан git-репозиторий памяти (RPC вернул
   // failed_precondition); показываем подсказку про Настройки вместо ошибки.
   const [configured, setConfigured] = useState(true);
@@ -71,15 +73,17 @@ export function MemoryPage() {
 
   const filtered = useMemo(() => {
     if (!notes) return [];
+    // Слой: заметки без поля layer (старые) считаем семантическими.
+    const byLayer = notes.filter((n) => (n.layer || "semantic") === layer);
     const q = query.trim().toLowerCase();
-    if (!q) return notes;
-    return notes.filter(
+    if (!q) return byLayer;
+    return byLayer.filter(
       (n) =>
         n.title.toLowerCase().includes(q) ||
         n.body.toLowerCase().includes(q) ||
         n.tags.some((t) => t.toLowerCase().includes(q)),
     );
-  }, [notes, query]);
+  }, [notes, query, layer]);
 
   if (notes === null) {
     return (
@@ -123,6 +127,19 @@ export function MemoryPage() {
         </Button>
       </div>
 
+      <div className="mb-4 flex gap-1">
+        {(["semantic", "episodic"] as const).map((l) => (
+          <Button
+            key={l}
+            size="sm"
+            variant={layer === l ? "default" : "outline"}
+            onClick={() => setLayer(l)}
+          >
+            {l === "semantic" ? "Факты" : "Сессии"}
+          </Button>
+        ))}
+      </div>
+
       <div className="relative mb-4">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -136,9 +153,11 @@ export function MemoryPage() {
 
       {filtered.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          {notes.length === 0
-            ? "Пока пусто. Агент складывает сюда ценные фрагменты через /brigade:memory, или создайте заметку кнопкой «Новая»."
-            : "Ничего не найдено."}
+          {query.trim()
+            ? "Ничего не найдено."
+            : layer === "episodic"
+              ? "Саммари сессий появятся здесь. Попроси агента «сохрани сессию в память»."
+              : "Пока пусто. Агент складывает сюда факты через /brigade:memory, или создай кнопкой «Новая»."}
         </p>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -198,6 +217,7 @@ function NewNoteDialog({
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [type, setType] = useState<string>("idea");
+  const [layer, setLayer] = useState<"semantic" | "episodic">("semantic");
   const [tags, setTags] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -209,6 +229,7 @@ function NewNoteDialog({
         title: title.trim(),
         body: body.trim(),
         type,
+        layer,
         tags: tags
           .split(",")
           .map((t) => t.trim())
@@ -222,6 +243,7 @@ function NewNoteDialog({
       setBody("");
       setTags("");
       setType("idea");
+      setLayer("semantic");
     } catch (err) {
       toast.error(
         err instanceof ConnectError
@@ -260,9 +282,24 @@ function NewNoteDialog({
           </div>
           <div className="flex gap-3">
             <div className="space-y-2">
+              <Label>Слой</Label>
+              <Select
+                value={layer}
+                onValueChange={(v) => setLayer(v as "semantic" | "episodic")}
+              >
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="semantic">Факт</SelectItem>
+                  <SelectItem value="episodic">Сессия</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1 space-y-2">
               <Label>Тип</Label>
               <Select value={type} onValueChange={setType}>
-                <SelectTrigger className="w-36">
+                <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -274,14 +311,14 @@ function NewNoteDialog({
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex-1 space-y-2">
-              <Label>Теги</Label>
-              <Input
-                value={tags}
-                onChange={(e) => setTags(e.target.value)}
-                placeholder="через запятую"
-              />
-            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Теги</Label>
+            <Input
+              value={tags}
+              onChange={(e) => setTags(e.target.value)}
+              placeholder="через запятую"
+            />
           </div>
         </div>
 

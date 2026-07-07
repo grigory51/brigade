@@ -60,6 +60,13 @@ export class Note extends Message<Note> {
    */
   updated = "";
 
+  /**
+   * layer — слой памяти: semantic (атомарный факт, дефолт) | episodic (саммари сессии).
+   *
+   * @generated from field: string layer = 9;
+   */
+  layer = "";
+
   constructor(data?: PartialMessage<Note>) {
     super();
     proto3.util.initPartial(data, this);
@@ -76,6 +83,7 @@ export class Note extends Message<Note> {
     { no: 6, name: "session", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 7, name: "created", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 8, name: "updated", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 9, name: "layer", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Note {
@@ -276,6 +284,13 @@ export class CreateNoteRequest extends Message<CreateNoteRequest> {
    */
   session = "";
 
+  /**
+   * semantic (дефолт) | episodic
+   *
+   * @generated from field: string layer = 6;
+   */
+  layer = "";
+
   constructor(data?: PartialMessage<CreateNoteRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -289,6 +304,7 @@ export class CreateNoteRequest extends Message<CreateNoteRequest> {
     { no: 3, name: "type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 4, name: "tags", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 5, name: "session", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "layer", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CreateNoteRequest {

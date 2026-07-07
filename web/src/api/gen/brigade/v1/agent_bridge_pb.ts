@@ -123,6 +123,13 @@ export class CreateMemoryNoteRequest extends Message<CreateMemoryNoteRequest> {
    */
   tags: string[] = [];
 
+  /**
+   * semantic (дефолт) | episodic (саммари сессии)
+   *
+   * @generated from field: string layer = 6;
+   */
+  layer = "";
+
   constructor(data?: PartialMessage<CreateMemoryNoteRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -136,6 +143,7 @@ export class CreateMemoryNoteRequest extends Message<CreateMemoryNoteRequest> {
     { no: 3, name: "body", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 4, name: "type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 5, name: "tags", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 6, name: "layer", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CreateMemoryNoteRequest {

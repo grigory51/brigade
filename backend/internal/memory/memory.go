@@ -43,6 +43,16 @@ var noteTypes = map[string]bool{
 
 const defaultType = "idea"
 
+// Слои памяти (layered memory): semantic — атомарный дистиллированный факт (дефолт);
+// episodic — саммари сессии (что было сделано). Неизвестный слой → semantic.
+const (
+	layerSemantic = "semantic"
+	layerEpisodic = "episodic"
+	defaultLayer  = layerSemantic
+)
+
+var noteLayers = map[string]bool{layerSemantic: true, layerEpisodic: true}
+
 // SettingsSource отдаёт пер-юзерные настройки памяти (remote + SSH-ключ, уже
 // расшифрованные). Реализуется *store.Store.
 type SettingsSource interface {
@@ -59,6 +69,7 @@ type Note struct {
 	Session string
 	Created string // дата ISO (YYYY-MM-DD)
 	Updated string
+	Layer   string // semantic | episodic
 }
 
 // frontmatter — YAML-заголовок .md-файла (round-trip модель хранения).
@@ -66,6 +77,7 @@ type frontmatter struct {
 	ID      string   `yaml:"id"`
 	Title   string   `yaml:"title"`
 	Type    string   `yaml:"type"`
+	Layer   string   `yaml:"layer"`
 	Tags    []string `yaml:"tags,omitempty"`
 	Session string   `yaml:"session,omitempty"`
 	Created string   `yaml:"created"`
@@ -345,17 +357,22 @@ func parseNote(data []byte) (Note, bool) {
 	body := rest[end+len("\n---"):]
 	body = bytes.TrimPrefix(body, []byte("\n"))
 	body = bytes.TrimLeft(body, "\n")
+	layer := fm.Layer
+	if !noteLayers[layer] {
+		layer = defaultLayer // старые заметки без поля layer — семантические
+	}
 	return Note{
 		ID: fm.ID, Title: fm.Title, Type: fm.Type, Tags: fm.Tags,
 		Session: fm.Session, Created: fm.Created, Updated: fm.Updated,
-		Body: strings.TrimRight(string(body), "\n"),
+		Layer: layer,
+		Body:  strings.TrimRight(string(body), "\n"),
 	}, true
 }
 
 // renderNote сериализует заметку в .md-файл с frontmatter.
 func renderNote(n Note) []byte {
 	fm := frontmatter{
-		ID: n.ID, Title: n.Title, Type: n.Type, Tags: n.Tags,
+		ID: n.ID, Title: n.Title, Type: n.Type, Layer: n.Layer, Tags: n.Tags,
 		Session: n.Session, Created: n.Created, Updated: n.Updated,
 	}
 	head, _ := yaml.Marshal(fm)
@@ -374,8 +391,19 @@ var slugRe = regexp.MustCompile(`[^a-z0-9]+`)
 
 // normalize заполняет отсутствующие поля: тип по умолчанию, даты, id из даты+slug(title).
 func normalize(n Note) Note {
+	n.Layer = strings.TrimSpace(strings.ToLower(n.Layer))
+	if !noteLayers[n.Layer] {
+		n.Layer = defaultLayer
+	}
 	n.Type = strings.TrimSpace(strings.ToLower(n.Type))
-	if !noteTypes[n.Type] {
+	switch {
+	case n.Layer == layerEpisodic:
+		// Эпизодические — саммари сессии; тип свободный, дефолт summary. На путь не влияет
+		// (episodic всегда в sessions/), поэтому список noteTypes для них не навязываем.
+		if n.Type == "" {
+			n.Type = "summary"
+		}
+	case !noteTypes[n.Type]:
 		n.Type = defaultType
 	}
 	today := time.Now().Format("2006-01-02")
@@ -402,9 +430,14 @@ func slug(title string) string {
 	return s
 }
 
-// notePath — путь файла заметки относительно корня репо: <type>s/<id>.md.
+// notePath — путь файла заметки относительно корня репо. Эпизодические (саммари сессий)
+// складываются в sessions/, семантические факты — в <type>s/ (idea → ideas/ и т.п.).
 func notePath(n Note) string {
-	return filepath.Join(n.Type+"s", n.ID+".md")
+	dir := n.Type + "s"
+	if n.Layer == layerEpisodic {
+		dir = "sessions"
+	}
+	return filepath.Join(dir, n.ID+".md")
 }
 
 // matches — попадает ли заметка под поисковую подстроку (уже в нижнем регистре).

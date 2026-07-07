@@ -35,6 +35,7 @@ message CreateMemoryNoteRequest {
   string body = 3;
   string type = 4;             // idea|decision|insight|todo|question|reference
   repeated string tags = 5;
+  string layer = 6;            // semantic (дефолт) | episodic (саммари сессии)
 }
 
 message CreateMemoryNoteResponse {
