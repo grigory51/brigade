@@ -1,69 +1,48 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { Loader2, NotebookPen, Plus, Search } from "lucide-react";
+import { Loader2, Plus, Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+
 import { memoryClient } from "@/api/client";
-import type { Note } from "@/api/gen/brigade/v1/memory_pb";
+import type { Topic } from "@/api/gen/brigade/v1/memory_pb";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+  noteCountLabel,
+  noteType,
+  plural,
+  softColor,
+  TOPIC_COLORS,
+} from "./notes";
 
-// noteTypes — типы заметок (в соответствии с бэкендом memory.noteTypes).
-const noteTypes = [
-  "idea",
-  "decision",
-  "insight",
-  "todo",
-  "question",
-  "reference",
-] as const;
-
-// MemoryPage — личная память: список заметок с поиском и созданием. Поиск — клиентский
-// фильтр по одному разу загруженному списку (при личных объёмах серверный запрос не нужен).
+// MemoryPage — «полки тем»: обзор всех тем памяти, вход в любую. Тема — главный герой:
+// карточка показывает обзор-синтез и пару последних заметок. Плоского списка заметок больше
+// нет — заметка всегда живёт внутри темы.
 export function MemoryPage() {
-  const [notes, setNotes] = useState<Note[] | null>(null);
+  const [topics, setTopics] = useState<Topic[] | null>(null);
   const [query, setQuery] = useState("");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  // layer — активный слой памяти: semantic (факты) | episodic (саммари сессий).
-  const [layer, setLayer] = useState<"semantic" | "episodic">("semantic");
-  // configured=false — у пользователя не задан git-репозиторий памяти (RPC вернул
-  // failed_precondition); показываем подсказку про Настройки вместо ошибки.
+  const [composerOpen, setComposerOpen] = useState(false);
+  // configured=false — у пользователя не настроен git-репозиторий памяти.
   const [configured, setConfigured] = useState(true);
 
   useEffect(() => {
     let alive = true;
     memoryClient
-      .listNotes({ query: "" })
+      .listTopics({ query: "" })
       .then((r) => {
-        if (alive) setNotes(r.notes);
+        if (alive) setTopics(r.topics);
       })
       .catch((err) => {
         if (!alive) return;
-        setNotes([]);
+        setTopics([]);
         if (err instanceof ConnectError && err.code === Code.FailedPrecondition) {
           setConfigured(false);
           return;
         }
         toast.error(
-          err instanceof ConnectError
-            ? err.rawMessage
-            : "Не удалось загрузить заметки",
+          err instanceof ConnectError ? err.rawMessage : "Не удалось загрузить темы",
         );
       });
     return () => {
@@ -72,20 +51,21 @@ export function MemoryPage() {
   }, []);
 
   const filtered = useMemo(() => {
-    if (!notes) return [];
-    // Слой: заметки без поля layer (старые) считаем семантическими.
-    const byLayer = notes.filter((n) => (n.layer || "semantic") === layer);
+    if (!topics) return [];
     const q = query.trim().toLowerCase();
-    if (!q) return byLayer;
-    return byLayer.filter(
-      (n) =>
-        n.title.toLowerCase().includes(q) ||
-        n.body.toLowerCase().includes(q) ||
-        n.tags.some((t) => t.toLowerCase().includes(q)),
+    if (!q) return topics;
+    return topics.filter(
+      (t) =>
+        t.name.toLowerCase().includes(q) ||
+        t.synthesis.toLowerCase().includes(q) ||
+        t.recent.some(
+          (n) =>
+            n.title.toLowerCase().includes(q) || n.body.toLowerCase().includes(q),
+        ),
     );
-  }, [notes, query, layer]);
+  }, [topics, query]);
 
-  if (notes === null) {
+  if (topics === null) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
         <Loader2 className="size-5 animate-spin" />
@@ -95,14 +75,11 @@ export function MemoryPage() {
 
   if (!configured) {
     return (
-      <div className="mx-auto h-full w-full max-w-4xl overflow-y-auto px-6 py-8">
-        <div className="mb-6 flex items-center gap-2">
-          <NotebookPen className="size-5 text-muted-foreground" />
-          <h1 className="text-lg font-semibold">Заметки</h1>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Память ещё не настроена. Укажите свой приватный git-репозиторий заметок и SSH-ключ
-          в{" "}
+      <div className="mx-auto h-full w-full max-w-5xl px-6 py-8">
+        <Header count={0} />
+        <p className="mt-6 text-sm text-muted-foreground">
+          Память ещё не настроена. Укажите свой приватный git-репозиторий заметок и
+          SSH-ключ в{" "}
           <Link to="/settings" className="underline hover:text-foreground">
             Настройках → Память
           </Link>
@@ -113,142 +90,167 @@ export function MemoryPage() {
   }
 
   return (
-    <div className="mx-auto h-full w-full max-w-4xl overflow-y-auto px-6 py-8">
-      <div className="mb-6 flex items-center gap-2">
-        <NotebookPen className="size-5 text-muted-foreground" />
-        <h1 className="text-lg font-semibold">Заметки</h1>
-        <Button
-          size="sm"
-          className="ml-auto"
-          onClick={() => setDialogOpen(true)}
-        >
+    <div className="flex h-full flex-col">
+      <div className="flex h-14 shrink-0 items-center gap-3 border-b px-6">
+        <Sparkles className="size-[18px] text-primary" />
+        <h1 className="text-[15px] font-semibold">Память</h1>
+        {topics.length > 0 && (
+          <span className="text-sm text-muted-foreground">
+            · {topics.length} {plural(topics.length, ["тема", "темы", "тем"])}
+          </span>
+        )}
+        <div className="relative ml-auto">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Искать во всех темах…"
+            className="h-9 w-52 pl-8"
+          />
+        </div>
+        <Button size="sm" onClick={() => setComposerOpen(true)}>
           <Plus className="size-4" />
-          Новая
+          Тема
         </Button>
       </div>
 
-      <div className="mb-4 flex gap-1">
-        {(["semantic", "episodic"] as const).map((l) => (
-          <Button
-            key={l}
-            size="sm"
-            variant={layer === l ? "default" : "outline"}
-            onClick={() => setLayer(l)}
-          >
-            {l === "semantic" ? "Факты" : "Сессии"}
-          </Button>
-        ))}
+      <div className="min-h-0 flex-1 overflow-y-auto p-6">
+        {composerOpen && (
+          <NewTopicComposer
+            onClose={() => setComposerOpen(false)}
+            onCreated={(t) => {
+              setTopics((prev) => [t, ...(prev ?? [])]);
+              setComposerOpen(false);
+            }}
+          />
+        )}
+
+        {filtered.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {query.trim()
+              ? "Ничего не найдено."
+              : "Пока нет тем. Создай тему кнопкой «Тема» — или агент сложит сюда заметки из сессии."}
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {filtered.map((t) => (
+              <TopicCard key={t.id} topic={t} />
+            ))}
+          </div>
+        )}
       </div>
-
-      <div className="relative mb-4">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Поиск по заголовку, тексту, тегам"
-          className="pl-9"
-        />
-      </div>
-
-      {filtered.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          {query.trim()
-            ? "Ничего не найдено."
-            : layer === "episodic"
-              ? "Саммари сессий появятся здесь. Попроси агента «сохрани сессию в память»."
-              : "Пока пусто. Агент складывает сюда факты через /brigade:memory, или создай кнопкой «Новая»."}
-        </p>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {filtered.map((n) => (
-            <div
-              key={n.id}
-              className="flex flex-col gap-2 rounded-lg border bg-card p-4"
-            >
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="min-w-0 truncate font-medium">
-                  {n.title || n.id}
-                </span>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {n.updated}
-                </span>
-              </div>
-              <p className="line-clamp-4 whitespace-pre-wrap text-sm text-muted-foreground">
-                {n.body}
-              </p>
-              <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-1">
-                <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                  {n.type}
-                </span>
-                {n.tags.map((t) => (
-                  <span
-                    key={t}
-                    className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
-                  >
-                    #{t}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <NewNoteDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        onCreated={(note) => setNotes((prev) => [note, ...(prev ?? [])])}
-      />
     </div>
   );
 }
 
-// NewNoteDialog — создание заметки из UI (title/body/type/tags → MemoryService.CreateNote).
-function NewNoteDialog({
-  open,
-  onOpenChange,
+function Header({ count }: { count: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      <Sparkles className="size-[18px] text-primary" />
+      <h1 className="text-[15px] font-semibold">Память</h1>
+      {count > 0 && (
+        <span className="text-sm text-muted-foreground">· {count}</span>
+      )}
+    </div>
+  );
+}
+
+// TopicCard — карточка темы на полке: цветная полоса, аватар, имя+мета, обзор-клэмп (serif),
+// пара последних заметок. Вся карточка — ссылка в тему.
+function TopicCard({ topic }: { topic: Topic }) {
+  return (
+    <Link
+      to={`/memory/${topic.id}`}
+      className="group relative flex flex-col overflow-hidden rounded-xl border bg-card transition-colors hover:border-foreground/25"
+    >
+      <div className="h-[3px] w-full" style={{ background: topic.color }} />
+      <div className="flex flex-col gap-3 p-4">
+        <div className="flex items-center gap-2.5">
+          <Avatar topic={topic} />
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[15px] font-semibold leading-tight">
+              {topic.name}
+            </div>
+            <div className="mt-0.5 text-xs text-muted-foreground">
+              {noteCountLabel(topic.noteCount)}
+              {topic.updated && ` · ${topic.updated}`}
+            </div>
+          </div>
+        </div>
+
+        {topic.synthesis ? (
+          <p className="line-clamp-3 font-serif text-[12.5px] leading-[1.55] text-muted-foreground">
+            {topic.synthesis}
+          </p>
+        ) : (
+          <p className="font-serif text-[12.5px] italic leading-[1.55] text-muted-foreground/70">
+            Обзор пока не собран.
+          </p>
+        )}
+
+        {topic.recent.length > 0 && (
+          <div className="mt-auto flex flex-col gap-1.5 border-t pt-3">
+            {topic.recent.map((n) => (
+              <div key={n.id} className="flex items-center gap-2">
+                <span
+                  className="size-[5px] shrink-0 rounded-full"
+                  style={{ background: noteType(n.type).color }}
+                />
+                <span className="truncate text-[13px] text-foreground/80">
+                  {n.title || n.body}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Link>
+  );
+}
+
+// Avatar — квадрат-аватар темы: буква/цифра на мягкой заливке цвета темы.
+function Avatar({ topic, size = 38 }: { topic: Topic; size?: number }) {
+  return (
+    <span
+      className="flex shrink-0 items-center justify-center rounded-[10px] font-semibold"
+      style={{
+        width: size,
+        height: size,
+        background: softColor(topic.color),
+        color: topic.color,
+        fontSize: size * 0.42,
+      }}
+    >
+      {topic.initial}
+    </span>
+  );
+}
+
+// NewTopicComposer — инлайн-композер темы над сеткой: имя + выбор цвета.
+function NewTopicComposer({
+  onClose,
   onCreated,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onCreated: (note: Note) => void;
+  onClose: () => void;
+  onCreated: (t: Topic) => void;
 }) {
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [type, setType] = useState<string>("idea");
-  const [layer, setLayer] = useState<"semantic" | "episodic">("semantic");
-  const [tags, setTags] = useState("");
+  const [name, setName] = useState("");
+  const [color, setColor] = useState(TOPIC_COLORS[0]);
   const [busy, setBusy] = useState(false);
+  const navigate = useNavigate();
 
-  async function onSubmit() {
-    if (!body.trim()) return;
+  async function submit() {
+    if (!name.trim()) return;
     setBusy(true);
     try {
-      const res = await memoryClient.createNote({
-        title: title.trim(),
-        body: body.trim(),
-        type,
-        layer,
-        tags: tags
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean),
-        session: "",
-      });
-      if (!res.note) throw new Error("пустой ответ CreateNote");
-      onCreated(res.note);
-      onOpenChange(false);
-      setTitle("");
-      setBody("");
-      setTags("");
-      setType("idea");
-      setLayer("semantic");
+      const res = await memoryClient.createTopic({ name: name.trim(), color });
+      if (!res.topic) throw new Error("пустой ответ CreateTopic");
+      onCreated(res.topic);
+      navigate(`/memory/${res.topic.id}`); // сразу открываем новую тему
     } catch (err) {
       toast.error(
-        err instanceof ConnectError
-          ? err.rawMessage
-          : "Не удалось сохранить заметку",
+        err instanceof ConnectError ? err.rawMessage : "Не удалось создать тему",
       );
     } finally {
       setBusy(false);
@@ -256,86 +258,41 @@ function NewNoteDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Новая заметка</DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Заголовок</Label>
-            <Input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Коротко о чём заметка"
+    <div className="mb-5 rounded-xl border bg-card p-4">
+      <div className="flex flex-col gap-3">
+        <Input
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && void submit()}
+          placeholder="Название темы"
+          className="font-medium"
+        />
+        <div className="flex items-center gap-2">
+          {TOPIC_COLORS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setColor(c)}
+              className={cn(
+                "size-[26px] rounded-full ring-offset-2 ring-offset-card transition",
+                color === c && "ring-2 ring-foreground",
+              )}
+              style={{ background: c }}
+              aria-label={`Цвет ${c}`}
             />
-          </div>
-          <div className="space-y-2">
-            <Label>Текст</Label>
-            <Textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder="Markdown"
-              rows={6}
-            />
-          </div>
-          <div className="flex gap-3">
-            <div className="space-y-2">
-              <Label>Слой</Label>
-              <Select
-                value={layer}
-                onValueChange={(v) => setLayer(v as "semantic" | "episodic")}
-              >
-                <SelectTrigger className="w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="semantic">Факт</SelectItem>
-                  <SelectItem value="episodic">Сессия</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex-1 space-y-2">
-              <Label>Тип</Label>
-              <Select value={type} onValueChange={setType}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {noteTypes.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Теги</Label>
-            <Input
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-              placeholder="через запятую"
-            />
+          ))}
+          <div className="ml-auto flex gap-2">
+            <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>
+              Отмена
+            </Button>
+            <Button size="sm" onClick={() => void submit()} disabled={busy || !name.trim()}>
+              {busy && <Loader2 className="size-4 animate-spin" />}
+              Создать тему
+            </Button>
           </div>
         </div>
-
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={busy}
-          >
-            Отмена
-          </Button>
-          <Button onClick={() => void onSubmit()} disabled={busy || !body.trim()}>
-            {busy && <Loader2 className="size-4 animate-spin" />}
-            Сохранить
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }

@@ -3,16 +3,17 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CreateNoteRequest, CreateNoteResponse, GetNoteRequest, GetNoteResponse, ListNotesRequest, ListNotesResponse } from "./memory_pb.js";
+import { CreateNoteRequest, CreateNoteResponse, CreateTopicRequest, CreateTopicResponse, DeleteNoteRequest, DeleteNoteResponse, GetNoteRequest, GetNoteResponse, GetTopicRequest, GetTopicResponse, ListNotesRequest, ListNotesResponse, ListTopicsRequest, ListTopicsResponse, MoveNoteRequest, MoveNoteResponse, UpdateNoteRequest, UpdateNoteResponse, UpdateTopicOverviewRequest, UpdateTopicOverviewResponse } from "./memory_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
- * MemoryService — личная память пользователя: атомарные markdown-заметки в git-репо.
- * Источник истины — .md-файлы (frontmatter + тело), durability делегирована git-remote.
- * Это КАНОНИЧЕСКИЙ пользовательский API памяти (JWT): зовётся из web, мобильного клиента
- * и любого JWT-клиента; умеет и читать, и создавать. Параллельный вход из сессии
- * (агент/skill внутри контейнера, per-session HMAC-токен) — AgentBridgeService.
- * CreateMemoryNote поверх того же ядра.
+ * MemoryService — личная память пользователя, организованная вокруг ТЕМ (topic-центрично).
+ * Тема — «блокнот»: связный обзор «своими словами» (synthesis, собирается агентом или
+ * правится вручную) + заметки, сгруппированные по подтемам. Источник истины — .md-файлы
+ * в git-репо (тема = каталог `topics/<id>/`, обзор — `_topic.md`, заметки — `<noteId>.md`),
+ * durability делегирована git-remote. Это КАНОНИЧЕСКИЙ пользовательский API памяти (JWT):
+ * web, мобильный клиент, любой JWT-клиент. Параллельный вход из сессии (агент/skill,
+ * per-session HMAC) — AgentBridgeService поверх того же ядра.
  *
  * @generated from service brigade.v1.MemoryService
  */
@@ -20,8 +21,98 @@ export const MemoryService = {
   typeName: "brigade.v1.MemoryService",
   methods: {
     /**
-     * ListNotes — заметки пользователя, при непустом query — фильтр по подстроке
-     * (title/body/tags), сортировка от новых к старым.
+     * ListTopics — все темы пользователя (с производными count/updated и парой последних
+     * заметок для карточки-«полки»). query пуст — все; иначе фильтр по имени/обзору/заметкам.
+     *
+     * @generated from rpc brigade.v1.MemoryService.ListTopics
+     */
+    listTopics: {
+      name: "ListTopics",
+      I: ListTopicsRequest,
+      O: ListTopicsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * GetTopic — тема с полным обзором и всеми её заметками (для экрана темы).
+     *
+     * @generated from rpc brigade.v1.MemoryService.GetTopic
+     */
+    getTopic: {
+      name: "GetTopic",
+      I: GetTopicRequest,
+      O: GetTopicResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * CreateTopic — новая тема (имя + цвет). initial (буква аватара) выводится из имени.
+     *
+     * @generated from rpc brigade.v1.MemoryService.CreateTopic
+     */
+    createTopic: {
+      name: "CreateTopic",
+      I: CreateTopicRequest,
+      O: CreateTopicResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * UpdateTopicOverview — перезаписать synthesis темы (ручное редактирование обзора).
+     *
+     * @generated from rpc brigade.v1.MemoryService.UpdateTopicOverview
+     */
+    updateTopicOverview: {
+      name: "UpdateTopicOverview",
+      I: UpdateTopicOverviewRequest,
+      O: UpdateTopicOverviewResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * CreateNote — создать заметку в теме/подтеме (write .md → commit → push синхронно).
+     * session пуст — заметка создана из UI, а не сессией; from — человекочитаемый провенанс.
+     *
+     * @generated from rpc brigade.v1.MemoryService.CreateNote
+     */
+    createNote: {
+      name: "CreateNote",
+      I: CreateNoteRequest,
+      O: CreateNoteResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * UpdateNote — правка полей заметки (title/body/type/sub) на месте.
+     *
+     * @generated from rpc brigade.v1.MemoryService.UpdateNote
+     */
+    updateNote: {
+      name: "UpdateNote",
+      I: UpdateNoteRequest,
+      O: UpdateNoteResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * MoveNote — перенос заметки в другую тему и/или подтему (перекладывает файл).
+     *
+     * @generated from rpc brigade.v1.MemoryService.MoveNote
+     */
+    moveNote: {
+      name: "MoveNote",
+      I: MoveNoteRequest,
+      O: MoveNoteResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * DeleteNote — удалить заметку (rm .md → commit → push).
+     *
+     * @generated from rpc brigade.v1.MemoryService.DeleteNote
+     */
+    deleteNote: {
+      name: "DeleteNote",
+      I: DeleteNoteRequest,
+      O: DeleteNoteResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * --- legacy, плоский доступ (мобильный клиент/обратная совместимость) ---
+     * ListNotes — все заметки пользователя плоским списком (без группировки по темам).
      *
      * @generated from rpc brigade.v1.MemoryService.ListNotes
      */
@@ -40,18 +131,6 @@ export const MemoryService = {
       name: "GetNote",
       I: GetNoteRequest,
       O: GetNoteResponse,
-      kind: MethodKind.Unary,
-    },
-    /**
-     * CreateNote — создать заметку (write .md → commit → push синхронно). session пуст —
-     * заметка создана из UI/мобилы, а не сессией.
-     *
-     * @generated from rpc brigade.v1.MemoryService.CreateNote
-     */
-    createNote: {
-      name: "CreateNote",
-      I: CreateNoteRequest,
-      O: CreateNoteResponse,
       kind: MethodKind.Unary,
     },
   }

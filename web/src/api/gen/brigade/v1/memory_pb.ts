@@ -7,7 +7,116 @@ import type { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialM
 import { Message, proto3 } from "@bufbuild/protobuf";
 
 /**
- * Note — одна заметка памяти.
+ * Topic — тема памяти («блокнот»).
+ *
+ * @generated from message brigade.v1.Topic
+ */
+export class Topic extends Message<Topic> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name = "";
+
+  /**
+   * hex акцента (из палитры тем)
+   *
+   * @generated from field: string color = 3;
+   */
+  color = "";
+
+  /**
+   * буква/цифра аватара (выводится из name)
+   *
+   * @generated from field: string initial = 4;
+   */
+  initial = "";
+
+  /**
+   * markdown-обзор «О чём эта тема» (может быть пустым)
+   *
+   * @generated from field: string synthesis = 5;
+   */
+  synthesis = "";
+
+  /**
+   * подтемы (порядок значим; первая — дефолтная)
+   *
+   * @generated from field: repeated string subs = 6;
+   */
+  subs: string[] = [];
+
+  /**
+   * производное: число заметок
+   *
+   * @generated from field: int32 note_count = 7;
+   */
+  noteCount = 0;
+
+  /**
+   * производное: самая свежая дата (тема/заметки)
+   *
+   * @generated from field: string updated = 8;
+   */
+  updated = "";
+
+  /**
+   * производное: уникальных сессий-источников
+   *
+   * @generated from field: int32 chat_count = 9;
+   */
+  chatCount = 0;
+
+  /**
+   * производное: 1-2 последних заметки (для карточки полки)
+   *
+   * @generated from field: repeated brigade.v1.Note recent = 10;
+   */
+  recent: Note[] = [];
+
+  constructor(data?: PartialMessage<Topic>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.Topic";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "color", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "initial", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "synthesis", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "subs", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 7, name: "note_count", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 8, name: "updated", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 9, name: "chat_count", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 10, name: "recent", kind: "message", T: Note, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Topic {
+    return new Topic().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): Topic {
+    return new Topic().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): Topic {
+    return new Topic().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: Topic | PlainMessage<Topic> | undefined, b: Topic | PlainMessage<Topic> | undefined): boolean {
+    return proto3.util.equals(Topic, a, b);
+  }
+}
+
+/**
+ * Note — одна заметка памяти (живёт внутри темы/подтемы).
  *
  * @generated from message brigade.v1.Note
  */
@@ -42,7 +151,7 @@ export class Note extends Message<Note> {
   tags: string[] = [];
 
   /**
-   * провенанс: id сессии-источника (пусто — создано из UI)
+   * провенанс: id сессии-источника (пусто — из UI)
    *
    * @generated from field: string session = 6;
    */
@@ -61,11 +170,32 @@ export class Note extends Message<Note> {
   updated = "";
 
   /**
-   * layer — слой памяти: semantic (атомарный факт, дефолт) | episodic (саммари сессии).
+   * legacy-слой: semantic|episodic (в темо-UI не используется)
    *
    * @generated from field: string layer = 9;
    */
   layer = "";
+
+  /**
+   * тема-владелец ("general" — виртуальная «Общее» для legacy)
+   *
+   * @generated from field: string topic_id = 10;
+   */
+  topicId = "";
+
+  /**
+   * подтема внутри темы
+   *
+   * @generated from field: string sub = 11;
+   */
+  sub = "";
+
+  /**
+   * человекочитаемый провенанс («чат: …», «вручную»)
+   *
+   * @generated from field: string from = 12;
+   */
+  from = "";
 
   constructor(data?: PartialMessage<Note>) {
     super();
@@ -84,6 +214,9 @@ export class Note extends Message<Note> {
     { no: 7, name: "created", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 8, name: "updated", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 9, name: "layer", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 10, name: "topic_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 11, name: "sub", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 12, name: "from", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Note {
@@ -100,6 +233,736 @@ export class Note extends Message<Note> {
 
   static equals(a: Note | PlainMessage<Note> | undefined, b: Note | PlainMessage<Note> | undefined): boolean {
     return proto3.util.equals(Note, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.ListTopicsRequest
+ */
+export class ListTopicsRequest extends Message<ListTopicsRequest> {
+  /**
+   * пусто — все темы
+   *
+   * @generated from field: string query = 1;
+   */
+  query = "";
+
+  constructor(data?: PartialMessage<ListTopicsRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.ListTopicsRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "query", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ListTopicsRequest {
+    return new ListTopicsRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ListTopicsRequest {
+    return new ListTopicsRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ListTopicsRequest {
+    return new ListTopicsRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: ListTopicsRequest | PlainMessage<ListTopicsRequest> | undefined, b: ListTopicsRequest | PlainMessage<ListTopicsRequest> | undefined): boolean {
+    return proto3.util.equals(ListTopicsRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.ListTopicsResponse
+ */
+export class ListTopicsResponse extends Message<ListTopicsResponse> {
+  /**
+   * @generated from field: repeated brigade.v1.Topic topics = 1;
+   */
+  topics: Topic[] = [];
+
+  constructor(data?: PartialMessage<ListTopicsResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.ListTopicsResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "topics", kind: "message", T: Topic, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ListTopicsResponse {
+    return new ListTopicsResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ListTopicsResponse {
+    return new ListTopicsResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ListTopicsResponse {
+    return new ListTopicsResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: ListTopicsResponse | PlainMessage<ListTopicsResponse> | undefined, b: ListTopicsResponse | PlainMessage<ListTopicsResponse> | undefined): boolean {
+    return proto3.util.equals(ListTopicsResponse, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.GetTopicRequest
+ */
+export class GetTopicRequest extends Message<GetTopicRequest> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  constructor(data?: PartialMessage<GetTopicRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.GetTopicRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetTopicRequest {
+    return new GetTopicRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetTopicRequest {
+    return new GetTopicRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetTopicRequest {
+    return new GetTopicRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: GetTopicRequest | PlainMessage<GetTopicRequest> | undefined, b: GetTopicRequest | PlainMessage<GetTopicRequest> | undefined): boolean {
+    return proto3.util.equals(GetTopicRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.GetTopicResponse
+ */
+export class GetTopicResponse extends Message<GetTopicResponse> {
+  /**
+   * @generated from field: brigade.v1.Topic topic = 1;
+   */
+  topic?: Topic;
+
+  /**
+   * все заметки темы (клиент группирует по sub)
+   *
+   * @generated from field: repeated brigade.v1.Note notes = 2;
+   */
+  notes: Note[] = [];
+
+  constructor(data?: PartialMessage<GetTopicResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.GetTopicResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "topic", kind: "message", T: Topic },
+    { no: 2, name: "notes", kind: "message", T: Note, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetTopicResponse {
+    return new GetTopicResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetTopicResponse {
+    return new GetTopicResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetTopicResponse {
+    return new GetTopicResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: GetTopicResponse | PlainMessage<GetTopicResponse> | undefined, b: GetTopicResponse | PlainMessage<GetTopicResponse> | undefined): boolean {
+    return proto3.util.equals(GetTopicResponse, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.CreateTopicRequest
+ */
+export class CreateTopicRequest extends Message<CreateTopicRequest> {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name = "";
+
+  /**
+   * hex из палитры (пусто — назначит сервер)
+   *
+   * @generated from field: string color = 2;
+   */
+  color = "";
+
+  constructor(data?: PartialMessage<CreateTopicRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.CreateTopicRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "color", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CreateTopicRequest {
+    return new CreateTopicRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): CreateTopicRequest {
+    return new CreateTopicRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): CreateTopicRequest {
+    return new CreateTopicRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: CreateTopicRequest | PlainMessage<CreateTopicRequest> | undefined, b: CreateTopicRequest | PlainMessage<CreateTopicRequest> | undefined): boolean {
+    return proto3.util.equals(CreateTopicRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.CreateTopicResponse
+ */
+export class CreateTopicResponse extends Message<CreateTopicResponse> {
+  /**
+   * @generated from field: brigade.v1.Topic topic = 1;
+   */
+  topic?: Topic;
+
+  constructor(data?: PartialMessage<CreateTopicResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.CreateTopicResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "topic", kind: "message", T: Topic },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CreateTopicResponse {
+    return new CreateTopicResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): CreateTopicResponse {
+    return new CreateTopicResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): CreateTopicResponse {
+    return new CreateTopicResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: CreateTopicResponse | PlainMessage<CreateTopicResponse> | undefined, b: CreateTopicResponse | PlainMessage<CreateTopicResponse> | undefined): boolean {
+    return proto3.util.equals(CreateTopicResponse, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.UpdateTopicOverviewRequest
+ */
+export class UpdateTopicOverviewRequest extends Message<UpdateTopicOverviewRequest> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  /**
+   * @generated from field: string synthesis = 2;
+   */
+  synthesis = "";
+
+  constructor(data?: PartialMessage<UpdateTopicOverviewRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.UpdateTopicOverviewRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "synthesis", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): UpdateTopicOverviewRequest {
+    return new UpdateTopicOverviewRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): UpdateTopicOverviewRequest {
+    return new UpdateTopicOverviewRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): UpdateTopicOverviewRequest {
+    return new UpdateTopicOverviewRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: UpdateTopicOverviewRequest | PlainMessage<UpdateTopicOverviewRequest> | undefined, b: UpdateTopicOverviewRequest | PlainMessage<UpdateTopicOverviewRequest> | undefined): boolean {
+    return proto3.util.equals(UpdateTopicOverviewRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.UpdateTopicOverviewResponse
+ */
+export class UpdateTopicOverviewResponse extends Message<UpdateTopicOverviewResponse> {
+  /**
+   * @generated from field: brigade.v1.Topic topic = 1;
+   */
+  topic?: Topic;
+
+  constructor(data?: PartialMessage<UpdateTopicOverviewResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.UpdateTopicOverviewResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "topic", kind: "message", T: Topic },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): UpdateTopicOverviewResponse {
+    return new UpdateTopicOverviewResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): UpdateTopicOverviewResponse {
+    return new UpdateTopicOverviewResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): UpdateTopicOverviewResponse {
+    return new UpdateTopicOverviewResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: UpdateTopicOverviewResponse | PlainMessage<UpdateTopicOverviewResponse> | undefined, b: UpdateTopicOverviewResponse | PlainMessage<UpdateTopicOverviewResponse> | undefined): boolean {
+    return proto3.util.equals(UpdateTopicOverviewResponse, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.CreateNoteRequest
+ */
+export class CreateNoteRequest extends Message<CreateNoteRequest> {
+  /**
+   * @generated from field: string title = 1;
+   */
+  title = "";
+
+  /**
+   * @generated from field: string body = 2;
+   */
+  body = "";
+
+  /**
+   * @generated from field: string type = 3;
+   */
+  type = "";
+
+  /**
+   * @generated from field: repeated string tags = 4;
+   */
+  tags: string[] = [];
+
+  /**
+   * опционально: провенанс
+   *
+   * @generated from field: string session = 5;
+   */
+  session = "";
+
+  /**
+   * legacy: semantic (дефолт) | episodic
+   *
+   * @generated from field: string layer = 6;
+   */
+  layer = "";
+
+  /**
+   * тема-владелец (пусто — «Общее»)
+   *
+   * @generated from field: string topic_id = 7;
+   */
+  topicId = "";
+
+  /**
+   * подтема (пусто — дефолтная тема темы)
+   *
+   * @generated from field: string sub = 8;
+   */
+  sub = "";
+
+  /**
+   * человекочитаемый провенанс
+   *
+   * @generated from field: string from = 9;
+   */
+  from = "";
+
+  constructor(data?: PartialMessage<CreateNoteRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.CreateNoteRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "body", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "tags", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 5, name: "session", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "layer", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "topic_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 8, name: "sub", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 9, name: "from", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CreateNoteRequest {
+    return new CreateNoteRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): CreateNoteRequest {
+    return new CreateNoteRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): CreateNoteRequest {
+    return new CreateNoteRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: CreateNoteRequest | PlainMessage<CreateNoteRequest> | undefined, b: CreateNoteRequest | PlainMessage<CreateNoteRequest> | undefined): boolean {
+    return proto3.util.equals(CreateNoteRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.CreateNoteResponse
+ */
+export class CreateNoteResponse extends Message<CreateNoteResponse> {
+  /**
+   * @generated from field: brigade.v1.Note note = 1;
+   */
+  note?: Note;
+
+  /**
+   * доказательство durability (заметка запушена)
+   *
+   * @generated from field: string commit_sha = 2;
+   */
+  commitSha = "";
+
+  constructor(data?: PartialMessage<CreateNoteResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.CreateNoteResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "note", kind: "message", T: Note },
+    { no: 2, name: "commit_sha", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CreateNoteResponse {
+    return new CreateNoteResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): CreateNoteResponse {
+    return new CreateNoteResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): CreateNoteResponse {
+    return new CreateNoteResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: CreateNoteResponse | PlainMessage<CreateNoteResponse> | undefined, b: CreateNoteResponse | PlainMessage<CreateNoteResponse> | undefined): boolean {
+    return proto3.util.equals(CreateNoteResponse, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.UpdateNoteRequest
+ */
+export class UpdateNoteRequest extends Message<UpdateNoteRequest> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  /**
+   * @generated from field: string title = 2;
+   */
+  title = "";
+
+  /**
+   * @generated from field: string body = 3;
+   */
+  body = "";
+
+  /**
+   * @generated from field: string type = 4;
+   */
+  type = "";
+
+  /**
+   * @generated from field: string sub = 5;
+   */
+  sub = "";
+
+  constructor(data?: PartialMessage<UpdateNoteRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.UpdateNoteRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "body", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "sub", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): UpdateNoteRequest {
+    return new UpdateNoteRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): UpdateNoteRequest {
+    return new UpdateNoteRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): UpdateNoteRequest {
+    return new UpdateNoteRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: UpdateNoteRequest | PlainMessage<UpdateNoteRequest> | undefined, b: UpdateNoteRequest | PlainMessage<UpdateNoteRequest> | undefined): boolean {
+    return proto3.util.equals(UpdateNoteRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.UpdateNoteResponse
+ */
+export class UpdateNoteResponse extends Message<UpdateNoteResponse> {
+  /**
+   * @generated from field: brigade.v1.Note note = 1;
+   */
+  note?: Note;
+
+  /**
+   * @generated from field: string commit_sha = 2;
+   */
+  commitSha = "";
+
+  constructor(data?: PartialMessage<UpdateNoteResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.UpdateNoteResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "note", kind: "message", T: Note },
+    { no: 2, name: "commit_sha", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): UpdateNoteResponse {
+    return new UpdateNoteResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): UpdateNoteResponse {
+    return new UpdateNoteResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): UpdateNoteResponse {
+    return new UpdateNoteResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: UpdateNoteResponse | PlainMessage<UpdateNoteResponse> | undefined, b: UpdateNoteResponse | PlainMessage<UpdateNoteResponse> | undefined): boolean {
+    return proto3.util.equals(UpdateNoteResponse, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.MoveNoteRequest
+ */
+export class MoveNoteRequest extends Message<MoveNoteRequest> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  /**
+   * @generated from field: string to_topic_id = 2;
+   */
+  toTopicId = "";
+
+  /**
+   * @generated from field: string to_sub = 3;
+   */
+  toSub = "";
+
+  constructor(data?: PartialMessage<MoveNoteRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.MoveNoteRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "to_topic_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "to_sub", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): MoveNoteRequest {
+    return new MoveNoteRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): MoveNoteRequest {
+    return new MoveNoteRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): MoveNoteRequest {
+    return new MoveNoteRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: MoveNoteRequest | PlainMessage<MoveNoteRequest> | undefined, b: MoveNoteRequest | PlainMessage<MoveNoteRequest> | undefined): boolean {
+    return proto3.util.equals(MoveNoteRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.MoveNoteResponse
+ */
+export class MoveNoteResponse extends Message<MoveNoteResponse> {
+  /**
+   * @generated from field: brigade.v1.Note note = 1;
+   */
+  note?: Note;
+
+  /**
+   * @generated from field: string commit_sha = 2;
+   */
+  commitSha = "";
+
+  constructor(data?: PartialMessage<MoveNoteResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.MoveNoteResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "note", kind: "message", T: Note },
+    { no: 2, name: "commit_sha", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): MoveNoteResponse {
+    return new MoveNoteResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): MoveNoteResponse {
+    return new MoveNoteResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): MoveNoteResponse {
+    return new MoveNoteResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: MoveNoteResponse | PlainMessage<MoveNoteResponse> | undefined, b: MoveNoteResponse | PlainMessage<MoveNoteResponse> | undefined): boolean {
+    return proto3.util.equals(MoveNoteResponse, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.DeleteNoteRequest
+ */
+export class DeleteNoteRequest extends Message<DeleteNoteRequest> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  constructor(data?: PartialMessage<DeleteNoteRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.DeleteNoteRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DeleteNoteRequest {
+    return new DeleteNoteRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): DeleteNoteRequest {
+    return new DeleteNoteRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): DeleteNoteRequest {
+    return new DeleteNoteRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: DeleteNoteRequest | PlainMessage<DeleteNoteRequest> | undefined, b: DeleteNoteRequest | PlainMessage<DeleteNoteRequest> | undefined): boolean {
+    return proto3.util.equals(DeleteNoteRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.DeleteNoteResponse
+ */
+export class DeleteNoteResponse extends Message<DeleteNoteResponse> {
+  /**
+   * @generated from field: string commit_sha = 1;
+   */
+  commitSha = "";
+
+  constructor(data?: PartialMessage<DeleteNoteResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.DeleteNoteResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "commit_sha", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DeleteNoteResponse {
+    return new DeleteNoteResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): DeleteNoteResponse {
+    return new DeleteNoteResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): DeleteNoteResponse {
+    return new DeleteNoteResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: DeleteNoteResponse | PlainMessage<DeleteNoteResponse> | undefined, b: DeleteNoteResponse | PlainMessage<DeleteNoteResponse> | undefined): boolean {
+    return proto3.util.equals(DeleteNoteResponse, a, b);
   }
 }
 
@@ -250,122 +1113,6 @@ export class GetNoteResponse extends Message<GetNoteResponse> {
 
   static equals(a: GetNoteResponse | PlainMessage<GetNoteResponse> | undefined, b: GetNoteResponse | PlainMessage<GetNoteResponse> | undefined): boolean {
     return proto3.util.equals(GetNoteResponse, a, b);
-  }
-}
-
-/**
- * @generated from message brigade.v1.CreateNoteRequest
- */
-export class CreateNoteRequest extends Message<CreateNoteRequest> {
-  /**
-   * @generated from field: string title = 1;
-   */
-  title = "";
-
-  /**
-   * @generated from field: string body = 2;
-   */
-  body = "";
-
-  /**
-   * @generated from field: string type = 3;
-   */
-  type = "";
-
-  /**
-   * @generated from field: repeated string tags = 4;
-   */
-  tags: string[] = [];
-
-  /**
-   * опционально: провенанс
-   *
-   * @generated from field: string session = 5;
-   */
-  session = "";
-
-  /**
-   * semantic (дефолт) | episodic
-   *
-   * @generated from field: string layer = 6;
-   */
-  layer = "";
-
-  constructor(data?: PartialMessage<CreateNoteRequest>) {
-    super();
-    proto3.util.initPartial(data, this);
-  }
-
-  static readonly runtime: typeof proto3 = proto3;
-  static readonly typeName = "brigade.v1.CreateNoteRequest";
-  static readonly fields: FieldList = proto3.util.newFieldList(() => [
-    { no: 1, name: "title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 2, name: "body", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 3, name: "type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 4, name: "tags", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
-    { no: 5, name: "session", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 6, name: "layer", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-  ]);
-
-  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CreateNoteRequest {
-    return new CreateNoteRequest().fromBinary(bytes, options);
-  }
-
-  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): CreateNoteRequest {
-    return new CreateNoteRequest().fromJson(jsonValue, options);
-  }
-
-  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): CreateNoteRequest {
-    return new CreateNoteRequest().fromJsonString(jsonString, options);
-  }
-
-  static equals(a: CreateNoteRequest | PlainMessage<CreateNoteRequest> | undefined, b: CreateNoteRequest | PlainMessage<CreateNoteRequest> | undefined): boolean {
-    return proto3.util.equals(CreateNoteRequest, a, b);
-  }
-}
-
-/**
- * @generated from message brigade.v1.CreateNoteResponse
- */
-export class CreateNoteResponse extends Message<CreateNoteResponse> {
-  /**
-   * @generated from field: brigade.v1.Note note = 1;
-   */
-  note?: Note;
-
-  /**
-   * доказательство durability (заметка запушена)
-   *
-   * @generated from field: string commit_sha = 2;
-   */
-  commitSha = "";
-
-  constructor(data?: PartialMessage<CreateNoteResponse>) {
-    super();
-    proto3.util.initPartial(data, this);
-  }
-
-  static readonly runtime: typeof proto3 = proto3;
-  static readonly typeName = "brigade.v1.CreateNoteResponse";
-  static readonly fields: FieldList = proto3.util.newFieldList(() => [
-    { no: 1, name: "note", kind: "message", T: Note },
-    { no: 2, name: "commit_sha", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-  ]);
-
-  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CreateNoteResponse {
-    return new CreateNoteResponse().fromBinary(bytes, options);
-  }
-
-  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): CreateNoteResponse {
-    return new CreateNoteResponse().fromJson(jsonValue, options);
-  }
-
-  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): CreateNoteResponse {
-    return new CreateNoteResponse().fromJsonString(jsonString, options);
-  }
-
-  static equals(a: CreateNoteResponse | PlainMessage<CreateNoteResponse> | undefined, b: CreateNoteResponse | PlainMessage<CreateNoteResponse> | undefined): boolean {
-    return proto3.util.equals(CreateNoteResponse, a, b);
   }
 }
 
