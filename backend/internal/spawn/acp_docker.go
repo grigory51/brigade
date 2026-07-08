@@ -165,20 +165,27 @@ func (d *DockerACPSpawner) daemonAddr(ctx context.Context, sessionID string) (st
 	if err != nil {
 		return "", err
 	}
-	info, err := d.spawner.cli.ContainerInspect(ctx, id)
+	return d.spawner.daemonAddrByID(ctx, id)
+}
+
+// daemonAddrByID резолвит http-адрес демона контейнера по его id в зависимости от режима
+// brigade (общий резолвер для per-session ACP и per-user CLI демонов):
+//   - host-режим (selfNetwork пуст): опубликованный порт на 127.0.0.1 (bridge-IP контейнера
+//     с хоста не роутится);
+//   - container-режим (brigade на общей сети): прямой IP контейнера:daemonPort.
+func (s *DockerSpawner) daemonAddrByID(ctx context.Context, id string) (string, error) {
+	info, err := s.cli.ContainerInspect(ctx, id)
 	if err != nil {
 		return "", fmt.Errorf("spawn: container inspect: %w", err)
 	}
-	if d.spawner.selfNetwork == "" {
-		// host-режим: опубликованный порт на 127.0.0.1.
+	if s.selfNetwork == "" {
 		if info.NetworkSettings != nil {
 			if binds := info.NetworkSettings.Ports[nat.Port(fmt.Sprintf("%d/tcp", daemonPort))]; len(binds) > 0 && binds[0].HostPort != "" {
 				return fmt.Sprintf("http://127.0.0.1:%s", binds[0].HostPort), nil
 			}
 		}
-		return "", fmt.Errorf("spawn: daemon port for session %s not published", sessionID)
+		return "", fmt.Errorf("spawn: daemon port for container %s not published", id)
 	}
-	// container-режим: прямой IP на общей сети.
 	if info.NetworkSettings != nil {
 		for _, nw := range info.NetworkSettings.Networks {
 			if nw.IPAddress != "" {
