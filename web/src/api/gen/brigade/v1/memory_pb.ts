@@ -557,6 +557,170 @@ export class UpdateTopicOverviewResponse extends Message<UpdateTopicOverviewResp
 }
 
 /**
+ * @generated from message brigade.v1.UpdateTopicRequest
+ */
+export class UpdateTopicRequest extends Message<UpdateTopicRequest> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  /**
+   * пусто — не менять
+   *
+   * @generated from field: string name = 2;
+   */
+  name = "";
+
+  /**
+   * пусто — не менять
+   *
+   * @generated from field: string color = 3;
+   */
+  color = "";
+
+  constructor(data?: PartialMessage<UpdateTopicRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.UpdateTopicRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "color", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): UpdateTopicRequest {
+    return new UpdateTopicRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): UpdateTopicRequest {
+    return new UpdateTopicRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): UpdateTopicRequest {
+    return new UpdateTopicRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: UpdateTopicRequest | PlainMessage<UpdateTopicRequest> | undefined, b: UpdateTopicRequest | PlainMessage<UpdateTopicRequest> | undefined): boolean {
+    return proto3.util.equals(UpdateTopicRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.UpdateTopicResponse
+ */
+export class UpdateTopicResponse extends Message<UpdateTopicResponse> {
+  /**
+   * @generated from field: brigade.v1.Topic topic = 1;
+   */
+  topic?: Topic;
+
+  constructor(data?: PartialMessage<UpdateTopicResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.UpdateTopicResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "topic", kind: "message", T: Topic },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): UpdateTopicResponse {
+    return new UpdateTopicResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): UpdateTopicResponse {
+    return new UpdateTopicResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): UpdateTopicResponse {
+    return new UpdateTopicResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: UpdateTopicResponse | PlainMessage<UpdateTopicResponse> | undefined, b: UpdateTopicResponse | PlainMessage<UpdateTopicResponse> | undefined): boolean {
+    return proto3.util.equals(UpdateTopicResponse, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.DeleteTopicRequest
+ */
+export class DeleteTopicRequest extends Message<DeleteTopicRequest> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  constructor(data?: PartialMessage<DeleteTopicRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.DeleteTopicRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DeleteTopicRequest {
+    return new DeleteTopicRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): DeleteTopicRequest {
+    return new DeleteTopicRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): DeleteTopicRequest {
+    return new DeleteTopicRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: DeleteTopicRequest | PlainMessage<DeleteTopicRequest> | undefined, b: DeleteTopicRequest | PlainMessage<DeleteTopicRequest> | undefined): boolean {
+    return proto3.util.equals(DeleteTopicRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.DeleteTopicResponse
+ */
+export class DeleteTopicResponse extends Message<DeleteTopicResponse> {
+  /**
+   * @generated from field: string commit_sha = 1;
+   */
+  commitSha = "";
+
+  constructor(data?: PartialMessage<DeleteTopicResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.DeleteTopicResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "commit_sha", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DeleteTopicResponse {
+    return new DeleteTopicResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): DeleteTopicResponse {
+    return new DeleteTopicResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): DeleteTopicResponse {
+    return new DeleteTopicResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: DeleteTopicResponse | PlainMessage<DeleteTopicResponse> | undefined, b: DeleteTopicResponse | PlainMessage<DeleteTopicResponse> | undefined): boolean {
+    return proto3.util.equals(DeleteTopicResponse, a, b);
+  }
+}
+
+/**
  * @generated from message brigade.v1.CreateNoteRequest
  */
 export class CreateNoteRequest extends Message<CreateNoteRequest> {

@@ -395,6 +395,77 @@ func (s *Service) UpdateTopicOverview(ctx context.Context, userID, id, synthesis
 	return topic, nil
 }
 
+// UpdateTopic переименовывает тему и/или меняет её цвет (id неизменен). Пустые поля не
+// трогаются; initial пересчитывается из нового имени.
+func (s *Service) UpdateTopic(ctx context.Context, userID, id, name, color string) (Topic, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sp, err := s.prepareLocked(ctx, userID)
+	if err != nil {
+		return Topic{}, err
+	}
+	metas, err := scanTopics(sp.repoDir)
+	if err != nil {
+		return Topic{}, err
+	}
+	topic := Topic{}
+	for _, m := range metas {
+		if m.ID == id {
+			topic = m
+			break
+		}
+	}
+	if topic.ID == "" {
+		topic = virtualTopicMeta(id) // материализуем ранее виртуальную тему (напр. «Общее»)
+	}
+	if name = strings.TrimSpace(name); name != "" {
+		topic.Name = name
+		topic.Initial = initialOf(name)
+	}
+	if color != "" {
+		topic.Color = color
+	}
+	topic.Updated = time.Now().Format("2006-01-02")
+	if topic.Created == "" {
+		topic.Created = topic.Updated
+	}
+	rel := filepath.Join("topics", id, topicMetaFile)
+	abs := filepath.Join(sp.repoDir, rel)
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		return Topic{}, fmt.Errorf("memory: mkdir topic: %w", err)
+	}
+	if err := os.WriteFile(abs, renderTopic(topic), 0o644); err != nil {
+		return Topic{}, fmt.Errorf("memory: write topic: %w", err)
+	}
+	if _, err := s.commitPushLocked(ctx, sp, "memory: topic update "+id, rel); err != nil {
+		return Topic{}, err
+	}
+	return topic, nil
+}
+
+// DeleteTopic удаляет тему целиком (каталог topics/<id>/ со всеми заметками). Виртуальную
+// «Общее» удалить нельзя — она собирает legacy-заметки, которых нет в topics/general/.
+func (s *Service) DeleteTopic(ctx context.Context, userID, id string) (string, error) {
+	if id == generalTopicID {
+		return "", fmt.Errorf("memory: cannot delete the «Общее» topic")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sp, err := s.prepareLocked(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	rel := filepath.Join("topics", id)
+	abs := filepath.Join(sp.repoDir, rel)
+	if _, statErr := os.Stat(abs); os.IsNotExist(statErr) {
+		return "", ErrNotFound
+	}
+	if err := os.RemoveAll(abs); err != nil {
+		return "", fmt.Errorf("memory: remove topic: %w", err)
+	}
+	return s.commitPushLocked(ctx, sp, "memory: topic delete "+id, rel)
+}
+
 // --- правки заметок ---
 
 // UpdateNote меняет поля заметки на месте (title/body/type/sub). Пустые title/body/type

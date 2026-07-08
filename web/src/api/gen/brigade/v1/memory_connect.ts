@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CreateNoteRequest, CreateNoteResponse, CreateTopicRequest, CreateTopicResponse, DeleteNoteRequest, DeleteNoteResponse, GetNoteRequest, GetNoteResponse, GetTopicRequest, GetTopicResponse, ListNotesRequest, ListNotesResponse, ListTopicsRequest, ListTopicsResponse, MoveNoteRequest, MoveNoteResponse, UpdateNoteRequest, UpdateNoteResponse, UpdateTopicOverviewRequest, UpdateTopicOverviewResponse } from "./memory_pb.js";
+import { CreateNoteRequest, CreateNoteResponse, CreateTopicRequest, CreateTopicResponse, DeleteNoteRequest, DeleteNoteResponse, DeleteTopicRequest, DeleteTopicResponse, GetNoteRequest, GetNoteResponse, GetTopicRequest, GetTopicResponse, ListNotesRequest, ListNotesResponse, ListTopicsRequest, ListTopicsResponse, MoveNoteRequest, MoveNoteResponse, UpdateNoteRequest, UpdateNoteResponse, UpdateTopicOverviewRequest, UpdateTopicOverviewResponse, UpdateTopicRequest, UpdateTopicResponse } from "./memory_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -63,6 +63,29 @@ export const MemoryService = {
       name: "UpdateTopicOverview",
       I: UpdateTopicOverviewRequest,
       O: UpdateTopicOverviewResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * UpdateTopic — переименование/смена цвета темы (id неизменен). Пустые поля не меняются.
+     *
+     * @generated from rpc brigade.v1.MemoryService.UpdateTopic
+     */
+    updateTopic: {
+      name: "UpdateTopic",
+      I: UpdateTopicRequest,
+      O: UpdateTopicResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * DeleteTopic — удалить тему целиком (каталог topics/<id>/ со всеми заметками). Виртуальную
+     * «Общее» удалить нельзя.
+     *
+     * @generated from rpc brigade.v1.MemoryService.DeleteTopic
+     */
+    deleteTopic: {
+      name: "DeleteTopic",
+      I: DeleteTopicRequest,
+      O: DeleteTopicResponse,
       kind: MethodKind.Unary,
     },
     /**

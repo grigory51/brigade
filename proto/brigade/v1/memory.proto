@@ -19,6 +19,11 @@ service MemoryService {
   rpc CreateTopic(CreateTopicRequest) returns (CreateTopicResponse) {}
   // UpdateTopicOverview — перезаписать synthesis темы (ручное редактирование обзора).
   rpc UpdateTopicOverview(UpdateTopicOverviewRequest) returns (UpdateTopicOverviewResponse) {}
+  // UpdateTopic — переименование/смена цвета темы (id неизменен). Пустые поля не меняются.
+  rpc UpdateTopic(UpdateTopicRequest) returns (UpdateTopicResponse) {}
+  // DeleteTopic — удалить тему целиком (каталог topics/<id>/ со всеми заметками). Виртуальную
+  // «Общее» удалить нельзя.
+  rpc DeleteTopic(DeleteTopicRequest) returns (DeleteTopicResponse) {}
 
   // CreateNote — создать заметку в теме/подтеме (write .md → commit → push синхронно).
   // session пуст — заметка создана из UI, а не сессией; from — человекочитаемый провенанс.
@@ -100,6 +105,24 @@ message UpdateTopicOverviewRequest {
 
 message UpdateTopicOverviewResponse {
   Topic topic = 1;
+}
+
+message UpdateTopicRequest {
+  string id = 1;
+  string name = 2;               // пусто — не менять
+  string color = 3;              // пусто — не менять
+}
+
+message UpdateTopicResponse {
+  Topic topic = 1;
+}
+
+message DeleteTopicRequest {
+  string id = 1;
+}
+
+message DeleteTopicResponse {
+  string commit_sha = 1;
 }
 
 message CreateNoteRequest {

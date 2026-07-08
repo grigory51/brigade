@@ -137,6 +137,32 @@ func (s *MemoryService) UpdateTopicOverview(ctx context.Context, req *connect.Re
 	return connect.NewResponse(&v1.UpdateTopicOverviewResponse{Topic: topicToProto(t)}), nil
 }
 
+// UpdateTopic переименовывает тему / меняет цвет.
+func (s *MemoryService) UpdateTopic(ctx context.Context, req *connect.Request[v1.UpdateTopicRequest]) (*connect.Response[v1.UpdateTopicResponse], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	t, err := s.memory.UpdateTopic(ctx, userID, req.Msg.Id, req.Msg.Name, req.Msg.Color)
+	if err != nil {
+		return nil, memoryError(err)
+	}
+	return connect.NewResponse(&v1.UpdateTopicResponse{Topic: topicToProto(t)}), nil
+}
+
+// DeleteTopic удаляет тему целиком.
+func (s *MemoryService) DeleteTopic(ctx context.Context, req *connect.Request[v1.DeleteTopicRequest]) (*connect.Response[v1.DeleteTopicResponse], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sha, err := s.memory.DeleteTopic(ctx, userID, req.Msg.Id)
+	if err != nil {
+		return nil, memoryError(err)
+	}
+	return connect.NewResponse(&v1.DeleteTopicResponse{CommitSha: sha}), nil
+}
+
 // UpdateNote правит поля заметки на месте.
 func (s *MemoryService) UpdateNote(ctx context.Context, req *connect.Request[v1.UpdateNoteRequest]) (*connect.Response[v1.UpdateNoteResponse], error) {
 	userID, err := requireUser(ctx)

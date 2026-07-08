@@ -44,6 +44,12 @@ const (
 	// MemoryServiceUpdateTopicOverviewProcedure is the fully-qualified name of the MemoryService's
 	// UpdateTopicOverview RPC.
 	MemoryServiceUpdateTopicOverviewProcedure = "/brigade.v1.MemoryService/UpdateTopicOverview"
+	// MemoryServiceUpdateTopicProcedure is the fully-qualified name of the MemoryService's UpdateTopic
+	// RPC.
+	MemoryServiceUpdateTopicProcedure = "/brigade.v1.MemoryService/UpdateTopic"
+	// MemoryServiceDeleteTopicProcedure is the fully-qualified name of the MemoryService's DeleteTopic
+	// RPC.
+	MemoryServiceDeleteTopicProcedure = "/brigade.v1.MemoryService/DeleteTopic"
 	// MemoryServiceCreateNoteProcedure is the fully-qualified name of the MemoryService's CreateNote
 	// RPC.
 	MemoryServiceCreateNoteProcedure = "/brigade.v1.MemoryService/CreateNote"
@@ -72,6 +78,11 @@ type MemoryServiceClient interface {
 	CreateTopic(context.Context, *connect.Request[v1.CreateTopicRequest]) (*connect.Response[v1.CreateTopicResponse], error)
 	// UpdateTopicOverview — перезаписать synthesis темы (ручное редактирование обзора).
 	UpdateTopicOverview(context.Context, *connect.Request[v1.UpdateTopicOverviewRequest]) (*connect.Response[v1.UpdateTopicOverviewResponse], error)
+	// UpdateTopic — переименование/смена цвета темы (id неизменен). Пустые поля не меняются.
+	UpdateTopic(context.Context, *connect.Request[v1.UpdateTopicRequest]) (*connect.Response[v1.UpdateTopicResponse], error)
+	// DeleteTopic — удалить тему целиком (каталог topics/<id>/ со всеми заметками). Виртуальную
+	// «Общее» удалить нельзя.
+	DeleteTopic(context.Context, *connect.Request[v1.DeleteTopicRequest]) (*connect.Response[v1.DeleteTopicResponse], error)
 	// CreateNote — создать заметку в теме/подтеме (write .md → commit → push синхронно).
 	// session пуст — заметка создана из UI, а не сессией; from — человекочитаемый провенанс.
 	CreateNote(context.Context, *connect.Request[v1.CreateNoteRequest]) (*connect.Response[v1.CreateNoteResponse], error)
@@ -123,6 +134,18 @@ func NewMemoryServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(memoryServiceMethods.ByName("UpdateTopicOverview")),
 			connect.WithClientOptions(opts...),
 		),
+		updateTopic: connect.NewClient[v1.UpdateTopicRequest, v1.UpdateTopicResponse](
+			httpClient,
+			baseURL+MemoryServiceUpdateTopicProcedure,
+			connect.WithSchema(memoryServiceMethods.ByName("UpdateTopic")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteTopic: connect.NewClient[v1.DeleteTopicRequest, v1.DeleteTopicResponse](
+			httpClient,
+			baseURL+MemoryServiceDeleteTopicProcedure,
+			connect.WithSchema(memoryServiceMethods.ByName("DeleteTopic")),
+			connect.WithClientOptions(opts...),
+		),
 		createNote: connect.NewClient[v1.CreateNoteRequest, v1.CreateNoteResponse](
 			httpClient,
 			baseURL+MemoryServiceCreateNoteProcedure,
@@ -168,6 +191,8 @@ type memoryServiceClient struct {
 	getTopic            *connect.Client[v1.GetTopicRequest, v1.GetTopicResponse]
 	createTopic         *connect.Client[v1.CreateTopicRequest, v1.CreateTopicResponse]
 	updateTopicOverview *connect.Client[v1.UpdateTopicOverviewRequest, v1.UpdateTopicOverviewResponse]
+	updateTopic         *connect.Client[v1.UpdateTopicRequest, v1.UpdateTopicResponse]
+	deleteTopic         *connect.Client[v1.DeleteTopicRequest, v1.DeleteTopicResponse]
 	createNote          *connect.Client[v1.CreateNoteRequest, v1.CreateNoteResponse]
 	updateNote          *connect.Client[v1.UpdateNoteRequest, v1.UpdateNoteResponse]
 	moveNote            *connect.Client[v1.MoveNoteRequest, v1.MoveNoteResponse]
@@ -194,6 +219,16 @@ func (c *memoryServiceClient) CreateTopic(ctx context.Context, req *connect.Requ
 // UpdateTopicOverview calls brigade.v1.MemoryService.UpdateTopicOverview.
 func (c *memoryServiceClient) UpdateTopicOverview(ctx context.Context, req *connect.Request[v1.UpdateTopicOverviewRequest]) (*connect.Response[v1.UpdateTopicOverviewResponse], error) {
 	return c.updateTopicOverview.CallUnary(ctx, req)
+}
+
+// UpdateTopic calls brigade.v1.MemoryService.UpdateTopic.
+func (c *memoryServiceClient) UpdateTopic(ctx context.Context, req *connect.Request[v1.UpdateTopicRequest]) (*connect.Response[v1.UpdateTopicResponse], error) {
+	return c.updateTopic.CallUnary(ctx, req)
+}
+
+// DeleteTopic calls brigade.v1.MemoryService.DeleteTopic.
+func (c *memoryServiceClient) DeleteTopic(ctx context.Context, req *connect.Request[v1.DeleteTopicRequest]) (*connect.Response[v1.DeleteTopicResponse], error) {
+	return c.deleteTopic.CallUnary(ctx, req)
 }
 
 // CreateNote calls brigade.v1.MemoryService.CreateNote.
@@ -237,6 +272,11 @@ type MemoryServiceHandler interface {
 	CreateTopic(context.Context, *connect.Request[v1.CreateTopicRequest]) (*connect.Response[v1.CreateTopicResponse], error)
 	// UpdateTopicOverview — перезаписать synthesis темы (ручное редактирование обзора).
 	UpdateTopicOverview(context.Context, *connect.Request[v1.UpdateTopicOverviewRequest]) (*connect.Response[v1.UpdateTopicOverviewResponse], error)
+	// UpdateTopic — переименование/смена цвета темы (id неизменен). Пустые поля не меняются.
+	UpdateTopic(context.Context, *connect.Request[v1.UpdateTopicRequest]) (*connect.Response[v1.UpdateTopicResponse], error)
+	// DeleteTopic — удалить тему целиком (каталог topics/<id>/ со всеми заметками). Виртуальную
+	// «Общее» удалить нельзя.
+	DeleteTopic(context.Context, *connect.Request[v1.DeleteTopicRequest]) (*connect.Response[v1.DeleteTopicResponse], error)
 	// CreateNote — создать заметку в теме/подтеме (write .md → commit → push синхронно).
 	// session пуст — заметка создана из UI, а не сессией; from — человекочитаемый провенанс.
 	CreateNote(context.Context, *connect.Request[v1.CreateNoteRequest]) (*connect.Response[v1.CreateNoteResponse], error)
@@ -282,6 +322,18 @@ func NewMemoryServiceHandler(svc MemoryServiceHandler, opts ...connect.HandlerOp
 		MemoryServiceUpdateTopicOverviewProcedure,
 		svc.UpdateTopicOverview,
 		connect.WithSchema(memoryServiceMethods.ByName("UpdateTopicOverview")),
+		connect.WithHandlerOptions(opts...),
+	)
+	memoryServiceUpdateTopicHandler := connect.NewUnaryHandler(
+		MemoryServiceUpdateTopicProcedure,
+		svc.UpdateTopic,
+		connect.WithSchema(memoryServiceMethods.ByName("UpdateTopic")),
+		connect.WithHandlerOptions(opts...),
+	)
+	memoryServiceDeleteTopicHandler := connect.NewUnaryHandler(
+		MemoryServiceDeleteTopicProcedure,
+		svc.DeleteTopic,
+		connect.WithSchema(memoryServiceMethods.ByName("DeleteTopic")),
 		connect.WithHandlerOptions(opts...),
 	)
 	memoryServiceCreateNoteHandler := connect.NewUnaryHandler(
@@ -330,6 +382,10 @@ func NewMemoryServiceHandler(svc MemoryServiceHandler, opts ...connect.HandlerOp
 			memoryServiceCreateTopicHandler.ServeHTTP(w, r)
 		case MemoryServiceUpdateTopicOverviewProcedure:
 			memoryServiceUpdateTopicOverviewHandler.ServeHTTP(w, r)
+		case MemoryServiceUpdateTopicProcedure:
+			memoryServiceUpdateTopicHandler.ServeHTTP(w, r)
+		case MemoryServiceDeleteTopicProcedure:
+			memoryServiceDeleteTopicHandler.ServeHTTP(w, r)
 		case MemoryServiceCreateNoteProcedure:
 			memoryServiceCreateNoteHandler.ServeHTTP(w, r)
 		case MemoryServiceUpdateNoteProcedure:
@@ -365,6 +421,14 @@ func (UnimplementedMemoryServiceHandler) CreateTopic(context.Context, *connect.R
 
 func (UnimplementedMemoryServiceHandler) UpdateTopicOverview(context.Context, *connect.Request[v1.UpdateTopicOverviewRequest]) (*connect.Response[v1.UpdateTopicOverviewResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.MemoryService.UpdateTopicOverview is not implemented"))
+}
+
+func (UnimplementedMemoryServiceHandler) UpdateTopic(context.Context, *connect.Request[v1.UpdateTopicRequest]) (*connect.Response[v1.UpdateTopicResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.MemoryService.UpdateTopic is not implemented"))
+}
+
+func (UnimplementedMemoryServiceHandler) DeleteTopic(context.Context, *connect.Request[v1.DeleteTopicRequest]) (*connect.Response[v1.DeleteTopicResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.MemoryService.DeleteTopic is not implemented"))
 }
 
 func (UnimplementedMemoryServiceHandler) CreateNote(context.Context, *connect.Request[v1.CreateNoteRequest]) (*connect.Response[v1.CreateNoteResponse], error) {
