@@ -69,6 +69,9 @@ const (
 	// AgentDaemonServiceSummarizeProcedure is the fully-qualified name of the AgentDaemonService's
 	// Summarize RPC.
 	AgentDaemonServiceSummarizeProcedure = "/brigade.v1.AgentDaemonService/Summarize"
+	// AgentDaemonServiceWriteFileProcedure is the fully-qualified name of the AgentDaemonService's
+	// WriteFile RPC.
+	AgentDaemonServiceWriteFileProcedure = "/brigade.v1.AgentDaemonService/WriteFile"
 )
 
 // AgentDaemonServiceClient is a client for the brigade.v1.AgentDaemonService service.
@@ -99,6 +102,9 @@ type AgentDaemonServiceClient interface {
 	ResolvePermission(context.Context, *connect.Request[v1.DaemonResolvePermissionRequest]) (*connect.Response[v1.Empty], error)
 	// Summarize — служебный turn для recap при архивации (свой сборщик, не в общий журнал).
 	Summarize(context.Context, *connect.Request[v1.DaemonSummarizeRequest]) (*connect.Response[v1.DaemonSummarizeResponse], error)
+	// WriteFile кладёт файл в рабочую директорию агента (path — относительно cwd). Через это
+	// brigade заливает вложения, не завязываясь на docker: демон пишет у себя внутри среды.
+	WriteFile(context.Context, *connect.Request[v1.DaemonWriteFileRequest]) (*connect.Response[v1.Empty], error)
 }
 
 // NewAgentDaemonServiceClient constructs a client for the brigade.v1.AgentDaemonService service. By
@@ -184,6 +190,12 @@ func NewAgentDaemonServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(agentDaemonServiceMethods.ByName("Summarize")),
 			connect.WithClientOptions(opts...),
 		),
+		writeFile: connect.NewClient[v1.DaemonWriteFileRequest, v1.Empty](
+			httpClient,
+			baseURL+AgentDaemonServiceWriteFileProcedure,
+			connect.WithSchema(agentDaemonServiceMethods.ByName("WriteFile")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -201,6 +213,7 @@ type agentDaemonServiceClient struct {
 	setConfigOption   *connect.Client[v1.DaemonSetConfigOptionRequest, v1.DaemonPayloadResponse]
 	resolvePermission *connect.Client[v1.DaemonResolvePermissionRequest, v1.Empty]
 	summarize         *connect.Client[v1.DaemonSummarizeRequest, v1.DaemonSummarizeResponse]
+	writeFile         *connect.Client[v1.DaemonWriteFileRequest, v1.Empty]
 }
 
 // Configure calls brigade.v1.AgentDaemonService.Configure.
@@ -263,6 +276,11 @@ func (c *agentDaemonServiceClient) Summarize(ctx context.Context, req *connect.R
 	return c.summarize.CallUnary(ctx, req)
 }
 
+// WriteFile calls brigade.v1.AgentDaemonService.WriteFile.
+func (c *agentDaemonServiceClient) WriteFile(ctx context.Context, req *connect.Request[v1.DaemonWriteFileRequest]) (*connect.Response[v1.Empty], error) {
+	return c.writeFile.CallUnary(ctx, req)
+}
+
 // AgentDaemonServiceHandler is an implementation of the brigade.v1.AgentDaemonService service.
 type AgentDaemonServiceHandler interface {
 	// Configure (пере)поднимает адаптер: секреты в env адаптера, resume_session_id непуст →
@@ -291,6 +309,9 @@ type AgentDaemonServiceHandler interface {
 	ResolvePermission(context.Context, *connect.Request[v1.DaemonResolvePermissionRequest]) (*connect.Response[v1.Empty], error)
 	// Summarize — служебный turn для recap при архивации (свой сборщик, не в общий журнал).
 	Summarize(context.Context, *connect.Request[v1.DaemonSummarizeRequest]) (*connect.Response[v1.DaemonSummarizeResponse], error)
+	// WriteFile кладёт файл в рабочую директорию агента (path — относительно cwd). Через это
+	// brigade заливает вложения, не завязываясь на docker: демон пишет у себя внутри среды.
+	WriteFile(context.Context, *connect.Request[v1.DaemonWriteFileRequest]) (*connect.Response[v1.Empty], error)
 }
 
 // NewAgentDaemonServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -372,6 +393,12 @@ func NewAgentDaemonServiceHandler(svc AgentDaemonServiceHandler, opts ...connect
 		connect.WithSchema(agentDaemonServiceMethods.ByName("Summarize")),
 		connect.WithHandlerOptions(opts...),
 	)
+	agentDaemonServiceWriteFileHandler := connect.NewUnaryHandler(
+		AgentDaemonServiceWriteFileProcedure,
+		svc.WriteFile,
+		connect.WithSchema(agentDaemonServiceMethods.ByName("WriteFile")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/brigade.v1.AgentDaemonService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AgentDaemonServiceConfigureProcedure:
@@ -398,6 +425,8 @@ func NewAgentDaemonServiceHandler(svc AgentDaemonServiceHandler, opts ...connect
 			agentDaemonServiceResolvePermissionHandler.ServeHTTP(w, r)
 		case AgentDaemonServiceSummarizeProcedure:
 			agentDaemonServiceSummarizeHandler.ServeHTTP(w, r)
+		case AgentDaemonServiceWriteFileProcedure:
+			agentDaemonServiceWriteFileHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -453,4 +482,8 @@ func (UnimplementedAgentDaemonServiceHandler) ResolvePermission(context.Context,
 
 func (UnimplementedAgentDaemonServiceHandler) Summarize(context.Context, *connect.Request[v1.DaemonSummarizeRequest]) (*connect.Response[v1.DaemonSummarizeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AgentDaemonService.Summarize is not implemented"))
+}
+
+func (UnimplementedAgentDaemonServiceHandler) WriteFile(context.Context, *connect.Request[v1.DaemonWriteFileRequest]) (*connect.Response[v1.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AgentDaemonService.WriteFile is not implemented"))
 }

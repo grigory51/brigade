@@ -1,10 +1,7 @@
 "use client";
 
-import {
-  ComposerAddAttachment,
-  ComposerAttachments,
-  UserMessageAttachments,
-} from "@/components/assistant-ui/attachment";
+import { UserMessageAttachments } from "@/components/assistant-ui/attachment";
+import { ComposerUploadButton } from "@/components/assistant-ui/composer-upload";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import {
   Reasoning,
@@ -312,14 +309,12 @@ const Composer: FC = () => {
 
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
-      <ComposerPrimitive.AttachmentDropzone asChild>
-        <div
-          data-slot="aui_composer-shell"
-          className="border-border/60 data-[dragging=true]:border-ring focus-within:border-border dark:border-muted-foreground/15 dark:focus-within:border-muted-foreground/30 relative flex w-full flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) shadow-[0_4px_16px_-8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] transition-[border-color,box-shadow] focus-within:shadow-[0_6px_24px_-8px_rgba(0,0,0,0.12),0_1px_2px_rgba(0,0,0,0.05)] data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))] dark:shadow-none"
-        >
-          <SlashMenu />
-          <ComposerAttachments />
-          <ComposerPrimitive.Input
+      <div
+        data-slot="aui_composer-shell"
+        className="border-border/60 focus-within:border-border dark:border-muted-foreground/15 dark:focus-within:border-muted-foreground/30 relative flex w-full flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) shadow-[0_4px_16px_-8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] transition-[border-color,box-shadow] focus-within:shadow-[0_6px_24px_-8px_rgba(0,0,0,0.12),0_1px_2px_rgba(0,0,0,0.05)] dark:shadow-none"
+      >
+        <SlashMenu />
+        <ComposerPrimitive.Input
             placeholder={
               historyLoading
                 ? "Загрузка истории…"
@@ -338,7 +333,6 @@ const Composer: FC = () => {
           />
           <ComposerAction />
         </div>
-      </ComposerPrimitive.AttachmentDropzone>
     </ComposerPrimitive.Root>
   );
 };
@@ -517,7 +511,7 @@ const ComposerAction: FC = () => {
           опций шире вьюпорта — группа сжимается и скроллится внутри себя, не выталкивая
           кнопку отправки за край экрана (горизонтальный скролл страницы). */}
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-        <ComposerAddAttachment />
+        <ComposerUploadButton />
         <ConfigSelectors />
       </div>
       <div className="flex shrink-0 items-center gap-1.5">

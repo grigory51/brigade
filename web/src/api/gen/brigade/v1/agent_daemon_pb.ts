@@ -7,6 +7,51 @@ import type { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialM
 import { Message, proto3, protoInt64 } from "@bufbuild/protobuf";
 
 /**
+ * @generated from message brigade.v1.DaemonWriteFileRequest
+ */
+export class DaemonWriteFileRequest extends Message<DaemonWriteFileRequest> {
+  /**
+   * относительно cwd агента (напр. uploads/<имя>)
+   *
+   * @generated from field: string path = 1;
+   */
+  path = "";
+
+  /**
+   * @generated from field: bytes content = 2;
+   */
+  content = new Uint8Array(0);
+
+  constructor(data?: PartialMessage<DaemonWriteFileRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.DaemonWriteFileRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "content", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaemonWriteFileRequest {
+    return new DaemonWriteFileRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): DaemonWriteFileRequest {
+    return new DaemonWriteFileRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): DaemonWriteFileRequest {
+    return new DaemonWriteFileRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: DaemonWriteFileRequest | PlainMessage<DaemonWriteFileRequest> | undefined, b: DaemonWriteFileRequest | PlainMessage<DaemonWriteFileRequest> | undefined): boolean {
+    return proto3.util.equals(DaemonWriteFileRequest, a, b);
+  }
+}
+
+/**
  * @generated from message brigade.v1.DaemonConfigureRequest
  */
 export class DaemonConfigureRequest extends Message<DaemonConfigureRequest> {

@@ -170,4 +170,18 @@ service SessionService {
   rpc Archive(ArchiveSessionRequest) returns (ArchiveSessionResponse) {}
   rpc IssueStreamTicket(IssueStreamTicketRequest) returns (IssueStreamTicketResponse) {}
   rpc ListPreviews(ListPreviewsRequest) returns (ListPreviewsResponse) {}
+  // UploadFile кладёт файл в рабочую директорию агента (uploads/<имя>) — локально или в
+  // контейнер сессии. Агент читает его по возвращённому пути. Транспорт AG-UI текстовый,
+  // поэтому вложения доставляются через файловую систему, а не в теле сообщения.
+  rpc UploadFile(UploadFileRequest) returns (UploadFileResponse) {}
+}
+
+message UploadFileRequest {
+  string session_id = 1;
+  string filename = 2;   // имя файла; сервер берёт только базовое имя и санитайзит его
+  bytes content = 3;
+}
+
+message UploadFileResponse {
+  string path = 1;       // путь относительно cwd агента (uploads/<имя>)
 }

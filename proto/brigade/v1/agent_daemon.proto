@@ -47,6 +47,14 @@ service AgentDaemonService {
   rpc ResolvePermission(DaemonResolvePermissionRequest) returns (Empty) {}
   // Summarize — служебный turn для recap при архивации (свой сборщик, не в общий журнал).
   rpc Summarize(DaemonSummarizeRequest) returns (DaemonSummarizeResponse) {}
+  // WriteFile кладёт файл в рабочую директорию агента (path — относительно cwd). Через это
+  // brigade заливает вложения, не завязываясь на docker: демон пишет у себя внутри среды.
+  rpc WriteFile(DaemonWriteFileRequest) returns (Empty) {}
+}
+
+message DaemonWriteFileRequest {
+  string path = 1;      // относительно cwd агента (напр. uploads/<имя>)
+  bytes content = 2;
 }
 
 message DaemonConfigureRequest {

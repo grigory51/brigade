@@ -1,10 +1,15 @@
-import { useContext } from "react";
+import { useCallback, useContext } from "react";
 import { Loader2, Wrench, ChevronRight } from "lucide-react";
 import { type ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { A2uiSurface } from "@a2ui/react/v0_9";
+import { sessionClient } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Thread } from "@/components/assistant-ui/thread";
+import {
+  ComposerUploadContext,
+  type UploadFn,
+} from "@/components/assistant-ui/composer-upload";
 import { FRONTEND_TOOL_NAMES, RENDER_UI_TOOL_NAME } from "./frontendTools";
 import { A2uiContext } from "./a2ui/context";
 import { RenderUiCard } from "./a2ui/renderUi";
@@ -31,6 +36,7 @@ export function AcpThread({
   configOptions,
   onConfigChange,
   readonly = false,
+  sessionId,
 }: {
   commands: AvailableCommand[];
   plan: PlanEntry[];
@@ -38,17 +44,37 @@ export function AcpThread({
   configOptions: ConfigOption[];
   onConfigChange: (configId: string, value: string) => void;
   readonly?: boolean;
+  sessionId?: string;
 }) {
+  // uploadFile заливает вложение в рабочую директорию агента сессии; путь возвращается для
+  // вставки в текст сообщения (агент читает файл сам). В readonly-ленте архива недоступно.
+  const uploadFile = useCallback<UploadFn>(
+    async (file) => {
+      const content = new Uint8Array(await file.arrayBuffer());
+      const res = await sessionClient.uploadFile({
+        sessionId: sessionId ?? "",
+        filename: file.name,
+        content,
+      });
+      return res.path;
+    },
+    [sessionId],
+  );
+
   return (
     <A2uiContext.Provider value={a2ui}>
-      <Thread
-        commands={commands}
-        components={{ ToolFallback }}
-        footer={readonly ? undefined : <PlanPanel plan={plan} />}
-        configOptions={configOptions}
-        onConfigChange={onConfigChange}
-        readonly={readonly}
-      />
+      <ComposerUploadContext.Provider
+        value={readonly || !sessionId ? null : uploadFile}
+      >
+        <Thread
+          commands={commands}
+          components={{ ToolFallback }}
+          footer={readonly ? undefined : <PlanPanel plan={plan} />}
+          configOptions={configOptions}
+          onConfigChange={onConfigChange}
+          readonly={readonly}
+        />
+      </ComposerUploadContext.Provider>
     </A2uiContext.Provider>
   );
 }

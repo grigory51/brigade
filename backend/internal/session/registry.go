@@ -81,6 +81,9 @@ type acpSession interface {
 	Status() (generating bool, seq int)
 	SessionID() string
 	Summarize(ctx context.Context, prompt string) (string, error)
+	// WriteFile кладёт файл в рабочую директорию агента (path — относительно cwd). Единая
+	// ручка фасада для заливки вложений: brigade не завязывается на среду (docker и т.п.).
+	WriteFile(ctx context.Context, path string, content []byte) error
 	Close() error
 }
 
@@ -913,6 +916,43 @@ func (r *Registry) Delete(ctx context.Context, sessionID, userID string) error {
 	r.releaseUserContainerIfIdle(userID)
 	log.Printf("session: deleted %s by user=%s", sessionID, userID)
 	return r.store.DeleteSession(ctx, sessionID)
+}
+
+// UploadFile кладёт файл в рабочую директорию агента (uploads/<имя>) ЧЕРЕЗ ФАСАД сессии
+// (acpSession.WriteFile), а не через docker-API: docker-сессия пишет демоном внутри
+// контейнера, local — напрямую в свой cwd. brigade не завязан на способ спавна. Возвращает
+// путь относительно cwd (агент читает файл по нему). Транспорт AG-UI текстовый, поэтому
+// вложения доставляются через файловую систему, а не в теле сообщения.
+func (r *Registry) UploadFile(ctx context.Context, sessionID, userID, filename string, content []byte) (string, error) {
+	client, ok := r.ACPClient(sessionID, userID)
+	if !ok {
+		return "", fmt.Errorf("session: нет живого агента для сессии %s", sessionID)
+	}
+	rel := "uploads/" + sanitizeUploadName(filename)
+	if err := client.WriteFile(ctx, rel, content); err != nil {
+		return "", fmt.Errorf("session: upload: %w", err)
+	}
+	return rel, nil
+}
+
+// sanitizeUploadName берёт базовое имя файла и заменяет небезопасные символы, гарантируя
+// непустое безопасное имя (защита от path traversal и экзотических имён).
+func sanitizeUploadName(name string) string {
+	name = filepath.Base(strings.TrimSpace(name))
+	name = strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9',
+			r == '.', r == '-', r == '_':
+			return r
+		default:
+			return '-'
+		}
+	}, name)
+	name = strings.Trim(name, ".-")
+	if name == "" {
+		name = "file"
+	}
+	return name
 }
 
 // archiveRecapPrompt — служебный промпт recap при архивации. Просит краткий пересказ

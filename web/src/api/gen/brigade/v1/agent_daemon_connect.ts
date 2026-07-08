@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { DaemonConfigureRequest, DaemonConfigureResponse, DaemonEvent, DaemonPayloadResponse, DaemonPromptRequest, DaemonPromptResponse, DaemonResolvePermissionRequest, DaemonSetConfigOptionRequest, DaemonStatusResponse, DaemonStreamEventsRequest, DaemonSummarizeRequest, DaemonSummarizeResponse } from "./agent_daemon_pb.js";
+import { DaemonConfigureRequest, DaemonConfigureResponse, DaemonEvent, DaemonPayloadResponse, DaemonPromptRequest, DaemonPromptResponse, DaemonResolvePermissionRequest, DaemonSetConfigOptionRequest, DaemonStatusResponse, DaemonStreamEventsRequest, DaemonSummarizeRequest, DaemonSummarizeResponse, DaemonWriteFileRequest } from "./agent_daemon_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { Empty } from "./auth_pb.js";
 
@@ -160,6 +160,18 @@ export const AgentDaemonService = {
       name: "Summarize",
       I: DaemonSummarizeRequest,
       O: DaemonSummarizeResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * WriteFile кладёт файл в рабочую директорию агента (path — относительно cwd). Через это
+     * brigade заливает вложения, не завязываясь на docker: демон пишет у себя внутри среды.
+     *
+     * @generated from rpc brigade.v1.AgentDaemonService.WriteFile
+     */
+    writeFile: {
+      name: "WriteFile",
+      I: DaemonWriteFileRequest,
+      O: Empty,
       kind: MethodKind.Unary,
     },
   }

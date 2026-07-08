@@ -168,6 +168,19 @@ func (s *service) Summarize(ctx context.Context, req *connect.Request[v1.DaemonS
 	return connect.NewResponse(&v1.DaemonSummarizeResponse{Text: text}), nil
 }
 
+// WriteFile кладёт файл в рабочую директорию агента (внутри среды демона), делегируя тому же
+// acp.Client.WriteFile — единый источник записи для local и docker.
+func (s *service) WriteFile(ctx context.Context, req *connect.Request[v1.DaemonWriteFileRequest]) (*connect.Response[v1.Empty], error) {
+	c, err := s.d.getClient()
+	if err != nil {
+		return nil, err
+	}
+	if err := c.WriteFile(ctx, req.Msg.Path, req.Msg.Content); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&v1.Empty{}), nil
+}
+
 // payload сериализует произвольную структуру в DaemonPayloadResponse.
 func payload(v any) (*connect.Response[v1.DaemonPayloadResponse], error) {
 	data, err := json.Marshal(v)

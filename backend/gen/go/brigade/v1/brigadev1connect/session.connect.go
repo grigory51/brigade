@@ -55,6 +55,9 @@ const (
 	// SessionServiceListPreviewsProcedure is the fully-qualified name of the SessionService's
 	// ListPreviews RPC.
 	SessionServiceListPreviewsProcedure = "/brigade.v1.SessionService/ListPreviews"
+	// SessionServiceUploadFileProcedure is the fully-qualified name of the SessionService's UploadFile
+	// RPC.
+	SessionServiceUploadFileProcedure = "/brigade.v1.SessionService/UploadFile"
 )
 
 // SessionServiceClient is a client for the brigade.v1.SessionService service.
@@ -71,6 +74,10 @@ type SessionServiceClient interface {
 	Archive(context.Context, *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error)
 	IssueStreamTicket(context.Context, *connect.Request[v1.IssueStreamTicketRequest]) (*connect.Response[v1.IssueStreamTicketResponse], error)
 	ListPreviews(context.Context, *connect.Request[v1.ListPreviewsRequest]) (*connect.Response[v1.ListPreviewsResponse], error)
+	// UploadFile кладёт файл в рабочую директорию агента (uploads/<имя>) — локально или в
+	// контейнер сессии. Агент читает его по возвращённому пути. Транспорт AG-UI текстовый,
+	// поэтому вложения доставляются через файловую систему, а не в теле сообщения.
+	UploadFile(context.Context, *connect.Request[v1.UploadFileRequest]) (*connect.Response[v1.UploadFileResponse], error)
 }
 
 // NewSessionServiceClient constructs a client for the brigade.v1.SessionService service. By
@@ -144,6 +151,12 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(sessionServiceMethods.ByName("ListPreviews")),
 			connect.WithClientOptions(opts...),
 		),
+		uploadFile: connect.NewClient[v1.UploadFileRequest, v1.UploadFileResponse](
+			httpClient,
+			baseURL+SessionServiceUploadFileProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("UploadFile")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -159,6 +172,7 @@ type sessionServiceClient struct {
 	archive           *connect.Client[v1.ArchiveSessionRequest, v1.ArchiveSessionResponse]
 	issueStreamTicket *connect.Client[v1.IssueStreamTicketRequest, v1.IssueStreamTicketResponse]
 	listPreviews      *connect.Client[v1.ListPreviewsRequest, v1.ListPreviewsResponse]
+	uploadFile        *connect.Client[v1.UploadFileRequest, v1.UploadFileResponse]
 }
 
 // Create calls brigade.v1.SessionService.Create.
@@ -211,6 +225,11 @@ func (c *sessionServiceClient) ListPreviews(ctx context.Context, req *connect.Re
 	return c.listPreviews.CallUnary(ctx, req)
 }
 
+// UploadFile calls brigade.v1.SessionService.UploadFile.
+func (c *sessionServiceClient) UploadFile(ctx context.Context, req *connect.Request[v1.UploadFileRequest]) (*connect.Response[v1.UploadFileResponse], error) {
+	return c.uploadFile.CallUnary(ctx, req)
+}
+
 // SessionServiceHandler is an implementation of the brigade.v1.SessionService service.
 type SessionServiceHandler interface {
 	Create(context.Context, *connect.Request[v1.CreateSessionRequest]) (*connect.Response[v1.CreateSessionResponse], error)
@@ -225,6 +244,10 @@ type SessionServiceHandler interface {
 	Archive(context.Context, *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error)
 	IssueStreamTicket(context.Context, *connect.Request[v1.IssueStreamTicketRequest]) (*connect.Response[v1.IssueStreamTicketResponse], error)
 	ListPreviews(context.Context, *connect.Request[v1.ListPreviewsRequest]) (*connect.Response[v1.ListPreviewsResponse], error)
+	// UploadFile кладёт файл в рабочую директорию агента (uploads/<имя>) — локально или в
+	// контейнер сессии. Агент читает его по возвращённому пути. Транспорт AG-UI текстовый,
+	// поэтому вложения доставляются через файловую систему, а не в теле сообщения.
+	UploadFile(context.Context, *connect.Request[v1.UploadFileRequest]) (*connect.Response[v1.UploadFileResponse], error)
 }
 
 // NewSessionServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -294,6 +317,12 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		connect.WithSchema(sessionServiceMethods.ByName("ListPreviews")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sessionServiceUploadFileHandler := connect.NewUnaryHandler(
+		SessionServiceUploadFileProcedure,
+		svc.UploadFile,
+		connect.WithSchema(sessionServiceMethods.ByName("UploadFile")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/brigade.v1.SessionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SessionServiceCreateProcedure:
@@ -316,6 +345,8 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 			sessionServiceIssueStreamTicketHandler.ServeHTTP(w, r)
 		case SessionServiceListPreviewsProcedure:
 			sessionServiceListPreviewsHandler.ServeHTTP(w, r)
+		case SessionServiceUploadFileProcedure:
+			sessionServiceUploadFileHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -363,4 +394,8 @@ func (UnimplementedSessionServiceHandler) IssueStreamTicket(context.Context, *co
 
 func (UnimplementedSessionServiceHandler) ListPreviews(context.Context, *connect.Request[v1.ListPreviewsRequest]) (*connect.Response[v1.ListPreviewsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.ListPreviews is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) UploadFile(context.Context, *connect.Request[v1.UploadFileRequest]) (*connect.Response[v1.UploadFileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.UploadFile is not implemented"))
 }

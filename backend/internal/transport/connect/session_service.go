@@ -3,6 +3,7 @@ package connectsvc
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"connectrpc.com/connect"
 
@@ -135,6 +136,29 @@ func (s *SessionService) Delete(ctx context.Context, req *connect.Request[v1.Del
 		return nil, sessionError(err)
 	}
 	return connect.NewResponse(&v1.Empty{}), nil
+}
+
+// maxUploadBytes — предел размера заливаемого файла: содержимое приходит в теле запроса
+// целиком, поэтому ограничиваем, чтобы не исчерпать память.
+const maxUploadBytes = 25 << 20 // 25 MiB
+
+// UploadFile кладёт файл в рабочую директорию агента сессии; агент читает его по пути.
+func (s *SessionService) UploadFile(ctx context.Context, req *connect.Request[v1.UploadFileRequest]) (*connect.Response[v1.UploadFileResponse], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(req.Msg.Content) == 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("empty file"))
+	}
+	if len(req.Msg.Content) > maxUploadBytes {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("file exceeds %d MiB", maxUploadBytes>>20))
+	}
+	uploadPath, err := s.registry.UploadFile(ctx, req.Msg.SessionId, userID, req.Msg.Filename, req.Msg.Content)
+	if err != nil {
+		return nil, sessionError(err)
+	}
+	return connect.NewResponse(&v1.UploadFileResponse{Path: uploadPath}), nil
 }
 
 // Archive переносит сессию в архив: агент генерирует recap, brigade сохраняет снимок

@@ -262,6 +262,13 @@ func (c *Client) Summarize(ctx context.Context, prompt string) (string, error) {
 	return resp.Msg.Text, nil
 }
 
+// WriteFile просит демон записать файл в рабочую директорию агента (path — относительно
+// cwd). Заливка вложений идёт через фасад, а не через docker-API brigade.
+func (c *Client) WriteFile(ctx context.Context, path string, content []byte) error {
+	_, err := c.rpc.WriteFile(ctx, authReq(c.token, &v1.DaemonWriteFileRequest{Path: path, Content: content}))
+	return err
+}
+
 // Close отцепляет клиента (останавливает StreamEvents-цикл). Демон (и адаптер) при этом
 // НЕ гасится — контейнер переживает рестарт brigade; остановка контейнера — отдельно,
 // при явном teardown (registry.terminate → docker remove).

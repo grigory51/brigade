@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -617,6 +619,21 @@ func (c *Client) recordUserMessage(text string) {
 // поэтому хук — безопасная точка привязать sink нового прогона: события предыдущего
 // turn'а физически не могут прийти после освобождения им promptMu, а значит не попадут
 // в sink этого прогона (структурная защита от слипания ответов двух turn'ов).
+// WriteFile кладёт content в рабочую директорию агента по относительному пути rel (напр.
+// uploads/<имя>). Часть фасада сессии: brigade заливает вложения через него, не завязываясь
+// на среду (docker и т.п.) — здесь запись идёт в локальную ФС относительно cwd адаптера
+// (в docker-режиме этот же метод исполняется внутри контейнера демоном). ctx не используется.
+func (c *Client) WriteFile(_ context.Context, rel string, content []byte) error {
+	abs := filepath.Join(c.opts.Cwd, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		return fmt.Errorf("acp: mkdir upload dir: %w", err)
+	}
+	if err := os.WriteFile(abs, content, 0o644); err != nil {
+		return fmt.Errorf("acp: write file %s: %w", rel, err)
+	}
+	return nil
+}
+
 func (c *Client) Prompt(ctx context.Context, text string, onTurnStart func()) (stopReason string, err error) {
 	// Сериализуем turn'ы: пока идёт один Prompt, следующий ждёт. Иначе потоковые события
 	// двух turn'ов смешались бы в общем sink (см. promptMu).

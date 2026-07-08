@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ArchiveSessionRequest, ArchiveSessionResponse, CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, ForkSessionRequest, ForkSessionResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse } from "./session_pb.js";
+import { ArchiveSessionRequest, ArchiveSessionResponse, CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, ForkSessionRequest, ForkSessionResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse, UploadFileRequest, UploadFileResponse } from "./session_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { Empty } from "./auth_pb.js";
 
@@ -106,6 +106,19 @@ export const SessionService = {
       name: "ListPreviews",
       I: ListPreviewsRequest,
       O: ListPreviewsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * UploadFile кладёт файл в рабочую директорию агента (uploads/<имя>) — локально или в
+     * контейнер сессии. Агент читает его по возвращённому пути. Транспорт AG-UI текстовый,
+     * поэтому вложения доставляются через файловую систему, а не в теле сообщения.
+     *
+     * @generated from rpc brigade.v1.SessionService.UploadFile
+     */
+    uploadFile: {
+      name: "UploadFile",
+      I: UploadFileRequest,
+      O: UploadFileResponse,
       kind: MethodKind.Unary,
     },
   }

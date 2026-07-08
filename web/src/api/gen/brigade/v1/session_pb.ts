@@ -996,3 +996,93 @@ export class IssueStreamTicketResponse extends Message<IssueStreamTicketResponse
   }
 }
 
+/**
+ * @generated from message brigade.v1.UploadFileRequest
+ */
+export class UploadFileRequest extends Message<UploadFileRequest> {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId = "";
+
+  /**
+   * имя файла; сервер берёт только базовое имя и санитайзит его
+   *
+   * @generated from field: string filename = 2;
+   */
+  filename = "";
+
+  /**
+   * @generated from field: bytes content = 3;
+   */
+  content = new Uint8Array(0);
+
+  constructor(data?: PartialMessage<UploadFileRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.UploadFileRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "filename", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "content", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): UploadFileRequest {
+    return new UploadFileRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): UploadFileRequest {
+    return new UploadFileRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): UploadFileRequest {
+    return new UploadFileRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: UploadFileRequest | PlainMessage<UploadFileRequest> | undefined, b: UploadFileRequest | PlainMessage<UploadFileRequest> | undefined): boolean {
+    return proto3.util.equals(UploadFileRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.UploadFileResponse
+ */
+export class UploadFileResponse extends Message<UploadFileResponse> {
+  /**
+   * путь относительно cwd агента (uploads/<имя>)
+   *
+   * @generated from field: string path = 1;
+   */
+  path = "";
+
+  constructor(data?: PartialMessage<UploadFileResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.UploadFileResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): UploadFileResponse {
+    return new UploadFileResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): UploadFileResponse {
+    return new UploadFileResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): UploadFileResponse {
+    return new UploadFileResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: UploadFileResponse | PlainMessage<UploadFileResponse> | undefined, b: UploadFileResponse | PlainMessage<UploadFileResponse> | undefined): boolean {
+    return proto3.util.equals(UploadFileResponse, a, b);
+  }
+}
+

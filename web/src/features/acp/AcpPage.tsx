@@ -66,6 +66,7 @@ function AcpSessionInner({
       <div className="relative flex h-full flex-col">
         <div className="min-h-0 flex-1">
           <AcpThread
+            sessionId={sessionId}
             commands={commands}
             plan={plan}
             a2ui={a2ui}
