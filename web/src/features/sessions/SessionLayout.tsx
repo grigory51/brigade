@@ -293,9 +293,7 @@ export function SessionLayout() {
                   to="/sessions"
                   className="flex shrink-0 items-center gap-2 px-1 font-semibold"
                 >
-                  <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sm font-bold text-sidebar-primary-foreground">
-                    b
-                  </span>
+                  <img src="/logo.svg" alt="" className="size-7 shrink-0 rounded-md" />
                   <span className="group-data-[collapsible=icon]:hidden">
                     brigade
                   </span>

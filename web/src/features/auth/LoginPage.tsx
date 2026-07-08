@@ -55,9 +55,7 @@ export function LoginPage() {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <div className="flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-xl bg-primary text-xl font-bold text-primary-foreground">
-              b
-            </div>
+            <img src="/logo.svg" alt="brigade" className="size-11 rounded-xl" />
             <div className="space-y-0.5">
               <CardTitle className="text-xl">brigade</CardTitle>
               <CardDescription>Запуск кодинг-агентов на VPC</CardDescription>
