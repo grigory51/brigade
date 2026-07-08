@@ -735,14 +735,25 @@ func (r *Registry) Shell(ctx context.Context, sessionID, userID string) (termws.
 
 	switch sess.Mode {
 	case store.SessionModeDocker:
+		// ACP-docker: шелл через фасад-демон (bash в pty внутри контейнера), а не docker-exec.
+		// Работает независимо от способа спавна; kill-by-mark-костыль не нужен (демон владеет
+		// pty и гасит его сам при закрытии стрима).
+		if sess.Kind == store.SessionKindACP {
+			rc, ok := r.ACPClient(sessionID, userID)
+			if !ok {
+				return nil, fmt.Errorf("session: нет живого демона для шелла сессии %s", sessionID)
+			}
+			remote, ok := rc.(*acpremote.Client)
+			if !ok {
+				return nil, fmt.Errorf("session: шелл сессии %s без acpremote-клиента", sessionID)
+			}
+			return remote.OpenShell(sess.Cwd)
+		}
+		// CLI-docker: exec-шелл в общий контейнер (до переработки CLI на демон, workstream E).
 		ds, ok := r.spawner.(*spawn.DockerSpawner)
 		if !ok {
 			return nil, fmt.Errorf("session: docker shell without DockerSpawner")
 		}
-		// userID передаём только для CLI: fallback на общий cli-shared контейнер
-		// осмыслен лишь для его сессий. ACP-сессия живёт в собственном контейнере
-		// (brigade.session.id); при его отсутствии шелл должен вернуть ошибку, а не
-		// уйти в чужой cli-shared контейнер пользователя.
 		return ds.SpawnShell(ctx, sess.ID, sharedUserID(sess), sess.Cwd)
 	default:
 		return spawn.StartLocalShell(ctx, sess.Cwd)

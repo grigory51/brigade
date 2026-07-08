@@ -13,12 +13,14 @@ package acpremote
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"sync"
 
 	"connectrpc.com/connect"
 	acpsdk "github.com/coder/acp-go-sdk"
+	"github.com/google/uuid"
 
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
 	"github.com/grigory51/brigade/backend/gen/go/brigade/v1/brigadev1connect"
@@ -282,6 +284,76 @@ func (c *Client) Summarize(ctx context.Context, prompt string) (string, error) {
 func (c *Client) WriteFile(ctx context.Context, path string, content []byte) error {
 	_, err := c.rpc.WriteFile(ctx, authReq(c.sign(), &v1.DaemonWriteFileRequest{Path: path, Content: content}))
 	return err
+}
+
+// OpenShell поднимает вспомогательный шелл (bash в pty) внутри контейнера через демон и
+// возвращает ShellSession (реализует termws.Shell). Эфемерный: закрытие сессии (Terminate)
+// гасит pty в демоне. Через фасад, а не docker-exec — работает независимо от способа спавна.
+func (c *Client) OpenShell(cwd string) (*ShellSession, error) {
+	id := uuid.NewString()
+	ctx, cancel := context.WithCancel(context.Background())
+	stream, err := c.rpc.OpenTerminal(ctx, authReq(c.sign(), &v1.DaemonOpenTerminalRequest{
+		Id:      id,
+		Cmd:     []string{"/bin/bash"},
+		Cwd:     cwd,
+		Durable: false,
+	}))
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	pr, pw := io.Pipe()
+	sh := &ShellSession{client: c, id: id, cancel: cancel, pr: pr, pw: pw}
+	go sh.pump(stream)
+	return sh, nil
+}
+
+// ShellSession — brigade-сторона вспомогательного шелла поверх Terminal RPC демона.
+// Реализует termws.Shell: Read из потока вывода (через io.Pipe), Write/Resize — unary RPC,
+// Terminate — отмена потока (демон гасит эфемерный pty). History пуст (жизнь = подключение).
+type ShellSession struct {
+	client *Client
+	id     string
+	cancel context.CancelFunc
+	pr     *io.PipeReader
+	pw     *io.PipeWriter
+}
+
+// pump перекладывает поток вывода терминала в pipe (его читает Read); конец потока → EOF.
+func (sh *ShellSession) pump(stream *connect.ServerStreamForClient[v1.DaemonTerminalOutput]) {
+	for stream.Receive() {
+		if _, err := sh.pw.Write(stream.Msg().Data); err != nil {
+			break
+		}
+	}
+	_ = sh.pw.CloseWithError(io.EOF)
+}
+
+func (sh *ShellSession) Read(p []byte) (int, error) { return sh.pr.Read(p) }
+
+func (sh *ShellSession) Write(p []byte) (int, error) {
+	_, err := sh.client.rpc.TerminalInput(context.Background(), authReq(sh.client.sign(),
+		&v1.DaemonTerminalInputRequest{Id: sh.id, Data: p}))
+	if err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+func (sh *ShellSession) Resize(cols, rows uint16) error {
+	_, err := sh.client.rpc.TerminalResize(context.Background(), authReq(sh.client.sign(),
+		&v1.DaemonTerminalResizeRequest{Id: sh.id, Cols: uint32(cols), Rows: uint32(rows)}))
+	return err
+}
+
+// History пуст: жизнь вспомогательного шелла равна жизни WS-подключения (нечего восстанавливать).
+func (sh *ShellSession) History() []byte { return nil }
+
+// Terminate отменяет поток (демон гасит эфемерный pty) и закрывает pipe.
+func (sh *ShellSession) Terminate(context.Context) error {
+	sh.cancel()
+	_ = sh.pw.CloseWithError(io.EOF)
+	return nil
 }
 
 // Close отцепляет клиента (останавливает StreamEvents-цикл). Демон (и адаптер) при этом
