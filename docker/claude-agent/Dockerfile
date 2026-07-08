@@ -43,9 +43,13 @@ RUN apt-get update \
         jq less unzip zip procps openssh-client patch file tree vim-tiny \
     && rm -rf /var/lib/apt/lists/*
 
-# Adapter не ниже 0.54: в 0.52 session/set_config_option (смена модели) рассинхро-
-# нивался с SDK-процессом — adapter рапортовал новую модель, а отвечала старая.
-RUN npm install -g @anthropic-ai/claude-code "@agentclientprotocol/claude-agent-acp@^0.54.1" \
+# Adapter держим в ногу с claude-code (тот ставится latest): каретка ^0.54.1 капалась на
+# 0.54.x, отставая от свежего SDK на несколько миноров — старый adapter не прорелеивал через
+# ACP новые механизмы (напр. structured-output инструмента Workflow ломался на фазе Scope).
+# Плавающий минор ^0.57 держит adapter актуальным. (Исторически ≥0.54: в 0.52
+# session/set_config_option рассинхронивался с SDK — adapter рапортовал новую модель, а
+# отвечала старая.)
+RUN npm install -g @anthropic-ai/claude-code "@agentclientprotocol/claude-agent-acp@^0.57.0" \
     && npm cache clean --force
 
 # brigade MCP-сервер кастомных UI-инструментов (render_ui, show_choice). Сток-адаптер
