@@ -114,8 +114,12 @@ func (x *DaemonOpenTerminalRequest) GetDurable() bool {
 }
 
 type DaemonTerminalOutput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"` // сырые байты TTY (без stdcopy-мультиплексирования)
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Data  []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"` // сырые байты TTY (без stdcopy-мультиплексирования)
+	// exited — финальное сообщение durable-терминала: процесс завершился (сигнал выхода агента
+	// для brigade; отличает завершение процесса от отцепления стрима). data при этом пуст.
+	Exited        bool  `protobuf:"varint,2,opt,name=exited,proto3" json:"exited,omitempty"`
+	ExitCode      int32 `protobuf:"varint,3,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -155,6 +159,20 @@ func (x *DaemonTerminalOutput) GetData() []byte {
 		return x.Data
 	}
 	return nil
+}
+
+func (x *DaemonTerminalOutput) GetExited() bool {
+	if x != nil {
+		return x.Exited
+	}
+	return false
+}
+
+func (x *DaemonTerminalOutput) GetExitCode() int32 {
+	if x != nil {
+		return x.ExitCode
+	}
+	return 0
 }
 
 type DaemonTerminalInputRequest struct {
@@ -959,9 +977,11 @@ const file_brigade_v1_agent_daemon_proto_rawDesc = "" +
 	"\x03env\x18\x04 \x03(\tR\x03env\x12\x12\n" +
 	"\x04cols\x18\x05 \x01(\rR\x04cols\x12\x12\n" +
 	"\x04rows\x18\x06 \x01(\rR\x04rows\x12\x18\n" +
-	"\adurable\x18\a \x01(\bR\adurable\"*\n" +
+	"\adurable\x18\a \x01(\bR\adurable\"_\n" +
 	"\x14DaemonTerminalOutput\x12\x12\n" +
-	"\x04data\x18\x01 \x01(\fR\x04data\"@\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data\x12\x16\n" +
+	"\x06exited\x18\x02 \x01(\bR\x06exited\x12\x1b\n" +
+	"\texit_code\x18\x03 \x01(\x05R\bexitCode\"@\n" +
 	"\x1aDaemonTerminalInputRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04data\x18\x02 \x01(\fR\x04data\"U\n" +

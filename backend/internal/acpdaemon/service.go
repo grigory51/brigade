@@ -221,7 +221,19 @@ func (s *service) OpenTerminal(ctx context.Context, req *connect.Request[v1.Daem
 			}
 			return nil
 		case <-t.doneCh:
-			return nil // процесс завершился — закрытие потока сигналит выход brigade
+			// Процесс завершился: дренируем остаток вывода, затем шлём финальный exited-сигнал
+			// (brigade отличает завершение процесса от отцепления стрима).
+			for {
+				select {
+				case chunk := <-ch:
+					if err := send(chunk); err != nil {
+						return err
+					}
+				default:
+					_ = stream.Send(&v1.DaemonTerminalOutput{Exited: true, ExitCode: int32(t.exitCode())})
+					return nil
+				}
+			}
 		case chunk := <-ch:
 			if err := send(chunk); err != nil {
 				return err

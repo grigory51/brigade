@@ -76,6 +76,10 @@ message DaemonOpenTerminalRequest {
 
 message DaemonTerminalOutput {
   bytes data = 1;            // сырые байты TTY (без stdcopy-мультиплексирования)
+  // exited — финальное сообщение durable-терминала: процесс завершился (сигнал выхода агента
+  // для brigade; отличает завершение процесса от отцепления стрима). data при этом пуст.
+  bool exited = 2;
+  int32 exit_code = 3;
 }
 
 message DaemonTerminalInputRequest {

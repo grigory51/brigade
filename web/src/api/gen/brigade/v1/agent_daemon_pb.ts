@@ -98,6 +98,19 @@ export class DaemonTerminalOutput extends Message<DaemonTerminalOutput> {
    */
   data = new Uint8Array(0);
 
+  /**
+   * exited — финальное сообщение durable-терминала: процесс завершился (сигнал выхода агента
+   * для brigade; отличает завершение процесса от отцепления стрима). data при этом пуст.
+   *
+   * @generated from field: bool exited = 2;
+   */
+  exited = false;
+
+  /**
+   * @generated from field: int32 exit_code = 3;
+   */
+  exitCode = 0;
+
   constructor(data?: PartialMessage<DaemonTerminalOutput>) {
     super();
     proto3.util.initPartial(data, this);
@@ -107,6 +120,8 @@ export class DaemonTerminalOutput extends Message<DaemonTerminalOutput> {
   static readonly typeName = "brigade.v1.DaemonTerminalOutput";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "data", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
+    { no: 2, name: "exited", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 3, name: "exit_code", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaemonTerminalOutput {

@@ -23,6 +23,7 @@ type terminal struct {
 
 	mu      sync.Mutex
 	hist    []byte
+	ec      int           // exit-код процесса (валиден после закрытия doneCh)
 	subCh   chan []byte   // канал текущего подписчика (nil — нет)
 	subDone chan struct{} // закрывается, чтобы отцепить подписчика (reconnect)
 }
@@ -59,8 +60,22 @@ func (t *terminal) readLoop(onExit func()) {
 			break
 		}
 	}
+	// Reap процесса и захват exit-кода (единственный Wait — kill его не дублирует).
+	_ = t.cmd.Wait()
+	t.mu.Lock()
+	if t.cmd.ProcessState != nil {
+		t.ec = t.cmd.ProcessState.ExitCode()
+	}
+	t.mu.Unlock()
 	close(t.doneCh)
 	onExit()
+}
+
+// exitCode возвращает код завершения процесса (валиден после закрытия doneCh).
+func (t *terminal) exitCode() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.ec
 }
 
 // subscribe отдаёт scrollback и канал live-вывода, отцепляя прежнего подписчика (reconnect).
@@ -93,13 +108,13 @@ func (t *terminal) resize(cols, rows uint16) error {
 	return pty.Setsize(t.ptmx, &pty.Winsize{Cols: cols, Rows: rows})
 }
 
-// kill гасит pty и процесс (эфемерный терминал — при закрытии стрима).
+// kill гасит pty и процесс (эфемерный терминал — при закрытии стрима). Reap делает readLoop
+// (Wait после EOF pty) — здесь Wait не зовём, двойной Wait недопустим.
 func (t *terminal) kill() {
 	_ = t.ptmx.Close()
 	if t.cmd.Process != nil {
 		_ = t.cmd.Process.Kill()
 	}
-	go func() { _ = t.cmd.Wait() }() // reap без зомби
 }
 
 // openReq — параметры запуска терминала (перекладка DaemonOpenTerminalRequest без gen-типов).
