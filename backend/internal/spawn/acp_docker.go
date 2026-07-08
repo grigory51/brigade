@@ -43,8 +43,9 @@ func (s *DockerSpawner) ACP() *DockerACPSpawner { return &DockerACPSpawner{spawn
 // возвращает адрес его Connect-сервера для дозвона. Секретов в env контейнера НЕТ (они
 // придут в Configure и лягут только в env дочернего адаптера — `/ws/shell` их не видит):
 // в env только несекретная конфигурация демона. Контейнер БЕЗ AutoRemove — переживает
-// рестарт brigade; удаляется явно при teardown. token — per-session daemon-token.
-func (d *DockerACPSpawner) StartDaemon(ctx context.Context, spec Spec, stateID, token string) (string, error) {
+// рестарт brigade; удаляется явно при teardown. pubKey — публичный Ed25519-ключ brigade
+// (asymmetric-auth: демон проверяет им подпись вызовов; утечка env импрсонацию не даёт).
+func (d *DockerACPSpawner) StartDaemon(ctx context.Context, spec Spec, stateID, pubKey string) (string, error) {
 	cli := d.spawner.cli
 	image := spec.Image
 	if image == "" {
@@ -71,7 +72,7 @@ func (d *DockerACPSpawner) StartDaemon(ctx context.Context, spec Spec, stateID, 
 		Env: []string{
 			"BRIGADE_SESSION_ID=" + spec.SessionID,
 			fmt.Sprintf("BRIGADE_DAEMON_PORT=%d", daemonPort),
-			"BRIGADE_DAEMON_TOKEN=" + token,
+			"BRIGADE_DAEMON_PUBKEY=" + pubKey,
 			"BRIGADE_DAEMON_LOG=" + AgentHome + daemonLogDir + "/" + spec.SessionID + "/acp-events.jsonl",
 		},
 		Hostname:     spec.Hostname,

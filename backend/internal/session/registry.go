@@ -519,6 +519,12 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 	}
 }
 
+// daemonTokenFn — подписант токена для вызовов демона сессии (asymmetric-auth): замыкает
+// preview.DaemonToken по sessionID; acpremote/cliremote подписывают им каждый вызов.
+func (r *Registry) daemonTokenFn(sessionID string) func() (string, error) {
+	return func() (string, error) { return r.previews.DaemonToken(sessionID) }
+}
+
 // spawnACPDaemon поднимает durable ACP-демон в контейнере сессии (docker-режим) и
 // возвращает acpremote-клиент к нему. Секреты (OAuth-токен, preview-env) уходят демону
 // через Configure — в env контейнера их НЕТ (не видны из /ws/shell docker exec).
@@ -533,18 +539,17 @@ func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token
 	if err != nil {
 		return nil, "", "", err
 	}
-	daemonToken := r.previews.DaemonTokenFor(sess.ID)
 	addr, err := ds.ACP().StartDaemon(ctx, spawn.Spec{
 		SessionID: sess.ID,
 		Cwd:       sess.Cwd,
 		HomeHost:  r.homeHost(sess),
 		Hostname:  r.userHostname(ctx, sess.UserID),
-	}, stateID, daemonToken)
+	}, stateID, r.previews.DaemonPublicKey())
 	if err != nil {
 		return nil, "", "", fmt.Errorf("session: start acp daemon: %w", err)
 	}
 
-	rc := acpremote.New(addr, daemonToken, "")
+	rc := acpremote.New(addr, "", r.daemonTokenFn(sess.ID))
 	sid, err := rc.Configure(ctx, acpremote.ConfigureOptions{
 		OAuthToken:        token,
 		ExtraEnv:          r.previewEnv(sess), // preview-токен/URL — только адаптеру, не в env контейнера
@@ -1139,7 +1144,7 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 			sid := sess.AgentSessionID
 			if ds, ok := r.spawner.(*spawn.DockerSpawner); ok {
 				if addr, alive := ds.ACP().DaemonAddr(ctx, sess.ID); alive {
-					rc = acpremote.New(addr, r.previews.DaemonTokenFor(sess.ID), sess.AgentSessionID)
+					rc = acpremote.New(addr, sess.AgentSessionID, r.daemonTokenFn(sess.ID))
 				}
 			}
 			if rc == nil {

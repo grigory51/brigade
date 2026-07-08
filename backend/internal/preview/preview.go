@@ -19,6 +19,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/grigory51/brigade/backend/internal/agentauth"
 )
 
 // tokenContext отделяет HMAC-токены preview от любых других применений того же
@@ -104,8 +106,9 @@ type Registered struct {
 // Реестр не персистится: маршрут детерминирован и работает без регистрации,
 // потеря ссылок в UI при рестарте исправляется повторной регистрацией.
 type Service struct {
-	cfg    Config
-	secret []byte
+	cfg          Config
+	secret       []byte
+	daemonSigner *agentauth.Signer
 
 	mu        sync.Mutex
 	bySession map[string][]Registered
@@ -115,9 +118,10 @@ type Service struct {
 // контекст-префикс отделяет токены preview от JWT.
 func NewService(cfg Config, secret []byte) *Service {
 	return &Service{
-		cfg:       cfg,
-		secret:    secret,
-		bySession: make(map[string][]Registered),
+		cfg:          cfg,
+		secret:       secret,
+		daemonSigner: agentauth.NewSigner(string(secret)),
+		bySession:    make(map[string][]Registered),
 	}
 }
 
@@ -137,15 +141,16 @@ func (s *Service) VerifyToken(sessionID, token string) bool {
 	return hmac.Equal([]byte(want), []byte(token))
 }
 
-// DaemonTokenFor возвращает per-session capability-токен для общения brigade с ACP-демоном
-// сессии. Отдельный HMAC-контекст (не путать с preview/AgentBridge-токеном): этот токен
-// даёт лишь право говорить со своим демоном и намеренно кладётся в env контейнера
-// (несекретный), тогда как preview-токен (доступ к AgentBridge) — нет. Детерминирован:
-// brigade пересчитывает его на restore, персистить не нужно.
-func (s *Service) DaemonTokenFor(sessionID string) string {
-	mac := hmac.New(sha256.New, s.secret)
-	mac.Write([]byte("brigade-daemon:" + sessionID))
-	return hex.EncodeToString(mac.Sum(nil))
+// DaemonPublicKey — публичный Ed25519-ключ brigade (base64) для env контейнера сессии
+// (BRIGADE_DAEMON_PUBKEY). Демон проверяет им подпись вызовов; утечка env импрсонацию не даёт.
+func (s *Service) DaemonPublicKey() string {
+	return s.daemonSigner.PublicKeyB64()
+}
+
+// DaemonToken подписывает короткоживущий токен для вызова демона сессии (aud=sessionID).
+// brigade подписывает приватным ключом на каждый запрос; демон проверяет публичным.
+func (s *Service) DaemonToken(sessionID string) (string, error) {
+	return s.daemonSigner.Token(sessionID)
 }
 
 // Register фиксирует preview-эндпоинт сессии (upsert по порту) и возвращает запись

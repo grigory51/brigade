@@ -29,6 +29,7 @@ import (
 
 	"github.com/grigory51/brigade/backend/gen/go/brigade/v1/brigadev1connect"
 	"github.com/grigory51/brigade/backend/internal/acp"
+	"github.com/grigory51/brigade/backend/internal/agentauth"
 	"github.com/grigory51/brigade/backend/internal/agui"
 	"github.com/grigory51/brigade/backend/internal/eventlog"
 )
@@ -183,17 +184,17 @@ type v1ConfigureRequest struct {
 // --- entrypoint ---
 
 // Main — точка входа субкоманды `brigade acp-agent`. Конфиг берётся из env (задаётся
-// brigade при создании контейнера; секретов тут нет — только несекретный daemon-token,
-// порт, session id, путь журнала):
+// brigade при создании контейнера; секретов тут нет — только публичный ключ, порт, session id,
+// путь журнала):
 //
 //	BRIGADE_SESSION_ID    — id сессии
 //	BRIGADE_DAEMON_PORT   — порт Connect-сервера демона
-//	BRIGADE_DAEMON_TOKEN  — capability-токен (проверяется на каждом вызове)
+//	BRIGADE_DAEMON_PUBKEY — публичный Ed25519-ключ brigade (проверка подписи вызовов)
 //	BRIGADE_DAEMON_LOG    — путь журнала событий (дефолт ~/.brigade/acp-events.jsonl)
 func Main() int {
 	sessionID := os.Getenv("BRIGADE_SESSION_ID")
 	port := os.Getenv("BRIGADE_DAEMON_PORT")
-	token := os.Getenv("BRIGADE_DAEMON_TOKEN")
+	pubKey := os.Getenv("BRIGADE_DAEMON_PUBKEY")
 	logPath := os.Getenv("BRIGADE_DAEMON_LOG")
 	if logPath == "" {
 		home, _ := os.UserHomeDir()
@@ -211,8 +212,18 @@ func Main() int {
 	}
 	defer d.Close()
 
+	var verifier *agentauth.Verifier
+	if pubKey != "" {
+		v, err := agentauth.NewVerifier(pubKey)
+		if err != nil {
+			log.Printf("acpdaemon: bad daemon pubkey: %v", err)
+			return 2
+		}
+		verifier = v
+	}
+
 	mux := http.NewServeMux()
-	interceptors := connect.WithInterceptors(tokenInterceptor{token: token})
+	interceptors := connect.WithInterceptors(tokenInterceptor{verifier: verifier, sessionID: sessionID})
 	mux.Handle(brigadev1connect.NewAgentDaemonServiceHandler(&service{d: d}, interceptors))
 
 	addr := ":" + port
@@ -224,18 +235,25 @@ func Main() int {
 	return 0
 }
 
-// tokenInterceptor проверяет daemon-token в заголовке Authorization (Bearer) на unary и
-// streaming вызовах. Токен несекретный (capability поговорить со своим демоном), но
-// отсекает случайные обращения.
-type tokenInterceptor struct{ token string }
+// tokenInterceptor проверяет подпись вызова публичным ключом brigade (asymmetric-auth) на
+// unary и streaming вызовах. brigade подписывает короткоживущий токен приватным ключом, демон
+// проверяет публичным (из env); токен адресован этой сессии (aud=sessionID) — отсекает и
+// случайные обращения, и replay токена от другой сессии.
+type tokenInterceptor struct {
+	verifier  *agentauth.Verifier
+	sessionID string
+}
 
 func (t tokenInterceptor) check(h http.Header) error {
-	if t.token == "" {
-		return nil // токен не задан — проверка выключена (dev)
+	if t.verifier == nil {
+		return nil // ключ не задан — проверка выключена (dev)
 	}
 	got, ok := strings.CutPrefix(h.Get("Authorization"), "Bearer ")
-	if !ok || strings.TrimSpace(got) != t.token {
-		return connect.NewError(connect.CodeUnauthenticated, errors.New("invalid daemon token"))
+	if !ok {
+		return connect.NewError(connect.CodeUnauthenticated, errors.New("missing daemon token"))
+	}
+	if err := t.verifier.Verify(strings.TrimSpace(got), t.sessionID); err != nil {
+		return connect.NewError(connect.CodeUnauthenticated, err)
 	}
 	return nil
 }

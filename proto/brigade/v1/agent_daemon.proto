@@ -16,8 +16,9 @@ import "brigade/v1/auth.proto";
 // таксономию событий во втором proto. Скаляры (seq, generating, stop_reason) — типизированы.
 // Имена сообщений с префиксом Daemon — уникальность в пакете brigade.v1.
 //
-// Авторизация — per-session daemon-token в заголовке Authorization (несекретная capability
-// поговорить со своим демоном; проверяется хендлером демона). Секреты (OAuth-токен,
+// Авторизация — асимметричная: brigade подписывает короткоживущий токен приватным ключом,
+// демон проверяет публичным (BRIGADE_DAEMON_PUBKEY в env; утечка env импрсонацию не даёт).
+// Токен адресован сессии (aud=sessionID). Секреты (OAuth-токен,
 // preview-env) НЕ в окружении контейнера, а приходят в Configure — демон кладёт их только
 // в env дочернего процесса адаптера, поэтому `/ws/shell` (docker exec) их не видит.
 service AgentDaemonService {
