@@ -32,6 +32,7 @@ import (
 
 	"github.com/grigory51/brigade/backend/internal/acp"
 	"github.com/grigory51/brigade/backend/internal/acp/acpremote"
+	"github.com/grigory51/brigade/backend/internal/cliremote"
 	"github.com/grigory51/brigade/backend/internal/agui"
 	"github.com/grigory51/brigade/backend/internal/preview"
 	"github.com/grigory51/brigade/backend/internal/spawn"
@@ -271,16 +272,6 @@ func (r *Registry) userClaudeToken(ctx context.Context, userID string) string {
 	return settings.ClaudeToken
 }
 
-// sharedUserID возвращает UserID сессии, только если она — docker-CLI (живёт в общем
-// per-user контейнере). Для прочих (ACP, legacy, local) — пусто: поиск контейнера по
-// сессии не должен фолбэчить на общий cli-shared контейнер пользователя.
-func sharedUserID(sess store.Session) string {
-	if sess.Mode == store.SessionModeDocker && sess.Kind == store.SessionKindCLI {
-		return sess.UserID
-	}
-	return ""
-}
-
 // ErrTeardownInProgress возвращается Stop/Delete, если teardown этой сессии уже
 // выполняется другим запросом.
 var ErrTeardownInProgress = errors.New("session: teardown already in progress")
@@ -476,6 +467,11 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 		// Сериализацию с удалением общего контейнера держит вызывающий (Create/restoreOne
 		// удерживают per-user лок до регистрации live-объекта — иначе releaseUserContainer
 		// в окне «спавн готов, но live ещё не записан» снёс бы контейнер под ногами).
+		if sess.Mode == store.SessionModeDocker {
+			// docker: CLI-агент — durable-терминал per-user демона (не docker-exec).
+			return r.spawnCLIDaemon(ctx, sess, token, "")
+		}
+		// local: claude-процесс в pty на хосте (LocalSpawner).
 		handle, err := r.spawner.Spawn(ctx, spawn.Spec{
 			SessionID: sess.ID,
 			UserID:    sess.UserID,
@@ -568,6 +564,43 @@ func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token
 	}
 	lv := &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, client: rc, teardown: r.acpDaemonTeardown(sess.ID)}
 	return lv, sid, "", nil
+}
+
+// cliAgentCommand — исполняемый файл CLI-агента внутри контейнера (та же команда, что и в
+// local-режиме spawn.agentCommand).
+const cliAgentCommand = "claude"
+
+// spawnCLIDaemon поднимает CLI-агента (claude) durable-терминалом per-user демона (общий
+// контейнер пользователя — логин claude привязан к контейнеру и переживает несколько сессий).
+// brigade ходит к демону по Terminal RPC, а не docker-exec'ом. resumeSessionID непусто →
+// `claude --resume` (restore/respawn), иначе `--session-id` (первый запуск). Возвращает
+// cliremote-Handle; удаление контейнера — releaseUserContainerIfIdle (доп. teardown не нужен).
+func (r *Registry) spawnCLIDaemon(ctx context.Context, sess store.Session, token, resumeSessionID string) (*live, string, string, error) {
+	ds, ok := r.spawner.(*spawn.DockerSpawner)
+	if !ok {
+		return nil, "", "", fmt.Errorf("session: docker-режим без DockerSpawner")
+	}
+	addr, err := ds.EnsureUserDaemon(ctx, spawn.Spec{
+		UserID:   sess.UserID,
+		HomeHost: r.homeHost(sess),
+		Hostname: r.userHostname(ctx, sess.UserID),
+	}, r.previews.DaemonPublicKey())
+	if err != nil {
+		return nil, "", "", fmt.Errorf("session: ensure user daemon: %w", err)
+	}
+	cmd := []string{cliAgentCommand, "--session-id", sess.ID}
+	if resumeSessionID != "" {
+		cmd = []string{cliAgentCommand, "--resume", resumeSessionID}
+	}
+	// aud подписи = userID (per-user демон обслуживает все CLI-сессии пользователя); id
+	// терминала = sess.ID (сессия). OAuth-токен и preview-env — в env процесса, не контейнера.
+	hc := cliremote.New(addr, sess.ID, r.daemonTokenFn(sess.UserID))
+	if err := hc.Start(cmd, sess.Cwd, r.agentEnv(sess, token), 0, 0); err != nil {
+		return nil, "", "", fmt.Errorf("session: start cli terminal: %w", err)
+	}
+	go r.watchExit(sess.ID, hc)
+	lv := &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, handle: hc}
+	return lv, hc.AgentSessionID(), hc.ContainerLabel(), nil
 }
 
 // acpPluginDirs — плагин-директории агента (per-session плагин brigade со скиллами), если
@@ -749,12 +782,16 @@ func (r *Registry) Shell(ctx context.Context, sessionID, userID string) (termws.
 			}
 			return remote.OpenShell(sess.Cwd)
 		}
-		// CLI-docker: exec-шелл в общий контейнер (до переработки CLI на демон, workstream E).
+		// CLI-docker: вспом. шелл — эфемерный терминал per-user демона (не docker-exec).
 		ds, ok := r.spawner.(*spawn.DockerSpawner)
 		if !ok {
 			return nil, fmt.Errorf("session: docker shell without DockerSpawner")
 		}
-		return ds.SpawnShell(ctx, sess.ID, sharedUserID(sess), sess.Cwd)
+		addr, alive := ds.UserDaemonAddr(ctx, sess.UserID)
+		if !alive {
+			return nil, fmt.Errorf("session: нет per-user демона для шелла сессии %s", sessionID)
+		}
+		return cliremote.OpenShell(addr, sess.Cwd, r.daemonTokenFn(sess.UserID))
 	default:
 		return spawn.StartLocalShell(ctx, sess.Cwd)
 	}
@@ -1113,37 +1150,26 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 		// brigade.session.id без agent_session_id; shared-схема (пустой label)
 		// перезапускает `claude --resume <agent_session_id>` exec'ом в общем
 		// контейнере пользователя — id обязателен и задан при спавне (--session-id).
-		if sess.Mode == store.SessionModeLocal && sess.AgentSessionID == "" {
-			return r.store.UpdateSessionStatus(ctx, sess.ID, store.SessionStatusStopped)
-		}
-		// Лок держим до регистрации live-объекта (как в Create): свип контейнеров в
-		// конце RestoreAll идёт под тем же локом и без удержания мог бы снести контейнер
-		// в окне «reattach готов, live не записан».
-		unlock := func() {}
-		if sess.Mode == store.SessionModeDocker && sess.Kind == store.SessionKindCLI {
-			unlock = r.lockUser(sess.UserID)
-		}
-		handle, err := r.spawner.Reattach(ctx, spawn.Persisted{
-			SessionID:      sess.ID,
-			AgentSessionID: sess.AgentSessionID,
-			ContainerLabel: sess.ContainerLabel,
-			Cwd:            sess.Cwd,
-			Env:            r.agentEnv(sess, r.userClaudeToken(ctx, sess.UserID)),
-			UserID:         sess.UserID,
-			HomeHost:       r.homeHost(sess),
-			Hostname:       r.userHostname(ctx, sess.UserID),
-		})
-		if err != nil {
+		if sess.Mode == store.SessionModeDocker {
+			// docker: CLI-агент живёт durable-терминалом per-user демона (переживает рестарт
+			// brigade). Восстановление = reconnect (демон переотдаёт scrollback, claude не
+			// прерывался); контейнер мёртв → EnsureUserDaemon поднимет заново, `claude --resume`
+			// реплеит переписку. Лок держим до регистрации live (как в Create): свип контейнеров
+			// в конце RestoreAll под тем же локом не снесёт контейнер в окне «готов, но не записан».
+			unlock := r.lockUser(sess.UserID)
+			lv, _, _, err := r.spawnCLIDaemon(ctx, sess, r.userClaudeToken(ctx, sess.UserID), sess.AgentSessionID)
+			if err != nil {
+				unlock()
+				return fmt.Errorf("restore cli: %w", err)
+			}
+			r.mu.Lock()
+			r.live[sess.ID] = lv
+			r.mu.Unlock()
 			unlock()
-			return fmt.Errorf("reattach cli: %w", err)
+			return nil
 		}
-		r.mu.Lock()
-		r.live[sess.ID] = &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, handle: handle}
-		r.mu.Unlock()
-		unlock()
-		// Следим за завершением восстановленного агента, как и при первичном спавне.
-		go r.watchExit(sess.ID, handle)
-		return nil
+		// local: процесс агента умер с рестартом brigade — сессия объективно мертва.
+		return r.store.UpdateSessionStatus(ctx, sess.ID, store.SessionStatusStopped)
 
 	case store.SessionKindACP:
 		token := r.userClaudeToken(ctx, sess.UserID)

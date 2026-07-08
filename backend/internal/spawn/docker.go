@@ -6,13 +6,12 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"sync"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 )
 
 // labelSessionID — ключ label, помечающий контейнер сессии brigade. По нему
@@ -28,12 +27,6 @@ const (
 	labelKind         = "brigade.kind"
 	labelKindCLIShare = "cli-shared"
 )
-
-// sessionMarkEnv — переменная окружения exec-процесса CLI-сессии в общем контейнере.
-// Docker API не умеет завершать exec-процессы и переподключаться к ним — по маркеру
-// в /proc/*/environ процесс сессии находится для kill (teardown, зачистка орфана
-// перед resume). Значение — SessionID.
-const sessionMarkEnv = "BRIGADE_SESSION_MARK"
 
 // dockerStopTimeoutSeconds — бюджет штатной остановки контейнера (ContainerStop), после
 // которого docker эскалирует до SIGKILL.
@@ -195,71 +188,12 @@ func homeBind(hostCfg *container.HostConfig, spec Spec) {
 // per-user контейнере (см. ensureUserContainer). Пустой — legacy-схема: отдельный
 // контейнер на сессию с label brigade.session.id=<SessionID> (сохранена для
 // восстановления старых сессий; новые так не создаются).
-func (s *DockerSpawner) Spawn(ctx context.Context, spec Spec) (Handle, error) {
-	if spec.UserID != "" {
-		containerID, err := s.ensureUserContainer(ctx, spec.UserID, spec.Image, spec.HomeHost, spec.Hostname)
-		if err != nil {
-			return nil, err
-		}
-		// --session-id фиксирует идентификатор сессии агента заранее (SessionID brigade —
-		// валидный UUID): resume после рестарта бэкенда делает `claude --resume <id>`
-		// свежим exec'ом, не полагаясь на структурное получение id от claude.
-		return s.spawnExecCLI(ctx, containerID, spec.SessionID, specWorkdir(spec), spec.Env,
-			[]string{agentCommand, "--session-id", spec.SessionID})
-	}
-
-	image := spec.Image
-	if image == "" {
-		image = defaultImage
-	}
-
-	cfg := &container.Config{
-		Image:        image,
-		Cmd:          []string{agentCommand},
-		Env:          spec.Env,
-		Hostname:     spec.Hostname,
-		WorkingDir:   specWorkdir(spec),
-		Labels:       map[string]string{labelSessionID: spec.SessionID},
-		Tty:          true,
-		OpenStdin:    true,
-		AttachStdin:  true,
-		AttachStdout: true,
-		AttachStderr: true,
-	}
-
-	// pid 1 — docker-init (tini), а не агент: он реапит осиротевшие процессы
-	// (например, убитые шеллы /ws/shell и их детей), иначе в контейнере копились
-	// бы зомби.
-	initProcess := true
-	hostCfg := &container.HostConfig{
-		Init: &initProcess,
-		// host.docker.internal резолвится в шлюз хоста и на Linux (host-gateway);
-		// используется, когда brigade — процесс на хосте (нет своей docker-сети).
-		ExtraHosts:  []string{"host.docker.internal:host-gateway"},
-		NetworkMode: s.netMode(),
-	}
-	// Весь home пользователя монтируется per-user: рабочие файлы (~/workspace) и
-	// состояние Claude (~/.claude, ~/.claude.json) переживают сессии и общие между
-	// контейнерами пользователя. Отдельного bind рабочей директории нет.
-	homeBind(hostCfg, spec)
-
-	created, err := s.cli.ContainerCreate(ctx, cfg, hostCfg, s.networkingConfig(), nil, "brigade-"+spec.SessionID)
-	if err != nil {
-		return nil, fmt.Errorf("spawn: container create: %w", err)
-	}
-
-	// Сначала attach, затем start: иначе ранний вывод агента до подключения теряется.
-	hijacked, err := s.attach(ctx, created.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.cli.ContainerStart(ctx, created.ID, container.StartOptions{}); err != nil {
-		hijacked.Close()
-		return nil, fmt.Errorf("spawn: container start: %w", err)
-	}
-
-	return s.newHandle(created.ID, spec.SessionID, hijacked), nil
+// Spawn/Reattach для docker больше не используются: CLI-сессии docker поднимает реестр через
+// per-user агент-демон (registry.spawnCLIDaemon → EnsureUserDaemon + cliremote), ACP —
+// registry.spawnACPDaemon. Методы оставлены для удовлетворения интерфейса Spawner (его
+// использует и local-спавнер); в docker-режиме не вызываются.
+func (s *DockerSpawner) Spawn(context.Context, Spec) (Handle, error) {
+	return nil, errors.New("spawn: docker-сессии поднимаются реестром через демон, не Spawn")
 }
 
 // Reattach восстанавливает CLI-сессию после рестарта бэкенда.
@@ -272,45 +206,8 @@ func (s *DockerSpawner) Spawn(ctx context.Context, spec Spec) (Handle, error) {
 // при необходимости (hostname/home сохраняют авторизацию Claude), осиротевший процесс
 // прежнего exec'а убивается по маркеру, затем свежий exec `claude --resume
 // <AgentSessionID>` продолжает тот же диалог.
-func (s *DockerSpawner) Reattach(ctx context.Context, p Persisted) (Handle, error) {
-	if p.ContainerLabel == "" && p.UserID != "" {
-		if p.AgentSessionID == "" {
-			return nil, errors.New("spawn: shared cli reattach requires agent session id")
-		}
-		containerID, err := s.ensureUserContainer(ctx, p.UserID, p.Image, p.HomeHost, p.Hostname)
-		if err != nil {
-			return nil, err
-		}
-		// Прежний exec пережил рестарт brigade (pty держит dockerd), но его attach
-		// невосстановим — процесс осиротел. Убиваем по маркеру СИНХРОННО (ждём
-		// завершения kill-скрипта): новый exec ниже получит тот же маркер, и не
-		// дождавшись kill, скрипт нашёл бы уже его /proc/<pid>/environ и убил свежий
-		// процесс.
-		if err := killByEnvMarkSync(ctx, s.cli, containerID, sessionMarkEnv, p.SessionID); err != nil {
-			log.Printf("spawn: orphan cleanup %s: %v", p.SessionID, err)
-		}
-		return s.spawnExecCLI(ctx, containerID, p.SessionID, specWorkdir(Spec{Cwd: p.Cwd}), p.Env,
-			[]string{agentCommand, "--resume", p.AgentSessionID})
-	}
-
-	label := p.ContainerLabel
-	if label == "" {
-		label = p.SessionID
-	}
-	if label == "" {
-		return nil, errors.New("spawn: docker reattach requires container label or session id")
-	}
-
-	id, err := s.findBySessionLabel(ctx, label)
-	if err != nil {
-		return nil, err
-	}
-
-	hijacked, err := s.attach(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return s.newHandle(id, p.SessionID, hijacked), nil
+func (s *DockerSpawner) Reattach(context.Context, Persisted) (Handle, error) {
+	return nil, errors.New("spawn: docker-сессии восстанавливаются реестром через демон, не Reattach")
 }
 
 // ensureUserContainer возвращает работающий общий контейнер пользователя, создавая
@@ -318,7 +215,7 @@ func (s *DockerSpawner) Reattach(ctx context.Context, p Persisted) (Handle, erro
 // главный процесс — idle-якорь (sleep infinity), сессии живут exec'ами. Hostname и
 // bind home стабильны per-user — авторизация Claude переживает и сессии, и
 // пересоздание контейнера настолько, насколько её fingerprint опирается на них.
-func (s *DockerSpawner) ensureUserContainer(ctx context.Context, userID, image, homeHost, hostname string) (string, error) {
+func (s *DockerSpawner) ensureUserContainer(ctx context.Context, userID, image, homeHost, hostname, pubKey string) (string, error) {
 	if id, state, err := s.findUserContainer(ctx, userID); err != nil {
 		return "", err
 	} else if id != "" {
@@ -332,19 +229,34 @@ func (s *DockerSpawner) ensureUserContainer(ctx context.Context, userID, image, 
 		image = defaultImage
 	}
 	initProcess := true
+	daemonNatPort := nat.Port(fmt.Sprintf("%d/tcp", daemonPort))
 	cfg := &container.Config{
-		Image:    image,
-		Cmd:      []string{"sleep", "infinity"},
+		Image: image,
+		// pid1 — per-user агент-демон brigade: CLI-сессии и вспом. шеллы он спавнит сам в pty
+		// (Terminal RPC), brigade ходит по Connect, а не docker-exec'ом. Контейнер общий на
+		// пользователя — логин claude (привязан к контейнеру) переживает несколько сессий.
+		Cmd:      []string{brigadeBinPath, "acp-agent"},
 		Hostname: hostname,
+		// Идентификатор демона (aud подписи) = userID: per-user демон обслуживает все CLI-сессии
+		// пользователя. Секретов в env нет — только публичный ключ.
+		Env: []string{
+			"BRIGADE_SESSION_ID=" + userID,
+			fmt.Sprintf("BRIGADE_DAEMON_PORT=%d", daemonPort),
+			"BRIGADE_DAEMON_PUBKEY=" + pubKey,
+			"BRIGADE_DAEMON_LOG=" + AgentHome + daemonLogDir + "/user-" + userID + "/events.jsonl",
+		},
 		Labels: map[string]string{
 			labelUserID: userID,
 			labelKind:   labelKindCLIShare,
 		},
+		ExposedPorts: nat.PortSet{daemonNatPort: struct{}{}},
 	}
 	hostCfg := &container.HostConfig{
 		Init:        &initProcess,
 		ExtraHosts:  []string{"host.docker.internal:host-gateway"},
 		NetworkMode: s.netMode(),
+		// Публикуем порт демона на 127.0.0.1:<эфемерный> для host-режима brigade (см. daemonAddrByID).
+		PortBindings: nat.PortMap{daemonNatPort: []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: ""}}},
 	}
 	homeBind(hostCfg, Spec{HomeHost: homeHost})
 
@@ -364,6 +276,42 @@ func (s *DockerSpawner) ensureUserContainer(ctx context.Context, userID, image, 
 		return "", fmt.Errorf("spawn: user container start: %w", err)
 	}
 	return created.ID, nil
+}
+
+// EnsureUserDaemon поднимает per-user контейнер с агентом-демоном (или переиспользует живой) и
+// возвращает адрес его Connect-сервера, дождавшись готовности. Общий контейнер на пользователя
+// сохраняет логин claude; CLI-сессии — durable-терминалы демона. pubKey — публичный ключ
+// brigade (asymmetric-auth). Вызывающий держит per-user лок (как прежняя shared-схема).
+func (s *DockerSpawner) EnsureUserDaemon(ctx context.Context, spec Spec, pubKey string) (string, error) {
+	id, err := s.ensureUserContainer(ctx, spec.UserID, spec.Image, spec.HomeHost, spec.Hostname, pubKey)
+	if err != nil {
+		return "", err
+	}
+	addr, err := s.daemonAddrByID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	if err := waitDaemonReady(ctx, addr); err != nil {
+		return "", err
+	}
+	return addr, nil
+}
+
+// UserDaemonAddr возвращает адрес per-user демона для reconnect после рестарта brigade.
+// ok=false — контейнера нет или он не поднимается.
+func (s *DockerSpawner) UserDaemonAddr(ctx context.Context, userID string) (string, bool) {
+	id, state, err := s.findUserContainer(ctx, userID)
+	if err != nil || id == "" {
+		return "", false
+	}
+	if err := s.ensureRunning(ctx, id, state); err != nil {
+		return "", false
+	}
+	addr, err := s.daemonAddrByID(ctx, id)
+	if err != nil {
+		return "", false
+	}
+	return addr, true
 }
 
 // findUserContainer ищет общий контейнер пользователя по label brigade.user.id.
@@ -473,120 +421,3 @@ func (s *DockerSpawner) findBySessionLabel(ctx context.Context, label string) (s
 	}
 	return list[0].ID, nil
 }
-
-// attach подключается к stdin/stdout/stderr контейнера в потоковом режиме.
-func (s *DockerSpawner) attach(ctx context.Context, id string) (types.HijackedResponse, error) {
-	hijacked, err := s.cli.ContainerAttach(ctx, id, container.AttachOptions{
-		Stream: true,
-		Stdin:  true,
-		Stdout: true,
-		Stderr: true,
-	})
-	if err != nil {
-		return types.HijackedResponse{}, fmt.Errorf("spawn: container attach: %w", err)
-	}
-	return hijacked, nil
-}
-
-func (s *DockerSpawner) newHandle(id, sessionID string, hijacked types.HijackedResponse) *dockerHandle {
-	return &dockerHandle{
-		cli:       s.cli,
-		id:        id,
-		sessionID: sessionID,
-		hijacked:  hijacked,
-		exitCode:  -1,
-	}
-}
-
-// dockerHandle — Handle над attach-потоком контейнера.
-//
-// При TTY:true вывод не мультиплексируется (без stdcopy-заголовков), поэтому Reader
-// отдаёт raw-байты терминала напрямую. Запись в stdin идёт в Conn соединения.
-type dockerHandle struct {
-	cli       *client.Client
-	id        string
-	sessionID string
-	hijacked  types.HijackedResponse
-
-	// hist хранит хвост вывода терминала для восстановления экрана при reconnect.
-	hist history
-
-	waitOnce sync.Once
-	waitErr  error
-	exitCode int
-}
-
-// Read читает вывод контейнера и попутно накапливает его хвост в hist, чтобы новое
-// WebSocket-подключение могло восстановить содержимое терминала.
-func (h *dockerHandle) Read(p []byte) (int, error) {
-	n, err := h.hijacked.Reader.Read(p)
-	if n > 0 {
-		h.hist.append(p[:n])
-	}
-	return n, err
-}
-
-func (h *dockerHandle) Write(p []byte) (int, error) { return h.hijacked.Conn.Write(p) }
-
-// History возвращает копию накопленного хвоста вывода терминала.
-func (h *dockerHandle) History() []byte { return h.hist.snapshot() }
-
-// Close закрывает attach-соединение. Контейнер при этом продолжает работать —
-// это нужно для resume через повторный attach; остановка контейнера выполняется
-// отдельно (Terminate при Stop/Delete сессии).
-func (h *dockerHandle) Close() error {
-	h.hijacked.Close()
-	return nil
-}
-
-// Terminate останавливает и удаляет контейнер сессии. Сначала закрывается attach-поток,
-// затем контейнер останавливается штатно (ContainerStop с таймаутом — docker сам
-// эскалирует до SIGKILL) и удаляется. Без этого Stop/Delete оставляли бы контейнер
-// работать вечно (утечка). Идемпотентна: отсутствующий/уже остановленный контейнер не
-// считается ошибкой.
-func (h *dockerHandle) Terminate(ctx context.Context) error {
-	h.hijacked.Close()
-
-	stopTimeout := dockerStopTimeoutSeconds
-	if err := h.cli.ContainerStop(ctx, h.id, container.StopOptions{Timeout: &stopTimeout}); err != nil {
-		// Контейнер мог уже не существовать/быть остановленным — это не ошибка teardown.
-		log.Printf("spawn: container stop %s: %v", h.id, err)
-	}
-	if err := h.cli.ContainerRemove(ctx, h.id, container.RemoveOptions{Force: true}); err != nil {
-		log.Printf("spawn: container remove %s: %v", h.id, err)
-	}
-	return nil
-}
-
-// Resize меняет размер TTY контейнера.
-func (h *dockerHandle) Resize(cols, rows uint16) error {
-	return h.cli.ContainerResize(context.Background(), h.id, container.ResizeOptions{
-		Height: uint(rows),
-		Width:  uint(cols),
-	})
-}
-
-// Wait дожидается завершения контейнера и фиксирует код выхода. Идемпотентна.
-func (h *dockerHandle) Wait() error {
-	h.waitOnce.Do(func() {
-		ctx := context.Background()
-		statusCh, errCh := h.cli.ContainerWait(ctx, h.id, container.WaitConditionNotRunning)
-		select {
-		case err := <-errCh:
-			h.waitErr = err
-			h.exitCode = -1
-		case st := <-statusCh:
-			h.exitCode = int(st.StatusCode)
-			if st.Error != nil {
-				h.waitErr = errors.New(st.Error.Message)
-			}
-		}
-	})
-	return h.waitErr
-}
-
-func (h *dockerHandle) ExitCode() int          { return h.exitCode }
-func (h *dockerHandle) AgentSessionID() string { return "" }
-
-// ContainerLabel возвращает значение label brigade.session.id контейнера сессии.
-func (h *dockerHandle) ContainerLabel() string { return h.sessionID }

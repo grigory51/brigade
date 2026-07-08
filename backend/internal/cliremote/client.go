@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
 	"github.com/grigory51/brigade/backend/gen/go/brigade/v1/brigadev1connect"
@@ -172,3 +173,83 @@ func (c *Client) AgentSessionID() string { return c.termID }
 // ContainerLabel пуст: CLI живёт в общем per-user контейнере (нет метки brigade.session.id).
 // По пустому значению restore выбирает per-user-daemon-ветку (как и прежняя shared-схема).
 func (c *Client) ContainerLabel() string { return "" }
+
+// --- вспомогательный шелл на per-user демоне ---
+
+// OpenShell поднимает вспомогательный шелл (bash в pty) на per-user демоне по baseURL и
+// возвращает ShellSession (реализует termws.Shell). Эфемерный: Terminate гасит pty в демоне.
+func OpenShell(baseURL, cwd string, signToken func() (string, error)) (*ShellSession, error) {
+	rpc := brigadev1connect.NewAgentDaemonServiceClient(http.DefaultClient, baseURL)
+	sh := &ShellSession{rpc: rpc, signToken: signToken, id: uuid.NewString()}
+	ctx, cancel := context.WithCancel(context.Background())
+	sh.cancel = cancel
+	stream, err := rpc.OpenTerminal(ctx, authReq(sh.sign(), &v1.DaemonOpenTerminalRequest{
+		Id:      sh.id,
+		Cmd:     []string{"/bin/bash"},
+		Cwd:     cwd,
+		Durable: false,
+	}))
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	sh.pr, sh.pw = io.Pipe()
+	go sh.pump(stream)
+	return sh, nil
+}
+
+// ShellSession — brigade-сторона вспомогательного шелла CLI-сессии поверх Terminal RPC
+// per-user демона. Реализует termws.Shell.
+type ShellSession struct {
+	rpc       brigadev1connect.AgentDaemonServiceClient
+	signToken func() (string, error)
+	id        string
+	cancel    context.CancelFunc
+	pr        *io.PipeReader
+	pw        *io.PipeWriter
+}
+
+func (sh *ShellSession) sign() string {
+	t, err := sh.signToken()
+	if err != nil {
+		log.Printf("cliremote: sign daemon token: %v", err)
+		return ""
+	}
+	return t
+}
+
+func (sh *ShellSession) pump(stream *connect.ServerStreamForClient[v1.DaemonTerminalOutput]) {
+	for stream.Receive() {
+		if _, err := sh.pw.Write(stream.Msg().Data); err != nil {
+			break
+		}
+	}
+	_ = sh.pw.CloseWithError(io.EOF)
+}
+
+func (sh *ShellSession) Read(p []byte) (int, error) { return sh.pr.Read(p) }
+
+func (sh *ShellSession) Write(p []byte) (int, error) {
+	_, err := sh.rpc.TerminalInput(context.Background(), authReq(sh.sign(),
+		&v1.DaemonTerminalInputRequest{Id: sh.id, Data: p}))
+	if err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+func (sh *ShellSession) Resize(cols, rows uint16) error {
+	_, err := sh.rpc.TerminalResize(context.Background(), authReq(sh.sign(),
+		&v1.DaemonTerminalResizeRequest{Id: sh.id, Cols: uint32(cols), Rows: uint32(rows)}))
+	return err
+}
+
+func (sh *ShellSession) History() []byte { return nil }
+
+func (sh *ShellSession) Terminate(context.Context) error {
+	sh.cancel()
+	if sh.pw != nil {
+		_ = sh.pw.CloseWithError(io.EOF)
+	}
+	return nil
+}
