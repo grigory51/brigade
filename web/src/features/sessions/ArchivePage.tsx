@@ -1,9 +1,12 @@
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Archive, ChevronLeft, Loader2 } from "lucide-react";
-import { archiveClient } from "@/api/client";
+import { ConnectError } from "@connectrpc/connect";
+import { Archive, ChevronLeft, Loader2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { archiveClient, sessionClient } from "@/api/client";
 import type { Session } from "@/api/gen/brigade/v1/session_pb";
+import { cn } from "@/lib/utils";
 import { AcpThread } from "@/features/acp/AcpThread";
 import { useArchivedRuntime } from "@/features/acp/useArchivedRuntime";
 
@@ -26,7 +29,26 @@ function formatDate(unixSec: bigint): string {
 // агента). Клик открывает readonly-чат.
 export function ArchivePage() {
   const [sessions, setSessions] = useState<Session[] | null>(null);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const navigate = useNavigate();
+
+  async function onDelete(id: string) {
+    setDeletingIds((prev) => new Set(prev).add(id));
+    try {
+      await sessionClient.delete({ sessionId: id });
+      setSessions((prev) => (prev ?? []).filter((s) => s.id !== id));
+      toast.success("Сессия удалена из архива");
+    } catch (err) {
+      toast.error(
+        err instanceof ConnectError ? err.rawMessage : "Не удалось удалить сессию",
+      );
+      setDeletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  }
 
   useEffect(() => {
     let alive = true;
@@ -65,25 +87,48 @@ export function ArchivePage() {
         </p>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {sessions.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => navigate(`/archive/${s.id}`)}
-              className="flex flex-col gap-2 rounded-lg border bg-card p-4 text-left transition-colors hover:border-foreground/20 hover:bg-accent/40"
-            >
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="min-w-0 truncate font-medium">
-                  {sessionTitle(s)}
-                </span>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {formatDate(s.createdAt)}
-                </span>
+          {sessions.map((s) => {
+            const deleting = deletingIds.has(s.id);
+            return (
+              <div
+                key={s.id}
+                onClick={() => !deleting && navigate(`/archive/${s.id}`)}
+                className={cn(
+                  "group flex cursor-pointer flex-col gap-2 rounded-lg border bg-card p-4 text-left transition-colors hover:border-foreground/20 hover:bg-accent/40",
+                  deleting && "pointer-events-none opacity-50",
+                )}
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="min-w-0 truncate font-medium">
+                    {sessionTitle(s)}
+                  </span>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">
+                      {formatDate(s.createdAt)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void onDelete(s.id);
+                      }}
+                      title="Удалить из архива"
+                      className="flex size-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground group-hover:opacity-100"
+                    >
+                      {deleting ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="size-3.5" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+                <p className="line-clamp-3 text-sm text-muted-foreground">
+                  {s.summary || "Без описания."}
+                </p>
               </div>
-              <p className="line-clamp-3 text-sm text-muted-foreground">
-                {s.summary || "Без описания."}
-              </p>
-            </button>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
