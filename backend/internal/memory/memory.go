@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -748,18 +749,40 @@ func (s *Service) prepareLocked(ctx context.Context, userID string) (space, erro
 // пользователя мог измениться) и идентичность; иначе git clone --depth 1.
 func (s *Service) ensureCloneLocked(ctx context.Context, sp space) error {
 	if isGitRepo(sp.repoDir) {
-		if _, err := s.git(ctx, sp.repoDir, sp.keyPath, "remote", "set-url", "origin", sp.remote); err != nil {
-			return err
+		if s.repoHealthy(ctx, sp) {
+			if _, err := s.git(ctx, sp.repoDir, sp.keyPath, "remote", "set-url", "origin", sp.remote); err != nil {
+				return err
+			}
+			return s.configIdentityLocked(ctx, sp)
 		}
-		return s.configIdentityLocked(ctx, sp)
+		// Битый клон: сорванный git-процесс оставил повреждённый ref/HEAD, из-за чего commit
+		// падает (fatal: cannot lock ref 'HEAD'). Клон одноразовый, истина — на remote:
+		// сносим и переклонируем. Не чиним ref'ы вручную — переклонирование надёжнее.
+		log.Printf("memory: repo %s unhealthy, re-cloning", sp.repoDir)
+		if err := os.RemoveAll(sp.repoDir); err != nil {
+			return fmt.Errorf("memory: remove broken clone: %w", err)
+		}
 	}
 	if err := os.MkdirAll(filepath.Dir(sp.repoDir), 0o755); err != nil {
 		return fmt.Errorf("memory: mkdir parent: %w", err)
 	}
-	if _, err := s.git(ctx, "", sp.keyPath, "clone", "--depth", "1", sp.remote, sp.repoDir); err != nil {
+	// Полный clone (не --depth 1): shallow-клон на части репозиториев провоцирует конфликт
+	// ref'ов при первом коммите; персональные репо памяти малы, экономия глубины не оправдана.
+	if _, err := s.git(ctx, "", sp.keyPath, "clone", sp.remote, sp.repoDir); err != nil {
 		return fmt.Errorf("memory: clone: %w", err)
 	}
 	return s.configIdentityLocked(ctx, sp)
+}
+
+// repoHealthy проверяет, что клон в рабочем состоянии: HEAD резолвится в коммит либо это
+// валидный unborn-symref (пустой remote без коммитов). Повреждённый HEAD/ref (после сорванного
+// git-процесса) не проходит обе проверки — такой клон переклонируется.
+func (s *Service) repoHealthy(ctx context.Context, sp space) bool {
+	if _, err := s.git(ctx, sp.repoDir, sp.keyPath, "rev-parse", "--verify", "--quiet", "HEAD"); err == nil {
+		return true
+	}
+	_, err := s.git(ctx, sp.repoDir, sp.keyPath, "symbolic-ref", "--quiet", "HEAD")
+	return err == nil
 }
 
 // configIdentityLocked задаёт локальную git-идентичность клона (нужна для commit).

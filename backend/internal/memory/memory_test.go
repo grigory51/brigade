@@ -1,6 +1,64 @@
 package memory
 
-import "testing"
+import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"testing"
+
+	"github.com/grigory51/brigade/backend/internal/store"
+)
+
+// fakeSettings — источник настроек памяти для тестов (только remote, без SSH-ключа).
+type fakeSettings struct{ remote string }
+
+func (f fakeSettings) GetUserSettings(context.Context, string) (store.UserSettings, error) {
+	return store.UserSettings{MemoryRemote: f.remote}, nil
+}
+
+// TestSelfHeal проверяет, что битый локальный клон (повреждённый HEAD после сорванного
+// git-процесса) переклонируется, и запись после этого проходит.
+func TestSelfHeal(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git не доступен")
+	}
+	base := t.TempDir()
+	bare := filepath.Join(t.TempDir(), "remote.git")
+	if out, err := exec.Command("git", "init", "--bare", "-b", "main", bare).CombinedOutput(); err != nil {
+		t.Fatalf("init bare: %v: %s", err, out)
+	}
+
+	svc := NewService(base, fakeSettings{remote: bare})
+	ctx := context.Background()
+	const userID = "u1"
+
+	// Первая заметка: clone (пустой bare) + commit + push.
+	if _, _, err := svc.Create(ctx, userID, Note{Title: "one", Body: "first"}); err != nil {
+		t.Fatalf("create 1: %v", err)
+	}
+
+	// Ломаем HEAD локального клона (симуляция сорванного git-процесса).
+	repoDir := filepath.Join(base, userID, "repo")
+	if err := os.WriteFile(filepath.Join(repoDir, ".git", "HEAD"), []byte("broken\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if svc.repoHealthy(ctx, space{repoDir: repoDir}) {
+		t.Fatal("repoHealthy должен быть false при битом HEAD")
+	}
+
+	// Вторая заметка: self-heal (переклонирование) и успешная запись.
+	if _, _, err := svc.Create(ctx, userID, Note{Title: "two", Body: "second"}); err != nil {
+		t.Fatalf("create 2 после порчи HEAD: %v", err)
+	}
+	notes, err := svc.List(ctx, userID, "")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(notes) != 2 {
+		t.Fatalf("после self-heal ждём 2 заметки, получили %d", len(notes))
+	}
+}
 
 // TestRoundTrip проверяет, что render→parse сохраняет поля заметки, а normalize
 // заполняет тип/дату/id/тему и slug ведёт себя предсказуемо.
