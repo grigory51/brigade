@@ -36,6 +36,8 @@ export function TopicPage() {
   const [activeSub, setActiveSub] = useState("all");
   const [composerOpen, setComposerOpen] = useState(false);
   const [editingTopic, setEditingTopic] = useState(false);
+  // allTopics — список тем для меню «переместить в тему» (грузим отдельно от текущей темы).
+  const [allTopics, setAllTopics] = useState<Topic[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -54,6 +56,20 @@ export function TopicPage() {
           err instanceof ConnectError ? err.rawMessage : "Не удалось загрузить тему",
         );
       });
+    return () => {
+      alive = false;
+    };
+  }, [topicId]);
+
+  // Список тем для меню «переместить в другую тему».
+  useEffect(() => {
+    let alive = true;
+    memoryClient
+      .listTopics({ query: "" })
+      .then((r) => {
+        if (alive) setAllTopics(r.topics);
+      })
+      .catch(() => {});
     return () => {
       alive = false;
     };
@@ -147,11 +163,11 @@ export function TopicPage() {
           )}
 
           {composerOpen && (
-            <NoteComposer
+            <NoteForm
               topic={topic}
               subs={subs.map((s) => s.name)}
               onClose={() => setComposerOpen(false)}
-              onCreated={(n) => {
+              onSaved={(n) => {
                 setNotes((prev) => [n, ...prev]);
                 setActiveSub("all");
                 setComposerOpen(false);
@@ -181,7 +197,9 @@ export function TopicPage() {
                         note={n}
                         topic={topic}
                         subs={subs.map((s) => s.name)}
+                        allTopics={allTopics}
                         onMoved={patchNote}
+                        onEdited={patchNote}
                         onDeleted={removeNote}
                       />
                     ))}
@@ -514,16 +532,21 @@ function NoteRow({
   note,
   topic,
   subs,
+  allTopics,
   onMoved,
+  onEdited,
   onDeleted,
 }: {
   note: Note;
   topic: Topic;
   subs: string[];
+  allTopics: Topic[];
   onMoved: (n: Note) => void;
+  onEdited: (n: Note) => void;
   onDeleted: (id: string) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   // busy — идёт move/delete (синхронный git-push занимает секунды): гасим строку и крутим
   // спиннер, чтобы действие не выглядело «зависшим».
   const [busy, setBusy] = useState(false);
@@ -559,6 +582,37 @@ function NoteRow({
       );
       setBusy(false);
     }
+  }
+
+  async function moveToTopic(toTopicId: string) {
+    setMenuOpen(false);
+    setBusy(true);
+    try {
+      await memoryClient.moveNote({ id: note.id, toTopicId, toSub: "" });
+      onDeleted(note.id); // заметка ушла из текущей темы — убираем из её ленты
+      toast.success("Перемещено в другую тему");
+    } catch (err) {
+      toast.error(
+        err instanceof ConnectError ? err.rawMessage : "Не удалось переместить",
+      );
+      setBusy(false);
+    }
+  }
+
+  // Режим редактирования: строка заметки заменяется формой (UpdateNote).
+  if (editing) {
+    return (
+      <NoteForm
+        topic={topic}
+        subs={subs}
+        note={note}
+        onClose={() => setEditing(false)}
+        onSaved={(n) => {
+          onEdited(n);
+          setEditing(false);
+        }}
+      />
+    );
   }
 
   return (
@@ -619,11 +673,23 @@ function NoteRow({
             onClick={() => setMenuOpen(false)}
             aria-label="Закрыть меню"
           />
-          <div className="absolute right-2 top-9 z-20 w-48 overflow-hidden rounded-[10px] border border-border/80 bg-popover py-1 shadow-lg">
+          <div className="absolute right-2 top-9 z-20 max-h-72 w-56 overflow-y-auto rounded-[10px] border border-border/80 bg-popover py-1 shadow-lg">
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                setEditing(true);
+              }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] hover:bg-accent"
+            >
+              <Pencil className="size-3.5 text-muted-foreground" />
+              Изменить
+            </button>
+
             {subs.filter((s) => s !== (note.sub || UNSORTED)).length > 0 && (
               <>
-                <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                  Переместить в
+                <div className="mt-1 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                  Переместить в подтему
                 </div>
                 {subs
                   .filter((s) => s !== (note.sub || UNSORTED))
@@ -638,9 +704,34 @@ function NoteRow({
                       {s}
                     </button>
                   ))}
-                <div className="my-1 h-px bg-border" />
               </>
             )}
+
+            {allTopics.filter((x) => x.id !== topic.id).length > 0 && (
+              <>
+                <div className="mt-1 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                  Переместить в тему
+                </div>
+                {allTopics
+                  .filter((x) => x.id !== topic.id)
+                  .map((x) => (
+                    <button
+                      key={x.id}
+                      type="button"
+                      onClick={() => void moveToTopic(x.id)}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] hover:bg-accent"
+                    >
+                      <span
+                        className="size-2 shrink-0 rounded-full"
+                        style={{ background: x.color }}
+                      />
+                      <span className="truncate">{x.name}</span>
+                    </button>
+                  ))}
+              </>
+            )}
+
+            <div className="my-1 h-px bg-border" />
             <button
               type="button"
               onClick={() => void remove()}
@@ -656,41 +747,54 @@ function NoteRow({
   );
 }
 
-// NoteComposer — инлайн-композер заметки: суть + детали + тип + подтема.
-function NoteComposer({
+// NoteForm — форма заметки: создание (note не задан) или редактирование (note задан).
+// Поля общие; при редактировании зовёт UpdateNote, при создании — CreateNote.
+function NoteForm({
   topic,
   subs,
+  note,
   onClose,
-  onCreated,
+  onSaved,
 }: {
   topic: Topic;
   subs: string[];
+  note?: Note;
   onClose: () => void;
-  onCreated: (n: Note) => void;
+  onSaved: (n: Note) => void;
 }) {
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [type, setType] = useState<string>("idea");
-  const [sub, setSub] = useState(subs[0] ?? UNSORTED);
+  const editing = !!note;
+  const [title, setTitle] = useState(note?.title ?? "");
+  const [body, setBody] = useState(note?.body ?? "");
+  const [type, setType] = useState<string>(note?.type || "idea");
+  const [sub, setSub] = useState(note?.sub || subs[0] || UNSORTED);
   const [busy, setBusy] = useState(false);
 
   async function submit() {
     if (!title.trim()) return;
     setBusy(true);
     try {
-      const res = await memoryClient.createNote({
-        title: title.trim(),
-        body: body.trim(),
-        type,
-        topicId: topic.id,
-        sub: sub === UNSORTED ? "" : sub,
-        from: "добавлено вручную",
-        tags: [],
-        session: "",
-        layer: "semantic",
-      });
-      if (!res.note) throw new Error("пустой ответ CreateNote");
-      onCreated(res.note);
+      const subVal = sub === UNSORTED ? "" : sub;
+      const res = note
+        ? await memoryClient.updateNote({
+            id: note.id,
+            title: title.trim(),
+            body: body.trim(),
+            type,
+            sub: subVal,
+          })
+        : await memoryClient.createNote({
+            title: title.trim(),
+            body: body.trim(),
+            type,
+            topicId: topic.id,
+            sub: subVal,
+            from: "добавлено вручную",
+            tags: [],
+            session: "",
+            layer: "semantic",
+          });
+      if (!res.note) throw new Error("пустой ответ");
+      onSaved(res.note);
     } catch (err) {
       toast.error(
         err instanceof ConnectError ? err.rawMessage : "Не удалось сохранить заметку",
@@ -703,7 +807,7 @@ function NoteComposer({
   return (
     <div className="mb-5 rounded-xl border border-border/80 bg-[#2f2e2c] p-4">
       <div className="mb-3 text-[13px] font-medium text-muted-foreground">
-        Новая заметка вручную
+        {editing ? "Изменить заметку" : "Новая заметка вручную"}
       </div>
       <div className="flex flex-col gap-3">
         <Input
@@ -769,7 +873,7 @@ function NoteComposer({
           </Button>
           <Button size="sm" onClick={() => void submit()} disabled={busy || !title.trim()}>
             {busy && <Loader2 className="size-4 animate-spin" />}
-            Сохранить в тему
+            {editing ? "Сохранить" : "Сохранить в тему"}
           </Button>
         </div>
       </div>
