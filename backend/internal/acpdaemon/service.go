@@ -3,6 +3,7 @@ package acpdaemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"connectrpc.com/connect"
 
@@ -176,6 +177,76 @@ func (s *service) WriteFile(ctx context.Context, req *connect.Request[v1.DaemonW
 		return nil, err
 	}
 	if err := c.WriteFile(ctx, req.Msg.Path, req.Msg.Content); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&v1.Empty{}), nil
+}
+
+// OpenTerminal спавнит команду в pty и стримит вывод. Эфемерный (durable=false): закрытие
+// стрима (ctx.Done) убивает pty — для /ws/shell. Durable: сначала scrollback, затем live-tail;
+// завершение процесса закрывает поток (сигнал выхода brigade), отцепление pty не гасит.
+func (s *service) OpenTerminal(ctx context.Context, req *connect.Request[v1.DaemonOpenTerminalRequest], stream *connect.ServerStream[v1.DaemonTerminalOutput]) error {
+	m := req.Msg
+	if len(m.Cmd) == 0 {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("empty cmd"))
+	}
+	t, err := s.d.terminals.open(openReq{
+		id: m.Id, cmd: m.Cmd, cwd: m.Cwd, env: m.Env,
+		cols: uint16(m.Cols), rows: uint16(m.Rows), durable: m.Durable,
+	})
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, err)
+	}
+	scrollback, ch, detach := t.subscribe()
+	defer detach()
+	send := func(data []byte) error {
+		if err := stream.Send(&v1.DaemonTerminalOutput{Data: data}); err != nil {
+			if !t.durable {
+				t.kill()
+			}
+			return err
+		}
+		return nil
+	}
+	if len(scrollback) > 0 {
+		if err := send(scrollback); err != nil {
+			return err
+		}
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			if !t.durable {
+				t.kill() // эфемерный: закрытие WS завершает pty (нет орфанов)
+			}
+			return nil
+		case <-t.doneCh:
+			return nil // процесс завершился — закрытие потока сигналит выход brigade
+		case chunk := <-ch:
+			if err := send(chunk); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func (s *service) TerminalInput(ctx context.Context, req *connect.Request[v1.DaemonTerminalInputRequest]) (*connect.Response[v1.Empty], error) {
+	t := s.d.terminals.get(req.Msg.Id)
+	if t == nil {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("terminal not found"))
+	}
+	if err := t.write(req.Msg.Data); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&v1.Empty{}), nil
+}
+
+func (s *service) TerminalResize(ctx context.Context, req *connect.Request[v1.DaemonTerminalResizeRequest]) (*connect.Response[v1.Empty], error) {
+	t := s.d.terminals.get(req.Msg.Id)
+	if t == nil {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("terminal not found"))
+	}
+	if err := t.resize(uint16(req.Msg.Cols), uint16(req.Msg.Rows)); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&v1.Empty{}), nil

@@ -7,6 +7,218 @@ import type { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialM
 import { Message, proto3, protoInt64 } from "@bufbuild/protobuf";
 
 /**
+ * @generated from message brigade.v1.DaemonOpenTerminalRequest
+ */
+export class DaemonOpenTerminalRequest extends Message<DaemonOpenTerminalRequest> {
+  /**
+   * клиентский id терминала (для input/resize и reattach durable)
+   *
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  /**
+   * команда + аргументы (напр. ["/bin/bash"])
+   *
+   * @generated from field: repeated string cmd = 2;
+   */
+  cmd: string[] = [];
+
+  /**
+   * @generated from field: string cwd = 3;
+   */
+  cwd = "";
+
+  /**
+   * доп. env "KEY=VALUE" (секреты — сюда, не в env контейнера)
+   *
+   * @generated from field: repeated string env = 4;
+   */
+  env: string[] = [];
+
+  /**
+   * @generated from field: uint32 cols = 5;
+   */
+  cols = 0;
+
+  /**
+   * @generated from field: uint32 rows = 6;
+   */
+  rows = 0;
+
+  /**
+   * true — pty переживает отцепление стрима (CLI-агент)
+   *
+   * @generated from field: bool durable = 7;
+   */
+  durable = false;
+
+  constructor(data?: PartialMessage<DaemonOpenTerminalRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.DaemonOpenTerminalRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "cmd", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 3, name: "cwd", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "env", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 5, name: "cols", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 6, name: "rows", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 7, name: "durable", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaemonOpenTerminalRequest {
+    return new DaemonOpenTerminalRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): DaemonOpenTerminalRequest {
+    return new DaemonOpenTerminalRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): DaemonOpenTerminalRequest {
+    return new DaemonOpenTerminalRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: DaemonOpenTerminalRequest | PlainMessage<DaemonOpenTerminalRequest> | undefined, b: DaemonOpenTerminalRequest | PlainMessage<DaemonOpenTerminalRequest> | undefined): boolean {
+    return proto3.util.equals(DaemonOpenTerminalRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.DaemonTerminalOutput
+ */
+export class DaemonTerminalOutput extends Message<DaemonTerminalOutput> {
+  /**
+   * сырые байты TTY (без stdcopy-мультиплексирования)
+   *
+   * @generated from field: bytes data = 1;
+   */
+  data = new Uint8Array(0);
+
+  constructor(data?: PartialMessage<DaemonTerminalOutput>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.DaemonTerminalOutput";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "data", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaemonTerminalOutput {
+    return new DaemonTerminalOutput().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): DaemonTerminalOutput {
+    return new DaemonTerminalOutput().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): DaemonTerminalOutput {
+    return new DaemonTerminalOutput().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: DaemonTerminalOutput | PlainMessage<DaemonTerminalOutput> | undefined, b: DaemonTerminalOutput | PlainMessage<DaemonTerminalOutput> | undefined): boolean {
+    return proto3.util.equals(DaemonTerminalOutput, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.DaemonTerminalInputRequest
+ */
+export class DaemonTerminalInputRequest extends Message<DaemonTerminalInputRequest> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  /**
+   * @generated from field: bytes data = 2;
+   */
+  data = new Uint8Array(0);
+
+  constructor(data?: PartialMessage<DaemonTerminalInputRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.DaemonTerminalInputRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "data", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaemonTerminalInputRequest {
+    return new DaemonTerminalInputRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): DaemonTerminalInputRequest {
+    return new DaemonTerminalInputRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): DaemonTerminalInputRequest {
+    return new DaemonTerminalInputRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: DaemonTerminalInputRequest | PlainMessage<DaemonTerminalInputRequest> | undefined, b: DaemonTerminalInputRequest | PlainMessage<DaemonTerminalInputRequest> | undefined): boolean {
+    return proto3.util.equals(DaemonTerminalInputRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.DaemonTerminalResizeRequest
+ */
+export class DaemonTerminalResizeRequest extends Message<DaemonTerminalResizeRequest> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  /**
+   * @generated from field: uint32 cols = 2;
+   */
+  cols = 0;
+
+  /**
+   * @generated from field: uint32 rows = 3;
+   */
+  rows = 0;
+
+  constructor(data?: PartialMessage<DaemonTerminalResizeRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.DaemonTerminalResizeRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "cols", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 3, name: "rows", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaemonTerminalResizeRequest {
+    return new DaemonTerminalResizeRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): DaemonTerminalResizeRequest {
+    return new DaemonTerminalResizeRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): DaemonTerminalResizeRequest {
+    return new DaemonTerminalResizeRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: DaemonTerminalResizeRequest | PlainMessage<DaemonTerminalResizeRequest> | undefined, b: DaemonTerminalResizeRequest | PlainMessage<DaemonTerminalResizeRequest> | undefined): boolean {
+    return proto3.util.equals(DaemonTerminalResizeRequest, a, b);
+  }
+}
+
+/**
  * @generated from message brigade.v1.DaemonWriteFileRequest
  */
 export class DaemonWriteFileRequest extends Message<DaemonWriteFileRequest> {

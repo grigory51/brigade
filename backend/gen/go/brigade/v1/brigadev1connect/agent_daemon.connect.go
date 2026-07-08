@@ -72,6 +72,15 @@ const (
 	// AgentDaemonServiceWriteFileProcedure is the fully-qualified name of the AgentDaemonService's
 	// WriteFile RPC.
 	AgentDaemonServiceWriteFileProcedure = "/brigade.v1.AgentDaemonService/WriteFile"
+	// AgentDaemonServiceOpenTerminalProcedure is the fully-qualified name of the AgentDaemonService's
+	// OpenTerminal RPC.
+	AgentDaemonServiceOpenTerminalProcedure = "/brigade.v1.AgentDaemonService/OpenTerminal"
+	// AgentDaemonServiceTerminalInputProcedure is the fully-qualified name of the AgentDaemonService's
+	// TerminalInput RPC.
+	AgentDaemonServiceTerminalInputProcedure = "/brigade.v1.AgentDaemonService/TerminalInput"
+	// AgentDaemonServiceTerminalResizeProcedure is the fully-qualified name of the AgentDaemonService's
+	// TerminalResize RPC.
+	AgentDaemonServiceTerminalResizeProcedure = "/brigade.v1.AgentDaemonService/TerminalResize"
 )
 
 // AgentDaemonServiceClient is a client for the brigade.v1.AgentDaemonService service.
@@ -105,6 +114,16 @@ type AgentDaemonServiceClient interface {
 	// WriteFile кладёт файл в рабочую директорию агента (path — относительно cwd). Через это
 	// brigade заливает вложения, не завязываясь на docker: демон пишет у себя внутри среды.
 	WriteFile(context.Context, *connect.Request[v1.DaemonWriteFileRequest]) (*connect.Response[v1.Empty], error)
+	// OpenTerminal спавнит команду в pty внутри среды агента и стримит её вывод. Через это
+	// brigade даёт терминалы (вспом. шелл и — для CLI-режима — сам агент), не завязываясь на
+	// docker-exec. durable=false — эфемерный (закрытие стрима убивает pty, для /ws/shell);
+	// durable=true — pty переживает отцепление (CLI-агент), поток отдаёт scrollback + live-tail,
+	// а завершение процесса закрывает поток (сигнал выхода для brigade).
+	OpenTerminal(context.Context, *connect.Request[v1.DaemonOpenTerminalRequest]) (*connect.ServerStreamForClient[v1.DaemonTerminalOutput], error)
+	// TerminalInput пишет байты в stdin pty терминала (id из OpenTerminal).
+	TerminalInput(context.Context, *connect.Request[v1.DaemonTerminalInputRequest]) (*connect.Response[v1.Empty], error)
+	// TerminalResize меняет размер TTY терминала.
+	TerminalResize(context.Context, *connect.Request[v1.DaemonTerminalResizeRequest]) (*connect.Response[v1.Empty], error)
 }
 
 // NewAgentDaemonServiceClient constructs a client for the brigade.v1.AgentDaemonService service. By
@@ -196,6 +215,24 @@ func NewAgentDaemonServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(agentDaemonServiceMethods.ByName("WriteFile")),
 			connect.WithClientOptions(opts...),
 		),
+		openTerminal: connect.NewClient[v1.DaemonOpenTerminalRequest, v1.DaemonTerminalOutput](
+			httpClient,
+			baseURL+AgentDaemonServiceOpenTerminalProcedure,
+			connect.WithSchema(agentDaemonServiceMethods.ByName("OpenTerminal")),
+			connect.WithClientOptions(opts...),
+		),
+		terminalInput: connect.NewClient[v1.DaemonTerminalInputRequest, v1.Empty](
+			httpClient,
+			baseURL+AgentDaemonServiceTerminalInputProcedure,
+			connect.WithSchema(agentDaemonServiceMethods.ByName("TerminalInput")),
+			connect.WithClientOptions(opts...),
+		),
+		terminalResize: connect.NewClient[v1.DaemonTerminalResizeRequest, v1.Empty](
+			httpClient,
+			baseURL+AgentDaemonServiceTerminalResizeProcedure,
+			connect.WithSchema(agentDaemonServiceMethods.ByName("TerminalResize")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -214,6 +251,9 @@ type agentDaemonServiceClient struct {
 	resolvePermission *connect.Client[v1.DaemonResolvePermissionRequest, v1.Empty]
 	summarize         *connect.Client[v1.DaemonSummarizeRequest, v1.DaemonSummarizeResponse]
 	writeFile         *connect.Client[v1.DaemonWriteFileRequest, v1.Empty]
+	openTerminal      *connect.Client[v1.DaemonOpenTerminalRequest, v1.DaemonTerminalOutput]
+	terminalInput     *connect.Client[v1.DaemonTerminalInputRequest, v1.Empty]
+	terminalResize    *connect.Client[v1.DaemonTerminalResizeRequest, v1.Empty]
 }
 
 // Configure calls brigade.v1.AgentDaemonService.Configure.
@@ -281,6 +321,21 @@ func (c *agentDaemonServiceClient) WriteFile(ctx context.Context, req *connect.R
 	return c.writeFile.CallUnary(ctx, req)
 }
 
+// OpenTerminal calls brigade.v1.AgentDaemonService.OpenTerminal.
+func (c *agentDaemonServiceClient) OpenTerminal(ctx context.Context, req *connect.Request[v1.DaemonOpenTerminalRequest]) (*connect.ServerStreamForClient[v1.DaemonTerminalOutput], error) {
+	return c.openTerminal.CallServerStream(ctx, req)
+}
+
+// TerminalInput calls brigade.v1.AgentDaemonService.TerminalInput.
+func (c *agentDaemonServiceClient) TerminalInput(ctx context.Context, req *connect.Request[v1.DaemonTerminalInputRequest]) (*connect.Response[v1.Empty], error) {
+	return c.terminalInput.CallUnary(ctx, req)
+}
+
+// TerminalResize calls brigade.v1.AgentDaemonService.TerminalResize.
+func (c *agentDaemonServiceClient) TerminalResize(ctx context.Context, req *connect.Request[v1.DaemonTerminalResizeRequest]) (*connect.Response[v1.Empty], error) {
+	return c.terminalResize.CallUnary(ctx, req)
+}
+
 // AgentDaemonServiceHandler is an implementation of the brigade.v1.AgentDaemonService service.
 type AgentDaemonServiceHandler interface {
 	// Configure (пере)поднимает адаптер: секреты в env адаптера, resume_session_id непуст →
@@ -312,6 +367,16 @@ type AgentDaemonServiceHandler interface {
 	// WriteFile кладёт файл в рабочую директорию агента (path — относительно cwd). Через это
 	// brigade заливает вложения, не завязываясь на docker: демон пишет у себя внутри среды.
 	WriteFile(context.Context, *connect.Request[v1.DaemonWriteFileRequest]) (*connect.Response[v1.Empty], error)
+	// OpenTerminal спавнит команду в pty внутри среды агента и стримит её вывод. Через это
+	// brigade даёт терминалы (вспом. шелл и — для CLI-режима — сам агент), не завязываясь на
+	// docker-exec. durable=false — эфемерный (закрытие стрима убивает pty, для /ws/shell);
+	// durable=true — pty переживает отцепление (CLI-агент), поток отдаёт scrollback + live-tail,
+	// а завершение процесса закрывает поток (сигнал выхода для brigade).
+	OpenTerminal(context.Context, *connect.Request[v1.DaemonOpenTerminalRequest], *connect.ServerStream[v1.DaemonTerminalOutput]) error
+	// TerminalInput пишет байты в stdin pty терминала (id из OpenTerminal).
+	TerminalInput(context.Context, *connect.Request[v1.DaemonTerminalInputRequest]) (*connect.Response[v1.Empty], error)
+	// TerminalResize меняет размер TTY терминала.
+	TerminalResize(context.Context, *connect.Request[v1.DaemonTerminalResizeRequest]) (*connect.Response[v1.Empty], error)
 }
 
 // NewAgentDaemonServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -399,6 +464,24 @@ func NewAgentDaemonServiceHandler(svc AgentDaemonServiceHandler, opts ...connect
 		connect.WithSchema(agentDaemonServiceMethods.ByName("WriteFile")),
 		connect.WithHandlerOptions(opts...),
 	)
+	agentDaemonServiceOpenTerminalHandler := connect.NewServerStreamHandler(
+		AgentDaemonServiceOpenTerminalProcedure,
+		svc.OpenTerminal,
+		connect.WithSchema(agentDaemonServiceMethods.ByName("OpenTerminal")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentDaemonServiceTerminalInputHandler := connect.NewUnaryHandler(
+		AgentDaemonServiceTerminalInputProcedure,
+		svc.TerminalInput,
+		connect.WithSchema(agentDaemonServiceMethods.ByName("TerminalInput")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentDaemonServiceTerminalResizeHandler := connect.NewUnaryHandler(
+		AgentDaemonServiceTerminalResizeProcedure,
+		svc.TerminalResize,
+		connect.WithSchema(agentDaemonServiceMethods.ByName("TerminalResize")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/brigade.v1.AgentDaemonService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AgentDaemonServiceConfigureProcedure:
@@ -427,6 +510,12 @@ func NewAgentDaemonServiceHandler(svc AgentDaemonServiceHandler, opts ...connect
 			agentDaemonServiceSummarizeHandler.ServeHTTP(w, r)
 		case AgentDaemonServiceWriteFileProcedure:
 			agentDaemonServiceWriteFileHandler.ServeHTTP(w, r)
+		case AgentDaemonServiceOpenTerminalProcedure:
+			agentDaemonServiceOpenTerminalHandler.ServeHTTP(w, r)
+		case AgentDaemonServiceTerminalInputProcedure:
+			agentDaemonServiceTerminalInputHandler.ServeHTTP(w, r)
+		case AgentDaemonServiceTerminalResizeProcedure:
+			agentDaemonServiceTerminalResizeHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -486,4 +575,16 @@ func (UnimplementedAgentDaemonServiceHandler) Summarize(context.Context, *connec
 
 func (UnimplementedAgentDaemonServiceHandler) WriteFile(context.Context, *connect.Request[v1.DaemonWriteFileRequest]) (*connect.Response[v1.Empty], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AgentDaemonService.WriteFile is not implemented"))
+}
+
+func (UnimplementedAgentDaemonServiceHandler) OpenTerminal(context.Context, *connect.Request[v1.DaemonOpenTerminalRequest], *connect.ServerStream[v1.DaemonTerminalOutput]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AgentDaemonService.OpenTerminal is not implemented"))
+}
+
+func (UnimplementedAgentDaemonServiceHandler) TerminalInput(context.Context, *connect.Request[v1.DaemonTerminalInputRequest]) (*connect.Response[v1.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AgentDaemonService.TerminalInput is not implemented"))
+}
+
+func (UnimplementedAgentDaemonServiceHandler) TerminalResize(context.Context, *connect.Request[v1.DaemonTerminalResizeRequest]) (*connect.Response[v1.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AgentDaemonService.TerminalResize is not implemented"))
 }

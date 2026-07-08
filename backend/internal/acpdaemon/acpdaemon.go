@@ -46,6 +46,7 @@ type Daemon struct {
 	sessionID string
 	log       *eventlog.Log
 	perms     *permStore
+	terminals *terminalMgr // pty-терминалы (вспом. шелл, CLI-агент)
 
 	mu     sync.Mutex
 	client *acp.Client // nil до Configure
@@ -58,7 +59,7 @@ func New(sessionID, logPath string) (*Daemon, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Daemon{sessionID: sessionID, log: l, perms: newPermStore()}, nil
+	return &Daemon{sessionID: sessionID, log: l, perms: newPermStore(), terminals: newTerminalMgr()}, nil
 }
 
 // journal сериализует AG-UI событие и добавляет его в журнал (получая seq).

@@ -51,6 +51,42 @@ service AgentDaemonService {
   // WriteFile кладёт файл в рабочую директорию агента (path — относительно cwd). Через это
   // brigade заливает вложения, не завязываясь на docker: демон пишет у себя внутри среды.
   rpc WriteFile(DaemonWriteFileRequest) returns (Empty) {}
+
+  // OpenTerminal спавнит команду в pty внутри среды агента и стримит её вывод. Через это
+  // brigade даёт терминалы (вспом. шелл и — для CLI-режима — сам агент), не завязываясь на
+  // docker-exec. durable=false — эфемерный (закрытие стрима убивает pty, для /ws/shell);
+  // durable=true — pty переживает отцепление (CLI-агент), поток отдаёт scrollback + live-tail,
+  // а завершение процесса закрывает поток (сигнал выхода для brigade).
+  rpc OpenTerminal(DaemonOpenTerminalRequest) returns (stream DaemonTerminalOutput) {}
+  // TerminalInput пишет байты в stdin pty терминала (id из OpenTerminal).
+  rpc TerminalInput(DaemonTerminalInputRequest) returns (Empty) {}
+  // TerminalResize меняет размер TTY терминала.
+  rpc TerminalResize(DaemonTerminalResizeRequest) returns (Empty) {}
+}
+
+message DaemonOpenTerminalRequest {
+  string id = 1;             // клиентский id терминала (для input/resize и reattach durable)
+  repeated string cmd = 2;   // команда + аргументы (напр. ["/bin/bash"])
+  string cwd = 3;
+  repeated string env = 4;   // доп. env "KEY=VALUE" (секреты — сюда, не в env контейнера)
+  uint32 cols = 5;
+  uint32 rows = 6;
+  bool durable = 7;          // true — pty переживает отцепление стрима (CLI-агент)
+}
+
+message DaemonTerminalOutput {
+  bytes data = 1;            // сырые байты TTY (без stdcopy-мультиплексирования)
+}
+
+message DaemonTerminalInputRequest {
+  string id = 1;
+  bytes data = 2;
+}
+
+message DaemonTerminalResizeRequest {
+  string id = 1;
+  uint32 cols = 2;
+  uint32 rows = 3;
 }
 
 message DaemonWriteFileRequest {

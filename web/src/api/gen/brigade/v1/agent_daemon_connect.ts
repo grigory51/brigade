@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { DaemonConfigureRequest, DaemonConfigureResponse, DaemonEvent, DaemonPayloadResponse, DaemonPromptRequest, DaemonPromptResponse, DaemonResolvePermissionRequest, DaemonSetConfigOptionRequest, DaemonStatusResponse, DaemonStreamEventsRequest, DaemonSummarizeRequest, DaemonSummarizeResponse, DaemonWriteFileRequest } from "./agent_daemon_pb.js";
+import { DaemonConfigureRequest, DaemonConfigureResponse, DaemonEvent, DaemonOpenTerminalRequest, DaemonPayloadResponse, DaemonPromptRequest, DaemonPromptResponse, DaemonResolvePermissionRequest, DaemonSetConfigOptionRequest, DaemonStatusResponse, DaemonStreamEventsRequest, DaemonSummarizeRequest, DaemonSummarizeResponse, DaemonTerminalInputRequest, DaemonTerminalOutput, DaemonTerminalResizeRequest, DaemonWriteFileRequest } from "./agent_daemon_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { Empty } from "./auth_pb.js";
 
@@ -172,6 +172,43 @@ export const AgentDaemonService = {
     writeFile: {
       name: "WriteFile",
       I: DaemonWriteFileRequest,
+      O: Empty,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * OpenTerminal спавнит команду в pty внутри среды агента и стримит её вывод. Через это
+     * brigade даёт терминалы (вспом. шелл и — для CLI-режима — сам агент), не завязываясь на
+     * docker-exec. durable=false — эфемерный (закрытие стрима убивает pty, для /ws/shell);
+     * durable=true — pty переживает отцепление (CLI-агент), поток отдаёт scrollback + live-tail,
+     * а завершение процесса закрывает поток (сигнал выхода для brigade).
+     *
+     * @generated from rpc brigade.v1.AgentDaemonService.OpenTerminal
+     */
+    openTerminal: {
+      name: "OpenTerminal",
+      I: DaemonOpenTerminalRequest,
+      O: DaemonTerminalOutput,
+      kind: MethodKind.ServerStreaming,
+    },
+    /**
+     * TerminalInput пишет байты в stdin pty терминала (id из OpenTerminal).
+     *
+     * @generated from rpc brigade.v1.AgentDaemonService.TerminalInput
+     */
+    terminalInput: {
+      name: "TerminalInput",
+      I: DaemonTerminalInputRequest,
+      O: Empty,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * TerminalResize меняет размер TTY терминала.
+     *
+     * @generated from rpc brigade.v1.AgentDaemonService.TerminalResize
+     */
+    terminalResize: {
+      name: "TerminalResize",
+      I: DaemonTerminalResizeRequest,
       O: Empty,
       kind: MethodKind.Unary,
     },
