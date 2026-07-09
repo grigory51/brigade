@@ -49,6 +49,11 @@ type Client struct {
 	// /run в один тред, а привязка sink нового прогона (onTurnStart) должна происходить
 	// строго между turn'ами.
 	promptMu sync.Mutex
+
+	// OnTurnEnd (может быть nil) вызывается по завершении каждого Prompt со stopReason и
+	// ошибкой; реестр вешает сюда push-уведомление (internal/notify). Summarize идёт отдельным
+	// RPC мимо Prompt, поэтому recap-архивации уведомление не шлёт. Ставится до первого Prompt.
+	OnTurnEnd func(stopReason string, err error)
 }
 
 // New создаёт клиент к демону по baseURL (http://<host>:<port>). signToken подписывает токен
@@ -198,10 +203,17 @@ func (c *Client) Prompt(ctx context.Context, text string, onTurnStart func()) (s
 		onTurnStart()
 	}
 	resp, err := c.rpc.Prompt(ctx, authReq(c.sign(), &v1.DaemonPromptRequest{Text: text}))
+	stopReason := ""
+	if resp != nil {
+		stopReason = resp.Msg.StopReason
+	}
+	if c.OnTurnEnd != nil {
+		c.OnTurnEnd(stopReason, err)
+	}
 	if err != nil {
 		return "", err
 	}
-	return resp.Msg.StopReason, nil
+	return stopReason, nil
 }
 
 // Cancel → session/cancel в демоне.

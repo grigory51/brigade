@@ -53,6 +53,12 @@ const (
 	// AuthServiceSetMemorySettingsProcedure is the fully-qualified name of the AuthService's
 	// SetMemorySettings RPC.
 	AuthServiceSetMemorySettingsProcedure = "/brigade.v1.AuthService/SetMemorySettings"
+	// AuthServiceGetNtfySettingsProcedure is the fully-qualified name of the AuthService's
+	// GetNtfySettings RPC.
+	AuthServiceGetNtfySettingsProcedure = "/brigade.v1.AuthService/GetNtfySettings"
+	// AuthServiceSetNtfySettingsProcedure is the fully-qualified name of the AuthService's
+	// SetNtfySettings RPC.
+	AuthServiceSetNtfySettingsProcedure = "/brigade.v1.AuthService/SetNtfySettings"
 )
 
 // AuthServiceClient is a client for the brigade.v1.AuthService service.
@@ -74,6 +80,12 @@ type AuthServiceClient interface {
 	// SetMemorySettings задаёт git-remote и SSH-ключ личной памяти. Возвращает обновлённое
 	// состояние.
 	SetMemorySettings(context.Context, *connect.Request[v1.SetMemorySettingsRequest]) (*connect.Response[v1.MemorySettings], error)
+	// GetNtfySettings возвращает настройки push-уведомлений пользователя (server/topic/events
+	// + флаг token_set; значение токена не раскрывается).
+	GetNtfySettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.NtfySettings], error)
+	// SetNtfySettings задаёт server/topic/token/events персональных ntfy-уведомлений.
+	// Возвращает обновлённое состояние.
+	SetNtfySettings(context.Context, *connect.Request[v1.SetNtfySettingsRequest]) (*connect.Response[v1.NtfySettings], error)
 }
 
 // NewAuthServiceClient constructs a client for the brigade.v1.AuthService service. By default, it
@@ -135,6 +147,18 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("SetMemorySettings")),
 			connect.WithClientOptions(opts...),
 		),
+		getNtfySettings: connect.NewClient[v1.Empty, v1.NtfySettings](
+			httpClient,
+			baseURL+AuthServiceGetNtfySettingsProcedure,
+			connect.WithSchema(authServiceMethods.ByName("GetNtfySettings")),
+			connect.WithClientOptions(opts...),
+		),
+		setNtfySettings: connect.NewClient[v1.SetNtfySettingsRequest, v1.NtfySettings](
+			httpClient,
+			baseURL+AuthServiceSetNtfySettingsProcedure,
+			connect.WithSchema(authServiceMethods.ByName("SetNtfySettings")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -148,6 +172,8 @@ type authServiceClient struct {
 	setClaudeToken    *connect.Client[v1.SetClaudeTokenRequest, v1.ClaudeSettings]
 	getMemorySettings *connect.Client[v1.Empty, v1.MemorySettings]
 	setMemorySettings *connect.Client[v1.SetMemorySettingsRequest, v1.MemorySettings]
+	getNtfySettings   *connect.Client[v1.Empty, v1.NtfySettings]
+	setNtfySettings   *connect.Client[v1.SetNtfySettingsRequest, v1.NtfySettings]
 }
 
 // Login calls brigade.v1.AuthService.Login.
@@ -190,6 +216,16 @@ func (c *authServiceClient) SetMemorySettings(ctx context.Context, req *connect.
 	return c.setMemorySettings.CallUnary(ctx, req)
 }
 
+// GetNtfySettings calls brigade.v1.AuthService.GetNtfySettings.
+func (c *authServiceClient) GetNtfySettings(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.NtfySettings], error) {
+	return c.getNtfySettings.CallUnary(ctx, req)
+}
+
+// SetNtfySettings calls brigade.v1.AuthService.SetNtfySettings.
+func (c *authServiceClient) SetNtfySettings(ctx context.Context, req *connect.Request[v1.SetNtfySettingsRequest]) (*connect.Response[v1.NtfySettings], error) {
+	return c.setNtfySettings.CallUnary(ctx, req)
+}
+
 // AuthServiceHandler is an implementation of the brigade.v1.AuthService service.
 type AuthServiceHandler interface {
 	Login(context.Context, *connect.Request[v1.LoginRequest]) (*connect.Response[v1.LoginResponse], error)
@@ -209,6 +245,12 @@ type AuthServiceHandler interface {
 	// SetMemorySettings задаёт git-remote и SSH-ключ личной памяти. Возвращает обновлённое
 	// состояние.
 	SetMemorySettings(context.Context, *connect.Request[v1.SetMemorySettingsRequest]) (*connect.Response[v1.MemorySettings], error)
+	// GetNtfySettings возвращает настройки push-уведомлений пользователя (server/topic/events
+	// + флаг token_set; значение токена не раскрывается).
+	GetNtfySettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.NtfySettings], error)
+	// SetNtfySettings задаёт server/topic/token/events персональных ntfy-уведомлений.
+	// Возвращает обновлённое состояние.
+	SetNtfySettings(context.Context, *connect.Request[v1.SetNtfySettingsRequest]) (*connect.Response[v1.NtfySettings], error)
 }
 
 // NewAuthServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -266,6 +308,18 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("SetMemorySettings")),
 		connect.WithHandlerOptions(opts...),
 	)
+	authServiceGetNtfySettingsHandler := connect.NewUnaryHandler(
+		AuthServiceGetNtfySettingsProcedure,
+		svc.GetNtfySettings,
+		connect.WithSchema(authServiceMethods.ByName("GetNtfySettings")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceSetNtfySettingsHandler := connect.NewUnaryHandler(
+		AuthServiceSetNtfySettingsProcedure,
+		svc.SetNtfySettings,
+		connect.WithSchema(authServiceMethods.ByName("SetNtfySettings")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/brigade.v1.AuthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AuthServiceLoginProcedure:
@@ -284,6 +338,10 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceGetMemorySettingsHandler.ServeHTTP(w, r)
 		case AuthServiceSetMemorySettingsProcedure:
 			authServiceSetMemorySettingsHandler.ServeHTTP(w, r)
+		case AuthServiceGetNtfySettingsProcedure:
+			authServiceGetNtfySettingsHandler.ServeHTTP(w, r)
+		case AuthServiceSetNtfySettingsProcedure:
+			authServiceSetNtfySettingsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -323,4 +381,12 @@ func (UnimplementedAuthServiceHandler) GetMemorySettings(context.Context, *conne
 
 func (UnimplementedAuthServiceHandler) SetMemorySettings(context.Context, *connect.Request[v1.SetMemorySettingsRequest]) (*connect.Response[v1.MemorySettings], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.SetMemorySettings is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) GetNtfySettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.NtfySettings], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.GetNtfySettings is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) SetNtfySettings(context.Context, *connect.Request[v1.SetNtfySettingsRequest]) (*connect.Response[v1.NtfySettings], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.SetNtfySettings is not implemented"))
 }

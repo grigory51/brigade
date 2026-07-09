@@ -133,7 +133,178 @@ export function SettingsPage() {
       </Card>
 
       <MemoryCard />
+      <NtfyCard />
     </div>
+  );
+}
+
+/** Событие уведомления: ключ совпадает с backend (internal/notify). */
+const NTFY_EVENTS: { key: string; label: string }[] = [
+  { key: "turn_end", label: "Агент завершил ответ" },
+  { key: "error", label: "Ошибка в turn'е" },
+];
+
+/**
+ * NtfyCard — раздел «Уведомления»: персональный push через ntfy. Пользователь задаёт топик
+ * (обязателен), опционально свой сервер и токен доступа, и выбирает события. Токен на сервере
+ * шифруется и наружу не отдаётся (только флаг «задан»); пустой при сохранении оставляет прежний.
+ */
+function NtfyCard() {
+  const [loaded, setLoaded] = useState(false);
+  const [server, setServer] = useState("");
+  const [topic, setTopic] = useState("");
+  const [tokenSet, setTokenSet] = useState(false);
+  const [tokenDraft, setTokenDraft] = useState("");
+  const [events, setEvents] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    authClient
+      .getNtfySettings({})
+      .then((r) => {
+        if (!alive) return;
+        setServer(r.server);
+        setTopic(r.topic);
+        setTokenSet(r.tokenSet);
+        setEvents(r.events);
+      })
+      .finally(() => {
+        if (alive) setLoaded(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const toggleEvent = useCallback((key: string) => {
+    setEvents((prev) =>
+      prev.includes(key) ? prev.filter((e) => e !== key) : [...prev, key],
+    );
+  }, []);
+
+  const save = useCallback(async () => {
+    setSaving(true);
+    try {
+      const res = await authClient.setNtfySettings({
+        server: server.trim(),
+        topic: topic.trim(),
+        token: tokenDraft,
+        events,
+      });
+      setServer(res.server);
+      setTopic(res.topic);
+      setTokenSet(res.tokenSet);
+      setEvents(res.events);
+      setTokenDraft(""); // токен из UI сразу убираем — он больше не показывается
+      toast.success("Настройки уведомлений сохранены");
+    } catch (err) {
+      toast.error(
+        err instanceof ConnectError
+          ? err.rawMessage
+          : "Не удалось сохранить настройки уведомлений",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }, [server, topic, tokenDraft, events]);
+
+  return (
+    <Card className="mt-4">
+      <CardHeader>
+        <CardTitle>Уведомления</CardTitle>
+        <CardDescription>
+          Персональный push через <code className="text-xs">ntfy</code> (
+          <a
+            href="https://ntfy.sh"
+            target="_blank"
+            rel="noreferrer"
+            className="underline"
+          >
+            ntfy.sh
+          </a>{" "}
+          или свой сервер). Укажите топик, подпишитесь на него в приложении ntfy —
+          и получайте пуш о выбранных событиях сессий. Токен нужен только для
+          защищённых топиков; после сохранения он не отображается.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {!loaded ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            Загрузка…
+          </div>
+        ) : (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="ntfy-topic">Топик</Label>
+              <Input
+                id="ntfy-topic"
+                placeholder="brigade-alerts-a8f3"
+                autoComplete="off"
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ntfy-server">Сервер (необязательно)</Label>
+              <Input
+                id="ntfy-server"
+                placeholder="https://ntfy.sh"
+                autoComplete="off"
+                value={server}
+                onChange={(e) => setServer(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ntfy-token">
+                {tokenSet ? "Новый токен доступа" : "Токен доступа (необязательно)"}
+              </Label>
+              <Input
+                id="ntfy-token"
+                type="password"
+                placeholder={
+                  tokenSet ? "Оставьте пустым, чтобы не менять" : "tk_…"
+                }
+                autoComplete="off"
+                value={tokenDraft}
+                onChange={(e) => setTokenDraft(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>События</Label>
+              <div className="space-y-1.5">
+                {NTFY_EVENTS.map((ev) => (
+                  <label
+                    key={ev.key}
+                    className="flex items-center gap-2 text-sm text-muted-foreground"
+                  >
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-primary"
+                      checked={events.includes(ev.key)}
+                      onChange={() => toggleEvent(ev.key)}
+                    />
+                    {ev.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <Button
+              onClick={() => void save()}
+              disabled={saving || !topic.trim()}
+            >
+              {saving && <Loader2 className="size-4 animate-spin" />}
+              Сохранить
+            </Button>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

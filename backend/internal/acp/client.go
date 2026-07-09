@@ -114,6 +114,13 @@ type Client struct {
 	// CONTENT другого). Держится на всё время Prompt.
 	promptMu sync.Mutex
 
+	// OnTurnEnd (может быть nil) вызывается один раз по завершении каждого пользовательского
+	// Prompt со stopReason и ошибкой turn'а. Реестр вешает сюда отправку push-уведомления
+	// (internal/notify). Служебный Summarize (recap при архивации) идёт мимо — через
+	// внутренний prompt(), не через публичный Prompt. Устанавливается при создании клиента,
+	// до первого Prompt — гонки нет.
+	OnTurnEnd func(stopReason string, err error)
+
 	sessionID acpsdk.SessionId
 
 	mu sync.Mutex
@@ -634,7 +641,18 @@ func (c *Client) WriteFile(_ context.Context, rel string, content []byte) error 
 	return nil
 }
 
+// Prompt — публичная точка пользовательского turn'а: прогоняет prompt() и по завершении
+// дёргает OnTurnEnd (push-уведомление реестра). Служебные turn'ы (Summarize) идут мимо неё,
+// напрямую через prompt(), чтобы recap-архивации не слал уведомление.
 func (c *Client) Prompt(ctx context.Context, text string, onTurnStart func()) (stopReason string, err error) {
+	stopReason, err = c.prompt(ctx, text, onTurnStart)
+	if c.OnTurnEnd != nil {
+		c.OnTurnEnd(stopReason, err)
+	}
+	return stopReason, err
+}
+
+func (c *Client) prompt(ctx context.Context, text string, onTurnStart func()) (stopReason string, err error) {
 	// Сериализуем turn'ы: пока идёт один Prompt, следующий ждёт. Иначе потоковые события
 	// двух turn'ов смешались бы в общем sink (см. promptMu).
 	c.promptMu.Lock()
@@ -720,7 +738,8 @@ func (c *Client) Summarize(ctx context.Context, prompt string) (string, error) {
 	}
 	unbind := c.Bind(sink, nil)
 	defer unbind()
-	if _, err := c.Prompt(ctx, prompt, nil); err != nil {
+	// Через внутренний prompt(), а не Prompt: recap-архивации не должен слать push-уведомление.
+	if _, err := c.prompt(ctx, prompt, nil); err != nil {
 		return "", err
 	}
 	mu.Lock()

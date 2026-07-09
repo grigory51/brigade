@@ -34,6 +34,7 @@ import (
 	"github.com/grigory51/brigade/backend/internal/acp/acpremote"
 	"github.com/grigory51/brigade/backend/internal/cliremote"
 	"github.com/grigory51/brigade/backend/internal/agui"
+	"github.com/grigory51/brigade/backend/internal/notify"
 	"github.com/grigory51/brigade/backend/internal/preview"
 	"github.com/grigory51/brigade/backend/internal/spawn"
 	"github.com/grigory51/brigade/backend/internal/store"
@@ -115,6 +116,9 @@ type Registry struct {
 	// cwd, реестр зарегистрированных preview. Всегда не-nil; при выключенном preview
 	// его методы деградируют до no-op.
 	previews *preview.Service
+	// notify шлёт пер-юзерные push-уведомления (ntfy) о завершении turn'ов. Может быть nil
+	// (тесты) — тогда хук не вешается. Настройки берёт из store пер-юзер.
+	notify *notify.Service
 
 	mu   sync.Mutex
 	live map[string]*live
@@ -135,7 +139,7 @@ type Registry struct {
 // (дефолт Cwd сессии); claudeHomeDir — базовый каталог per-user ~/.claude (docker);
 // previews — сервис публикации dev-серверов. Подписочный токен Claude берётся
 // per-user из store при создании сессии.
-func NewRegistry(st *store.Store, spawner spawn.Spawner, mode store.SessionMode, workDir, claudeHomeDir string, maxContainers int, previews *preview.Service) *Registry {
+func NewRegistry(st *store.Store, spawner spawn.Spawner, mode store.SessionMode, workDir, claudeHomeDir string, maxContainers int, previews *preview.Service, notifier *notify.Service) *Registry {
 	return &Registry{
 		store:         st,
 		spawner:       spawner,
@@ -144,6 +148,7 @@ func NewRegistry(st *store.Store, spawner spawn.Spawner, mode store.SessionMode,
 		claudeHomeDir: claudeHomeDir,
 		maxContainers: maxContainers,
 		previews:      previews,
+		notify:        notifier,
 		live:          make(map[string]*live),
 		tearingDown:   make(map[string]struct{}),
 		userLocks:     make(map[string]*sync.Mutex),
@@ -502,6 +507,7 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 		if err != nil {
 			return nil, "", "", fmt.Errorf("session: spawn acp: %w", err)
 		}
+		client.OnTurnEnd = r.turnEndHook(sess)
 		if prompt != "" {
 			// Стартовый промпт отправляем в фоне: turn доходит до конца независимо от
 			// того, подключился ли уже WS-клиент (события буферизуются клиентом ACP).
@@ -519,6 +525,19 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 // preview.DaemonToken по sessionID; acpremote/cliremote подписывают им каждый вызов.
 func (r *Registry) daemonTokenFn(sessionID string) func() (string, error) {
 	return func() (string, error) { return r.previews.DaemonToken(sessionID) }
+}
+
+// turnEndHook возвращает колбэк OnTurnEnd для ACP-клиента: по завершении пользовательского
+// turn'а шлёт владельцу push-уведомление (ntfy) в фоне, чтобы доставка не тормозила turn.
+// nil, если уведомления не сконфигурированы (r.notify == nil) — тогда клиент хук не вешает.
+func (r *Registry) turnEndHook(sess store.Session) func(string, error) {
+	if r.notify == nil {
+		return nil
+	}
+	userID, label := sess.UserID, sess.Name
+	return func(stopReason string, turnErr error) {
+		go r.notify.TurnEnded(context.Background(), userID, label, stopReason, turnErr)
+	}
 }
 
 // spawnACPDaemon поднимает durable ACP-демон в контейнере сессии (docker-режим) и
@@ -546,6 +565,7 @@ func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token
 	}
 
 	rc := acpremote.New(addr, "", r.daemonTokenFn(sess.ID))
+	rc.OnTurnEnd = r.turnEndHook(sess)
 	sid, err := rc.Configure(ctx, acpremote.ConfigureOptions{
 		OAuthToken:        token,
 		ExtraEnv:          r.previewEnv(sess), // preview-токен/URL — только адаптеру, не в env контейнера
@@ -889,6 +909,7 @@ func (r *Registry) Fork(ctx context.Context, sessionID, userID string) (store.Se
 			_ = r.store.DeleteSession(ctx, sess.ID)
 			return store.Session{}, fmt.Errorf("session: fork acp: %w", err)
 		}
+		client.OnTurnEnd = r.turnEndHook(sess)
 		lv, sid = &live{owner: userID, kind: sess.Kind, mode: sess.Mode, client: client}, client.SessionID()
 	}
 
@@ -1181,7 +1202,9 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 			sid := sess.AgentSessionID
 			if ds, ok := r.spawner.(*spawn.DockerSpawner); ok {
 				if addr, alive := ds.ACP().DaemonAddr(ctx, sess.ID); alive {
-					rc = acpremote.New(addr, sess.AgentSessionID, r.daemonTokenFn(sess.ID))
+					c := acpremote.New(addr, sess.AgentSessionID, r.daemonTokenFn(sess.ID))
+					c.OnTurnEnd = r.turnEndHook(sess)
+					rc = c
 				}
 			}
 			if rc == nil {
@@ -1210,6 +1233,7 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 		if err != nil {
 			return fmt.Errorf("reattach acp: %w", err)
 		}
+		client.OnTurnEnd = r.turnEndHook(sess)
 		if err := r.store.UpdateSessionResume(ctx, sess.ID, client.SessionID(), ""); err != nil {
 			_ = client.Close()
 			return fmt.Errorf("persist acp resume: %w", err)

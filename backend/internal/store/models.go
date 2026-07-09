@@ -48,6 +48,13 @@ type UserSettings struct {
 	ClaudeToken  string
 	MemoryRemote string
 	MemorySSHKey string
+	// NtfyServer/NtfyTopic — адрес сервера ntfy и топик push-уведомлений (не секреты).
+	// NtfyToken — токен публикации в топик (секрет, шифруется). NtfyEvents — CSV включённых
+	// событий (напр. "turn_end,error").
+	NtfyServer string
+	NtfyTopic  string
+	NtfyToken  string
+	NtfyEvents string
 }
 
 // Session — сессия агента. Поля agent_session_id и container_label несут

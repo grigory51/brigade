@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ClaudeSettings, Empty, LoginRequest, LoginResponse, MemorySettings, RefreshRequest, RefreshResponse, SetClaudeTokenRequest, SetMemorySettingsRequest, User } from "./auth_pb.js";
+import { ClaudeSettings, Empty, LoginRequest, LoginResponse, MemorySettings, NtfySettings, RefreshRequest, RefreshResponse, SetClaudeTokenRequest, SetMemorySettingsRequest, SetNtfySettingsRequest, User } from "./auth_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -98,6 +98,30 @@ export const AuthService = {
       name: "SetMemorySettings",
       I: SetMemorySettingsRequest,
       O: MemorySettings,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * GetNtfySettings возвращает настройки push-уведомлений пользователя (server/topic/events
+     * + флаг token_set; значение токена не раскрывается).
+     *
+     * @generated from rpc brigade.v1.AuthService.GetNtfySettings
+     */
+    getNtfySettings: {
+      name: "GetNtfySettings",
+      I: Empty,
+      O: NtfySettings,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * SetNtfySettings задаёт server/topic/token/events персональных ntfy-уведомлений.
+     * Возвращает обновлённое состояние.
+     *
+     * @generated from rpc brigade.v1.AuthService.SetNtfySettings
+     */
+    setNtfySettings: {
+      name: "SetNtfySettings",
+      I: SetNtfySettingsRequest,
+      O: NtfySettings,
       kind: MethodKind.Unary,
     },
   }

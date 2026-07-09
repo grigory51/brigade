@@ -20,6 +20,7 @@ import (
 	"github.com/grigory51/brigade/backend/internal/auth"
 	"github.com/grigory51/brigade/backend/internal/config"
 	"github.com/grigory51/brigade/backend/internal/memory"
+	"github.com/grigory51/brigade/backend/internal/notify"
 	"github.com/grigory51/brigade/backend/internal/preview"
 	"github.com/grigory51/brigade/backend/internal/secret"
 	"github.com/grigory51/brigade/backend/internal/session"
@@ -105,9 +106,13 @@ func runServer(configPath string) {
 	// (per-user), базовый каталог рабочих копий — из конфига.
 	memorySvc := memory.NewService(cfg.Memory.Dir, st)
 
+	// Персональные push-уведомления через ntfy: настройки (топик/токен/события) — из store
+	// per-user. Реестр вешает уведомление о завершении turn'а через этот сервис.
+	notifySvc := notify.New(st)
+
 	// Реестр живых сессий поверх store и спавнера. Режим фиксируется в каждой сессии;
 	// подписочный токен Claude берётся per-user из store при создании сессии.
-	registry := session.NewRegistry(st, spawner, store.SessionMode(cfg.Mode), cfg.WorkDir, cfg.ClaudeHomeDir, cfg.MaxContainers, previewSvc)
+	registry := session.NewRegistry(st, spawner, store.SessionMode(cfg.Mode), cfg.WorkDir, cfg.ClaudeHomeDir, cfg.MaxContainers, previewSvc, notifySvc)
 	defer registry.Close()
 
 	// Восстановление живых сессий после рестарта: упавшие помечаются failed и не

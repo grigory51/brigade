@@ -231,6 +231,44 @@ func (s *Service) SetMemorySettings(ctx context.Context, userID, remote, sshKey 
 	return nil
 }
 
+// NtfySettings возвращает состояние настроек push-уведомлений пользователя: server, topic,
+// CSV включённых событий (для показа/редактирования в UI) и флаг «токен задан». Само
+// значение токена наружу не отдаётся.
+func (s *Service) NtfySettings(ctx context.Context, userID string) (server, topic, events string, tokenSet bool, err error) {
+	var encToken string
+	e := s.db.QueryRowContext(ctx,
+		`SELECT ntfy_server, ntfy_topic, ntfy_token, ntfy_events FROM user_settings WHERE user_id = ?`, userID).
+		Scan(&server, &topic, &encToken, &events)
+	if errors.Is(e, sql.ErrNoRows) {
+		return "", "", "", false, nil
+	}
+	if e != nil {
+		return "", "", "", false, fmt.Errorf("auth: query ntfy settings: %w", e)
+	}
+	return server, topic, events, encToken != "", nil
+}
+
+// SetNtfySettings задаёт server/topic/events и (опционально) токен ntfy. server/topic/events
+// перезаписываются всегда (пустой topic отключает уведомления); пустой token СОХРАНЯЕТ
+// прежний (чтобы правка server/topic не стирала токен). Токен шифруется перед записью.
+func (s *Service) SetNtfySettings(ctx context.Context, userID, server, topic, token, events string) error {
+	// CASE сохраняет существующий токен, когда новый пуст (excluded.ntfy_token = '').
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO user_settings (user_id, ntfy_server, ntfy_topic, ntfy_token, ntfy_events, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(user_id) DO UPDATE SET
+		   ntfy_server = excluded.ntfy_server,
+		   ntfy_topic = excluded.ntfy_topic,
+		   ntfy_token = CASE WHEN excluded.ntfy_token = '' THEN user_settings.ntfy_token ELSE excluded.ntfy_token END,
+		   ntfy_events = excluded.ntfy_events,
+		   updated_at = excluded.updated_at`,
+		userID, server, topic, s.cipher.Encrypt(token), events, s.now().Unix())
+	if err != nil {
+		return fmt.Errorf("auth: set ntfy settings: %w", err)
+	}
+	return nil
+}
+
 // issuePair выпускает access-JWT и сохраняет новый refresh-токен в store.
 func (s *Service) issuePair(ctx context.Context, u User) (TokenPair, error) {
 	access, accessExp, err := s.jwt.Issue(u.ID, u.Username, s.now())

@@ -61,6 +61,26 @@ message SetMemorySettingsRequest {
   string ssh_key = 2;
 }
 
+// NtfySettings — состояние настроек персональных push-уведомлений через ntfy. server и
+// topic показываются в UI; значение токена наружу НЕ отдаётся — только флаг token_set.
+// events — включённые пользователем события (напр. "turn_end", "error").
+message NtfySettings {
+  string server = 1;
+  string topic = 2;
+  bool token_set = 3;
+  repeated string events = 4;
+}
+
+// SetNtfySettingsRequest — установка настроек ntfy. server/topic/events перезаписываются
+// всегда (пустой topic отключает уведомления). token: пустой СОХРАНЯЕТ прежний (правка
+// server/topic не стирает токен); задать новый — прислать непустой.
+message SetNtfySettingsRequest {
+  string server = 1;
+  string topic = 2;
+  string token = 3;
+  repeated string events = 4;
+}
+
 // AuthService — логин/пароль с JWT (TTL), refresh-токеном и per-user настройками Claude.
 service AuthService {
   rpc Login(LoginRequest) returns (LoginResponse) {}
@@ -80,4 +100,10 @@ service AuthService {
   // SetMemorySettings задаёт git-remote и SSH-ключ личной памяти. Возвращает обновлённое
   // состояние.
   rpc SetMemorySettings(SetMemorySettingsRequest) returns (MemorySettings) {}
+  // GetNtfySettings возвращает настройки push-уведомлений пользователя (server/topic/events
+  // + флаг token_set; значение токена не раскрывается).
+  rpc GetNtfySettings(Empty) returns (NtfySettings) {}
+  // SetNtfySettings задаёт server/topic/token/events персональных ntfy-уведомлений.
+  // Возвращает обновлённое состояние.
+  rpc SetNtfySettings(SetNtfySettingsRequest) returns (NtfySettings) {}
 }

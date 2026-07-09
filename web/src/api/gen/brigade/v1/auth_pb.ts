@@ -433,3 +433,121 @@ export class SetMemorySettingsRequest extends Message<SetMemorySettingsRequest> 
   }
 }
 
+/**
+ * NtfySettings — состояние настроек персональных push-уведомлений через ntfy. server и
+ * topic показываются в UI; значение токена наружу НЕ отдаётся — только флаг token_set.
+ * events — включённые пользователем события (напр. "turn_end", "error").
+ *
+ * @generated from message brigade.v1.NtfySettings
+ */
+export class NtfySettings extends Message<NtfySettings> {
+  /**
+   * @generated from field: string server = 1;
+   */
+  server = "";
+
+  /**
+   * @generated from field: string topic = 2;
+   */
+  topic = "";
+
+  /**
+   * @generated from field: bool token_set = 3;
+   */
+  tokenSet = false;
+
+  /**
+   * @generated from field: repeated string events = 4;
+   */
+  events: string[] = [];
+
+  constructor(data?: PartialMessage<NtfySettings>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.NtfySettings";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "server", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "topic", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "token_set", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 4, name: "events", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): NtfySettings {
+    return new NtfySettings().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): NtfySettings {
+    return new NtfySettings().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): NtfySettings {
+    return new NtfySettings().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: NtfySettings | PlainMessage<NtfySettings> | undefined, b: NtfySettings | PlainMessage<NtfySettings> | undefined): boolean {
+    return proto3.util.equals(NtfySettings, a, b);
+  }
+}
+
+/**
+ * SetNtfySettingsRequest — установка настроек ntfy. server/topic/events перезаписываются
+ * всегда (пустой topic отключает уведомления). token: пустой СОХРАНЯЕТ прежний (правка
+ * server/topic не стирает токен); задать новый — прислать непустой.
+ *
+ * @generated from message brigade.v1.SetNtfySettingsRequest
+ */
+export class SetNtfySettingsRequest extends Message<SetNtfySettingsRequest> {
+  /**
+   * @generated from field: string server = 1;
+   */
+  server = "";
+
+  /**
+   * @generated from field: string topic = 2;
+   */
+  topic = "";
+
+  /**
+   * @generated from field: string token = 3;
+   */
+  token = "";
+
+  /**
+   * @generated from field: repeated string events = 4;
+   */
+  events: string[] = [];
+
+  constructor(data?: PartialMessage<SetNtfySettingsRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.SetNtfySettingsRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "server", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "topic", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "token", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "events", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SetNtfySettingsRequest {
+    return new SetNtfySettingsRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SetNtfySettingsRequest {
+    return new SetNtfySettingsRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SetNtfySettingsRequest {
+    return new SetNtfySettingsRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SetNtfySettingsRequest | PlainMessage<SetNtfySettingsRequest> | undefined, b: SetNtfySettingsRequest | PlainMessage<SetNtfySettingsRequest> | undefined): boolean {
+    return proto3.util.equals(SetNtfySettingsRequest, a, b);
+  }
+}
+
