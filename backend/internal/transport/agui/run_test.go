@@ -162,7 +162,10 @@ func TestServePromptFinishesStreamsBeforeBind(t *testing.T) {
 		Messages: []inputMessage{{Role: "user", Content: "привет"}},
 	})
 
-	want := []string{"FinishStreams", "Bind", "Prompt"}
+	// FinishStreams в onTurnStart (до Bind — закрывает хвост прошлого turn'а) И в конце этого
+	// turn'а (до unbind/RUN_FINISHED — закрывает его финальный открытый текст, иначе
+	// RUN_FINISHED уходит «поверх открытого текста» и клиент @ag-ui его отвергает).
+	want := []string{"FinishStreams", "Bind", "Prompt", "FinishStreams"}
 	if strings.Join(b.calls, ",") != strings.Join(want, ",") {
 		t.Errorf("порядок вызовов = %v, want %v", b.calls, want)
 	}

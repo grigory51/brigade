@@ -118,6 +118,13 @@ func (rn *run) serve(in runAgentInput) {
 		rn.bindable.FinishStreams()
 		unbind = rn.bindable.Bind(rn.sink, rn.resolvePermission)
 	})
+	// Закрываем незавершённые потоки ЭТОГО turn'а (финальный текст остаётся без END — adapter
+	// закрывает сообщение лишь на границе turn'а) ДО unbind, пока поток ещё привязан: иначе
+	// RUN_FINISHED уйдёт «поверх открытого текста» и клиент @ag-ui его отвергнет
+	// (Cannot send 'RUN_FINISHED' while text messages are still active). На daemon-пути
+	// FinishStreams дожидается доставки закрытий на SSE (закрытия идут асинхронно через
+	// StreamEvents, а RUN_FINISHED — напрямую, и без ожидания обгонял бы их).
+	rn.bindable.FinishStreams()
 	if unbind != nil {
 		unbind()
 	}

@@ -17,6 +17,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"connectrpc.com/connect"
 	acpsdk "github.com/coder/acp-go-sdk"
@@ -40,6 +41,9 @@ type Client struct {
 	sink      acp.EventSink
 	bindGen   uint64
 	cancel    context.CancelFunc // отменяет текущий StreamEvents-цикл
+	// deliveredSeq — seq последнего события, доставленного текущему sink (streamLoop). По нему
+	// FinishStreams дожидается, что закрывающие потоки события доехали до SSE до RUN_FINISHED.
+	deliveredSeq int64
 
 	// promptMu сериализует turn'ы, как acp.Client.promptMu: brigade допускает параллельные
 	// /run в один тред, а привязка sink нового прогона (onTurnStart) должна происходить
@@ -179,6 +183,9 @@ func (c *Client) streamLoop(ctx context.Context, gen uint64, from int64) {
 			continue
 		}
 		_ = cur(evt)
+		c.mu.Lock()
+		c.deliveredSeq = msg.Seq
+		c.mu.Unlock()
 	}
 }
 
@@ -203,10 +210,39 @@ func (c *Client) Cancel(ctx context.Context) error {
 	return err
 }
 
-// FinishStreams → закрытие открытых потоков в демоне.
+// FinishStreams закрывает открытые потоки в демоне (журналит TEXT_MESSAGE_END и т.п.) И, если
+// поток привязан, дожидается доставки этих закрытий на sink/SSE. Без ожидания — гонка: демон
+// журналит END, а он едет на SSE асинхронно через StreamEvents, тогда как RUN_FINISHED run.go
+// шлёт напрямую и обгоняет; клиент @ag-ui отвергает RUN_FINISHED «поверх открытого текста».
 func (c *Client) FinishStreams() {
 	if _, err := c.rpc.FinishStreams(context.Background(), authReq(c.sign(), &v1.Empty{})); err != nil {
 		log.Printf("acpremote: finish streams: %v", err)
+		return
+	}
+	// Дренируем доставку только при активной привязке: без sink (напр. вызов на onTurnStart
+	// до Bind) seq не двигается — ждать нечего.
+	c.mu.Lock()
+	bound := c.sink != nil
+	c.mu.Unlock()
+	if !bound {
+		return
+	}
+	_, target := c.Status() // журнал демона после закрытия
+	c.waitDelivered(int64(target), 2*time.Second)
+}
+
+// waitDelivered блокируется, пока streamLoop не доставит события до seq target (или таймаут —
+// защита от повисшего/оборванного потока: best-effort, RUN_FINISHED всё равно уйдёт).
+func (c *Client) waitDelivered(target int64, timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	for {
+		c.mu.Lock()
+		got := c.deliveredSeq
+		c.mu.Unlock()
+		if got >= target || time.Now().After(deadline) {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 
