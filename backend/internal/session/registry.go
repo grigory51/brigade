@@ -94,6 +94,13 @@ var (
 	_ acpSession = (*acpremote.Client)(nil)
 )
 
+// AgentKeyProvider выдаёт per-user SSH-ключ агента (генерируя пару при первом обращении):
+// приватный ключ (OpenSSH PEM) для подкладывания в контейнер и публичный (authorized_keys).
+// Реализуется auth.Service.
+type AgentKeyProvider interface {
+	EnsureAgentSSHKey(ctx context.Context, userID string) (privatePEM, publicKey string, err error)
+}
+
 // Registry — реестр живых сессий поверх store и спавнера.
 //
 // Режим спавна (local|docker) — свойство ИНСТАНСА (BRIGADE_MODE), не сессии:
@@ -119,6 +126,9 @@ type Registry struct {
 	// notify шлёт пер-юзерные push-уведомления (ntfy) о завершении turn'ов. Может быть nil
 	// (тесты) — тогда хук не вешается. Настройки берёт из store пер-юзер.
 	notify *notify.Service
+	// agentKeys выдаёт (генерируя при отсутствии) per-user SSH-ключ агента для провижининга
+	// в контейнер сессии. Может быть nil (тесты) — тогда ключ не подкладывается.
+	agentKeys AgentKeyProvider
 
 	mu   sync.Mutex
 	live map[string]*live
@@ -139,7 +149,7 @@ type Registry struct {
 // (дефолт Cwd сессии); claudeHomeDir — базовый каталог per-user ~/.claude (docker);
 // previews — сервис публикации dev-серверов. Подписочный токен Claude берётся
 // per-user из store при создании сессии.
-func NewRegistry(st *store.Store, spawner spawn.Spawner, mode store.SessionMode, workDir, claudeHomeDir string, maxContainers int, previews *preview.Service, notifier *notify.Service) *Registry {
+func NewRegistry(st *store.Store, spawner spawn.Spawner, mode store.SessionMode, workDir, claudeHomeDir string, maxContainers int, previews *preview.Service, notifier *notify.Service, agentKeys AgentKeyProvider) *Registry {
 	return &Registry{
 		store:         st,
 		spawner:       spawner,
@@ -149,6 +159,7 @@ func NewRegistry(st *store.Store, spawner spawn.Spawner, mode store.SessionMode,
 		maxContainers: maxContainers,
 		previews:      previews,
 		notify:        notifier,
+		agentKeys:     agentKeys,
 		live:          make(map[string]*live),
 		tearingDown:   make(map[string]struct{}),
 		userLocks:     make(map[string]*sync.Mutex),
@@ -407,6 +418,7 @@ func (r *Registry) Create(ctx context.Context, userID string, kind store.Session
 	// Скилл публикации preview кладётся до спавна: агент должен видеть его с первого
 	// хода. В docker-режиме cwd — путь хоста, файл попадает в контейнер через bind-mount.
 	r.installSkill(sess)
+	r.provisionAgentSSH(ctx, sess)
 
 	// Агент должен пережить запрос Create: его жизнь равна жизни сессии, а не
 	// вызову RPC. Отвязываем спавн от ctx запроса, иначе по завершении Create его
@@ -712,6 +724,63 @@ func (r *Registry) installSkill(sess store.Session) {
 	}
 }
 
+// provisionAgentSSH подкладывает per-user SSH-ключ агента в его home на ХОСТЕ (docker-режим):
+// ~/.ssh/{id_ed25519, id_ed25519.pub, config}. home bind-mount'ится в контейнер, поэтому агент
+// видит ключ по ~/.ssh и может пушить в GitHub (git@github.com) без интерактива. Ключ стабилен
+// per-user (общий home пользователя); файлы перезаписываются каждый спавн — синхронизация с
+// перевыпущенным ключом. В local-режиме (home пуст) no-op: агент пользуется хостовым ~/.ssh.
+// Ошибки логируются, не роняют создание сессии — пуш вспомогателен.
+func (r *Registry) provisionAgentSSH(ctx context.Context, sess store.Session) {
+	if r.agentKeys == nil {
+		return
+	}
+	home := r.homeHost(sess)
+	if home == "" {
+		return
+	}
+	priv, pub, err := r.agentKeys.EnsureAgentSSHKey(ctx, sess.UserID)
+	if err != nil {
+		log.Printf("session: ensure agent ssh key %s: %v", sess.UserID, err)
+		return
+	}
+
+	sshDir := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(sshDir, 0o700); err != nil {
+		log.Printf("session: mkdir .ssh %s: %v", sshDir, err)
+		return
+	}
+	// config направляет git@github.com на подложенный ключ и принимает host-key при первом
+	// подключении (accept-new пишет known_hosts), чтобы push не висел на интерактивной проверке.
+	const sshConfig = "Host github.com\n" +
+		"    HostName github.com\n" +
+		"    User git\n" +
+		"    IdentityFile ~/.ssh/id_ed25519\n" +
+		"    IdentitiesOnly yes\n" +
+		"    StrictHostKeyChecking accept-new\n"
+	files := []struct {
+		path string
+		data []byte
+		mode os.FileMode
+	}{
+		{filepath.Join(sshDir, "id_ed25519"), []byte(priv), 0o600},
+		{filepath.Join(sshDir, "id_ed25519.pub"), []byte(pub + "\n"), 0o644},
+		{filepath.Join(sshDir, "config"), []byte(sshConfig), 0o600},
+	}
+	for _, f := range files {
+		if err := os.WriteFile(f.path, f.data, f.mode); err != nil {
+			log.Printf("session: write %s: %v", f.path, err)
+			return
+		}
+		if err := os.Chown(f.path, spawn.AgentUID, spawn.AgentGID); err != nil {
+			log.Printf("session: chown %s: %v", f.path, err)
+		}
+	}
+	// .ssh каталог — под агентом (иначе ssh откажется читать root-owned ключ у uid 1001).
+	if err := os.Chown(sshDir, spawn.AgentUID, spawn.AgentGID); err != nil {
+		log.Printf("session: chown %s: %v", sshDir, err)
+	}
+}
+
 // rootID возвращает идентификатор корневой сессии дерева (подъём по parent_id).
 // Ветки монтируют volume состояния корня: форкнутый агент читает исходную сессию из
 // общего хранилища. Родитель, удалённый из store, обрывает подъём — корнем считается
@@ -884,6 +953,7 @@ func (r *Registry) Fork(ctx context.Context, sessionID, userID string) (store.Se
 		return store.Session{}, err
 	}
 	r.installSkill(sess)
+	r.provisionAgentSSH(ctx, sess)
 
 	// Как и в Create: жизнь агента равна жизни сессии, спавн отвязывается от ctx запроса.
 	token := r.userClaudeToken(ctx, sess.UserID)
@@ -1156,6 +1226,7 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 	// добавивший новый скилл, должен долетать и в уже существующие сессии при рестарте, а
 	// не только в новые. Идемпотентно; для сессий, которые не респавнятся, — безвредно.
 	r.installSkill(sess)
+	r.provisionAgentSSH(ctx, sess)
 
 	switch sess.Kind {
 	case store.SessionKindCLI:

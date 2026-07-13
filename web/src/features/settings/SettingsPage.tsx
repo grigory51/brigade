@@ -133,8 +133,126 @@ export function SettingsPage() {
       </Card>
 
       <MemoryCard />
+      <SshCard />
       <NtfyCard />
     </div>
+  );
+}
+
+/**
+ * SshCard — раздел «SSH-ключ агента»: стабильный per-user ключ, который brigade генерирует и
+ * подкладывает в контейнер сессии. Публичную часть пользователь добавляет в GitHub (Settings →
+ * SSH and GPG keys или deploy key репозитория), после чего агент может пушить по git@github.com.
+ * Приватный ключ на сервере зашифрован и наружу не отдаётся. Ключ генерируется при первом
+ * открытии; «Перевыпустить» создаёт новую пару (старый публичный ключ в GitHub перестаёт работать).
+ */
+function SshCard() {
+  const [publicKey, setPublicKey] = useState<string | null>(null); // null = загрузка
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    authClient
+      .getSSHSettings({})
+      .then((r) => {
+        if (alive) setPublicKey(r.publicKey);
+      })
+      .catch(() => {
+        if (alive) setPublicKey("");
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const copy = useCallback(() => {
+    if (!publicKey) return;
+    void navigator.clipboard
+      .writeText(publicKey)
+      .then(() => toast.success("Публичный ключ скопирован"))
+      .catch(() => toast.error("Не удалось скопировать"));
+  }, [publicKey]);
+
+  const regenerate = useCallback(async () => {
+    if (
+      !window.confirm(
+        "Перевыпустить SSH-ключ? Старый публичный ключ, добавленный в GitHub, перестанет работать — нужно будет добавить новый.",
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await authClient.regenerateSSHKey({});
+      setPublicKey(res.publicKey);
+      toast.success("SSH-ключ перевыпущен — обновите ключ в GitHub");
+    } catch (err) {
+      toast.error(
+        err instanceof ConnectError
+          ? err.rawMessage
+          : "Не удалось перевыпустить ключ",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  return (
+    <Card className="mt-4">
+      <CardHeader>
+        <CardTitle>SSH-ключ агента</CardTitle>
+        <CardDescription>
+          Стабильный ключ, который brigade подкладывает в контейнер ваших сессий.
+          Добавьте публичный ключ в{" "}
+          <a
+            href="https://github.com/settings/keys"
+            target="_blank"
+            rel="noreferrer"
+            className="underline"
+          >
+            GitHub → SSH keys
+          </a>{" "}
+          (или как deploy key репозитория) — и агент сможет пушить по{" "}
+          <code className="text-xs">git@github.com</code>. Приватный ключ хранится
+          на сервере зашифрованным и наружу не отдаётся.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {publicKey === null ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            Загрузка…
+          </div>
+        ) : (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="ssh-pub">Публичный ключ</Label>
+              <Textarea
+                id="ssh-pub"
+                readOnly
+                rows={3}
+                className="font-mono text-xs"
+                value={publicKey}
+                onFocus={(e) => e.currentTarget.select()}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={copy} disabled={!publicKey}>
+                Скопировать
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => void regenerate()}
+                disabled={busy}
+              >
+                {busy && <Loader2 className="size-4 animate-spin" />}
+                Перевыпустить
+              </Button>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -309,14 +427,13 @@ function NtfyCard() {
 }
 
 /**
- * MemoryCard — раздел «Память»: приватный git-репозиторий заметок пользователя и SSH-ключ
- * к нему. Репозиторий и ключ ПЕР-ЮЗЕРНЫЕ; ключ на сервере шифруется и наружу не отдаётся
- * (только флаг «задан»). Пустой ключ при сохранении оставляет прежний.
+ * MemoryCard — раздел «Память»: приватный git-репозиторий заметок пользователя. Репозиторий
+ * ПЕР-ЮЗЕРНЫЙ. Для git@-remote доступ идёт по SSH-ключу агента (см. раздел «SSH-ключ агента»):
+ * отдельный ключ памяти задавать не нужно — добавьте публичный ключ агента в git-хост.
  */
 function MemoryCard() {
-  const [keySet, setKeySet] = useState<boolean | null>(null); // null = загрузка
+  const [loaded, setLoaded] = useState(false);
   const [remote, setRemote] = useState("");
-  const [keyDraft, setKeyDraft] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -324,12 +441,10 @@ function MemoryCard() {
     authClient
       .getMemorySettings({})
       .then((r) => {
-        if (!alive) return;
-        setRemote(r.remote);
-        setKeySet(r.keySet);
+        if (alive) setRemote(r.remote);
       })
-      .catch(() => {
-        if (alive) setKeySet(false);
+      .finally(() => {
+        if (alive) setLoaded(true);
       });
     return () => {
       alive = false;
@@ -339,13 +454,8 @@ function MemoryCard() {
   const save = useCallback(async () => {
     setSaving(true);
     try {
-      const res = await authClient.setMemorySettings({
-        remote: remote.trim(),
-        sshKey: keyDraft,
-      });
+      const res = await authClient.setMemorySettings({ remote: remote.trim() });
       setRemote(res.remote);
-      setKeySet(res.keySet);
-      setKeyDraft(""); // ключ из UI сразу убираем — он больше не показывается
       toast.success("Настройки памяти сохранены");
     } catch (err) {
       toast.error(
@@ -356,71 +466,39 @@ function MemoryCard() {
     } finally {
       setSaving(false);
     }
-  }, [remote, keyDraft]);
+  }, [remote]);
 
   return (
     <Card className="mt-4">
       <CardHeader>
         <CardTitle>Память</CardTitle>
         <CardDescription>
-          Ваш приватный git-репозиторий заметок и SSH-ключ к нему (для{" "}
-          <code className="text-xs">git@</code>-remote). Данные изолированы: репозиторий и
-          доступ у каждого пользователя свои. Ключ после сохранения не отображается.
+          Ваш приватный git-репозиторий заметок (пер-юзерный). Для{" "}
+          <code className="text-xs">git@</code>-remote доступ идёт по SSH-ключу агента —
+          отдельный ключ задавать не нужно, добавьте публичный ключ из раздела ниже в свой
+          git-хост.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        {keySet === null ? (
+        {!loaded ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
             Загрузка…
           </div>
         ) : (
-          <div className="flex items-center gap-1.5 text-sm">
-            {keySet ? (
-              <>
-                <Check className="size-4 text-success" />
-                <span className="text-muted-foreground">SSH-ключ задан</span>
-              </>
-            ) : (
-              <span className="text-muted-foreground">SSH-ключ не задан</span>
-            )}
+          <div className="space-y-2">
+            <Label htmlFor="memory-remote">Git-remote</Label>
+            <Input
+              id="memory-remote"
+              placeholder="git@gitlab.com:you/brigade-memory.git"
+              autoComplete="off"
+              value={remote}
+              onChange={(e) => setRemote(e.target.value)}
+            />
           </div>
         )}
 
-        <div className="space-y-2">
-          <Label htmlFor="memory-remote">Git-remote</Label>
-          <Input
-            id="memory-remote"
-            placeholder="git@gitlab.com:you/brigade-memory.git"
-            autoComplete="off"
-            value={remote}
-            onChange={(e) => setRemote(e.target.value)}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="memory-key">
-            {keySet ? "Новый SSH-ключ" : "SSH-ключ (приватный, без пароля)"}
-          </Label>
-          <Textarea
-            id="memory-key"
-            rows={4}
-            placeholder={
-              keySet
-                ? "Оставьте пустым, чтобы не менять"
-                : "-----BEGIN OPENSSH PRIVATE KEY-----"
-            }
-            autoComplete="off"
-            className="font-mono text-xs"
-            value={keyDraft}
-            onChange={(e) => setKeyDraft(e.target.value)}
-          />
-        </div>
-
-        <Button
-          onClick={() => void save()}
-          disabled={saving || (!remote.trim() && !keyDraft.trim())}
-        >
+        <Button onClick={() => void save()} disabled={saving || !loaded}>
           {saving && <Loader2 className="size-4 animate-spin" />}
           Сохранить
         </Button>

@@ -1,0 +1,14 @@
+workspace/
+bin/
+
+# Локальные конфиги и базы.
+config.yaml
+*.db
+*.db-shm
+*.db-wal
+
+# Встроенный фронтенд: содержимое dist кладёт Makefile перед go build (сборка web).
+# В git хранится только .gitkeep — go:embed требует непустую директорию для компиляции
+# чистого чекаута.
+internal/web/dist/*
+!internal/web/dist/.gitkeep

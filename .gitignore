@@ -1,12 +1,8 @@
 # Сборочные артефакты единого бинаря.
 /bin/
-backend/bin/
 
-# Локальные конфиги и базы.
-backend/config.yaml
-*.db
-*.db-shm
-*.db-wal
+# Собранный десктоп-бандл macOS (make app).
+/dist/
 
 # Зависимости и сборки web.
 web/node_modules/
@@ -19,12 +15,6 @@ web/dist/
 /data/
 .playwright-mcp/
 
-# Встроенный фронтенд: содержимое dist кладёт Makefile перед go build (сборка web).
-# В git хранится только .gitkeep — go:embed требует непустую директорию для компиляции
-# чистого чекаута.
-backend/internal/web/dist/*
-!backend/internal/web/dist/.gitkeep
-
 # Mobile (Gradle).
 mobile/.gradle/
 mobile/build/
@@ -35,7 +25,6 @@ mobile/local.properties
 .DS_Store
 .idea/
 .claude/
-backend/workspace/
 
 # Архивы (дизайн-хендоффы, выгрузки) — не часть репозитория.
 *.zip

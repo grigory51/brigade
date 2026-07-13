@@ -59,6 +59,12 @@ const (
 	// AuthServiceSetNtfySettingsProcedure is the fully-qualified name of the AuthService's
 	// SetNtfySettings RPC.
 	AuthServiceSetNtfySettingsProcedure = "/brigade.v1.AuthService/SetNtfySettings"
+	// AuthServiceGetSSHSettingsProcedure is the fully-qualified name of the AuthService's
+	// GetSSHSettings RPC.
+	AuthServiceGetSSHSettingsProcedure = "/brigade.v1.AuthService/GetSSHSettings"
+	// AuthServiceRegenerateSSHKeyProcedure is the fully-qualified name of the AuthService's
+	// RegenerateSSHKey RPC.
+	AuthServiceRegenerateSSHKeyProcedure = "/brigade.v1.AuthService/RegenerateSSHKey"
 )
 
 // AuthServiceClient is a client for the brigade.v1.AuthService service.
@@ -74,11 +80,9 @@ type AuthServiceClient interface {
 	// SetClaudeToken задаёт (или очищает пустым значением) подписочный токен Claude
 	// пользователя. Возвращает обновлённое состояние (token_set).
 	SetClaudeToken(context.Context, *connect.Request[v1.SetClaudeTokenRequest]) (*connect.Response[v1.ClaudeSettings], error)
-	// GetMemorySettings возвращает настройки личной памяти пользователя (remote + флаг
-	// key_set; значение ключа не раскрывается).
+	// GetMemorySettings возвращает настройки личной памяти пользователя (git-remote).
 	GetMemorySettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.MemorySettings], error)
-	// SetMemorySettings задаёт git-remote и SSH-ключ личной памяти. Возвращает обновлённое
-	// состояние.
+	// SetMemorySettings задаёт git-remote личной памяти. Возвращает обновлённое состояние.
 	SetMemorySettings(context.Context, *connect.Request[v1.SetMemorySettingsRequest]) (*connect.Response[v1.MemorySettings], error)
 	// GetNtfySettings возвращает настройки push-уведомлений пользователя (server/topic/events
 	// + флаг token_set; значение токена не раскрывается).
@@ -86,6 +90,12 @@ type AuthServiceClient interface {
 	// SetNtfySettings задаёт server/topic/token/events персональных ntfy-уведомлений.
 	// Возвращает обновлённое состояние.
 	SetNtfySettings(context.Context, *connect.Request[v1.SetNtfySettingsRequest]) (*connect.Response[v1.NtfySettings], error)
+	// GetSSHSettings возвращает публичный SSH-ключ агента пользователя, генерируя пару при
+	// первом обращении (приватный ключ наружу не отдаётся).
+	GetSSHSettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error)
+	// RegenerateSSHKey перевыпускает пару SSH-ключей агента (старый публичный ключ в GitHub
+	// после этого недействителен). Возвращает новый публичный ключ.
+	RegenerateSSHKey(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error)
 }
 
 // NewAuthServiceClient constructs a client for the brigade.v1.AuthService service. By default, it
@@ -159,6 +169,18 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("SetNtfySettings")),
 			connect.WithClientOptions(opts...),
 		),
+		getSSHSettings: connect.NewClient[v1.Empty, v1.SSHSettings](
+			httpClient,
+			baseURL+AuthServiceGetSSHSettingsProcedure,
+			connect.WithSchema(authServiceMethods.ByName("GetSSHSettings")),
+			connect.WithClientOptions(opts...),
+		),
+		regenerateSSHKey: connect.NewClient[v1.Empty, v1.SSHSettings](
+			httpClient,
+			baseURL+AuthServiceRegenerateSSHKeyProcedure,
+			connect.WithSchema(authServiceMethods.ByName("RegenerateSSHKey")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -174,6 +196,8 @@ type authServiceClient struct {
 	setMemorySettings *connect.Client[v1.SetMemorySettingsRequest, v1.MemorySettings]
 	getNtfySettings   *connect.Client[v1.Empty, v1.NtfySettings]
 	setNtfySettings   *connect.Client[v1.SetNtfySettingsRequest, v1.NtfySettings]
+	getSSHSettings    *connect.Client[v1.Empty, v1.SSHSettings]
+	regenerateSSHKey  *connect.Client[v1.Empty, v1.SSHSettings]
 }
 
 // Login calls brigade.v1.AuthService.Login.
@@ -226,6 +250,16 @@ func (c *authServiceClient) SetNtfySettings(ctx context.Context, req *connect.Re
 	return c.setNtfySettings.CallUnary(ctx, req)
 }
 
+// GetSSHSettings calls brigade.v1.AuthService.GetSSHSettings.
+func (c *authServiceClient) GetSSHSettings(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error) {
+	return c.getSSHSettings.CallUnary(ctx, req)
+}
+
+// RegenerateSSHKey calls brigade.v1.AuthService.RegenerateSSHKey.
+func (c *authServiceClient) RegenerateSSHKey(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error) {
+	return c.regenerateSSHKey.CallUnary(ctx, req)
+}
+
 // AuthServiceHandler is an implementation of the brigade.v1.AuthService service.
 type AuthServiceHandler interface {
 	Login(context.Context, *connect.Request[v1.LoginRequest]) (*connect.Response[v1.LoginResponse], error)
@@ -239,11 +273,9 @@ type AuthServiceHandler interface {
 	// SetClaudeToken задаёт (или очищает пустым значением) подписочный токен Claude
 	// пользователя. Возвращает обновлённое состояние (token_set).
 	SetClaudeToken(context.Context, *connect.Request[v1.SetClaudeTokenRequest]) (*connect.Response[v1.ClaudeSettings], error)
-	// GetMemorySettings возвращает настройки личной памяти пользователя (remote + флаг
-	// key_set; значение ключа не раскрывается).
+	// GetMemorySettings возвращает настройки личной памяти пользователя (git-remote).
 	GetMemorySettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.MemorySettings], error)
-	// SetMemorySettings задаёт git-remote и SSH-ключ личной памяти. Возвращает обновлённое
-	// состояние.
+	// SetMemorySettings задаёт git-remote личной памяти. Возвращает обновлённое состояние.
 	SetMemorySettings(context.Context, *connect.Request[v1.SetMemorySettingsRequest]) (*connect.Response[v1.MemorySettings], error)
 	// GetNtfySettings возвращает настройки push-уведомлений пользователя (server/topic/events
 	// + флаг token_set; значение токена не раскрывается).
@@ -251,6 +283,12 @@ type AuthServiceHandler interface {
 	// SetNtfySettings задаёт server/topic/token/events персональных ntfy-уведомлений.
 	// Возвращает обновлённое состояние.
 	SetNtfySettings(context.Context, *connect.Request[v1.SetNtfySettingsRequest]) (*connect.Response[v1.NtfySettings], error)
+	// GetSSHSettings возвращает публичный SSH-ключ агента пользователя, генерируя пару при
+	// первом обращении (приватный ключ наружу не отдаётся).
+	GetSSHSettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error)
+	// RegenerateSSHKey перевыпускает пару SSH-ключей агента (старый публичный ключ в GitHub
+	// после этого недействителен). Возвращает новый публичный ключ.
+	RegenerateSSHKey(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error)
 }
 
 // NewAuthServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -320,6 +358,18 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("SetNtfySettings")),
 		connect.WithHandlerOptions(opts...),
 	)
+	authServiceGetSSHSettingsHandler := connect.NewUnaryHandler(
+		AuthServiceGetSSHSettingsProcedure,
+		svc.GetSSHSettings,
+		connect.WithSchema(authServiceMethods.ByName("GetSSHSettings")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceRegenerateSSHKeyHandler := connect.NewUnaryHandler(
+		AuthServiceRegenerateSSHKeyProcedure,
+		svc.RegenerateSSHKey,
+		connect.WithSchema(authServiceMethods.ByName("RegenerateSSHKey")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/brigade.v1.AuthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AuthServiceLoginProcedure:
@@ -342,6 +392,10 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceGetNtfySettingsHandler.ServeHTTP(w, r)
 		case AuthServiceSetNtfySettingsProcedure:
 			authServiceSetNtfySettingsHandler.ServeHTTP(w, r)
+		case AuthServiceGetSSHSettingsProcedure:
+			authServiceGetSSHSettingsHandler.ServeHTTP(w, r)
+		case AuthServiceRegenerateSSHKeyProcedure:
+			authServiceRegenerateSSHKeyHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -389,4 +443,12 @@ func (UnimplementedAuthServiceHandler) GetNtfySettings(context.Context, *connect
 
 func (UnimplementedAuthServiceHandler) SetNtfySettings(context.Context, *connect.Request[v1.SetNtfySettingsRequest]) (*connect.Response[v1.NtfySettings], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.SetNtfySettings is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) GetSSHSettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.GetSSHSettings is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) RegenerateSSHKey(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.RegenerateSSHKey is not implemented"))
 }

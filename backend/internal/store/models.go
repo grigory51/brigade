@@ -40,14 +40,13 @@ type User struct {
 }
 
 // UserSettings — персональные настройки пользователя. ClaudeToken — подписочный
-// токен Claude Code; MemoryRemote/MemorySSHKey — git-репо личной памяти и приватный
-// SSH-ключ к нему. Всё — секреты: в БД шифруются, наружу (в API) значения не отдаются
-// (только флаги «задано»). GetUserSettings возвращает их уже расшифрованными.
+// токен Claude Code; MemoryRemote — git-репо личной памяти (доступ к git@-remote идёт по
+// SSH-ключу агента, см. auth.EnsureAgentSSHKey). Секреты в БД шифруются, наружу (в API)
+// значения не отдаются. GetUserSettings возвращает их уже расшифрованными.
 type UserSettings struct {
 	UserID       string
 	ClaudeToken  string
 	MemoryRemote string
-	MemorySSHKey string
 	// NtfyServer/NtfyTopic — адрес сервера ntfy и топик push-уведомлений (не секреты).
 	// NtfyToken — токен публикации в топик (секрет, шифруется). NtfyEvents — CSV включённых
 	// событий (напр. "turn_end,error").

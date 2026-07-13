@@ -64,7 +64,7 @@ func (s *AgentBridgeService) CreateMemoryNote(ctx context.Context, req *connect.
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, errSessionNotFound)
 	}
-	n, sha, err := s.memory.Create(ctx, sess.UserID, memory.Note{
+	n, sha, err := s.memory.CreateNoteInTopic(ctx, sess.UserID, req.Msg.Topic, memory.Note{
 		Title:   req.Msg.Title,
 		Body:    req.Msg.Body,
 		Type:    req.Msg.Type,

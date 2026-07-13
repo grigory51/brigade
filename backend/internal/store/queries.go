@@ -44,9 +44,9 @@ func (s *Store) GetUserSettings(ctx context.Context, userID string) (UserSetting
 	settings := UserSettings{UserID: userID}
 	var updatedAt int64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT claude_token, memory_remote, memory_ssh_key, ntfy_server, ntfy_topic, ntfy_token, ntfy_events, updated_at
+		`SELECT claude_token, memory_remote, ntfy_server, ntfy_topic, ntfy_token, ntfy_events, updated_at
 		 FROM user_settings WHERE user_id = ?`, userID).
-		Scan(&settings.ClaudeToken, &settings.MemoryRemote, &settings.MemorySSHKey,
+		Scan(&settings.ClaudeToken, &settings.MemoryRemote,
 			&settings.NtfyServer, &settings.NtfyTopic, &settings.NtfyToken, &settings.NtfyEvents, &updatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return settings, nil
@@ -57,7 +57,6 @@ func (s *Store) GetUserSettings(ctx context.Context, userID string) (UserSetting
 	// Секретные колонки хранятся зашифрованными — отдаём наружу расшифрованными.
 	settings.ClaudeToken = s.cipher.Decrypt(settings.ClaudeToken)
 	settings.MemoryRemote = s.cipher.Decrypt(settings.MemoryRemote)
-	settings.MemorySSHKey = s.cipher.Decrypt(settings.MemorySSHKey)
 	settings.NtfyToken = s.cipher.Decrypt(settings.NtfyToken)
 	// updated_at сканируется, но не хранится в модели (никто не читает).
 	_ = updatedAt

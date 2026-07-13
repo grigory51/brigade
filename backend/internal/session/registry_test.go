@@ -75,7 +75,7 @@ func newTestRegistry(t *testing.T) *Registry {
 		t.Fatalf("store.Open: %v", err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	return NewRegistry(st, spawn.NewLocalSpawner(), store.SessionModeLocal, "/tmp", "", 16, preview.NewService(preview.Config{}, []byte("test")), nil)
+	return NewRegistry(st, spawn.NewLocalSpawner(), store.SessionModeLocal, "/tmp", "", 16, preview.NewService(preview.Config{}, []byte("test")), nil, nil)
 }
 
 // TestAtContainerLimit проверяет учёт контейнеров: ACP — контейнер на сессию, docker-CLI —

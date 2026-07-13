@@ -123,36 +123,30 @@ func (s *AuthService) SetClaudeToken(ctx context.Context, req *connect.Request[v
 	return connect.NewResponse(&v1.ClaudeSettings{TokenSet: strings.TrimSpace(req.Msg.Token) != ""}), nil
 }
 
-// GetMemorySettings возвращает настройки личной памяти текущего пользователя (remote +
-// флаг key_set; значение ключа не раскрывается).
+// GetMemorySettings возвращает git-remote личной памяти текущего пользователя.
 func (s *AuthService) GetMemorySettings(ctx context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.MemorySettings], error) {
 	u, ok := auth.UserFromContext(ctx)
 	if !ok {
 		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
 	}
-	remote, keySet, err := s.svc.MemorySettings(ctx, u.ID)
+	remote, err := s.svc.MemorySettings(ctx, u.ID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&v1.MemorySettings{Remote: remote, KeySet: keySet}), nil
+	return connect.NewResponse(&v1.MemorySettings{Remote: remote}), nil
 }
 
-// SetMemorySettings задаёт git-remote и SSH-ключ памяти текущего пользователя. Пустой
-// ssh_key сохраняет прежний ключ. Возвращает актуальное состояние (перечитывает его, чтобы
-// key_set корректно отражал сохранение прежнего ключа).
+// SetMemorySettings задаёт git-remote личной памяти текущего пользователя.
 func (s *AuthService) SetMemorySettings(ctx context.Context, req *connect.Request[v1.SetMemorySettingsRequest]) (*connect.Response[v1.MemorySettings], error) {
 	u, ok := auth.UserFromContext(ctx)
 	if !ok {
 		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
 	}
-	if err := s.svc.SetMemorySettings(ctx, u.ID, strings.TrimSpace(req.Msg.Remote), strings.TrimSpace(req.Msg.SshKey)); err != nil {
+	remote := strings.TrimSpace(req.Msg.Remote)
+	if err := s.svc.SetMemorySettings(ctx, u.ID, remote); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	remote, keySet, err := s.svc.MemorySettings(ctx, u.ID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	return connect.NewResponse(&v1.MemorySettings{Remote: remote, KeySet: keySet}), nil
+	return connect.NewResponse(&v1.MemorySettings{Remote: remote}), nil
 }
 
 // GetNtfySettings возвращает настройки push-уведомлений текущего пользователя (server/topic/
@@ -194,6 +188,33 @@ func (s *AuthService) SetNtfySettings(ctx context.Context, req *connect.Request[
 	}), nil
 }
 
+// GetSSHSettings возвращает публичный SSH-ключ агента текущего пользователя (генерируя пару
+// при первом обращении; приватный ключ не раскрывается).
+func (s *AuthService) GetSSHSettings(ctx context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error) {
+	u, ok := auth.UserFromContext(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
+	}
+	_, pub, err := s.svc.EnsureAgentSSHKey(ctx, u.ID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&v1.SSHSettings{PublicKey: pub}), nil
+}
+
+// RegenerateSSHKey перевыпускает пару SSH-ключей агента текущего пользователя.
+func (s *AuthService) RegenerateSSHKey(ctx context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error) {
+	u, ok := auth.UserFromContext(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
+	}
+	pub, err := s.svc.RegenerateAgentSSHKey(ctx, u.ID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&v1.SSHSettings{PublicKey: pub}), nil
+}
+
 // splitEvents/joinEvents конвертируют CSV-хранение событий ntfy ↔ список proto. Пустые
 // элементы отбрасываются (пустой CSV → nil).
 func splitEvents(csv string) []string {
@@ -222,6 +243,23 @@ func joinEvents(events []string) string {
 // userToProto переводит доменного пользователя auth в proto-сообщение.
 func userToProto(u auth.User) *v1.User {
 	return &v1.User{Id: u.ID, Username: u.Username}
+}
+
+// DesktopLoginHandler — HTTP-обработчик авто-логина для десктоп-режима: выпускает сессию
+// сид-пользователя (без пароля) и ставит те же httpOnly-cookie, что и обычный Login, затем
+// редиректит на SPA. Приложение локальное и однопользовательское (127.0.0.1), экран логина в
+// нём — лишнее трение. Регистрируется ТОЛЬКО в десктоп-режиме; в серверном ручки нет.
+func (s *AuthService) DesktopLoginHandler(username string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		pair, err := s.svc.IssueForUser(r.Context(), username)
+		if err != nil {
+			http.Error(w, "desktop auto-login failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		setAccessCookie(w.Header(), pair.AccessToken, pair.AccessExpiresAt)
+		setRefreshCookie(w.Header(), pair.RefreshToken, pair.RefreshExpiresAt)
+		http.Redirect(w, r, "/", http.StatusFound)
+	}
 }
 
 // setAccessCookie добавляет в ответ Set-Cookie с access-токеном (httpOnly) для web.

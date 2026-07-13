@@ -126,13 +126,16 @@ func (x *RegisterPreviewResponse) GetUrl() string {
 }
 
 type CreateMemoryNoteRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
-	Body          string                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
-	Type          string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"` // idea|decision|insight|todo|question|reference
-	Tags          []string               `protobuf:"bytes,5,rep,name=tags,proto3" json:"tags,omitempty"`
-	Layer         string                 `protobuf:"bytes,6,opt,name=layer,proto3" json:"layer,omitempty"` // semantic (дефолт) | episodic (саммари сессии)
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Title     string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Body      string                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
+	Type      string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"` // idea|decision|insight|todo|question|reference
+	Tags      []string               `protobuf:"bytes,5,rep,name=tags,proto3" json:"tags,omitempty"`
+	Layer     string                 `protobuf:"bytes,6,opt,name=layer,proto3" json:"layer,omitempty"` // semantic (дефолт) | episodic (саммари сессии)
+	// topic — ИМЯ темы-владельца (человекочитаемое, напр. "DIY"). Тема создаётся, если её нет;
+	// совпадение с существующей — по slug/имени. Пусто → виртуальная «Общее». НЕ путать с tags.
+	Topic         string `protobuf:"bytes,7,opt,name=topic,proto3" json:"topic,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -209,6 +212,13 @@ func (x *CreateMemoryNoteRequest) GetLayer() string {
 	return ""
 }
 
+func (x *CreateMemoryNoteRequest) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
 type CreateMemoryNoteResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -273,7 +283,7 @@ const file_brigade_v1_agent_bridge_proto_rawDesc = "" +
 	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\"+\n" +
 	"\x17RegisterPreviewResponse\x12\x10\n" +
-	"\x03url\x18\x01 \x01(\tR\x03url\"\xa0\x01\n" +
+	"\x03url\x18\x01 \x01(\tR\x03url\"\xb6\x01\n" +
 	"\x17CreateMemoryNoteRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x14\n" +
@@ -281,7 +291,8 @@ const file_brigade_v1_agent_bridge_proto_rawDesc = "" +
 	"\x04body\x18\x03 \x01(\tR\x04body\x12\x12\n" +
 	"\x04type\x18\x04 \x01(\tR\x04type\x12\x12\n" +
 	"\x04tags\x18\x05 \x03(\tR\x04tags\x12\x14\n" +
-	"\x05layer\x18\x06 \x01(\tR\x05layer\"I\n" +
+	"\x05layer\x18\x06 \x01(\tR\x05layer\x12\x14\n" +
+	"\x05topic\x18\a \x01(\tR\x05topic\"I\n" +
 	"\x18CreateMemoryNoteResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +

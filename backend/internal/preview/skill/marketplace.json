@@ -1,0 +1,7 @@
+{
+  "name": "brigade-local",
+  "owner": { "name": "Brigade" },
+  "plugins": [
+    { "name": "brigade", "source": "./" }
+  ]
+}

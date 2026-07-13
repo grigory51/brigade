@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/grigory51/brigade/backend/internal/store"
@@ -29,7 +30,7 @@ func TestSelfHeal(t *testing.T) {
 		t.Fatalf("init bare: %v: %s", err, out)
 	}
 
-	svc := NewService(base, fakeSettings{remote: bare})
+	svc := NewService(base, fakeSettings{remote: bare}, nil)
 	ctx := context.Background()
 	const userID = "u1"
 
@@ -154,5 +155,68 @@ func TestTopicModel(t *testing.T) {
 	taken := map[string]bool{"api": true}
 	if uniqueTopicID("api", taken) != "api-2" {
 		t.Fatal("uniqueTopicID suffix")
+	}
+}
+
+// TestCreateNoteInTopic: заметка с ИМЕНЕМ темы уходит в эту тему (создаёт её при отсутствии),
+// повторное имя переиспользует тему без дубля, пустое имя → «Общее». Регрессия: раньше агент не
+// мог задать тему и всё падало в «Общее».
+func TestCreateNoteInTopic(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git не доступен")
+	}
+	base := t.TempDir()
+	bare := filepath.Join(t.TempDir(), "remote.git")
+	if out, err := exec.Command("git", "init", "--bare", "-b", "main", bare).CombinedOutput(); err != nil {
+		t.Fatalf("init bare: %v: %s", err, out)
+	}
+	svc := NewService(base, fakeSettings{remote: bare}, nil)
+	ctx := context.Background()
+	const userID = "u1"
+
+	diyCount := func() int {
+		topics, err := svc.ListTopics(ctx, userID, "")
+		if err != nil {
+			t.Fatalf("list topics: %v", err)
+		}
+		c := 0
+		for _, tp := range topics {
+			if strings.EqualFold(tp.Name, "DIY") {
+				c++
+			}
+		}
+		return c
+	}
+
+	n1, _, err := svc.CreateNoteInTopic(ctx, userID, "DIY", Note{Title: "аккумуляторы", Body: "b"})
+	if err != nil {
+		t.Fatalf("create in DIY: %v", err)
+	}
+	if n1.TopicID == generalTopicID || n1.TopicID == "" {
+		t.Errorf("заметка ушла в general, а не в тему DIY: %q", n1.TopicID)
+	}
+	if c := diyCount(); c != 1 {
+		t.Errorf("тем DIY после первой заметки = %d, want 1", c)
+	}
+
+	// Повторное имя — та же тема, без дубля.
+	n2, _, err := svc.CreateNoteInTopic(ctx, userID, "DIY", Note{Title: "вторая"})
+	if err != nil {
+		t.Fatalf("create 2 in DIY: %v", err)
+	}
+	if n2.TopicID != n1.TopicID {
+		t.Errorf("вторая заметка в другой теме: %q vs %q", n2.TopicID, n1.TopicID)
+	}
+	if c := diyCount(); c != 1 {
+		t.Errorf("тем DIY после второй заметки = %d, want 1 (дубль темы)", c)
+	}
+
+	// Пустое имя темы → «Общее».
+	n3, _, err := svc.CreateNoteInTopic(ctx, userID, "", Note{Title: "без темы"})
+	if err != nil {
+		t.Fatalf("create в общее: %v", err)
+	}
+	if n3.TopicID != generalTopicID {
+		t.Errorf("пустая тема → %q, want %q", n3.TopicID, generalTopicID)
 	}
 }

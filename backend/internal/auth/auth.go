@@ -125,6 +125,20 @@ func (s *Service) Login(ctx context.Context, username, password string) (TokenPa
 	return s.issuePair(ctx, User{ID: id, Username: username})
 }
 
+// IssueForUser выпускает пару токенов для пользователя по имени БЕЗ проверки пароля.
+// Используется десктоп-режимом (локальный однопользовательский запуск) для авто-логина
+// сид-пользователя без экрана входа. Возвращает ErrInvalidCredentials, если пользователя нет.
+func (s *Service) IssueForUser(ctx context.Context, username string) (TokenPair, error) {
+	id, _, err := s.userByUsername(ctx, username)
+	if errors.Is(err, sql.ErrNoRows) {
+		return TokenPair{}, ErrInvalidCredentials
+	}
+	if err != nil {
+		return TokenPair{}, err
+	}
+	return s.issuePair(ctx, User{ID: id, Username: username})
+}
+
 // Refresh обменивает действительный refresh-токен на новую пару токенов.
 // Использованный refresh-токен ротируется (удаляется), что ограничивает окно
 // повторного применения. Недействительный/истёкший токен — ErrInvalidToken.
@@ -195,36 +209,32 @@ func (s *Service) SetClaudeToken(ctx context.Context, userID, token string) erro
 	return nil
 }
 
-// MemorySettings возвращает состояние настроек памяти пользователя: git-remote (для показа
-// в UI — это его собственный репозиторий) и флаг «SSH-ключ задан». Само значение ключа
-// наружу не отдаётся.
-func (s *Service) MemorySettings(ctx context.Context, userID string) (remote string, keySet bool, err error) {
-	var encRemote, encKey string
+// MemorySettings возвращает git-remote личной памяти пользователя (его собственный
+// репозиторий заметок). Доступ к git@-remote идёт по SSH-ключу агента, отдельного ключа
+// памяти нет.
+func (s *Service) MemorySettings(ctx context.Context, userID string) (remote string, err error) {
+	var encRemote string
 	e := s.db.QueryRowContext(ctx,
-		`SELECT memory_remote, memory_ssh_key FROM user_settings WHERE user_id = ?`, userID).
-		Scan(&encRemote, &encKey)
+		`SELECT memory_remote FROM user_settings WHERE user_id = ?`, userID).
+		Scan(&encRemote)
 	if errors.Is(e, sql.ErrNoRows) {
-		return "", false, nil
+		return "", nil
 	}
 	if e != nil {
-		return "", false, fmt.Errorf("auth: query memory settings: %w", e)
+		return "", fmt.Errorf("auth: query memory settings: %w", e)
 	}
-	return s.cipher.Decrypt(encRemote), encKey != "", nil
+	return s.cipher.Decrypt(encRemote), nil
 }
 
-// SetMemorySettings задаёт git-remote личной памяти и (опционально) приватный SSH-ключ.
-// remote перезаписывается всегда (пустой — отключает память у пользователя); пустой sshKey
-// СОХРАНЯЕТ прежний ключ (чтобы правка remote не стирала ключ) — очистка ключа делается
-// отдельно. Оба значения шифруются перед записью.
-func (s *Service) SetMemorySettings(ctx context.Context, userID, remote, sshKey string) error {
-	// CASE сохраняет существующий ключ, когда новый пуст (excluded.memory_ssh_key = '').
+// SetMemorySettings задаёт git-remote личной памяти (пустой — отключает память у пользователя).
+// remote шифруется перед записью (может нести токен в URL).
+func (s *Service) SetMemorySettings(ctx context.Context, userID, remote string) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO user_settings (user_id, memory_remote, memory_ssh_key, updated_at) VALUES (?, ?, ?, ?)
+		`INSERT INTO user_settings (user_id, memory_remote, updated_at) VALUES (?, ?, ?)
 		 ON CONFLICT(user_id) DO UPDATE SET
 		   memory_remote = excluded.memory_remote,
-		   memory_ssh_key = CASE WHEN excluded.memory_ssh_key = '' THEN user_settings.memory_ssh_key ELSE excluded.memory_ssh_key END,
 		   updated_at = excluded.updated_at`,
-		userID, s.cipher.Encrypt(remote), s.cipher.Encrypt(sshKey), s.now().Unix())
+		userID, s.cipher.Encrypt(remote), s.now().Unix())
 	if err != nil {
 		return fmt.Errorf("auth: set memory settings: %w", err)
 	}

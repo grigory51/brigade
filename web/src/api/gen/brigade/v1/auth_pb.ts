@@ -340,9 +340,9 @@ export class SetClaudeTokenRequest extends Message<SetClaudeTokenRequest> {
 }
 
 /**
- * MemorySettings — состояние настроек личной памяти пользователя. remote (его собственный
- * git-репозиторий заметок) показывается в UI; значение SSH-ключа наружу НЕ отдаётся —
- * только флаг key_set.
+ * MemorySettings — состояние настроек личной памяти пользователя: remote (его собственный
+ * git-репозиторий заметок). Доступ к git@-remote идёт по SSH-ключу агента (см. SSHSettings),
+ * отдельный ключ памяти не задаётся.
  *
  * @generated from message brigade.v1.MemorySettings
  */
@@ -351,11 +351,6 @@ export class MemorySettings extends Message<MemorySettings> {
    * @generated from field: string remote = 1;
    */
   remote = "";
-
-  /**
-   * @generated from field: bool key_set = 2;
-   */
-  keySet = false;
 
   constructor(data?: PartialMessage<MemorySettings>) {
     super();
@@ -366,7 +361,6 @@ export class MemorySettings extends Message<MemorySettings> {
   static readonly typeName = "brigade.v1.MemorySettings";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "remote", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 2, name: "key_set", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): MemorySettings {
@@ -387,9 +381,7 @@ export class MemorySettings extends Message<MemorySettings> {
 }
 
 /**
- * SetMemorySettingsRequest — установка настроек памяти. remote перезаписывается всегда
- * (пустой отключает память у пользователя). ssh_key: пустой СОХРАНЯЕТ прежний ключ (правка
- * remote не стирает ключ); задать новый — прислать непустой.
+ * SetMemorySettingsRequest — установка git-remote личной памяти (пустой отключает память).
  *
  * @generated from message brigade.v1.SetMemorySettingsRequest
  */
@@ -398,11 +390,6 @@ export class SetMemorySettingsRequest extends Message<SetMemorySettingsRequest> 
    * @generated from field: string remote = 1;
    */
   remote = "";
-
-  /**
-   * @generated from field: string ssh_key = 2;
-   */
-  sshKey = "";
 
   constructor(data?: PartialMessage<SetMemorySettingsRequest>) {
     super();
@@ -413,7 +400,6 @@ export class SetMemorySettingsRequest extends Message<SetMemorySettingsRequest> 
   static readonly typeName = "brigade.v1.SetMemorySettingsRequest";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "remote", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 2, name: "ssh_key", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SetMemorySettingsRequest {
@@ -548,6 +534,48 @@ export class SetNtfySettingsRequest extends Message<SetNtfySettingsRequest> {
 
   static equals(a: SetNtfySettingsRequest | PlainMessage<SetNtfySettingsRequest> | undefined, b: SetNtfySettingsRequest | PlainMessage<SetNtfySettingsRequest> | undefined): boolean {
     return proto3.util.equals(SetNtfySettingsRequest, a, b);
+  }
+}
+
+/**
+ * SSHSettings — публичная часть per-user SSH-ключа агента. Приватный ключ генерируется и
+ * хранится на сервере (зашифрован) и подкладывается в контейнер сессии; наружу отдаётся
+ * только публичный ключ — его пользователь добавляет в GitHub (SSH keys / deploy key),
+ * чтобы агент мог пушить.
+ *
+ * @generated from message brigade.v1.SSHSettings
+ */
+export class SSHSettings extends Message<SSHSettings> {
+  /**
+   * @generated from field: string public_key = 1;
+   */
+  publicKey = "";
+
+  constructor(data?: PartialMessage<SSHSettings>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.SSHSettings";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "public_key", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SSHSettings {
+    return new SSHSettings().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SSHSettings {
+    return new SSHSettings().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SSHSettings {
+    return new SSHSettings().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SSHSettings | PlainMessage<SSHSettings> | undefined, b: SSHSettings | PlainMessage<SSHSettings> | undefined): boolean {
+    return proto3.util.equals(SSHSettings, a, b);
   }
 }
 

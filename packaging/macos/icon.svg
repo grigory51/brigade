@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Иконка macOS: логотип brigade вписан с полями (~100px) в прозрачный холст 1024 —
+       нативная посадка (не в край) и прозрачные углы (без белых полей). Масштаб 824/256. -->
+  <g transform="translate(100 100) scale(3.21875)">
+    <rect width="256" height="256" rx="56" fill="#15191f"/>
+    <path d="M58 86 L102 128 L58 170"
+          fill="none" stroke="#c96442" stroke-width="22"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="126" y="86" width="74" height="20" rx="10" fill="#c96442"/>
+    <rect x="138" y="118" width="62" height="20" rx="10" fill="#b0563a"/>
+    <rect x="150" y="150" width="50" height="20" rx="10" fill="#7d4029"/>
+  </g>
+</svg>

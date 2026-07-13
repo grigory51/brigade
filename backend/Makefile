@@ -12,7 +12,7 @@ PROTO_DIR := ../proto
 # Собранный фронтенд встраивается в бинарь через go:embed из этого каталога.
 EMBED_DIR := internal/web/dist
 
-.PHONY: deps gen build-web embed build build-go run test vet tidy clean
+.PHONY: deps gen build-web embed build build-go run app test vet tidy clean
 
 # Скачать зависимости модуля.
 deps:
@@ -48,7 +48,16 @@ build: build-web embed build-go
 # Запустить собранный бинарь сервиса. Зависит от build: сначала пересобираются все
 # запчасти (фронт + бинарь), затем запуск — отдельный шаг сборки перед запуском не нужен.
 run: build
-	$(BIN) -config config.yaml
+	$(BIN) --config config.yaml
+
+# Собрать Brigade.app — десктоп-обёртка macOS (нативное окно через webview). Требует macOS
+# и Xcode Command Line Tools: webview тянет cgo (CGO_ENABLED=1), поэтому это единственная
+# сборка бинаря с cgo; серверные/CI-сборки остаются CGO_ENABLED=0. Фронт → embed →
+# darwin/arm64-бинарь → бандл. Результат: ../dist/Brigade.app (не подписан; первый запуск —
+# правый клик → Открыть).
+app: build-web embed
+	CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -trimpath -o bin/brigade-darwin ./cmd/brigade
+	bash ../scripts/make-app.sh bin/brigade-darwin ../dist/Brigade.app
 
 # Прогнать тесты.
 test:

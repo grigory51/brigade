@@ -7,7 +7,7 @@ WEB_DIR     := $(ROOT)/web
 BACKEND_DIR := $(ROOT)/backend
 MOBILE_DIR  := $(ROOT)/mobile
 
-.PHONY: all proto build-web build build-all build-mobile run test vet clean tidy release
+.PHONY: all proto build-web build build-all build-mobile run app test vet clean tidy release
 
 all: build
 
@@ -23,6 +23,11 @@ build:
 # пересобирает запчасти перед стартом.
 run:
 	$(MAKE) -C $(BACKEND_DIR) run
+
+# Собрать macOS-десктоп Brigade.app (нативное окно webview) → dist/Brigade.app.
+# Только macOS (нужен cgo/Xcode CLT для webview).
+app:
+	$(MAKE) -C $(BACKEND_DIR) app
 
 # Кодген Go+TS из proto через buf.
 proto:

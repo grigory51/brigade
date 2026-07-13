@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ClaudeSettings, Empty, LoginRequest, LoginResponse, MemorySettings, NtfySettings, RefreshRequest, RefreshResponse, SetClaudeTokenRequest, SetMemorySettingsRequest, SetNtfySettingsRequest, User } from "./auth_pb.js";
+import { ClaudeSettings, Empty, LoginRequest, LoginResponse, MemorySettings, NtfySettings, RefreshRequest, RefreshResponse, SetClaudeTokenRequest, SetMemorySettingsRequest, SetNtfySettingsRequest, SSHSettings, User } from "./auth_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -77,8 +77,7 @@ export const AuthService = {
       kind: MethodKind.Unary,
     },
     /**
-     * GetMemorySettings возвращает настройки личной памяти пользователя (remote + флаг
-     * key_set; значение ключа не раскрывается).
+     * GetMemorySettings возвращает настройки личной памяти пользователя (git-remote).
      *
      * @generated from rpc brigade.v1.AuthService.GetMemorySettings
      */
@@ -89,8 +88,7 @@ export const AuthService = {
       kind: MethodKind.Unary,
     },
     /**
-     * SetMemorySettings задаёт git-remote и SSH-ключ личной памяти. Возвращает обновлённое
-     * состояние.
+     * SetMemorySettings задаёт git-remote личной памяти. Возвращает обновлённое состояние.
      *
      * @generated from rpc brigade.v1.AuthService.SetMemorySettings
      */
@@ -122,6 +120,30 @@ export const AuthService = {
       name: "SetNtfySettings",
       I: SetNtfySettingsRequest,
       O: NtfySettings,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * GetSSHSettings возвращает публичный SSH-ключ агента пользователя, генерируя пару при
+     * первом обращении (приватный ключ наружу не отдаётся).
+     *
+     * @generated from rpc brigade.v1.AuthService.GetSSHSettings
+     */
+    getSSHSettings: {
+      name: "GetSSHSettings",
+      I: Empty,
+      O: SSHSettings,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * RegenerateSSHKey перевыпускает пару SSH-ключей агента (старый публичный ключ в GitHub
+     * после этого недействителен). Возвращает новый публичный ключ.
+     *
+     * @generated from rpc brigade.v1.AuthService.RegenerateSSHKey
+     */
+    regenerateSSHKey: {
+      name: "RegenerateSSHKey",
+      I: Empty,
+      O: SSHSettings,
       kind: MethodKind.Unary,
     },
   }

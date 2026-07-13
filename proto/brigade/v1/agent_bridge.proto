@@ -36,6 +36,9 @@ message CreateMemoryNoteRequest {
   string type = 4;             // idea|decision|insight|todo|question|reference
   repeated string tags = 5;
   string layer = 6;            // semantic (дефолт) | episodic (саммари сессии)
+  // topic — ИМЯ темы-владельца (человекочитаемое, напр. "DIY"). Тема создаётся, если её нет;
+  // совпадение с существующей — по slug/имени. Пусто → виртуальная «Общее». НЕ путать с tags.
+  string topic = 7;
 }
 
 message CreateMemoryNoteResponse {

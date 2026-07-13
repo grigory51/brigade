@@ -45,20 +45,16 @@ message SetClaudeTokenRequest {
   string token = 1;
 }
 
-// MemorySettings — состояние настроек личной памяти пользователя. remote (его собственный
-// git-репозиторий заметок) показывается в UI; значение SSH-ключа наружу НЕ отдаётся —
-// только флаг key_set.
+// MemorySettings — состояние настроек личной памяти пользователя: remote (его собственный
+// git-репозиторий заметок). Доступ к git@-remote идёт по SSH-ключу агента (см. SSHSettings),
+// отдельный ключ памяти не задаётся.
 message MemorySettings {
   string remote = 1;
-  bool key_set = 2;
 }
 
-// SetMemorySettingsRequest — установка настроек памяти. remote перезаписывается всегда
-// (пустой отключает память у пользователя). ssh_key: пустой СОХРАНЯЕТ прежний ключ (правка
-// remote не стирает ключ); задать новый — прислать непустой.
+// SetMemorySettingsRequest — установка git-remote личной памяти (пустой отключает память).
 message SetMemorySettingsRequest {
   string remote = 1;
-  string ssh_key = 2;
 }
 
 // NtfySettings — состояние настроек персональных push-уведомлений через ntfy. server и
@@ -81,6 +77,14 @@ message SetNtfySettingsRequest {
   repeated string events = 4;
 }
 
+// SSHSettings — публичная часть per-user SSH-ключа агента. Приватный ключ генерируется и
+// хранится на сервере (зашифрован) и подкладывается в контейнер сессии; наружу отдаётся
+// только публичный ключ — его пользователь добавляет в GitHub (SSH keys / deploy key),
+// чтобы агент мог пушить.
+message SSHSettings {
+  string public_key = 1;
+}
+
 // AuthService — логин/пароль с JWT (TTL), refresh-токеном и per-user настройками Claude.
 service AuthService {
   rpc Login(LoginRequest) returns (LoginResponse) {}
@@ -94,11 +98,9 @@ service AuthService {
   // SetClaudeToken задаёт (или очищает пустым значением) подписочный токен Claude
   // пользователя. Возвращает обновлённое состояние (token_set).
   rpc SetClaudeToken(SetClaudeTokenRequest) returns (ClaudeSettings) {}
-  // GetMemorySettings возвращает настройки личной памяти пользователя (remote + флаг
-  // key_set; значение ключа не раскрывается).
+  // GetMemorySettings возвращает настройки личной памяти пользователя (git-remote).
   rpc GetMemorySettings(Empty) returns (MemorySettings) {}
-  // SetMemorySettings задаёт git-remote и SSH-ключ личной памяти. Возвращает обновлённое
-  // состояние.
+  // SetMemorySettings задаёт git-remote личной памяти. Возвращает обновлённое состояние.
   rpc SetMemorySettings(SetMemorySettingsRequest) returns (MemorySettings) {}
   // GetNtfySettings возвращает настройки push-уведомлений пользователя (server/topic/events
   // + флаг token_set; значение токена не раскрывается).
@@ -106,4 +108,10 @@ service AuthService {
   // SetNtfySettings задаёт server/topic/token/events персональных ntfy-уведомлений.
   // Возвращает обновлённое состояние.
   rpc SetNtfySettings(SetNtfySettingsRequest) returns (NtfySettings) {}
+  // GetSSHSettings возвращает публичный SSH-ключ агента пользователя, генерируя пару при
+  // первом обращении (приватный ключ наружу не отдаётся).
+  rpc GetSSHSettings(Empty) returns (SSHSettings) {}
+  // RegenerateSSHKey перевыпускает пару SSH-ключей агента (старый публичный ключ в GitHub
+  // после этого недействителен). Возвращает новый публичный ключ.
+  rpc RegenerateSSHKey(Empty) returns (SSHSettings) {}
 }

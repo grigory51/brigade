@@ -11,7 +11,7 @@ mode: local
 addr: ":8080"
 
 # Путь к файлу SQLite. Создаётся при первом запуске, миграции прогоняются автоматически.
-sqlite_path: "./brigade.db"
+sqlite_path: "brigade.db"
 
 jwt:
   # Ключ подписи JWT. В проде задавайте через env (BRIGADE_JWT__SECRET), не храните в yaml.

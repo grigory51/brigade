@@ -57,6 +57,17 @@ func main() {
 		},
 	})
 
+	// Субкоманда десктоп-режима: локальный запуск «в один клик» (Brigade.app). Готовит
+	// пер-пользовательский конфиг/данные и открывает нативное окно на localhost.
+	root.AddCommand(&cobra.Command{
+		Use:   "desktop",
+		Short: "локальный запуск в нативном окне (для Brigade.app)",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			runDesktop()
+			return nil
+		},
+	})
+
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}
@@ -104,7 +115,7 @@ func runServer(configPath string) {
 
 	// Личная память: пер-юзерные git-репозитории заметок. Настройки/креды — из store
 	// (per-user), базовый каталог рабочих копий — из конфига.
-	memorySvc := memory.NewService(cfg.Memory.Dir, st)
+	memorySvc := memory.NewService(cfg.Memory.Dir, st, authSvc)
 
 	// Персональные push-уведомления через ntfy: настройки (топик/токен/события) — из store
 	// per-user. Реестр вешает уведомление о завершении turn'а через этот сервис.
@@ -112,7 +123,7 @@ func runServer(configPath string) {
 
 	// Реестр живых сессий поверх store и спавнера. Режим фиксируется в каждой сессии;
 	// подписочный токен Claude берётся per-user из store при создании сессии.
-	registry := session.NewRegistry(st, spawner, store.SessionMode(cfg.Mode), cfg.WorkDir, cfg.ClaudeHomeDir, cfg.MaxContainers, previewSvc, notifySvc)
+	registry := session.NewRegistry(st, spawner, store.SessionMode(cfg.Mode), cfg.WorkDir, cfg.ClaudeHomeDir, cfg.MaxContainers, previewSvc, notifySvc, authSvc)
 	defer registry.Close()
 
 	// Восстановление живых сессий после рестарта: упавшие помечаются failed и не
@@ -132,7 +143,14 @@ func runServer(configPath string) {
 	// AcpService.ResolvePermission (доставляет решение) — создаётся здесь.
 	perms := aguitransport.NewPermissionStore()
 
-	mux.Handle(brigadev1connect.NewAuthServiceHandler(connectsvc.NewAuthService(authSvc), interceptors))
+	authService := connectsvc.NewAuthService(authSvc)
+	mux.Handle(brigadev1connect.NewAuthServiceHandler(authService, interceptors))
+	// Десктоп-режим: авто-логин сид-пользователя без экрана входа (локальный
+	// однопользовательский запуск). /desktop/auth ставит сессионные cookie и редиректит на SPA;
+	// webview стартует именно с него (см. runDesktop). В серверном режиме ручка не подключается.
+	if desktopMode {
+		mux.HandleFunc("/desktop/auth", authService.DesktopLoginHandler(cfg.Seed.Username))
+	}
 	mux.Handle(brigadev1connect.NewSessionServiceHandler(connectsvc.NewSessionService(registry, tickets, previewSvc), interceptors))
 	mux.Handle(brigadev1connect.NewAgentServiceHandler(connectsvc.NewAgentService(), interceptors))
 	// AcpService — управляющие вызовы ACP-чата (история/статус/workflow/отмена/опции/

@@ -54,10 +54,18 @@ const (
 
 var noteLayers = map[string]bool{layerSemantic: true, layerEpisodic: true}
 
-// SettingsSource отдаёт пер-юзерные настройки памяти (remote + SSH-ключ, уже
-// расшифрованные). Реализуется *store.Store.
+// SettingsSource отдаёт пер-юзерные настройки памяти (remote, уже расшифрованный).
+// Реализуется *store.Store.
 type SettingsSource interface {
 	GetUserSettings(ctx context.Context, userID string) (store.UserSettings, error)
+}
+
+// AgentKeyProvider выдаёт per-user приватный SSH-ключ агента (генерируя пару при первом
+// обращении). Это тот же ключ, что brigade подкладывает в контейнер сессии; память использует
+// его для git@-remote, чтобы пользователю не требовалось отдельно задавать ключ памяти —
+// достаточно один раз добавить публичный ключ агента в git-хост. Реализуется auth.Service.
+type AgentKeyProvider interface {
+	EnsureAgentSSHKey(ctx context.Context, userID string) (privatePEM, publicKey string, err error)
 }
 
 // Note — одна заметка памяти (живёт внутри темы/подтемы).
@@ -136,15 +144,17 @@ var topicColors = []string{
 
 // Service — ядро памяти: пер-юзерные git-хранилища + чтение/запись заметок.
 type Service struct {
-	baseDir  string          // корень пер-юзерных рабочих копий: <baseDir>/<userID>/...
-	settings SettingsSource  // источник пер-юзерных настроек (remote, ключ)
-	mu       sync.Mutex
+	baseDir   string           // корень пер-юзерных рабочих копий: <baseDir>/<userID>/...
+	settings  SettingsSource   // источник пер-юзерных настроек (remote)
+	agentKeys AgentKeyProvider // источник per-user SSH-ключа агента для git@-remote (может быть nil)
+	mu        sync.Mutex
 }
 
 // NewService собирает Service. baseDir — база пер-юзерных клонов; settings — источник
-// пер-юзерных настроек (store).
-func NewService(baseDir string, settings SettingsSource) *Service {
-	return &Service{baseDir: baseDir, settings: settings}
+// пер-юзерных настроек (store); agentKeys — источник per-user SSH-ключа агента для доступа к
+// git@-remote (nil — без ключа, только публичные/https-remote).
+func NewService(baseDir string, settings SettingsSource, agentKeys AgentKeyProvider) *Service {
+	return &Service{baseDir: baseDir, settings: settings, agentKeys: agentKeys}
 }
 
 // space — разрешённое пер-юзерное окружение для git-операций.
@@ -177,6 +187,44 @@ func (s *Service) Create(ctx context.Context, userID string, n Note) (Note, stri
 		return Note{}, "", err
 	}
 	return n, sha, nil
+}
+
+// CreateNoteInTopic создаёт заметку в теме по её ИМЕНИ: тема резолвится (по slug/имени) или
+// создаётся, если её нет; пустое имя (или «Общее») кладёт заметку в виртуальную «Общее». Нужна
+// агент-пути (skill /note): агент задаёт человекочитаемое имя темы, а не её id. Композирует
+// публичные методы без вложенной блокировки (каждый берёт mu сам).
+func (s *Service) CreateNoteInTopic(ctx context.Context, userID, topicName string, n Note) (Note, string, error) {
+	topicID, err := s.ensureTopicID(ctx, userID, topicName)
+	if err != nil {
+		return Note{}, "", err
+	}
+	n.TopicID = topicID
+	return s.Create(ctx, userID, n)
+}
+
+// ensureTopicID резолвит имя темы в её id, создавая тему при отсутствии. Пусто/«Общее» →
+// general (виртуальная тема legacy-заметок, её не создаём). Существующую находит по совпадению
+// id==slug(name) либо имени (регистронезависимо).
+func (s *Service) ensureTopicID(ctx context.Context, userID, name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" || strings.EqualFold(name, generalTopicName) {
+		return generalTopicID, nil
+	}
+	topics, err := s.ListTopics(ctx, userID, "")
+	if err != nil {
+		return "", err
+	}
+	slug := topicSlug(name)
+	for _, t := range topics {
+		if t.ID == slug || strings.EqualFold(t.Name, name) {
+			return t.ID, nil
+		}
+	}
+	t, err := s.CreateTopic(ctx, userID, name, "")
+	if err != nil {
+		return "", err
+	}
+	return t.ID, nil
 }
 
 // List возвращает заметки пользователя, при непустом query — отфильтрованные по подстроке
@@ -733,9 +781,16 @@ func (s *Service) prepareLocked(ctx context.Context, userID string) (space, erro
 	}
 	userDir := filepath.Join(s.baseDir, userID)
 	sp := space{remote: set.MemoryRemote, repoDir: filepath.Join(userDir, "repo")}
-	if set.MemorySSHKey != "" {
+	// Для git@/ssh-remote материализуем ключ агента (общий per-user): пользователю не нужно
+	// задавать отдельный ключ памяти — тот же публичный ключ, что и у агента, добавляется в
+	// git-хост. Для https-remote ключ не нужен (GIT_SSH_COMMAND git не задействует).
+	if s.agentKeys != nil && isSSHRemote(set.MemoryRemote) {
+		priv, _, err := s.agentKeys.EnsureAgentSSHKey(ctx, userID)
+		if err != nil {
+			return space{}, fmt.Errorf("memory: agent ssh key: %w", err)
+		}
 		sp.keyPath = filepath.Join(userDir, "id")
-		if err := writeKey(sp.keyPath, set.MemorySSHKey); err != nil {
+		if err := writeKey(sp.keyPath, priv); err != nil {
 			return space{}, err
 		}
 	}
@@ -848,6 +903,12 @@ func (s *Service) git(ctx context.Context, dir, keyPath string, args ...string) 
 		return out, fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, bytes.TrimSpace(out))
 	}
 	return out, nil
+}
+
+// isSSHRemote сообщает, требует ли remote SSH-ключа: scp-подобный git@host:path либо ssh://.
+// https/http-remote ключ не задействуют.
+func isSSHRemote(remote string) bool {
+	return strings.HasPrefix(remote, "git@") || strings.HasPrefix(remote, "ssh://")
 }
 
 // writeKey материализует приватный SSH-ключ в файл с правами 0600 (каталог 0700), гарантируя
