@@ -572,6 +572,12 @@ function NoteRow({
 
   async function remove() {
     setMenuOpen(false);
+    if (
+      !window.confirm(
+        `Удалить заметку «${note.title || note.id}»? Действие необратимо.`,
+      )
+    )
+      return;
     setBusy(true);
     try {
       await memoryClient.deleteNote({ id: note.id });
@@ -767,13 +773,16 @@ function NoteForm({
   const [body, setBody] = useState(note?.body ?? "");
   const [type, setType] = useState<string>(note?.type || "idea");
   const [sub, setSub] = useState(note?.sub || subs[0] || UNSORTED);
+  // newSub — имя НОВОЙ подтемы (создаётся на лету). Непустое значение перекрывает выбор чипа.
+  const [newSub, setNewSub] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function submit() {
     if (!title.trim()) return;
     setBusy(true);
     try {
-      const subVal = sub === UNSORTED ? "" : sub;
+      // Новая подтема (если введена) важнее выбранного чипа; UNSORTED = без подтемы (пустой sub).
+      const subVal = newSub.trim() || (sub === UNSORTED ? "" : sub);
       const res = note
         ? await memoryClient.updateNote({
             id: note.id,
@@ -854,18 +863,32 @@ function NoteForm({
           </div>
         </div>
 
-        {subs.length > 0 && (
-          <div>
-            <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-              Подтема
-            </div>
-            <div className="flex flex-wrap gap-1.5">
+        <div>
+          <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+            Подтема
+          </div>
+          {subs.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1.5">
               {subs.map((s) => (
-                <SubChip key={s} label={s} active={sub === s} onClick={() => setSub(s)} />
+                <SubChip
+                  key={s}
+                  label={s}
+                  active={!newSub.trim() && sub === s}
+                  onClick={() => {
+                    setNewSub("");
+                    setSub(s);
+                  }}
+                />
               ))}
             </div>
-          </div>
-        )}
+          )}
+          <Input
+            value={newSub}
+            onChange={(e) => setNewSub(e.target.value)}
+            placeholder={subs.length > 0 ? "…или новая подтема" : "Новая подтема (необязательно)"}
+            className="h-8 text-[13px]"
+          />
+        </div>
 
         <div className="flex justify-end gap-2">
           <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>
