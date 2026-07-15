@@ -47,6 +47,9 @@ const (
 	SessionServiceStopProcedure = "/brigade.v1.SessionService/Stop"
 	// SessionServiceDeleteProcedure is the fully-qualified name of the SessionService's Delete RPC.
 	SessionServiceDeleteProcedure = "/brigade.v1.SessionService/Delete"
+	// SessionServiceReloadAgentProcedure is the fully-qualified name of the SessionService's
+	// ReloadAgent RPC.
+	SessionServiceReloadAgentProcedure = "/brigade.v1.SessionService/ReloadAgent"
 	// SessionServiceArchiveProcedure is the fully-qualified name of the SessionService's Archive RPC.
 	SessionServiceArchiveProcedure = "/brigade.v1.SessionService/Archive"
 	// SessionServiceIssueStreamTicketProcedure is the fully-qualified name of the SessionService's
@@ -69,6 +72,10 @@ type SessionServiceClient interface {
 	Fork(context.Context, *connect.Request[v1.ForkSessionRequest]) (*connect.Response[v1.ForkSessionResponse], error)
 	Stop(context.Context, *connect.Request[v1.StopSessionRequest]) (*connect.Response[v1.Empty], error)
 	Delete(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.Empty], error)
+	// ReloadAgent переинициализирует ACP-агента сессии (session/load того же диалога), чтобы
+	// подхватить обновлённые скиллы/плагины без пересоздания сессии. Только ACP; не во время
+	// генерации.
+	ReloadAgent(context.Context, *connect.Request[v1.ReloadAgentRequest]) (*connect.Response[v1.Empty], error)
 	// Archive переносит сессию в архив (recap + снимок истории + остановка контейнера).
 	// Чтение архива (список, история) — в отдельном ArchiveService.
 	Archive(context.Context, *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error)
@@ -133,6 +140,12 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(sessionServiceMethods.ByName("Delete")),
 			connect.WithClientOptions(opts...),
 		),
+		reloadAgent: connect.NewClient[v1.ReloadAgentRequest, v1.Empty](
+			httpClient,
+			baseURL+SessionServiceReloadAgentProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("ReloadAgent")),
+			connect.WithClientOptions(opts...),
+		),
 		archive: connect.NewClient[v1.ArchiveSessionRequest, v1.ArchiveSessionResponse](
 			httpClient,
 			baseURL+SessionServiceArchiveProcedure,
@@ -169,6 +182,7 @@ type sessionServiceClient struct {
 	fork              *connect.Client[v1.ForkSessionRequest, v1.ForkSessionResponse]
 	stop              *connect.Client[v1.StopSessionRequest, v1.Empty]
 	delete            *connect.Client[v1.DeleteSessionRequest, v1.Empty]
+	reloadAgent       *connect.Client[v1.ReloadAgentRequest, v1.Empty]
 	archive           *connect.Client[v1.ArchiveSessionRequest, v1.ArchiveSessionResponse]
 	issueStreamTicket *connect.Client[v1.IssueStreamTicketRequest, v1.IssueStreamTicketResponse]
 	listPreviews      *connect.Client[v1.ListPreviewsRequest, v1.ListPreviewsResponse]
@@ -210,6 +224,11 @@ func (c *sessionServiceClient) Delete(ctx context.Context, req *connect.Request[
 	return c.delete.CallUnary(ctx, req)
 }
 
+// ReloadAgent calls brigade.v1.SessionService.ReloadAgent.
+func (c *sessionServiceClient) ReloadAgent(ctx context.Context, req *connect.Request[v1.ReloadAgentRequest]) (*connect.Response[v1.Empty], error) {
+	return c.reloadAgent.CallUnary(ctx, req)
+}
+
 // Archive calls brigade.v1.SessionService.Archive.
 func (c *sessionServiceClient) Archive(ctx context.Context, req *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error) {
 	return c.archive.CallUnary(ctx, req)
@@ -239,6 +258,10 @@ type SessionServiceHandler interface {
 	Fork(context.Context, *connect.Request[v1.ForkSessionRequest]) (*connect.Response[v1.ForkSessionResponse], error)
 	Stop(context.Context, *connect.Request[v1.StopSessionRequest]) (*connect.Response[v1.Empty], error)
 	Delete(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.Empty], error)
+	// ReloadAgent переинициализирует ACP-агента сессии (session/load того же диалога), чтобы
+	// подхватить обновлённые скиллы/плагины без пересоздания сессии. Только ACP; не во время
+	// генерации.
+	ReloadAgent(context.Context, *connect.Request[v1.ReloadAgentRequest]) (*connect.Response[v1.Empty], error)
 	// Archive переносит сессию в архив (recap + снимок истории + остановка контейнера).
 	// Чтение архива (список, история) — в отдельном ArchiveService.
 	Archive(context.Context, *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error)
@@ -299,6 +322,12 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		connect.WithSchema(sessionServiceMethods.ByName("Delete")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sessionServiceReloadAgentHandler := connect.NewUnaryHandler(
+		SessionServiceReloadAgentProcedure,
+		svc.ReloadAgent,
+		connect.WithSchema(sessionServiceMethods.ByName("ReloadAgent")),
+		connect.WithHandlerOptions(opts...),
+	)
 	sessionServiceArchiveHandler := connect.NewUnaryHandler(
 		SessionServiceArchiveProcedure,
 		svc.Archive,
@@ -339,6 +368,8 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 			sessionServiceStopHandler.ServeHTTP(w, r)
 		case SessionServiceDeleteProcedure:
 			sessionServiceDeleteHandler.ServeHTTP(w, r)
+		case SessionServiceReloadAgentProcedure:
+			sessionServiceReloadAgentHandler.ServeHTTP(w, r)
 		case SessionServiceArchiveProcedure:
 			sessionServiceArchiveHandler.ServeHTTP(w, r)
 		case SessionServiceIssueStreamTicketProcedure:
@@ -382,6 +413,10 @@ func (UnimplementedSessionServiceHandler) Stop(context.Context, *connect.Request
 
 func (UnimplementedSessionServiceHandler) Delete(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.Empty], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.Delete is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) ReloadAgent(context.Context, *connect.Request[v1.ReloadAgentRequest]) (*connect.Response[v1.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.ReloadAgent is not implemented"))
 }
 
 func (UnimplementedSessionServiceHandler) Archive(context.Context, *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error) {

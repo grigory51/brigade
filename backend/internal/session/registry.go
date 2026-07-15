@@ -301,6 +301,10 @@ var ErrClaudeTokenRequired = errors.New("session: требуется токен 
 // одновременных docker-контейнеров (config.max_containers).
 var ErrContainerLimitReached = errors.New("session: достигнут лимит контейнеров")
 
+// ErrReloadWhileGenerating возвращается ReloadAgent, если агент сейчас генерирует: переинициали-
+// зация (session/load) оборвала бы активный turn. Останови turn и повтори.
+var ErrReloadWhileGenerating = errors.New("session: агент генерирует — остановите turn перед перезагрузкой")
+
 // atContainerLimit сообщает, превысит ли новая сессия (userID, kind) лимит docker-
 // контейнеров. Учёт зеркалит releaseUserContainerIfIdle: ACP-сессия = 1 контейнер,
 // docker-CLI сессии одного пользователя делят общий контейнер (1 на владельца). Новая
@@ -897,6 +901,77 @@ func (r *Registry) ACPClient(sessionID, userID string) (acpSession, bool) {
 		return nil, false
 	}
 	return lv.client, true
+}
+
+// ReloadAgent переинициализирует ACP-агента сессии, чтобы подхватить обновлённые скиллы/плагины
+// (напр. после апгрейда brigade, переименовавшего скилл). Плагины ACP статичны на время сессии
+// (грузятся один раз при session/new|load), горячей перезагрузки в SDK/ACP нет — поэтому
+// переподнимаем адаптер через session/load того же agent_session_id: диалог сохраняется (агент
+// реплеит thread), а скиллы читаются заново. local — свежий subprocess; docker — повторный
+// Configure живого демона (контейнер не пересоздаётся). Во время генерации отказываем.
+func (r *Registry) ReloadAgent(ctx context.Context, sessionID, userID string) error {
+	r.mu.Lock()
+	lv, ok := r.live[sessionID]
+	r.mu.Unlock()
+	if !ok || lv.owner != userID || lv.client == nil {
+		return store.ErrNotFound
+	}
+	if gen, _ := lv.client.Status(); gen {
+		return ErrReloadWhileGenerating
+	}
+	sess, err := r.store.GetSession(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	// Обновляем файлы скиллов до реинициализации, чтобы свежая загрузка их прочитала.
+	r.installSkill(sess)
+	token := r.userClaudeToken(ctx, userID)
+
+	if sess.Mode == store.SessionModeDocker {
+		rc, ok := lv.client.(*acpremote.Client)
+		if !ok {
+			return fmt.Errorf("session: reload: неожиданный тип ACP-клиента")
+		}
+		// Демон жив — повторный Configure переинициализирует адаптер (session/load) с
+		// актуальными плагинами; контейнер/демон не пересоздаются.
+		if _, err := rc.Configure(ctx, acpremote.ConfigureOptions{
+			OAuthToken:      token,
+			ExtraEnv:        r.previewEnv(sess),
+			Cwd:             sess.Cwd,
+			ResumeSessionID: sess.AgentSessionID,
+			McpServers:      []acpsdk.McpServer{acp.BrigadeMCPServer()},
+			PluginDirs:      r.acpPluginDirs(sess),
+		}); err != nil {
+			return fmt.Errorf("session: reload acp daemon: %w", err)
+		}
+		return nil
+	}
+
+	// local: переподнимаем subprocess-адаптер с resume — session/load читает свежие плагины из
+	// проектного settings.json (--setting-sources project). Новый клиент заменяет старый.
+	client, err := acp.New(ctx, acp.Options{
+		Cwd:             sess.Cwd,
+		OAuthToken:      token,
+		ResumeSessionID: sess.AgentSessionID,
+		ExtraEnv:        r.previewEnv(sess),
+	})
+	if err != nil {
+		return fmt.Errorf("session: reload acp: %w", err)
+	}
+	client.OnTurnEnd = r.turnEndHook(sess)
+	r.mu.Lock()
+	// Проверяем, что live не сменился (Stop/Delete в гонке) перед подменой.
+	if cur, ok := r.live[sessionID]; !ok || cur != lv {
+		r.mu.Unlock()
+		_ = client.Close()
+		return store.ErrNotFound
+	}
+	old := lv.client
+	lv.client = client
+	r.mu.Unlock()
+	_ = old.Close()
+	_ = r.store.UpdateSessionResume(ctx, sess.ID, client.SessionID(), "")
+	return nil
 }
 
 // List возвращает сессии пользователя из store (включая остановленные/упавшие).

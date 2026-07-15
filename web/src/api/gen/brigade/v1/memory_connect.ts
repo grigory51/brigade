@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CreateNoteRequest, CreateNoteResponse, CreateTopicRequest, CreateTopicResponse, DeleteNoteRequest, DeleteNoteResponse, DeleteTopicRequest, DeleteTopicResponse, GetNoteRequest, GetNoteResponse, GetTopicRequest, GetTopicResponse, ListNotesRequest, ListNotesResponse, ListTopicsRequest, ListTopicsResponse, MoveNoteRequest, MoveNoteResponse, UpdateNoteRequest, UpdateNoteResponse, UpdateTopicOverviewRequest, UpdateTopicOverviewResponse, UpdateTopicRequest, UpdateTopicResponse } from "./memory_pb.js";
+import { CreateNoteRequest, CreateNoteResponse, CreateTopicRequest, CreateTopicResponse, DeleteNoteRequest, DeleteNoteResponse, DeleteTopicRequest, DeleteTopicResponse, GetNoteRequest, GetNoteResponse, GetTopicRequest, GetTopicResponse, ListNotesRequest, ListNotesResponse, ListTopicsRequest, ListTopicsResponse, MoveNoteRequest, MoveNoteResponse, SyncMemoryRequest, SyncMemoryResponse, UpdateNoteRequest, UpdateNoteResponse, UpdateTopicOverviewRequest, UpdateTopicOverviewResponse, UpdateTopicRequest, UpdateTopicResponse } from "./memory_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -131,6 +131,19 @@ export const MemoryService = {
       name: "DeleteNote",
       I: DeleteNoteRequest,
       O: DeleteNoteResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * SyncMemory — подтянуть свежие изменения с origin (git pull --rebase) в локальный клон.
+     * Нужен, чтобы видеть правки из другого инстанса brigade (у каждого свой клон). Клиент
+     * после успеха перечитывает темы/заметки обычными ListTopics/GetTopic.
+     *
+     * @generated from rpc brigade.v1.MemoryService.SyncMemory
+     */
+    syncMemory: {
+      name: "SyncMemory",
+      I: SyncMemoryRequest,
+      O: SyncMemoryResponse,
       kind: MethodKind.Unary,
     },
     /**

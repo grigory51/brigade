@@ -2,6 +2,7 @@ package connectsvc
 
 import (
 	"context"
+	"encoding/json"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 	"connectrpc.com/connect"
@@ -68,7 +69,16 @@ func (s *AcpService) GetStatus(ctx context.Context, req *connect.Request[v1.GetS
 		return nil, err
 	}
 	generating, seq := b.Status()
-	return connect.NewResponse(&v1.GetStatusResponse{Generating: generating, Seq: int64(seq)}), nil
+	resp := &v1.GetStatusResponse{Generating: generating, Seq: int64(seq)}
+	// Живые permission-запросы: клиент восстанавливает по ним диалог после переоткрытия/
+	// навигации (история грузится unary, CUSTOM permission_request при этом не приходит).
+	// JSON — та же форма PermissionRequest, что у CUSTOM-события (клиент парсит тем же кодом).
+	for _, p := range s.perms.Pending(req.Msg.ThreadId) {
+		if data, err := json.Marshal(p); err == nil {
+			resp.PendingPermissions = append(resp.PendingPermissions, string(data))
+		}
+	}
+	return connect.NewResponse(resp), nil
 }
 
 // ListWorkflows — workflow-запуски харнесса сессии.

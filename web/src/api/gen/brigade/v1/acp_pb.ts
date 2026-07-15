@@ -453,6 +453,16 @@ export class GetStatusResponse extends Message<GetStatusResponse> {
    */
   seq = protoInt64.zero;
 
+  /**
+   * pending_permissions — живые запросы разрешения (human-in-the-loop), JSON каждого
+   * PermissionRequest (та же форма, что CUSTOM permission_request). Позволяет клиенту
+   * восстановить диалог разрешения после переоткрытия/навигации (история грузится unary,
+   * CUSTOM-события при этом не приходят). Обычно пусто.
+   *
+   * @generated from field: repeated string pending_permissions = 3;
+   */
+  pendingPermissions: string[] = [];
+
   constructor(data?: PartialMessage<GetStatusResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -463,6 +473,7 @@ export class GetStatusResponse extends Message<GetStatusResponse> {
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "generating", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 2, name: "seq", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 3, name: "pending_permissions", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetStatusResponse {

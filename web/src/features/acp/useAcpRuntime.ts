@@ -188,6 +188,9 @@ type CustomEventValue = Record<string, unknown> | undefined;
 export function useAcpRuntime(sessionId: string): AcpRuntime {
   const { getAccessToken } = useAuth();
   const [permission, setPermission] = useState<PendingPermission | null>(null);
+  // resolvedPermIds — id уже отвеченных запросов: не переоткрывать диалог, если статус-полл
+  // подхватит его в узком окне между ответом и удалением из PermissionStore на бэке.
+  const resolvedPermIds = useRef<Set<string>>(new Set());
   const [commands, setCommands] = useState<AvailableCommand[]>([]);
   const [plan, setPlan] = useState<PlanEntry[]>([]);
   const [configOptions, setConfigOptions] = useState<ConfigOption[]>([]);
@@ -317,6 +320,22 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
           seq: Number(data.seq),
           tick: prev.tick + 1,
         }));
+        // Догоняем висящий permission-запрос: при открытии треда/возврате во вкладку история
+        // грузится unary, а CUSTOM permission_request не приходит — восстанавливаем диалог из
+        // статуса. Только ДОБАВЛЯЕМ (не гасим): очистка — за ответом/Stop (в docker-режиме
+        // Pending пуст, поведение не меняется).
+        if (data.pendingPermissions.length > 0) {
+          try {
+            const p = toPermission(
+              JSON.parse(data.pendingPermissions[0]) as CustomEventValue,
+            );
+            if (p.id && !resolvedPermIds.current.has(p.id)) {
+              setPermission((cur) => (cur && cur.id === p.id ? cur : p));
+            }
+          } catch {
+            // Некорректный JSON запроса — игнорируем, следующий тик повторит.
+          }
+        }
       } catch {
         // Транзиентный сбой сети — следующий тик повторит.
       }
@@ -449,6 +468,7 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
   // resolvePermission отправляет решение пользователя и снимает диалог. Доставка
   // best-effort: бэкенд отвечает пустым в любом случае.
   const resolvePermission = useRef((id: string, decision: string) => {
+    resolvedPermIds.current.add(id); // чтобы status-полл не переоткрыл уже отвеченный диалог
     void acpClient
       .resolvePermission({ threadId: sessionId, id, decision })
       .catch(() => {});

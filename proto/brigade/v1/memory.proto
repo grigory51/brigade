@@ -35,6 +35,11 @@ service MemoryService {
   // DeleteNote — удалить заметку (rm .md → commit → push).
   rpc DeleteNote(DeleteNoteRequest) returns (DeleteNoteResponse) {}
 
+  // SyncMemory — подтянуть свежие изменения с origin (git pull --rebase) в локальный клон.
+  // Нужен, чтобы видеть правки из другого инстанса brigade (у каждого свой клон). Клиент
+  // после успеха перечитывает темы/заметки обычными ListTopics/GetTopic.
+  rpc SyncMemory(SyncMemoryRequest) returns (SyncMemoryResponse) {}
+
   // --- legacy, плоский доступ (мобильный клиент/обратная совместимость) ---
   // ListNotes — все заметки пользователя плоским списком (без группировки по темам).
   rpc ListNotes(ListNotesRequest) returns (ListNotesResponse) {}
@@ -173,6 +178,10 @@ message DeleteNoteRequest {
 message DeleteNoteResponse {
   string commit_sha = 1;
 }
+
+message SyncMemoryRequest {}
+
+message SyncMemoryResponse {}
 
 message ListNotesRequest {
   string query = 1;              // пусто — все заметки

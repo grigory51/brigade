@@ -254,6 +254,24 @@ export function SessionLayout() {
     [navigate],
   );
 
+  // reloadingId — сессия, чей ACP-агент сейчас переинициализируется (перезагрузка скиллов).
+  const [reloadingId, setReloadingId] = useState<string | null>(null);
+  const onReloadAgent = useCallback(async (id: string) => {
+    setReloadingId(id);
+    try {
+      await sessionClient.reloadAgent({ sessionId: id });
+      toast.success("Агент перезагружен — скиллы обновлены");
+    } catch (err) {
+      toast.error(
+        err instanceof ConnectError
+          ? err.rawMessage
+          : "Не удалось перезагрузить агента",
+      );
+    } finally {
+      setReloadingId(null);
+    }
+  }, []);
+
   const openCreate = useCallback(() => setCreateOpen(true), []);
 
   // Дерево веток в сайдбаре: корневые сессии в исходном порядке (новые сверху), после
@@ -369,7 +387,8 @@ export function SessionLayout() {
                           busy={
                             busyId === s.id ||
                             deletingIds.has(s.id) ||
-                            archivingIds.has(s.id)
+                            archivingIds.has(s.id) ||
+                            reloadingId === s.id
                           }
                           deleting={deletingIds.has(s.id)}
                           archiving={archivingIds.has(s.id)}
@@ -378,6 +397,8 @@ export function SessionLayout() {
                           onRename={(name) => void onRename(s.id, name)}
                           onFork={() => void onFork(s.id)}
                           onArchive={() => void onArchive(s.id)}
+                          onReloadAgent={() => void onReloadAgent(s.id)}
+                          reloading={reloadingId === s.id}
                         />
                       ))}
                   </SidebarMenu>
@@ -493,6 +514,8 @@ function SessionItem({
   onRename,
   onFork,
   onArchive,
+  onReloadAgent,
+  reloading = false,
 }: {
   session: Session;
   depth?: number;
@@ -504,6 +527,8 @@ function SessionItem({
   onRename: (name: string) => void;
   onFork: () => void;
   onArchive: () => void;
+  onReloadAgent: () => void;
+  reloading?: boolean;
 }) {
   // locked — сессия в необратимой операции (удаление/архивация): её нельзя открывать,
   // переименовывать, а контент блокирован оверлеем.
@@ -575,10 +600,10 @@ function SessionItem({
           if (!locked) startEdit();
         }}
         tooltip={label}
-        // Правый паддинг под ряд hover-иконок: у ACP их 4 (архив/ветка/переименовать/
-        // удалить), у CLI — 2 (переименовать/удалить), поэтому места нужно больше.
+        // Правый паддинг под ряд hover-иконок: у ACP их 5 (перезагрузка/архив/ветка/
+        // переименовать/удалить), у CLI — 2 (переименовать/удалить), поэтому места нужно больше.
         className={`${
-          session.kind === SessionKind.ACP ? "pr-28" : "pr-16"
+          session.kind === SessionKind.ACP ? "pr-36" : "pr-16"
         }${locked ? " opacity-60" : ""}`}
         // Ветки визуально вкладываются под родителя (см. ordered в SessionLayout).
         style={depth > 0 ? { paddingLeft: `${8 + depth * 16}px` } : undefined}
@@ -593,6 +618,30 @@ function SessionItem({
         </span>
         <span className="truncate">{label}</span>
       </SidebarMenuButton>
+      {session.kind === SessionKind.ACP && (
+        <SidebarMenuAction
+          showOnHover
+          disabled={busy}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!busy) onReloadAgent();
+          }}
+          aria-label="Перезагрузить агента (обновить скиллы)"
+          title="Перезагрузить агента (обновить скиллы)"
+          // showOnHover прячет без наведения — на время перезагрузки спиннер виден.
+          className={
+            reloading
+              ? "right-[7rem] text-sidebar-foreground/60 opacity-100"
+              : "right-[7rem] text-sidebar-foreground/60 hover:text-sidebar-foreground"
+          }
+        >
+          {reloading ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <RefreshCw className="size-4" />
+          )}
+        </SidebarMenuAction>
+      )}
       {session.kind === SessionKind.ACP && (
         <SidebarMenuAction
           showOnHover

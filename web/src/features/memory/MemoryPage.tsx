@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { Loader2, Plus, Search, Sparkles } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { memoryClient } from "@/api/client";
@@ -26,29 +26,46 @@ export function MemoryPage() {
   const [composerOpen, setComposerOpen] = useState(false);
   // configured=false — у пользователя не настроен git-репозиторий памяти.
   const [configured, setConfigured] = useState(true);
+  // syncing — идёт ручной pull с origin (кнопка «Обновить»).
+  const [syncing, setSyncing] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await memoryClient.listTopics({ query: "" });
+      setTopics(r.topics);
+      setConfigured(true);
+    } catch (err) {
+      setTopics([]);
+      if (err instanceof ConnectError && err.code === Code.FailedPrecondition) {
+        setConfigured(false);
+        return;
+      }
+      toast.error(
+        err instanceof ConnectError ? err.rawMessage : "Не удалось загрузить темы",
+      );
+    }
+  }, []);
 
   useEffect(() => {
-    let alive = true;
-    memoryClient
-      .listTopics({ query: "" })
-      .then((r) => {
-        if (alive) setTopics(r.topics);
-      })
-      .catch((err) => {
-        if (!alive) return;
-        setTopics([]);
-        if (err instanceof ConnectError && err.code === Code.FailedPrecondition) {
-          setConfigured(false);
-          return;
-        }
-        toast.error(
-          err instanceof ConnectError ? err.rawMessage : "Не удалось загрузить темы",
-        );
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
+    void load();
+  }, [load]);
+
+  // sync — подтянуть изменения памяти с origin (правки из другого инстанса brigade), затем
+  // перечитать темы. У каждого инстанса свой локальный клон, авто-pull нет — только по кнопке.
+  const sync = useCallback(async () => {
+    setSyncing(true);
+    try {
+      await memoryClient.syncMemory({});
+      await load();
+      toast.success("Память обновлена");
+    } catch (err) {
+      toast.error(
+        err instanceof ConnectError ? err.rawMessage : "Не удалось обновить память",
+      );
+    } finally {
+      setSyncing(false);
+    }
+  }, [load]);
 
   const filtered = useMemo(() => {
     if (!topics) return [];
@@ -109,6 +126,16 @@ export function MemoryPage() {
             className="h-9 w-52 pl-8"
           />
         </div>
+        <button
+          type="button"
+          onClick={() => void sync()}
+          disabled={syncing}
+          aria-label="Обновить память"
+          title="Подтянуть изменения с сервера"
+          className="flex size-8 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+        >
+          <RefreshCw className={syncing ? "size-4 animate-spin" : "size-4"} />
+        </button>
         <Button size="sm" onClick={() => setComposerOpen(true)}>
           <Plus className="size-4" />
           Тема

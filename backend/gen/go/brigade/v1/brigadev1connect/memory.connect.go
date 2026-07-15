@@ -61,6 +61,9 @@ const (
 	// MemoryServiceDeleteNoteProcedure is the fully-qualified name of the MemoryService's DeleteNote
 	// RPC.
 	MemoryServiceDeleteNoteProcedure = "/brigade.v1.MemoryService/DeleteNote"
+	// MemoryServiceSyncMemoryProcedure is the fully-qualified name of the MemoryService's SyncMemory
+	// RPC.
+	MemoryServiceSyncMemoryProcedure = "/brigade.v1.MemoryService/SyncMemory"
 	// MemoryServiceListNotesProcedure is the fully-qualified name of the MemoryService's ListNotes RPC.
 	MemoryServiceListNotesProcedure = "/brigade.v1.MemoryService/ListNotes"
 	// MemoryServiceGetNoteProcedure is the fully-qualified name of the MemoryService's GetNote RPC.
@@ -92,6 +95,10 @@ type MemoryServiceClient interface {
 	MoveNote(context.Context, *connect.Request[v1.MoveNoteRequest]) (*connect.Response[v1.MoveNoteResponse], error)
 	// DeleteNote — удалить заметку (rm .md → commit → push).
 	DeleteNote(context.Context, *connect.Request[v1.DeleteNoteRequest]) (*connect.Response[v1.DeleteNoteResponse], error)
+	// SyncMemory — подтянуть свежие изменения с origin (git pull --rebase) в локальный клон.
+	// Нужен, чтобы видеть правки из другого инстанса brigade (у каждого свой клон). Клиент
+	// после успеха перечитывает темы/заметки обычными ListTopics/GetTopic.
+	SyncMemory(context.Context, *connect.Request[v1.SyncMemoryRequest]) (*connect.Response[v1.SyncMemoryResponse], error)
 	// --- legacy, плоский доступ (мобильный клиент/обратная совместимость) ---
 	// ListNotes — все заметки пользователя плоским списком (без группировки по темам).
 	ListNotes(context.Context, *connect.Request[v1.ListNotesRequest]) (*connect.Response[v1.ListNotesResponse], error)
@@ -170,6 +177,12 @@ func NewMemoryServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(memoryServiceMethods.ByName("DeleteNote")),
 			connect.WithClientOptions(opts...),
 		),
+		syncMemory: connect.NewClient[v1.SyncMemoryRequest, v1.SyncMemoryResponse](
+			httpClient,
+			baseURL+MemoryServiceSyncMemoryProcedure,
+			connect.WithSchema(memoryServiceMethods.ByName("SyncMemory")),
+			connect.WithClientOptions(opts...),
+		),
 		listNotes: connect.NewClient[v1.ListNotesRequest, v1.ListNotesResponse](
 			httpClient,
 			baseURL+MemoryServiceListNotesProcedure,
@@ -197,6 +210,7 @@ type memoryServiceClient struct {
 	updateNote          *connect.Client[v1.UpdateNoteRequest, v1.UpdateNoteResponse]
 	moveNote            *connect.Client[v1.MoveNoteRequest, v1.MoveNoteResponse]
 	deleteNote          *connect.Client[v1.DeleteNoteRequest, v1.DeleteNoteResponse]
+	syncMemory          *connect.Client[v1.SyncMemoryRequest, v1.SyncMemoryResponse]
 	listNotes           *connect.Client[v1.ListNotesRequest, v1.ListNotesResponse]
 	getNote             *connect.Client[v1.GetNoteRequest, v1.GetNoteResponse]
 }
@@ -251,6 +265,11 @@ func (c *memoryServiceClient) DeleteNote(ctx context.Context, req *connect.Reque
 	return c.deleteNote.CallUnary(ctx, req)
 }
 
+// SyncMemory calls brigade.v1.MemoryService.SyncMemory.
+func (c *memoryServiceClient) SyncMemory(ctx context.Context, req *connect.Request[v1.SyncMemoryRequest]) (*connect.Response[v1.SyncMemoryResponse], error) {
+	return c.syncMemory.CallUnary(ctx, req)
+}
+
 // ListNotes calls brigade.v1.MemoryService.ListNotes.
 func (c *memoryServiceClient) ListNotes(ctx context.Context, req *connect.Request[v1.ListNotesRequest]) (*connect.Response[v1.ListNotesResponse], error) {
 	return c.listNotes.CallUnary(ctx, req)
@@ -286,6 +305,10 @@ type MemoryServiceHandler interface {
 	MoveNote(context.Context, *connect.Request[v1.MoveNoteRequest]) (*connect.Response[v1.MoveNoteResponse], error)
 	// DeleteNote — удалить заметку (rm .md → commit → push).
 	DeleteNote(context.Context, *connect.Request[v1.DeleteNoteRequest]) (*connect.Response[v1.DeleteNoteResponse], error)
+	// SyncMemory — подтянуть свежие изменения с origin (git pull --rebase) в локальный клон.
+	// Нужен, чтобы видеть правки из другого инстанса brigade (у каждого свой клон). Клиент
+	// после успеха перечитывает темы/заметки обычными ListTopics/GetTopic.
+	SyncMemory(context.Context, *connect.Request[v1.SyncMemoryRequest]) (*connect.Response[v1.SyncMemoryResponse], error)
 	// --- legacy, плоский доступ (мобильный клиент/обратная совместимость) ---
 	// ListNotes — все заметки пользователя плоским списком (без группировки по темам).
 	ListNotes(context.Context, *connect.Request[v1.ListNotesRequest]) (*connect.Response[v1.ListNotesResponse], error)
@@ -360,6 +383,12 @@ func NewMemoryServiceHandler(svc MemoryServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(memoryServiceMethods.ByName("DeleteNote")),
 		connect.WithHandlerOptions(opts...),
 	)
+	memoryServiceSyncMemoryHandler := connect.NewUnaryHandler(
+		MemoryServiceSyncMemoryProcedure,
+		svc.SyncMemory,
+		connect.WithSchema(memoryServiceMethods.ByName("SyncMemory")),
+		connect.WithHandlerOptions(opts...),
+	)
 	memoryServiceListNotesHandler := connect.NewUnaryHandler(
 		MemoryServiceListNotesProcedure,
 		svc.ListNotes,
@@ -394,6 +423,8 @@ func NewMemoryServiceHandler(svc MemoryServiceHandler, opts ...connect.HandlerOp
 			memoryServiceMoveNoteHandler.ServeHTTP(w, r)
 		case MemoryServiceDeleteNoteProcedure:
 			memoryServiceDeleteNoteHandler.ServeHTTP(w, r)
+		case MemoryServiceSyncMemoryProcedure:
+			memoryServiceSyncMemoryHandler.ServeHTTP(w, r)
 		case MemoryServiceListNotesProcedure:
 			memoryServiceListNotesHandler.ServeHTTP(w, r)
 		case MemoryServiceGetNoteProcedure:
@@ -445,6 +476,10 @@ func (UnimplementedMemoryServiceHandler) MoveNote(context.Context, *connect.Requ
 
 func (UnimplementedMemoryServiceHandler) DeleteNote(context.Context, *connect.Request[v1.DeleteNoteRequest]) (*connect.Response[v1.DeleteNoteResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.MemoryService.DeleteNote is not implemented"))
+}
+
+func (UnimplementedMemoryServiceHandler) SyncMemory(context.Context, *connect.Request[v1.SyncMemoryRequest]) (*connect.Response[v1.SyncMemoryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.MemoryService.SyncMemory is not implemented"))
 }
 
 func (UnimplementedMemoryServiceHandler) ListNotes(context.Context, *connect.Request[v1.ListNotesRequest]) (*connect.Response[v1.ListNotesResponse], error) {

@@ -1327,6 +1327,78 @@ func (x *DeleteNoteResponse) GetCommitSha() string {
 	return ""
 }
 
+type SyncMemoryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncMemoryRequest) Reset() {
+	*x = SyncMemoryRequest{}
+	mi := &file_brigade_v1_memory_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncMemoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncMemoryRequest) ProtoMessage() {}
+
+func (x *SyncMemoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_memory_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncMemoryRequest.ProtoReflect.Descriptor instead.
+func (*SyncMemoryRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{22}
+}
+
+type SyncMemoryResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncMemoryResponse) Reset() {
+	*x = SyncMemoryResponse{}
+	mi := &file_brigade_v1_memory_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncMemoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncMemoryResponse) ProtoMessage() {}
+
+func (x *SyncMemoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_memory_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncMemoryResponse.ProtoReflect.Descriptor instead.
+func (*SyncMemoryResponse) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{23}
+}
+
 type ListNotesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"` // пусто — все заметки
@@ -1336,7 +1408,7 @@ type ListNotesRequest struct {
 
 func (x *ListNotesRequest) Reset() {
 	*x = ListNotesRequest{}
-	mi := &file_brigade_v1_memory_proto_msgTypes[22]
+	mi := &file_brigade_v1_memory_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1348,7 +1420,7 @@ func (x *ListNotesRequest) String() string {
 func (*ListNotesRequest) ProtoMessage() {}
 
 func (x *ListNotesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_memory_proto_msgTypes[22]
+	mi := &file_brigade_v1_memory_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1361,7 +1433,7 @@ func (x *ListNotesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNotesRequest.ProtoReflect.Descriptor instead.
 func (*ListNotesRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{22}
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ListNotesRequest) GetQuery() string {
@@ -1380,7 +1452,7 @@ type ListNotesResponse struct {
 
 func (x *ListNotesResponse) Reset() {
 	*x = ListNotesResponse{}
-	mi := &file_brigade_v1_memory_proto_msgTypes[23]
+	mi := &file_brigade_v1_memory_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1392,7 +1464,7 @@ func (x *ListNotesResponse) String() string {
 func (*ListNotesResponse) ProtoMessage() {}
 
 func (x *ListNotesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_memory_proto_msgTypes[23]
+	mi := &file_brigade_v1_memory_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1405,7 +1477,7 @@ func (x *ListNotesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNotesResponse.ProtoReflect.Descriptor instead.
 func (*ListNotesResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{23}
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ListNotesResponse) GetNotes() []*Note {
@@ -1424,7 +1496,7 @@ type GetNoteRequest struct {
 
 func (x *GetNoteRequest) Reset() {
 	*x = GetNoteRequest{}
-	mi := &file_brigade_v1_memory_proto_msgTypes[24]
+	mi := &file_brigade_v1_memory_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1436,7 +1508,7 @@ func (x *GetNoteRequest) String() string {
 func (*GetNoteRequest) ProtoMessage() {}
 
 func (x *GetNoteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_memory_proto_msgTypes[24]
+	mi := &file_brigade_v1_memory_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1449,7 +1521,7 @@ func (x *GetNoteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetNoteRequest.ProtoReflect.Descriptor instead.
 func (*GetNoteRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{24}
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GetNoteRequest) GetId() string {
@@ -1468,7 +1540,7 @@ type GetNoteResponse struct {
 
 func (x *GetNoteResponse) Reset() {
 	*x = GetNoteResponse{}
-	mi := &file_brigade_v1_memory_proto_msgTypes[25]
+	mi := &file_brigade_v1_memory_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1480,7 +1552,7 @@ func (x *GetNoteResponse) String() string {
 func (*GetNoteResponse) ProtoMessage() {}
 
 func (x *GetNoteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_memory_proto_msgTypes[25]
+	mi := &file_brigade_v1_memory_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1493,7 +1565,7 @@ func (x *GetNoteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetNoteResponse.ProtoReflect.Descriptor instead.
 func (*GetNoteResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{25}
+	return file_brigade_v1_memory_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *GetNoteResponse) GetNote() *Note {
@@ -1603,7 +1675,9 @@ const file_brigade_v1_memory_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"3\n" +
 	"\x12DeleteNoteResponse\x12\x1d\n" +
 	"\n" +
-	"commit_sha\x18\x01 \x01(\tR\tcommitSha\"(\n" +
+	"commit_sha\x18\x01 \x01(\tR\tcommitSha\"\x13\n" +
+	"\x11SyncMemoryRequest\"\x14\n" +
+	"\x12SyncMemoryResponse\"(\n" +
 	"\x10ListNotesRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\";\n" +
 	"\x11ListNotesResponse\x12&\n" +
@@ -1611,7 +1685,7 @@ const file_brigade_v1_memory_proto_rawDesc = "" +
 	"\x0eGetNoteRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"7\n" +
 	"\x0fGetNoteResponse\x12$\n" +
-	"\x04note\x18\x01 \x01(\v2\x10.brigade.v1.NoteR\x04note2\xcf\a\n" +
+	"\x04note\x18\x01 \x01(\v2\x10.brigade.v1.NoteR\x04note2\x9e\b\n" +
 	"\rMemoryService\x12M\n" +
 	"\n" +
 	"ListTopics\x12\x1d.brigade.v1.ListTopicsRequest\x1a\x1e.brigade.v1.ListTopicsResponse\"\x00\x12G\n" +
@@ -1626,7 +1700,9 @@ const file_brigade_v1_memory_proto_rawDesc = "" +
 	"UpdateNote\x12\x1d.brigade.v1.UpdateNoteRequest\x1a\x1e.brigade.v1.UpdateNoteResponse\"\x00\x12G\n" +
 	"\bMoveNote\x12\x1b.brigade.v1.MoveNoteRequest\x1a\x1c.brigade.v1.MoveNoteResponse\"\x00\x12M\n" +
 	"\n" +
-	"DeleteNote\x12\x1d.brigade.v1.DeleteNoteRequest\x1a\x1e.brigade.v1.DeleteNoteResponse\"\x00\x12J\n" +
+	"DeleteNote\x12\x1d.brigade.v1.DeleteNoteRequest\x1a\x1e.brigade.v1.DeleteNoteResponse\"\x00\x12M\n" +
+	"\n" +
+	"SyncMemory\x12\x1d.brigade.v1.SyncMemoryRequest\x1a\x1e.brigade.v1.SyncMemoryResponse\"\x00\x12J\n" +
 	"\tListNotes\x12\x1c.brigade.v1.ListNotesRequest\x1a\x1d.brigade.v1.ListNotesResponse\"\x00\x12D\n" +
 	"\aGetNote\x12\x1a.brigade.v1.GetNoteRequest\x1a\x1b.brigade.v1.GetNoteResponse\"\x00B\xa8\x01\n" +
 	"\x0ecom.brigade.v1B\vMemoryProtoP\x01Z@github.com/grigory51/brigade/backend/gen/go/brigade/v1;brigadev1\xa2\x02\x03BXX\xaa\x02\n" +
@@ -1645,7 +1721,7 @@ func file_brigade_v1_memory_proto_rawDescGZIP() []byte {
 	return file_brigade_v1_memory_proto_rawDescData
 }
 
-var file_brigade_v1_memory_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_brigade_v1_memory_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_brigade_v1_memory_proto_goTypes = []any{
 	(*Topic)(nil),                       // 0: brigade.v1.Topic
 	(*Note)(nil),                        // 1: brigade.v1.Note
@@ -1669,10 +1745,12 @@ var file_brigade_v1_memory_proto_goTypes = []any{
 	(*MoveNoteResponse)(nil),            // 19: brigade.v1.MoveNoteResponse
 	(*DeleteNoteRequest)(nil),           // 20: brigade.v1.DeleteNoteRequest
 	(*DeleteNoteResponse)(nil),          // 21: brigade.v1.DeleteNoteResponse
-	(*ListNotesRequest)(nil),            // 22: brigade.v1.ListNotesRequest
-	(*ListNotesResponse)(nil),           // 23: brigade.v1.ListNotesResponse
-	(*GetNoteRequest)(nil),              // 24: brigade.v1.GetNoteRequest
-	(*GetNoteResponse)(nil),             // 25: brigade.v1.GetNoteResponse
+	(*SyncMemoryRequest)(nil),           // 22: brigade.v1.SyncMemoryRequest
+	(*SyncMemoryResponse)(nil),          // 23: brigade.v1.SyncMemoryResponse
+	(*ListNotesRequest)(nil),            // 24: brigade.v1.ListNotesRequest
+	(*ListNotesResponse)(nil),           // 25: brigade.v1.ListNotesResponse
+	(*GetNoteRequest)(nil),              // 26: brigade.v1.GetNoteRequest
+	(*GetNoteResponse)(nil),             // 27: brigade.v1.GetNoteResponse
 }
 var file_brigade_v1_memory_proto_depIdxs = []int32{
 	1,  // 0: brigade.v1.Topic.recent:type_name -> brigade.v1.Note
@@ -1697,22 +1775,24 @@ var file_brigade_v1_memory_proto_depIdxs = []int32{
 	16, // 19: brigade.v1.MemoryService.UpdateNote:input_type -> brigade.v1.UpdateNoteRequest
 	18, // 20: brigade.v1.MemoryService.MoveNote:input_type -> brigade.v1.MoveNoteRequest
 	20, // 21: brigade.v1.MemoryService.DeleteNote:input_type -> brigade.v1.DeleteNoteRequest
-	22, // 22: brigade.v1.MemoryService.ListNotes:input_type -> brigade.v1.ListNotesRequest
-	24, // 23: brigade.v1.MemoryService.GetNote:input_type -> brigade.v1.GetNoteRequest
-	3,  // 24: brigade.v1.MemoryService.ListTopics:output_type -> brigade.v1.ListTopicsResponse
-	5,  // 25: brigade.v1.MemoryService.GetTopic:output_type -> brigade.v1.GetTopicResponse
-	7,  // 26: brigade.v1.MemoryService.CreateTopic:output_type -> brigade.v1.CreateTopicResponse
-	9,  // 27: brigade.v1.MemoryService.UpdateTopicOverview:output_type -> brigade.v1.UpdateTopicOverviewResponse
-	11, // 28: brigade.v1.MemoryService.UpdateTopic:output_type -> brigade.v1.UpdateTopicResponse
-	13, // 29: brigade.v1.MemoryService.DeleteTopic:output_type -> brigade.v1.DeleteTopicResponse
-	15, // 30: brigade.v1.MemoryService.CreateNote:output_type -> brigade.v1.CreateNoteResponse
-	17, // 31: brigade.v1.MemoryService.UpdateNote:output_type -> brigade.v1.UpdateNoteResponse
-	19, // 32: brigade.v1.MemoryService.MoveNote:output_type -> brigade.v1.MoveNoteResponse
-	21, // 33: brigade.v1.MemoryService.DeleteNote:output_type -> brigade.v1.DeleteNoteResponse
-	23, // 34: brigade.v1.MemoryService.ListNotes:output_type -> brigade.v1.ListNotesResponse
-	25, // 35: brigade.v1.MemoryService.GetNote:output_type -> brigade.v1.GetNoteResponse
-	24, // [24:36] is the sub-list for method output_type
-	12, // [12:24] is the sub-list for method input_type
+	22, // 22: brigade.v1.MemoryService.SyncMemory:input_type -> brigade.v1.SyncMemoryRequest
+	24, // 23: brigade.v1.MemoryService.ListNotes:input_type -> brigade.v1.ListNotesRequest
+	26, // 24: brigade.v1.MemoryService.GetNote:input_type -> brigade.v1.GetNoteRequest
+	3,  // 25: brigade.v1.MemoryService.ListTopics:output_type -> brigade.v1.ListTopicsResponse
+	5,  // 26: brigade.v1.MemoryService.GetTopic:output_type -> brigade.v1.GetTopicResponse
+	7,  // 27: brigade.v1.MemoryService.CreateTopic:output_type -> brigade.v1.CreateTopicResponse
+	9,  // 28: brigade.v1.MemoryService.UpdateTopicOverview:output_type -> brigade.v1.UpdateTopicOverviewResponse
+	11, // 29: brigade.v1.MemoryService.UpdateTopic:output_type -> brigade.v1.UpdateTopicResponse
+	13, // 30: brigade.v1.MemoryService.DeleteTopic:output_type -> brigade.v1.DeleteTopicResponse
+	15, // 31: brigade.v1.MemoryService.CreateNote:output_type -> brigade.v1.CreateNoteResponse
+	17, // 32: brigade.v1.MemoryService.UpdateNote:output_type -> brigade.v1.UpdateNoteResponse
+	19, // 33: brigade.v1.MemoryService.MoveNote:output_type -> brigade.v1.MoveNoteResponse
+	21, // 34: brigade.v1.MemoryService.DeleteNote:output_type -> brigade.v1.DeleteNoteResponse
+	23, // 35: brigade.v1.MemoryService.SyncMemory:output_type -> brigade.v1.SyncMemoryResponse
+	25, // 36: brigade.v1.MemoryService.ListNotes:output_type -> brigade.v1.ListNotesResponse
+	27, // 37: brigade.v1.MemoryService.GetNote:output_type -> brigade.v1.GetNoteResponse
+	25, // [25:38] is the sub-list for method output_type
+	12, // [12:25] is the sub-list for method input_type
 	12, // [12:12] is the sub-list for extension type_name
 	12, // [12:12] is the sub-list for extension extendee
 	0,  // [0:12] is the sub-list for field type_name
@@ -1729,7 +1809,7 @@ func file_brigade_v1_memory_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_brigade_v1_memory_proto_rawDesc), len(file_brigade_v1_memory_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   26,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ArchiveSessionRequest, ArchiveSessionResponse, CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, ForkSessionRequest, ForkSessionResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse, UploadFileRequest, UploadFileResponse } from "./session_pb.js";
+import { ArchiveSessionRequest, ArchiveSessionResponse, CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, ForkSessionRequest, ForkSessionResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, ReloadAgentRequest, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse, UploadFileRequest, UploadFileResponse } from "./session_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { Empty } from "./auth_pb.js";
 
@@ -75,6 +75,19 @@ export const SessionService = {
     delete: {
       name: "Delete",
       I: DeleteSessionRequest,
+      O: Empty,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * ReloadAgent переинициализирует ACP-агента сессии (session/load того же диалога), чтобы
+     * подхватить обновлённые скиллы/плагины без пересоздания сессии. Только ACP; не во время
+     * генерации.
+     *
+     * @generated from rpc brigade.v1.SessionService.ReloadAgent
+     */
+    reloadAgent: {
+      name: "ReloadAgent",
+      I: ReloadAgentRequest,
       O: Empty,
       kind: MethodKind.Unary,
     },

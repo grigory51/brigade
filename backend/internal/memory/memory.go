@@ -227,6 +227,33 @@ func (s *Service) ensureTopicID(ctx context.Context, userID, name string) (strin
 	return t.ID, nil
 }
 
+// Sync подтягивает свежие изменения памяти с origin в локальную рабочую копию
+// (git pull --rebase). Нужен, чтобы видеть правки, сделанные из ДРУГОГО инстанса brigade: у
+// каждого инстанса свой локальный клон, а read-путь читает клон как есть. --rebase (не reset)
+// сохраняет незапушенные локальные коммиты (если push ранее сорвался). Пустой remote — no-op;
+// конфликт rebase откатывается (иначе клон застрянет в rebase-in-progress).
+func (s *Service) Sync(ctx context.Context, userID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sp, err := s.prepareLocked(ctx, userID)
+	if err != nil {
+		return err
+	}
+	out, err := s.git(ctx, sp.repoDir, sp.keyPath, "pull", "--rebase", "origin", "HEAD")
+	if err != nil {
+		// Пустой remote (ни одного коммита) — синхронизировать нечего, не ошибка.
+		if bytes.Contains(out, []byte("couldn't find remote ref")) ||
+			bytes.Contains(out, []byte("no such ref")) {
+			return nil
+		}
+		// Конфликт rebase оставил бы клон в rebase-in-progress (проходит repoHealthy, но
+		// следующие операции падают) — откатываем и отдаём ошибку наверх.
+		_, _ = s.git(ctx, sp.repoDir, sp.keyPath, "rebase", "--abort")
+		return fmt.Errorf("memory: sync: %w", err)
+	}
+	return nil
+}
+
 // List возвращает заметки пользователя, при непустом query — отфильтрованные по подстроке
 // (title/body/tags, регистронезависимо), отсортированные от новых к старым.
 func (s *Service) List(ctx context.Context, userID, query string) ([]Note, error) {

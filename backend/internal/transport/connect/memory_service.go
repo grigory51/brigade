@@ -202,6 +202,19 @@ func (s *MemoryService) DeleteNote(ctx context.Context, req *connect.Request[v1.
 	return connect.NewResponse(&v1.DeleteNoteResponse{CommitSha: sha}), nil
 }
 
+// SyncMemory подтягивает свежие изменения памяти с origin (git pull --rebase) — чтобы видеть
+// правки из другого инстанса brigade. Клиент после успеха перечитывает темы/заметки.
+func (s *MemoryService) SyncMemory(ctx context.Context, _ *connect.Request[v1.SyncMemoryRequest]) (*connect.Response[v1.SyncMemoryResponse], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.memory.Sync(ctx, userID); err != nil {
+		return nil, memoryError(err)
+	}
+	return connect.NewResponse(&v1.SyncMemoryResponse{}), nil
+}
+
 // noteToProto конвертирует доменную заметку в proto-форму.
 func noteToProto(n memory.Note) *v1.Note {
 	return &v1.Note{

@@ -548,11 +548,16 @@ func (x *GetStatusRequest) GetThreadId() string {
 }
 
 type GetStatusResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Generating    bool                   `protobuf:"varint,1,opt,name=generating,proto3" json:"generating,omitempty"`
-	Seq           int64                  `protobuf:"varint,2,opt,name=seq,proto3" json:"seq,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Generating bool                   `protobuf:"varint,1,opt,name=generating,proto3" json:"generating,omitempty"`
+	Seq        int64                  `protobuf:"varint,2,opt,name=seq,proto3" json:"seq,omitempty"`
+	// pending_permissions — живые запросы разрешения (human-in-the-loop), JSON каждого
+	// PermissionRequest (та же форма, что CUSTOM permission_request). Позволяет клиенту
+	// восстановить диалог разрешения после переоткрытия/навигации (история грузится unary,
+	// CUSTOM-события при этом не приходят). Обычно пусто.
+	PendingPermissions []string `protobuf:"bytes,3,rep,name=pending_permissions,json=pendingPermissions,proto3" json:"pending_permissions,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *GetStatusResponse) Reset() {
@@ -597,6 +602,13 @@ func (x *GetStatusResponse) GetSeq() int64 {
 		return x.Seq
 	}
 	return 0
+}
+
+func (x *GetStatusResponse) GetPendingPermissions() []string {
+	if x != nil {
+		return x.PendingPermissions
+	}
+	return nil
 }
 
 type ListWorkflowsRequest struct {
@@ -940,12 +952,13 @@ const file_brigade_v1_acp_proto_rawDesc = "" +
 	"\bcommands\x18\x02 \x03(\v2\x16.brigade.v1.AcpCommandR\bcommands\x12B\n" +
 	"\x0econfig_options\x18\x03 \x03(\v2\x1b.brigade.v1.AcpConfigOptionR\rconfigOptions\"/\n" +
 	"\x10GetStatusRequest\x12\x1b\n" +
-	"\tthread_id\x18\x01 \x01(\tR\bthreadId\"E\n" +
+	"\tthread_id\x18\x01 \x01(\tR\bthreadId\"v\n" +
 	"\x11GetStatusResponse\x12\x1e\n" +
 	"\n" +
 	"generating\x18\x01 \x01(\bR\n" +
 	"generating\x12\x10\n" +
-	"\x03seq\x18\x02 \x01(\x03R\x03seq\"3\n" +
+	"\x03seq\x18\x02 \x01(\x03R\x03seq\x12/\n" +
+	"\x13pending_permissions\x18\x03 \x03(\tR\x12pendingPermissions\"3\n" +
 	"\x14ListWorkflowsRequest\x12\x1b\n" +
 	"\tthread_id\x18\x01 \x01(\tR\bthreadId\"N\n" +
 	"\x15ListWorkflowsResponse\x125\n" +

@@ -125,6 +125,19 @@ func (s *SessionService) Stop(ctx context.Context, req *connect.Request[v1.StopS
 	return connect.NewResponse(&v1.Empty{}), nil
 }
 
+// ReloadAgent переинициализирует ACP-агента сессии (session/load того же диалога), чтобы
+// подхватить обновлённые скиллы/плагины без пересоздания сессии.
+func (s *SessionService) ReloadAgent(ctx context.Context, req *connect.Request[v1.ReloadAgentRequest]) (*connect.Response[v1.Empty], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.registry.ReloadAgent(ctx, req.Msg.SessionId, userID); err != nil {
+		return nil, sessionError(err)
+	}
+	return connect.NewResponse(&v1.Empty{}), nil
+}
+
 // Delete останавливает сессию (если жива) и удаляет её запись.
 func (s *SessionService) Delete(ctx context.Context, req *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.Empty], error) {
 	userID, err := requireUser(ctx)
@@ -228,7 +241,8 @@ func sessionError(err error) error {
 	if errors.Is(err, store.ErrNotFound) {
 		return connect.NewError(connect.CodeNotFound, err)
 	}
-	if errors.Is(err, session.ErrTeardownInProgress) {
+	if errors.Is(err, session.ErrTeardownInProgress) ||
+		errors.Is(err, session.ErrReloadWhileGenerating) {
 		return connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 	return connect.NewError(connect.CodeInternal, err)

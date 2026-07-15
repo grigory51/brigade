@@ -93,6 +93,11 @@ message GetStatusRequest {
 message GetStatusResponse {
   bool generating = 1;
   int64 seq = 2;
+  // pending_permissions — живые запросы разрешения (human-in-the-loop), JSON каждого
+  // PermissionRequest (та же форма, что CUSTOM permission_request). Позволяет клиенту
+  // восстановить диалог разрешения после переоткрытия/навигации (история грузится unary,
+  // CUSTOM-события при этом не приходят). Обычно пусто.
+  repeated string pending_permissions = 3;
 }
 
 message ListWorkflowsRequest {

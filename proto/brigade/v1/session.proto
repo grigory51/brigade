@@ -115,6 +115,10 @@ message DeleteSessionRequest {
   string session_id = 1;
 }
 
+message ReloadAgentRequest {
+  string session_id = 1;
+}
+
 // Archive переносит сессию в архив: агент генерирует recap (summary), brigade сохраняет
 // снимок истории чата, останавливает контейнер и помечает сессию archived.
 message ArchiveSessionRequest {
@@ -165,6 +169,10 @@ service SessionService {
   rpc Fork(ForkSessionRequest) returns (ForkSessionResponse) {}
   rpc Stop(StopSessionRequest) returns (Empty) {}
   rpc Delete(DeleteSessionRequest) returns (Empty) {}
+  // ReloadAgent переинициализирует ACP-агента сессии (session/load того же диалога), чтобы
+  // подхватить обновлённые скиллы/плагины без пересоздания сессии. Только ACP; не во время
+  // генерации.
+  rpc ReloadAgent(ReloadAgentRequest) returns (Empty) {}
   // Archive переносит сессию в архив (recap + снимок истории + остановка контейнера).
   // Чтение архива (список, история) — в отдельном ArchiveService.
   rpc Archive(ArchiveSessionRequest) returns (ArchiveSessionResponse) {}

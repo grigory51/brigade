@@ -1131,6 +1131,68 @@ export class DeleteNoteResponse extends Message<DeleteNoteResponse> {
 }
 
 /**
+ * @generated from message brigade.v1.SyncMemoryRequest
+ */
+export class SyncMemoryRequest extends Message<SyncMemoryRequest> {
+  constructor(data?: PartialMessage<SyncMemoryRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.SyncMemoryRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SyncMemoryRequest {
+    return new SyncMemoryRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SyncMemoryRequest {
+    return new SyncMemoryRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SyncMemoryRequest {
+    return new SyncMemoryRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SyncMemoryRequest | PlainMessage<SyncMemoryRequest> | undefined, b: SyncMemoryRequest | PlainMessage<SyncMemoryRequest> | undefined): boolean {
+    return proto3.util.equals(SyncMemoryRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.SyncMemoryResponse
+ */
+export class SyncMemoryResponse extends Message<SyncMemoryResponse> {
+  constructor(data?: PartialMessage<SyncMemoryResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.SyncMemoryResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SyncMemoryResponse {
+    return new SyncMemoryResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SyncMemoryResponse {
+    return new SyncMemoryResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SyncMemoryResponse {
+    return new SyncMemoryResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SyncMemoryResponse | PlainMessage<SyncMemoryResponse> | undefined, b: SyncMemoryResponse | PlainMessage<SyncMemoryResponse> | undefined): boolean {
+    return proto3.util.equals(SyncMemoryResponse, a, b);
+  }
+}
+
+/**
  * @generated from message brigade.v1.ListNotesRequest
  */
 export class ListNotesRequest extends Message<ListNotesRequest> {

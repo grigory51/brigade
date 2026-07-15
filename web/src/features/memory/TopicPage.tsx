@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ConnectError } from "@connectrpc/connect";
 import {
@@ -8,6 +8,7 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
+  RefreshCw,
   Sparkles,
   Trash2,
   Undo2,
@@ -38,28 +39,43 @@ export function TopicPage() {
   const [editingTopic, setEditingTopic] = useState(false);
   // allTopics — список тем для меню «переместить в тему» (грузим отдельно от текущей темы).
   const [allTopics, setAllTopics] = useState<Topic[]>([]);
+  // syncing — идёт ручной pull с origin (кнопка «Обновить»).
+  const [syncing, setSyncing] = useState(false);
+
+  const reload = useCallback(async () => {
+    try {
+      const r = await memoryClient.getTopic({ id: topicId });
+      setTopic(r.topic ?? null);
+      setNotes(r.notes);
+    } catch (err) {
+      setTopic(null);
+      toast.error(
+        err instanceof ConnectError ? err.rawMessage : "Не удалось загрузить тему",
+      );
+    }
+  }, [topicId]);
 
   useEffect(() => {
-    let alive = true;
     setTopic(undefined);
-    memoryClient
-      .getTopic({ id: topicId })
-      .then((r) => {
-        if (!alive) return;
-        setTopic(r.topic ?? null);
-        setNotes(r.notes);
-      })
-      .catch((err) => {
-        if (!alive) return;
-        setTopic(null);
-        toast.error(
-          err instanceof ConnectError ? err.rawMessage : "Не удалось загрузить тему",
-        );
-      });
-    return () => {
-      alive = false;
-    };
-  }, [topicId]);
+    void reload();
+  }, [reload]);
+
+  // sync — подтянуть изменения памяти с origin (правки из другого инстанса brigade), затем
+  // перечитать тему. Авто-pull нет — только по кнопке.
+  const sync = useCallback(async () => {
+    setSyncing(true);
+    try {
+      await memoryClient.syncMemory({});
+      await reload();
+      toast.success("Память обновлена");
+    } catch (err) {
+      toast.error(
+        err instanceof ConnectError ? err.rawMessage : "Не удалось обновить память",
+      );
+    } finally {
+      setSyncing(false);
+    }
+  }, [reload]);
 
   // Список тем для меню «переместить в другую тему».
   useEffect(() => {
@@ -128,6 +144,8 @@ export function TopicPage() {
         onAdd={() => setComposerOpen(true)}
         onEdit={() => setEditingTopic(true)}
         onDeleted={() => navigate("/memory")}
+        onSync={() => void sync()}
+        syncing={syncing}
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -221,11 +239,15 @@ function TopicHeader({
   onAdd,
   onEdit,
   onDeleted,
+  onSync,
+  syncing,
 }: {
   topic?: Topic;
   onAdd?: () => void;
   onEdit?: () => void;
   onDeleted?: () => void;
+  onSync?: () => void;
+  syncing?: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -270,6 +292,18 @@ function TopicHeader({
             · {topic.noteCount}
           </span>
           <div className="ml-auto flex items-center gap-1.5">
+            {onSync && (
+              <button
+                type="button"
+                onClick={onSync}
+                disabled={syncing}
+                aria-label="Обновить память"
+                title="Подтянуть изменения с сервера"
+                className="flex size-8 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+              >
+                <RefreshCw className={syncing ? "size-4 animate-spin" : "size-4"} />
+              </button>
+            )}
             <Button size="sm" onClick={onAdd}>
               <Plus className="size-4" />
               Заметка
@@ -640,9 +674,9 @@ function NoteRow({
           </span>
         </div>
         {note.body && (
-          <p className="mt-0.5 whitespace-pre-wrap text-[13px] leading-[1.55] text-muted-foreground">
+          <Markdown className="mt-0.5 text-[13px] leading-[1.55] text-muted-foreground">
             {note.body}
-          </p>
+          </Markdown>
         )}
         <div className="mt-1 flex items-center gap-1.5 text-[11.5px] text-muted-foreground/70">
           {note.from && (
