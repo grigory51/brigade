@@ -9,10 +9,13 @@
 
 FROM node:22-slim AS web
 WORKDIR /src/web
+# Версия для показа в UI: git в образе недоступен, поэтому её передаёт build-arg VERSION
+# (CI берёт из тега; см. .github/workflows/docker.yml). Локальный docker build без arg → "dev".
+ARG VERSION=dev
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web/ ./
-RUN npm run build
+RUN VITE_APP_VERSION=$VERSION npm run build
 
 FROM golang:1.26 AS build
 WORKDIR /src

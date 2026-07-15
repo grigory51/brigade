@@ -719,6 +719,10 @@ function UserMenu() {
               <LogOut className="size-4" />
               Выйти
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <div className="px-2 py-1 text-[11px] text-muted-foreground">
+              brigade {import.meta.env.VITE_APP_VERSION ?? "dev"}
+            </div>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>

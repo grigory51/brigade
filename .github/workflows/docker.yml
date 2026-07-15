@@ -44,6 +44,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Версия для показа в UI (web-стадия brigade-образа читает VERSION build-arg; git в
+          # образе нет). Тег с префиксом v — как у `git describe`. Для brigade-agent неиспользуем.
+          build-args: |
+            VERSION=${{ github.ref_name }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,scope=${{ matrix.image }},mode=max
 
