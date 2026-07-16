@@ -47,7 +47,7 @@ claude_home_dir: ""
 
 # Публикация dev-серверов сессий через встроенный L7-прокси: запрос на
 # {sessionId}-{port}.{domain} проксируется к порту сессии (local — 127.0.0.1,
-# docker — IP контейнера). Подробности — docs/preview.md.
+# docker — IP контейнера).
 preview:
   enabled: true
   # Режим адресации preview:

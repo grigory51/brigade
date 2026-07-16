@@ -58,16 +58,33 @@ iconutil -c icns "$ICONSET" -o "$OUT/Contents/Resources/AppIcon.icns"
 RES="$OUT/Contents/Resources"
 DL="$(mktemp -d)"
 
-# node (latest v22, как node:22 в docker-образе). Точное имя тарбола берём из dist-листинга,
-# чтобы не гадать патч-версию.
-echo "make-app: скачиваю node (v22, darwin-arm64)…"
-NODE_TARBALL="$(curl -fsSL https://nodejs.org/dist/latest-v22.x/ \
+# node (latest v22, как node:22 в docker-образе). Имя тарбола резолвим из dist-листинга (пара
+# КБ), сам тарбол (~30 МБ) кешируем между сборками — не тянем каждый раз.
+CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/brigade-make-app"
+mkdir -p "$CACHE"
+NODE_TARBALL="$(curl -fsSL https://nodejs.org/dist/latest-v22.x/ 2>/dev/null \
   | grep -o 'node-v22[0-9.]*-darwin-arm64.tar.gz' | head -1)"
 if [ -z "$NODE_TARBALL" ]; then
-  echo "make-app: не удалось определить версию node" >&2
+  # Листинг недоступен (офлайн) — берём самый свежий тарбол из кеша.
+  NODE_TARBALL="$(cd "$CACHE" && ls -1 node-v22*-darwin-arm64.tar.gz 2>/dev/null | sort | tail -1)"
+fi
+if [ -z "$NODE_TARBALL" ]; then
+  echo "make-app: не удалось определить версию node (нет сети и пустой кеш)" >&2
   exit 1
 fi
-curl -fsSL "https://nodejs.org/dist/latest-v22.x/${NODE_TARBALL}" | tar xz -C "$DL"
+NODE_CACHED="$CACHE/$NODE_TARBALL"
+if [ -f "$NODE_CACHED" ]; then
+  echo "make-app: node из кеша ($NODE_TARBALL)"
+else
+  echo "make-app: скачиваю node ($NODE_TARBALL)…"
+  if ! curl -fsSL "https://nodejs.org/dist/latest-v22.x/${NODE_TARBALL}" -o "$NODE_CACHED.tmp"; then
+    rm -f "$NODE_CACHED.tmp"
+    echo "make-app: не удалось скачать node" >&2
+    exit 1
+  fi
+  mv "$NODE_CACHED.tmp" "$NODE_CACHED"
+fi
+tar xzf "$NODE_CACHED" -C "$DL"
 NODE_SRC="$DL/${NODE_TARBALL%.tar.gz}"
 # Рантайму нужен только бинарь node (самодостаточен, ICU внутри); npm/lib в бандл не кладём.
 mkdir -p "$RES/node/bin"

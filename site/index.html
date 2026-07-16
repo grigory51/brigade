@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>brigade — self-hosted multiplexer for coding agents</title>
+  <meta name="description" content="Run coding agents on your own hardware and talk to them from any browser. Close the laptop, open the phone — the agent keeps working." />
+  <meta name="theme-color" content="#262624" />
+  <link rel="icon" href="logo.svg" type="image/svg+xml" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="brigade — self-hosted multiplexer for coding agents" />
+  <meta property="og:description" content="Run coding agents on your own hardware. Close the laptop, open the phone — the agent keeps working." />
+  <meta property="og:image" content="https://grigory51.github.io/brigade/logo.svg" />
+  <meta name="twitter:card" content="summary" />
+  <style>
+    :root {
+      --bg: #262624; --fg: #faf9f5; --card: #30302e; --panel: #1f1e1d;
+      --muted: #2f2f2d; --muted-fg: #b7b5ac; --border: #413f3b;
+      --primary: #c96442; --primary-2: #b0563a; --primary-3: #7d4029; --primary-fg: #fff;
+      --radius: 14px;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); line-height: 1.55; -webkit-font-smoothing: antialiased; }
+    a { color: inherit; text-decoration: none; }
+    ::selection { background: rgba(201,100,66,.35); }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+    .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted-fg); }
+    .accent { color: var(--primary); }
+
+    header { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(10px); background: color-mix(in srgb, var(--bg) 82%, transparent); border-bottom: 1px solid var(--border); }
+    .nav { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+    .brand { display: flex; align-items: center; gap: 11px; font-weight: 650; font-size: 17px; letter-spacing: -.01em; }
+    .brand img { width: 30px; height: 30px; border-radius: 8px; }
+    .nav-links { display: flex; align-items: center; gap: 8px; }
+
+    .btn { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 18px; border-radius: 10px; border: 1px solid transparent; font: inherit; font-weight: 550; font-size: 14.5px; cursor: pointer; transition: transform .12s ease, background .15s ease, border-color .15s ease; white-space: nowrap; }
+    .btn svg { width: 17px; height: 17px; }
+    .btn-primary { background: var(--primary); color: var(--primary-fg); box-shadow: 0 1px 0 rgba(0,0,0,.25), 0 8px 24px -12px rgba(201,100,66,.7); }
+    .btn-primary:hover { background: #d6764f; transform: translateY(-1px); }
+    .btn-ghost { background: transparent; color: var(--fg); border-color: var(--border); }
+    .btn-ghost:hover { background: var(--card); border-color: #56534e; transform: translateY(-1px); }
+    .btn-sm { height: 36px; padding: 0 14px; font-size: 13.5px; }
+
+    .hero { position: relative; overflow: hidden; padding: 92px 0 76px; }
+    .hero::before { content: ""; position: absolute; inset: -40% 0 auto 0; height: 620px; background: radial-gradient(60% 60% at 50% 0%, rgba(201,100,66,.16), transparent 70%); pointer-events: none; }
+    .hero-grid { position: relative; display: grid; grid-template-columns: 1.05fr .95fr; gap: 56px; align-items: center; }
+    h1 { font-size: clamp(2.3rem, 5.2vw, 3.6rem); line-height: 1.04; letter-spacing: -.03em; margin: 18px 0 0; font-weight: 680; }
+    .lede { color: var(--muted-fg); font-size: clamp(1.05rem, 2vw, 1.2rem); margin: 20px 0 0; max-width: 34ch; }
+    .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+    .meta-line { margin-top: 26px; display: flex; gap: 18px; flex-wrap: wrap; color: var(--muted-fg); font-family: var(--mono); font-size: 12.5px; }
+    .meta-line span { display: inline-flex; align-items: center; gap: 7px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 3px rgba(201,100,66,.18); }
+
+    /* hero panel */
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 18px; box-shadow: 0 40px 80px -40px rgba(0,0,0,.7); overflow: hidden; }
+    .panel-bar { display: flex; align-items: center; gap: 7px; padding: 13px 16px; border-bottom: 1px solid var(--border); }
+    .tl { width: 11px; height: 11px; border-radius: 50%; background: #44423e; }
+    .panel-body { display: grid; grid-template-columns: 148px 1fr; min-height: 268px; }
+    .side { border-right: 1px solid var(--border); padding: 12px 10px; background: color-mix(in srgb, var(--panel) 70%, #000); }
+    .side .lbl { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted-fg); padding: 4px 8px 8px; }
+    .srow { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 8px; font-size: 12.5px; color: #d8d6cf; }
+    .srow.active { background: var(--card); }
+    .srow .sd { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .srow .sd.on { background: #4ade80; } .srow .sd.run { background: var(--primary); } .srow .sd.idle { background: #56534e; }
+    .side-fork { margin-left: 16px; }
+    .main { padding: 20px 22px; display: flex; flex-direction: column; gap: 16px; }
+    .prompt { font-family: var(--mono); font-size: 13.5px; color: #e9e7e0; display: flex; gap: 10px; align-items: baseline; }
+    .prompt .chev { color: var(--primary); font-weight: 700; }
+    .caret { display: inline-block; width: 8px; height: 16px; background: var(--primary); vertical-align: -2px; animation: blink 1.1s step-end infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+    .echelon { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
+    .abar { height: 34px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); display: flex; align-items: center; gap: 10px; padding: 0 12px; font-family: var(--mono); font-size: 12px; color: var(--muted-fg); }
+    .abar .tag { width: 44px; height: 8px; border-radius: 5px; }
+    .abar:nth-child(1) .tag { background: var(--primary); }
+    .abar:nth-child(2) { margin-right: 26px; } .abar:nth-child(2) .tag { background: var(--primary-2); }
+    .abar:nth-child(3) { margin-right: 52px; } .abar:nth-child(3) .tag { background: var(--primary-3); }
+    .abar .pulse { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); animation: pulse 1.6s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: .3; } 50% { opacity: 1; } }
+
+    .band { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 7%, transparent), transparent); }
+    .band-inner { padding: 60px 0; text-align: center; }
+    .band h2 { font-size: clamp(1.6rem, 3.4vw, 2.2rem); letter-spacing: -.02em; margin: 10px 0 0; font-weight: 660; }
+    .band p { color: var(--muted-fg); max-width: 56ch; margin: 16px auto 0; font-size: 1.05rem; }
+
+    .shot-lg { width: 100%; display: block; border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 40px 80px -44px rgba(0,0,0,.75); }
+    .shot-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+    .shot-row img { width: 100%; display: block; border: 1px solid var(--border); border-radius: 14px; }
+
+    section { padding: 84px 0; }
+    .sec-head { max-width: 48ch; margin-bottom: 44px; }
+    .sec-head h2 { font-size: clamp(1.7rem, 3.6vw, 2.3rem); letter-spacing: -.025em; margin: 12px 0 0; font-weight: 660; }
+    .sec-head p { color: var(--muted-fg); margin: 14px 0 0; font-size: 1.05rem; }
+
+    /* feature blocks with schematics */
+    .feats { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .feat { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; display: flex; flex-direction: column; transition: border-color .16s ease, transform .16s ease; }
+    .feat:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border)); transform: translateY(-2px); }
+    .feat-top { display: flex; gap: 14px; }
+    .ic { width: 40px; height: 40px; flex: none; border-radius: 10px; display: grid; place-items: center; background: color-mix(in srgb, var(--primary) 16%, var(--panel)); border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border)); }
+    .ic svg { width: 20px; height: 20px; stroke: var(--primary); fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .feat h3 { margin: 2px 0 6px; font-size: 1.08rem; letter-spacing: -.01em; }
+    .feat p { margin: 0; color: var(--muted-fg); font-size: 14px; }
+    .schema { margin-top: 18px; background: var(--panel); border: 1px solid var(--border); border-radius: 11px; padding: 16px; }
+
+    /* shared SVG schematic styles */
+    .sv { display: block; width: 100%; height: auto; }
+    .sv text { font-family: var(--mono); fill: var(--muted-fg); }
+    .s-box { fill: var(--card); stroke: var(--border); stroke-width: 1.5; }
+    .s-box2 { fill: var(--bg); stroke: var(--border); stroke-width: 1.5; }
+    .s-dash { fill: none; stroke: #6a6660; stroke-width: 1.5; stroke-dasharray: 5 4; }
+    .s-l { fill: none; stroke: var(--border); stroke-width: 1.5; }
+    .s-acc { fill: none; stroke: var(--primary); stroke-width: 2; }
+    .s-accf { fill: var(--primary); } .s-accf2 { fill: var(--primary-2); } .s-accf3 { fill: var(--primary-3); }
+    .s-tb { fill: #e9e7e0; } .s-g { fill: #4ade80; } .s-r { fill: #e5654a; }
+
+    /* compact "more" chips */
+    .more { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+    .chip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border); background: var(--card); border-radius: 999px; padding: 8px 14px; font-size: 13.5px; color: #d8d6cf; }
+    .chip svg { width: 15px; height: 15px; stroke: var(--primary); fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* architecture */
+    .arch { display: flex; flex-direction: column; gap: 0; }
+    .layer { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 22px; }
+    .layer .cap { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted-fg); margin-bottom: 14px; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .node { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 15px 17px; }
+    .node .n { font-weight: 600; }
+    .node .s { color: var(--muted-fg); font-family: var(--mono); font-size: 12px; margin-top: 5px; }
+    .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .mod { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 13px; font-size: 13px; }
+    .mod b { display: block; font-weight: 600; margin-bottom: 3px; }
+    .mod span { color: var(--muted-fg); font-family: var(--mono); font-size: 11.5px; }
+    .mod.hl { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); background: color-mix(in srgb, var(--primary) 8%, var(--card)); }
+    .conn { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 12px 0; color: var(--muted-fg); font-family: var(--mono); font-size: 11.5px; letter-spacing: .06em; }
+    .conn::before, .conn::after { content: ""; height: 1px; width: 44px; background: linear-gradient(90deg, transparent, var(--primary)); }
+    .conn::after { transform: scaleX(-1); }
+    .arch-foot { margin-top: 20px; color: var(--muted-fg); font-size: 14px; }
+
+    /* quickstart */
+    .qs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .code { position: relative; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+    .code-head { display: flex; align-items: center; justify-content: space-between; padding: 11px 14px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 12px; color: var(--muted-fg); }
+    .copy { background: transparent; border: 1px solid var(--border); color: var(--muted-fg); border-radius: 7px; padding: 4px 9px; font: inherit; font-size: 11.5px; cursor: pointer; transition: .14s; }
+    .copy:hover { color: var(--fg); border-color: #56534e; }
+    pre { margin: 0; padding: 16px; overflow-x: auto; }
+    code { font-family: var(--mono); font-size: 12.6px; line-height: 1.7; color: #e4e2db; }
+    .cm { color: #8a8880; } .ca { color: var(--primary); }
+
+    footer { border-top: 1px solid var(--border); padding: 44px 0; }
+    .foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; }
+    .foot .brand { font-size: 15px; }
+    .foot-meta { color: var(--muted-fg); font-size: 13.5px; }
+    .status { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; color: var(--muted-fg); }
+    .status .sd { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); }
+
+    @media (max-width: 900px) {
+      .hero-grid { grid-template-columns: 1fr; gap: 40px; }
+      .hero { padding: 64px 0 56px; }
+      .feats { grid-template-columns: 1fr; }
+      .qs-grid { grid-template-columns: 1fr; }
+      .row2, .grid3, .shot-row { grid-template-columns: 1fr; }
+      .nav-links .hide-sm { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap nav">
+      <a class="brand" href="#top"><img src="logo.svg" alt="" /> brigade</a>
+      <nav class="nav-links">
+        <a class="btn btn-ghost btn-sm hide-sm" href="#features">Features</a>
+        <a class="btn btn-ghost btn-sm" href="https://github.com/grigory51/brigade" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.09.68-.22.68-.49 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.49-1.11-1.49-.91-.64.07-.62.07-.62 1 .07 1.53 1.05 1.53 1.05.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.55-1.14-4.55-5.05 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05a9.4 9.4 0 0 1 5 0c1.91-1.32 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.92-2.34 4.79-4.57 5.04.36.32.68.94.68 1.9 0 1.37-.01 2.48-.01 2.82 0 .27.18.59.69.49A10.03 10.03 0 0 0 22 12.25C22 6.58 17.52 2 12 2Z"/></svg>
+          GitHub
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <a id="top"></a>
+  <div class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <div class="eyebrow">Self-hosted · Open source · MIT</div>
+        <h1>Your coding agents,<br /><span class="accent">running on your hardware.</span></h1>
+        <p class="lede">brigade keeps agent sessions alive on your own server and mirrors them to any browser. Close the laptop, open the phone — the agent keeps working.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="#quickstart">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+            Get started
+          </a>
+          <a class="btn btn-ghost" href="https://github.com/grigory51/brigade" target="_blank" rel="noopener">Star on GitHub</a>
+        </div>
+        <div class="meta-line">
+          <span><i class="dot"></i> Single Go binary</span>
+          <span><i class="dot"></i> Local or Docker</span>
+          <span><i class="dot"></i> Web, desktop &amp; mobile</span>
+        </div>
+      </div>
+
+      <div class="panel" aria-hidden="true">
+        <div class="panel-bar"><i class="tl"></i><i class="tl"></i><i class="tl"></i></div>
+        <div class="panel-body">
+          <div class="side">
+            <div class="lbl">Sessions</div>
+            <div class="srow active"><i class="sd run"></i> deploy-landing</div>
+            <div class="srow"><i class="sd on"></i> refactor-auth</div>
+            <div class="srow side-fork"><i class="sd on"></i> ↳ jwt-rotation</div>
+            <div class="srow"><i class="sd idle"></i> nightly-tests</div>
+          </div>
+          <div class="main">
+            <div class="prompt"><span class="chev">&gt;</span> ship the landing page<span class="caret"></span></div>
+            <div class="echelon">
+              <div class="abar"><span class="tag"></span> reading site/index.html <i class="pulse"></i></div>
+              <div class="abar"><span class="tag"></span> writing pages.yml <i class="pulse"></i></div>
+              <div class="abar"><span class="tag"></span> git push origin main <i class="pulse"></i></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="band">
+    <div class="wrap band-inner">
+      <div class="eyebrow">Persist &amp; resume</div>
+      <h2>The session outlives the connection.</h2>
+      <p>Agents run on the server, not in the tab. Sessions survive backend restarts and reconnects — a turn that started on your desktop finishes while you watch from your phone. Nothing to babysit.</p>
+    </div>
+  </div>
+
+  <section>
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="eyebrow">See it</div>
+        <h2>A real interface, not a wrapper.</h2>
+        <p>Structured chat with tool-call cards and quoted context, a git-backed memory dashboard, and a live session list — all in one dark, keyboard-friendly UI.</p>
+      </div>
+      <img class="shot-lg" src="shots/chat.png" alt="ACP chat with tool-call cards and quoted context" />
+      <div class="shot-row">
+        <img src="shots/memory.png" alt="Git-backed memory dashboard" />
+        <img src="shots/sessions.png" alt="Session list" />
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="eyebrow">What's inside</div>
+        <h2>One binary. The whole workflow.</h2>
+        <p>brigade spawns coding agents, keeps them alive, and gives you a real interface to drive them — terminal or structured chat, isolated how you like.</p>
+      </div>
+
+      <div class="feats">
+
+        <!-- Two session modes -->
+        <div class="feat">
+          <div class="feat-top">
+            <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3"/><path d="M13 15h4"/></svg></div>
+            <div><h3>Two session modes</h3><p>A full terminal (pty + xterm.js) or a structured chat over ACP → AG-UI: tool-call cards, diffs, plans and permission prompts.</p></div>
+          </div>
+          <div class="schema">
+            <svg class="sv" viewBox="0 0 300 132" role="img" aria-label="terminal and chat panels">
+              <rect class="s-box" x="6" y="10" width="132" height="112" rx="8"/>
+              <text x="18" y="34" font-size="10">$ npm run dev</text>
+              <text x="18" y="52" class="s-tb" font-size="10">▸ ready :3000</text>
+              <rect class="s-accf" x="18" y="62" width="8" height="12"/>
+              <text x="18" y="112" font-size="9">TERMINAL</text>
+              <rect class="s-box" x="162" y="10" width="132" height="112" rx="8"/>
+              <rect class="s-box2" x="174" y="22" width="70" height="14" rx="7"/>
+              <rect class="s-box2" x="192" y="42" width="90" height="16" rx="8"/>
+              <rect class="s-box2" x="174" y="66" width="108" height="34" rx="6"/>
+              <rect class="s-g" x="182" y="74" width="7" height="7" rx="1.5"/><text x="194" y="80" font-size="8">+ added</text>
+              <rect class="s-r" x="182" y="86" width="7" height="7" rx="1.5"/><text x="194" y="92" font-size="8">- removed</text>
+              <text x="174" y="114" font-size="9">CHAT</text>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Any ACP agent -->
+        <div class="feat">
+          <div class="feat-top">
+            <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><circle cx="12" cy="12" r="4"/></svg></div>
+            <div><h3>Any ACP agent</h3><p>Claude Code works today. Sessions speak <span class="accent">ACP</span> (with a CLI under the hood), so opencode and other agents drop in next — no rewrite.</p></div>
+          </div>
+          <div class="schema">
+            <svg class="sv" viewBox="0 0 300 132" role="img" aria-label="brigade speaks ACP to swappable agents">
+              <rect class="s-box" x="10" y="46" width="86" height="40" rx="9"/>
+              <text x="30" y="70" class="s-tb" font-size="12">brigade</text>
+              <path class="s-acc" d="M96 66 H150"/>
+              <text x="104" y="60" class="accent" font-size="9" fill="#c96442">ACP</text>
+              <rect class="s-box" x="150" y="16" width="132" height="26" rx="7"/>
+              <circle class="s-g" cx="164" cy="29" r="4"/><text x="176" y="33" class="s-tb" font-size="11">Claude Code</text>
+              <rect class="s-dash" x="150" y="53" width="132" height="26" rx="7"/>
+              <circle cx="164" cy="66" r="4" fill="#6a6660"/><text x="176" y="70" font-size="11">opencode · soon</text>
+              <rect class="s-dash" x="150" y="90" width="132" height="26" rx="7"/>
+              <text x="164" y="107" font-size="11">…any ACP agent</text>
+              <path class="s-l" d="M150 29 H150 M138 66 H150 M138 103 H150"/>
+              <path class="s-acc" d="M96 66 C120 66 126 29 150 29 M96 66 C120 66 126 103 150 103"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Local or Docker -->
+        <div class="feat">
+          <div class="feat-top">
+            <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M21 8V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v2"/><path d="M7 12h.01M7 16h.01"/></svg></div>
+            <div><h3>Local or Docker isolation</h3><p>Run agents as host processes, or one container per session. Set per instance; every session resumes from agent state after a restart.</p></div>
+          </div>
+          <div class="schema">
+            <svg class="sv" viewBox="0 0 300 132" role="img" aria-label="local process vs docker container">
+              <text x="8" y="20" font-size="9">LOCAL</text>
+              <line class="s-l" x1="8" y1="98" x2="140" y2="98"/>
+              <rect class="s-box" x="30" y="54" width="88" height="34" rx="9"/>
+              <text x="46" y="75" class="s-tb" font-size="11">agent pty</text>
+              <line class="s-l" x1="74" y1="88" x2="74" y2="98"/>
+              <text x="162" y="20" font-size="9">DOCKER</text>
+              <rect class="s-dash" x="162" y="28" width="130" height="86" rx="10"/>
+              <rect class="s-box" x="182" y="54" width="90" height="34" rx="9"/>
+              <text x="196" y="75" class="s-tb" font-size="11">session</text>
+              <text x="172" y="46" font-size="9">container</text>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Session tree -->
+        <div class="feat">
+          <div class="feat-top">
+            <div class="ic"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="9" r="2.5"/><path d="M6 8.5v7M8.5 6H14a2 2 0 0 1 2 2v-.5"/></svg></div>
+            <div><h3>Session tree</h3><p>Fork any chat into an independent branch — full history carried over — and explore two directions without losing the first.</p></div>
+          </div>
+          <div class="schema">
+            <svg class="sv" viewBox="0 0 300 132" role="img" aria-label="a session forking into a branch">
+              <path class="s-acc" d="M20 96 H280"/>
+              <circle class="s-accf" cx="60" cy="96" r="6"/><circle class="s-accf" cx="140" cy="96" r="6"/><circle class="s-accf" cx="240" cy="96" r="6"/>
+              <path class="s-l" d="M140 96 C180 96 180 44 220 44"/>
+              <circle class="s-accf2" cx="220" cy="44" r="6"/><circle class="s-accf2" cx="270" cy="44" r="6"/>
+              <path class="s-l" d="M220 44 H270"/>
+              <text x="150" y="40" font-size="10">fork · branch</text>
+              <text x="20" y="120" font-size="10">main session</text>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Preview proxy -->
+        <div class="feat">
+          <div class="feat-top">
+            <div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/></svg></div>
+            <div><h3>Preview proxy</h3><p>A dev server the agent starts is instantly live at a per-session subdomain — built-in L7 proxy and TLS, no reverse proxy to wire up.</p></div>
+          </div>
+          <div class="schema">
+            <svg class="sv" viewBox="0 0 300 132" role="img" aria-label="browser to preview url to session port">
+              <rect class="s-box" x="8" y="50" width="70" height="34" rx="8"/><text x="24" y="71" class="s-tb" font-size="11">browser</text>
+              <path class="s-acc" d="M78 67 H108"/>
+              <rect class="s-box2" x="108" y="46" width="112" height="42" rx="10"/>
+              <path class="s-acc" d="M122 67 a5 5 0 0 1 10 0" /><rect class="s-accf" x="121" y="66" width="12" height="9" rx="2"/>
+              <text x="138" y="64" class="s-tb" font-size="9">app-3000</text>
+              <text x="138" y="76" font-size="9">.you.dev</text>
+              <path class="s-acc" d="M220 67 H250"/>
+              <rect class="s-box" x="250" y="50" width="44" height="34" rx="8"/><text x="258" y="71" class="s-tb" font-size="10">:3000</text>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Git-backed memory -->
+        <div class="feat">
+          <div class="feat-top">
+            <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M14 3v5h5M8 13h6M8 17h4"/></svg></div>
+            <div><h3>Memory in your own git</h3><p>You and the agent save notes to a personal, searchable store — markdown <span class="accent">committed to your own git repo</span>. Delete the chat, keep the knowledge; organized into topics.</p></div>
+          </div>
+          <div class="schema">
+            <svg class="sv" viewBox="0 0 300 132" role="img" aria-label="a note committed to a git repo">
+              <rect class="s-box" x="10" y="34" width="78" height="64" rx="8"/>
+              <line class="s-l" x1="22" y1="52" x2="76" y2="52"/><line class="s-l" x1="22" y1="64" x2="76" y2="64"/><line class="s-l" x1="22" y1="76" x2="60" y2="76"/>
+              <text x="20" y="114" font-size="9">note.md</text>
+              <path class="s-acc" d="M88 66 H120"/>
+              <path class="s-acc" d="M126 66 H250"/>
+              <circle class="s-accf3" cx="140" cy="66" r="6"/><circle class="s-accf2" cx="188" cy="66" r="6"/><circle class="s-accf" cx="236" cy="66" r="6"/>
+              <rect class="s-box" x="256" y="46" width="36" height="40" rx="8"/>
+              <text x="264" y="70" class="s-tb" font-size="10">git</text>
+              <text x="126" y="100" font-size="9">commits · searchable · durable</text>
+            </svg>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="more">
+        <span class="chip"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m8 10 2 2-2 2M13 15h3"/></svg> Side terminal</span>
+        <span class="chip"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/></svg> Model switcher</span>
+        <span class="chip"><svg viewBox="0 0 24 24"><path d="m7 8-4 4 4 4M17 8l4 4-4 4M14 4l-4 16"/></svg> Slash commands</span>
+        <span class="chip"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m7 14 4-4 3 3 5-6"/></svg> Live usage</span>
+        <span class="chip"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg> Desktop app (macOS)</span>
+        <span class="chip"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg> Mobile client (KMP)</span>
+      </div>
+    </div>
+  </section>
+
+  <section style="padding-top:0">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="eyebrow">Architecture</div>
+        <h2>Browser in, agents out.</h2>
+        <p>One Go binary serves every surface — API, embedded SPA, terminal and chat streams, auth, storage, the preview proxy — then spawns an agent per session.</p>
+      </div>
+
+      <div class="arch">
+        <div class="layer">
+          <div class="cap">Clients — share the proto contract</div>
+          <div class="row2">
+            <div class="node"><div class="n">Browser</div><div class="s">React · xterm.js · AG-UI chat</div></div>
+            <div class="node"><div class="n">Mobile</div><div class="s">Kotlin Multiplatform · iOS &amp; Android</div></div>
+          </div>
+        </div>
+
+        <div class="conn">ConnectRPC · WebSocket · SSE</div>
+
+        <div class="layer">
+          <div class="cap">brigade — single Go binary</div>
+          <div class="grid3">
+            <div class="mod"><b>ConnectRPC API</b><span>+ embedded SPA (go:embed)</span></div>
+            <div class="mod"><b>WS streams</b><span>terminal · side shell</span></div>
+            <div class="mod"><b>SSE chat</b><span>ACP → AG-UI</span></div>
+            <div class="mod"><b>L7 preview proxy</b><span>wildcard + TLS</span></div>
+            <div class="mod"><b>Auth · SQLite</b><span>JWT · sessions · resume</span></div>
+            <div class="mod hl"><b>Spawner</b><span>local pty │ docker</span></div>
+          </div>
+        </div>
+
+        <div class="conn">spawns one agent per session</div>
+
+        <div class="layer">
+          <div class="cap">Per session</div>
+          <div class="row2">
+            <div class="node"><div class="n">claude-agent-acp → agent</div><div class="s">local process or docker container · resumable</div></div>
+            <div class="node"><div class="n">Git-backed memory</div><div class="s">notes committed to your repo</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="arch-foot">The protobuf contract in <span class="accent">proto/</span> is the single source of truth — the web and mobile clients are generated from it.</div>
+    </div>
+  </section>
+
+  <section id="quickstart" style="padding-top:0">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="eyebrow">Quick start</div>
+        <h2>Running in a couple of commands.</h2>
+        <p>Two ways to run it — a prebuilt binary or Docker. It drives Claude Code today; more ACP agents are on the way.</p>
+      </div>
+      <div class="qs-grid">
+        <div class="code">
+          <div class="code-head"><span>Prebuilt binary — embeds the web UI</span><button class="copy" type="button">Copy</button></div>
+<pre><code><span class="cm"># latest linux/amd64 build from GitHub Releases</span>
+curl -L https://github.com/grigory51/brigade/releases/latest/download/brigade-linux-amd64.tar.gz | tar xz
+./brigade --config config.yaml   <span class="cm"># → http://localhost:8080</span></code></pre>
+        </div>
+        <div class="code">
+          <div class="code-head"><span>Docker — a container per session</span><button class="copy" type="button">Copy</button></div>
+<pre><code>docker run -d --name brigade -p 8080:8080 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v brigade-data:/data \
+  -e <span class="ca">BRIGADE_MODE</span>=docker \
+  -e <span class="ca">BRIGADE_JWT__SECRET</span>=change-me \
+  ghcr.io/grigory51/brigade:latest</code></pre>
+        </div>
+      </div>
+      <p style="margin-top:18px; color:var(--muted-fg); font-size:14.5px;">
+        Prefer a native window? <span class="accent">make app</span> bundles a self-contained
+        <b style="color:var(--fg); font-weight:600;">Brigade.app</b> for macOS — the same brigade,
+        node and agent runtime included. A Kotlin Multiplatform mobile client shares the backend too.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap foot">
+      <div>
+        <a class="brand" href="#top"><img src="logo.svg" alt="" style="width:26px;height:26px" /> brigade</a>
+        <div class="foot-meta" style="margin-top:10px">Self-hosted multiplexer for coding agents · MIT</div>
+      </div>
+      <div style="display:flex; flex-direction:column; align-items:flex-end; gap:10px">
+        <a class="btn btn-ghost btn-sm" href="https://github.com/grigory51/brigade" target="_blank" rel="noopener">github.com/grigory51/brigade</a>
+        <span class="status"><i class="sd"></i> Early and moving fast — run it behind a VPN</span>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    document.querySelectorAll('.copy').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var code = btn.closest('.code').querySelector('code');
+        navigator.clipboard.writeText(code.innerText).then(function () {
+          var prev = btn.textContent; btn.textContent = 'Copied';
+          setTimeout(function () { btn.textContent = prev; }, 1400);
+        });
+      });
+    });
+  </script>
+</body>
+</html>

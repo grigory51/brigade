@@ -1,0 +1,9 @@
+{
+  "name": "brigade-screenshots",
+  "private": true,
+  "type": "module",
+  "description": "Playwright-снимки UI brigade для README и лендинга (→ site/shots).",
+  "dependencies": {
+    "playwright": "^1.48.0"
+  }
+}

@@ -74,12 +74,18 @@ jobs:
       - name: build
         run: make build
       # Корневой `make build` делегирует в backend/, поэтому артефакт — backend/bin/brigade.
+      # Два ассета: версионный (для явной пометки) и версионно-независимый — последний даёт
+      # стабильный URL releases/latest/download/brigade-linux-amd64.tar.gz (сниппет «скачать бинарь»).
       - name: package
-        run: tar -czf "brigade-${{ github.ref_name }}-linux-amd64.tar.gz" -C backend/bin brigade
+        run: |
+          tar -czf "brigade-${{ github.ref_name }}-linux-amd64.tar.gz" -C backend/bin brigade
+          cp "brigade-${{ github.ref_name }}-linux-amd64.tar.gz" brigade-linux-amd64.tar.gz
       - name: release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           # Теги с суффиксом (v1.2.3-rc1) помечаются пре-релизом.
           prerelease: ${{ contains(github.ref_name, '-') }}
-          files: brigade-${{ github.ref_name }}-linux-amd64.tar.gz
+          files: |
+            brigade-${{ github.ref_name }}-linux-amd64.tar.gz
+            brigade-linux-amd64.tar.gz
