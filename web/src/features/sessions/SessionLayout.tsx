@@ -799,13 +799,23 @@ function SessionTopbar() {
   // в развёрнутом её дублирует триггер в шапке sidebar. На мобильном (offcanvas)
   // триггер нужен всегда — он открывает выезжающую панель.
   const showTrigger = isMobile || state === "collapsed";
+  const hasContent = Boolean(title || right);
 
-  // Шапку не рендерим вовсе, когда показывать в ней нечего (нет заголовка, нет
-  // правого слота и триггер не нужен) — экран отдаёт всю высоту содержимому.
-  if (!showTrigger && !title && !right) {
+  // Ничего показывать и разворачивать не нужно — шапки нет вовсе, экран отдаёт всю высоту.
+  if (!showTrigger && !hasContent) {
     return null;
   }
 
+  // Нужен только триггер (sidebar свёрнут, у экрана нет своей шапки): не занимаем целую
+  // полосу-хедер ради одной кнопки — показываем компактный плавающий триггер в углу поверх
+  // контента. Позиционируется относительно SidebarInset (он relative).
+  if (!hasContent) {
+    return (
+      <SidebarTrigger className="absolute left-2 top-2 z-20 size-8 rounded-md border bg-background/80 shadow-sm backdrop-blur hover:bg-accent" />
+    );
+  }
+
+  // Есть заголовок/правый слот — обычная шапка, триггер встроен слева.
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b px-4">
       <div className="flex min-w-0 items-center gap-3">
