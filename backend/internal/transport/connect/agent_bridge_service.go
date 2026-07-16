@@ -71,6 +71,8 @@ func (s *AgentBridgeService) CreateMemoryNote(ctx context.Context, req *connect.
 		Tags:    req.Msg.Tags,
 		Session: req.Msg.SessionId,
 		Layer:   req.Msg.Layer,
+		Sub:     req.Msg.Sub,
+		From:    "чат",
 	})
 	if err != nil {
 		return nil, memoryError(err)

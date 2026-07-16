@@ -14,8 +14,11 @@ import (
 func TestInstallSkillValidPluginFormat(t *testing.T) {
 	cwd := t.TempDir()
 
-	// Предзаданный settings.json: чужой ключ + СТАРЫЙ невалидный формат brigade (проверяем миграцию).
-	old := `{"foreign":true,"enabledPlugins":{"brigade":{"source":{"source":"directory","path":".claude/plugins/brigade"}}}}`
+	// Предзаданный settings.json: чужой ключ + СТАРЫЙ невалидный формат brigade + прежние
+	// per-marketplace-записи (константный brigade-local) — проверяем миграцию и очистку.
+	old := `{"foreign":true,` +
+		`"enabledPlugins":{"brigade":{"x":1},"brigade@brigade-local":true},` +
+		`"extraKnownMarketplaces":{"brigade-local":{"source":{"source":"directory","path":"x"}},"other-mp":{"source":{}}}}`
 	if err := os.MkdirAll(filepath.Join(cwd, ".claude"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -23,7 +26,8 @@ func TestInstallSkillValidPluginFormat(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := InstallSkill(cwd); err != nil {
+	const mpID = "brigade-testsess"
+	if err := InstallSkill(cwd, mpID); err != nil {
 		t.Fatalf("InstallSkill: %v", err)
 	}
 
@@ -41,15 +45,24 @@ func TestInstallSkillValidPluginFormat(t *testing.T) {
 	}
 
 	enabled, _ := s["enabledPlugins"].(map[string]any)
-	if enabled["brigade@brigade-local"] != true {
-		t.Errorf("нет enabledPlugins[brigade@brigade-local]=true: %v", enabled)
+	if enabled["brigade@"+mpID] != true {
+		t.Errorf("нет enabledPlugins[brigade@%s]=true: %v", mpID, enabled)
 	}
 	if _, bad := enabled["brigade"]; bad {
 		t.Error("остался прежний невалидный ключ enabledPlugins.brigade")
 	}
+	if _, stale := enabled["brigade@brigade-local"]; stale {
+		t.Error("прежний enabledPlugins[brigade@brigade-local] не очищен")
+	}
 	markets, _ := s["extraKnownMarketplaces"].(map[string]any)
-	if _, ok := markets["brigade-local"].(map[string]any); !ok {
-		t.Errorf("нет extraKnownMarketplaces[brigade-local]: %v", markets)
+	if _, ok := markets[mpID].(map[string]any); !ok {
+		t.Errorf("нет extraKnownMarketplaces[%s]: %v", mpID, markets)
+	}
+	if _, stale := markets["brigade-local"]; stale {
+		t.Error("прежний extraKnownMarketplaces[brigade-local] не очищен")
+	}
+	if _, ok := markets["other-mp"]; !ok {
+		t.Error("чужой marketplace other-mp затёрт")
 	}
 	if s["foreign"] != true {
 		t.Error("чужой ключ settings затёрт")

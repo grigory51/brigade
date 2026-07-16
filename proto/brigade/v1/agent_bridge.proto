@@ -39,6 +39,8 @@ message CreateMemoryNoteRequest {
   // topic — ИМЯ темы-владельца (человекочитаемое, напр. "DIY"). Тема создаётся, если её нет;
   // совпадение с существующей — по slug/имени. Пусто → виртуальная «Общее». НЕ путать с tags.
   string topic = 7;
+  // sub — подтема внутри темы (напр. "Аккумуляторы"). Пусто → «Общее».
+  string sub = 8;
 }
 
 message CreateMemoryNoteResponse {

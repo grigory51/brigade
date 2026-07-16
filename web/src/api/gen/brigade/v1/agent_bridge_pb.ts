@@ -138,6 +138,13 @@ export class CreateMemoryNoteRequest extends Message<CreateMemoryNoteRequest> {
    */
   topic = "";
 
+  /**
+   * sub — подтема внутри темы (напр. "Аккумуляторы"). Пусто → «Общее».
+   *
+   * @generated from field: string sub = 8;
+   */
+  sub = "";
+
   constructor(data?: PartialMessage<CreateMemoryNoteRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -153,6 +160,7 @@ export class CreateMemoryNoteRequest extends Message<CreateMemoryNoteRequest> {
     { no: 5, name: "tags", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 6, name: "layer", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 7, name: "topic", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 8, name: "sub", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CreateMemoryNoteRequest {

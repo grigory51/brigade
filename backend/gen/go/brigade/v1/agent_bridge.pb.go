@@ -135,7 +135,9 @@ type CreateMemoryNoteRequest struct {
 	Layer     string                 `protobuf:"bytes,6,opt,name=layer,proto3" json:"layer,omitempty"` // semantic (дефолт) | episodic (саммари сессии)
 	// topic — ИМЯ темы-владельца (человекочитаемое, напр. "DIY"). Тема создаётся, если её нет;
 	// совпадение с существующей — по slug/имени. Пусто → виртуальная «Общее». НЕ путать с tags.
-	Topic         string `protobuf:"bytes,7,opt,name=topic,proto3" json:"topic,omitempty"`
+	Topic string `protobuf:"bytes,7,opt,name=topic,proto3" json:"topic,omitempty"`
+	// sub — подтема внутри темы (напр. "Аккумуляторы"). Пусто → «Общее».
+	Sub           string `protobuf:"bytes,8,opt,name=sub,proto3" json:"sub,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -219,6 +221,13 @@ func (x *CreateMemoryNoteRequest) GetTopic() string {
 	return ""
 }
 
+func (x *CreateMemoryNoteRequest) GetSub() string {
+	if x != nil {
+		return x.Sub
+	}
+	return ""
+}
+
 type CreateMemoryNoteResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -283,7 +292,7 @@ const file_brigade_v1_agent_bridge_proto_rawDesc = "" +
 	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\"+\n" +
 	"\x17RegisterPreviewResponse\x12\x10\n" +
-	"\x03url\x18\x01 \x01(\tR\x03url\"\xb6\x01\n" +
+	"\x03url\x18\x01 \x01(\tR\x03url\"\xc8\x01\n" +
 	"\x17CreateMemoryNoteRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x14\n" +
@@ -292,7 +301,8 @@ const file_brigade_v1_agent_bridge_proto_rawDesc = "" +
 	"\x04type\x18\x04 \x01(\tR\x04type\x12\x12\n" +
 	"\x04tags\x18\x05 \x03(\tR\x04tags\x12\x14\n" +
 	"\x05layer\x18\x06 \x01(\tR\x05layer\x12\x14\n" +
-	"\x05topic\x18\a \x01(\tR\x05topic\"I\n" +
+	"\x05topic\x18\a \x01(\tR\x05topic\x12\x10\n" +
+	"\x03sub\x18\b \x01(\tR\x03sub\"I\n" +
 	"\x18CreateMemoryNoteResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
