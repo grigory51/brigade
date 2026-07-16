@@ -872,15 +872,70 @@ func (r *Registry) watchExit(sessionID string, handle spawn.Handle) {
 	r.releaseUserContainerIfIdle(owner)
 }
 
-// Handle реализует termws.HandleProvider: отдаёт Handle CLI-сессии её владельцу.
-func (r *Registry) Handle(sessionID, userID string) (spawn.Handle, bool) {
+// Handle реализует termws.HandleProvider: отдаёт Handle CLI-сессии её владельцу, при
+// необходимости пере-подняв мёртвую среду (симметрично EnsureACPClient для ACP). docker:
+// per-user демон/терминал мог умереть вне рестарта brigade (docker rm) — поток stale-хэндла
+// оборван (pump помечает streamDead, но waitCh не закрывает, поэтому watchExit сессию не
+// снимает), и терминал сразу отвалился бы. Мёртвый хэндл → пере-поднимаем демон и терминал с
+// resume. local: процесс durable в рамках работы brigade; его смерть снимает watchExit,
+// мёртвый local-хэндл сюда не долетает (Alive у него нет — считаем живым).
+func (r *Registry) Handle(ctx context.Context, sessionID, userID string) (spawn.Handle, bool) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	lv, ok := r.live[sessionID]
+	r.mu.Unlock()
 	if !ok || lv.owner != userID || lv.handle == nil {
 		return nil, false
 	}
-	return lv.handle, true
+	if lv.mode != store.SessionModeDocker || handleAlive(lv.handle) {
+		return lv.handle, true
+	}
+
+	// Мёртв — сериализуем респавн per-user (демон общий на все CLI-сессии пользователя).
+	unlock := r.lockUser(userID)
+	defer unlock()
+	r.mu.Lock()
+	lv = r.live[sessionID]
+	r.mu.Unlock()
+	if lv == nil || lv.handle == nil {
+		return nil, false
+	}
+	if handleAlive(lv.handle) {
+		return lv.handle, true
+	}
+
+	sess, err := r.Get(ctx, sessionID, userID)
+	if err != nil {
+		log.Printf("session: ensure cli %s: get session: %v", sessionID, err)
+		return nil, false
+	}
+	newLv, _, _, err := r.spawnCLIDaemon(ctx, sess, r.userClaudeToken(ctx, sess.UserID), sess.AgentSessionID)
+	if err != nil {
+		log.Printf("session: ensure cli %s: respawn: %v", sessionID, err)
+		return nil, false
+	}
+	r.mu.Lock()
+	old := r.live[sessionID]
+	r.live[sessionID] = newLv
+	r.mu.Unlock()
+	// Старый хэндл мёртв окончательно — Abandon отцепляет И разблокирует его watchExit
+	// (иначе горутина повисла бы на Wait: обрыв стрима waitCh не закрывает).
+	if old != nil && old.handle != nil {
+		if ab, ok := old.handle.(interface{ Abandon() }); ok {
+			ab.Abandon()
+		} else {
+			_ = old.handle.Close()
+		}
+	}
+	return newLv.handle, true
+}
+
+// handleAlive — жив ли поток терминала (cliremote реализует Alive). Хэндл без Alive считаем
+// живым: respawn был бы не по адресу.
+func handleAlive(h spawn.Handle) bool {
+	if a, ok := h.(interface{ Alive() bool }); ok {
+		return a.Alive()
+	}
+	return true
 }
 
 // Shell реализует termws.ShellProvider: спавнит вспомогательный шелл рядом с сессией

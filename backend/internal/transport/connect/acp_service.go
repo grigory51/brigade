@@ -40,9 +40,26 @@ func (s *AcpService) bindable(ctx context.Context, threadID string) (agui.Bindab
 	return b, nil
 }
 
+// ensureBindable — как bindable, но пере-поднимает мёртвую среду агента перед выдачей
+// (EnsureBindable). Для путей, где пользователь реально ОТКРЫВАЕТ сессию (история): если
+// контейнер/адаптер умер вне рестарта brigade, он оживает с resume, а не отдаёт пустую ленту.
+// GetStatus сюда НЕ переводим: его часто поллят (в т.ч. для индикации в списке), и респавн на
+// каждый полл будил бы остановленные контейнеры зря.
+func (s *AcpService) ensureBindable(ctx context.Context, threadID string) (agui.Bindable, error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	b, ok := s.provider.EnsureBindable(ctx, threadID, userID)
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, errSessionNotFound)
+	}
+	return b, nil
+}
+
 // GetHistory отдаёт ленту чата плюс снимки команд и опций сессии.
 func (s *AcpService) GetHistory(ctx context.Context, req *connect.Request[v1.GetHistoryRequest]) (*connect.Response[v1.GetHistoryResponse], error) {
-	b, err := s.bindable(ctx, req.Msg.ThreadId)
+	b, err := s.ensureBindable(ctx, req.Msg.ThreadId)
 	if err != nil {
 		return nil, err
 	}

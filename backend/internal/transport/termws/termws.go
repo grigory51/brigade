@@ -67,9 +67,10 @@ type TicketRedeemer interface {
 // Удовлетворяется реестром живых сессий (internal/session, шаг 3). До его готовности
 // транспорт компилируется и тестируется против любой реализации этого интерфейса.
 type HandleProvider interface {
-	// Handle возвращает Handle сессии и принадлежащего ей пользователя. ok=false,
-	// если сессия неизвестна, мертва или принадлежит другому пользователю.
-	Handle(sessionID, userID string) (h spawn.Handle, ok bool)
+	// Handle возвращает Handle сессии и принадлежащего ей пользователя, при необходимости
+	// пере-подняв мёртвую среду агента (docker-демон убит вне рестарта brigade). ok=false,
+	// если сессия неизвестна, принадлежит другому пользователю либо среду поднять не удалось.
+	Handle(ctx context.Context, sessionID, userID string) (h spawn.Handle, ok bool)
 }
 
 // clientMessage — входящее сообщение от клиента (клиент→сервер).
@@ -100,7 +101,7 @@ func Handler(tickets TicketRedeemer, provider HandleProvider) http.Handler {
 			return
 		}
 
-		handle, ok := provider.Handle(sessionID, userID)
+		handle, ok := provider.Handle(r.Context(), sessionID, userID)
 		if !ok {
 			http.Error(w, "сессия не найдена", http.StatusNotFound)
 			return

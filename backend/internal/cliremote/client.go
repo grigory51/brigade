@@ -35,9 +35,10 @@ type Client struct {
 	pr     *io.PipeReader
 	pw     *io.PipeWriter
 
-	mu       sync.Mutex
-	exitCode int
-	waitCh   chan struct{} // закрыт при завершении процесса (получен exited-сигнал)
+	mu         sync.Mutex
+	exitCode   int
+	streamDead bool          // поток вывода терминала оборван (детач Close ИЛИ смерть демона)
+	waitCh     chan struct{} // закрыт при завершении процесса (получен exited-сигнал)
 }
 
 // New создаёт клиент к per-user демону по baseURL. termID — id CLI-сессии (терминала);
@@ -112,6 +113,12 @@ func (c *Client) pump(stream *connect.ServerStreamForClient[v1.DaemonTerminalOut
 			break
 		}
 	}
+	// Поток завершился: либо чистый exited-сигнал (выше), либо обрыв (детач нами или смерть
+	// демона/контейнера вне рестарта brigade). Помечаем хэндл непригодным — реестр по Alive
+	// решит, пере-поднять ли среду перед выдачей терминалу (см. Registry.Handle).
+	c.mu.Lock()
+	c.streamDead = true
+	c.mu.Unlock()
 	_ = c.pw.CloseWithError(io.EOF)
 }
 
@@ -161,6 +168,30 @@ func (c *Client) ExitCode() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.exitCode
+}
+
+// Alive сообщает, жив ли поток вывода терминала. false — стрим оборван: детач нами (Close)
+// ЛИБО смерть демона/контейнера (docker rm вне рестарта brigade). Реестр по нему решает,
+// пере-поднять ли среду перед выдачей хэндла терминалу (см. Registry.Handle).
+func (c *Client) Alive() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return !c.streamDead
+}
+
+// Abandon — teardown окончательно мёртвого хэндла при пере-подъёме среды: как Close, но ещё
+// разблокирует Wait (закрывает waitCh). Обрыв стрима waitCh НЕ закрывает (durable-семантика
+// для reconnect), поэтому без этого горутина watchExit, ждущая Wait, повисла бы навсегда.
+// Использовать только когда среда пере-поднимается заново (не при штатном рестарте brigade).
+func (c *Client) Abandon() {
+	c.mu.Lock()
+	select {
+	case <-c.waitCh:
+	default:
+		close(c.waitCh)
+	}
+	c.mu.Unlock()
+	_ = c.Close()
 }
 
 // History пуст: scrollback приходит первым сообщением durable-стрима (через Read) на attach.
