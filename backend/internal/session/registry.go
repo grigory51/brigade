@@ -551,7 +551,7 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 		}
 		// local: acp.New сам поднимает adapter-subprocess в процессе brigade (без демона —
 		// он умрёт с brigade, restore пере-спавнит через session/load).
-		client, err := acp.New(ctx, acp.Options{Cwd: sess.Cwd, OAuthToken: token, ExtraEnv: r.previewEnv(sess)})
+		client, err := acp.New(ctx, r.acpLocalOptions(sess, token))
 		if err != nil {
 			return nil, "", "", fmt.Errorf("session: spawn acp: %w", err)
 		}
@@ -678,6 +678,21 @@ func (r *Registry) acpPluginDirs(sess store.Session) []string {
 		return nil
 	}
 	return []string{sess.Cwd + "/" + preview.PluginDirRel}
+}
+
+// acpLocalOptions — общие опции local-адаптера ACP (acp.New): cwd, токен, preview-env, MCP-сервер
+// brigade (render_ui/show_choice) и каталог плагина со скиллами. ЕДИНАЯ точка, чтобы ВСЕ пути
+// (создание, restore, respawn, reload, fork) поднимали адаптер с одинаковым набором — иначе часть
+// путей теряет --plugin-dir/MCP и скиллы (/note) либо render_ui пропадают. Resume/Fork
+// вызывающий доставляет сам поверх.
+func (r *Registry) acpLocalOptions(sess store.Session, token string) acp.Options {
+	return acp.Options{
+		Cwd:        sess.Cwd,
+		OAuthToken: token,
+		ExtraEnv:   r.previewEnv(sess),
+		McpServers: []acpsdk.McpServer{acp.BrigadeMCPServer()},
+		PluginDirs: r.acpPluginDirs(sess),
+	}
 }
 
 // acpDaemonTeardown — замыкание удаления контейнера ACP-демона (для live.teardown, docker).
@@ -1082,12 +1097,9 @@ func (r *Registry) reviveACP(ctx context.Context, sess store.Session) (*live, er
 		}
 		return lv, nil
 	}
-	client, err := acp.New(ctx, acp.Options{
-		Cwd:             sess.Cwd,
-		OAuthToken:      token,
-		ResumeSessionID: sess.AgentSessionID,
-		ExtraEnv:        r.previewEnv(sess),
-	})
+	opts := r.acpLocalOptions(sess, token)
+	opts.ResumeSessionID = sess.AgentSessionID
+	client, err := acp.New(ctx, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -1145,12 +1157,9 @@ func (r *Registry) ReloadAgent(ctx context.Context, sessionID, userID string) er
 
 	// local: переподнимаем subprocess-адаптер с resume — session/load читает свежие плагины из
 	// проектного settings.json (--setting-sources project). Новый клиент заменяет старый.
-	client, err := acp.New(ctx, acp.Options{
-		Cwd:             sess.Cwd,
-		OAuthToken:      token,
-		ResumeSessionID: sess.AgentSessionID,
-		ExtraEnv:        r.previewEnv(sess),
-	})
+	opts := r.acpLocalOptions(sess, token)
+	opts.ResumeSessionID = sess.AgentSessionID
+	client, err := acp.New(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("session: reload acp: %w", err)
 	}
@@ -1239,13 +1248,9 @@ func (r *Registry) Fork(ctx context.Context, sessionID, userID string) (store.Se
 		}
 		lv, sid = l, s
 	} else {
-		client, err := acp.New(context.WithoutCancel(ctx), acp.Options{
-			Cwd:               sess.Cwd,
-			OAuthToken:        token,
-			ForkFromSessionID: src.AgentSessionID,
-			ExtraEnv:          r.previewEnv(sess),
-			PluginDirs:        r.acpPluginDirs(sess),
-		})
+		opts := r.acpLocalOptions(sess, token)
+		opts.ForkFromSessionID = src.AgentSessionID
+		client, err := acp.New(context.WithoutCancel(ctx), opts)
 		if err != nil {
 			// Ветка не создалась — запись убираем целиком, полусозданное состояние хуже ошибки.
 			_ = r.store.DeleteSession(ctx, sess.ID)
@@ -1582,13 +1587,9 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 		// PluginDirs обязателен и здесь (как в Create/ReloadAgent): session/load шлёт плагин-мета
 		// из него, иначе resume-агент не перечитает скиллы и оставит их из старого состояния
 		// сессии (напр. переименованный скилл не подхватится при рестарте brigade).
-		client, err := acp.New(ctx, acp.Options{
-			Cwd:             sess.Cwd,
-			OAuthToken:      token,
-			ResumeSessionID: sess.AgentSessionID,
-			ExtraEnv:        r.previewEnv(sess),
-			PluginDirs:      r.acpPluginDirs(sess),
-		})
+		opts := r.acpLocalOptions(sess, token)
+		opts.ResumeSessionID = sess.AgentSessionID
+		client, err := acp.New(ctx, opts)
 		if err != nil {
 			return fmt.Errorf("reattach acp: %w", err)
 		}
