@@ -305,6 +305,16 @@ func (p aguiProvider) Bindable(sessionID, userID string) (aguitransport.Bindable
 	return c, true
 }
 
+// EnsureBindable — как Bindable, но пере-поднимает мёртвую среду агента перед turn'ом
+// (см. session.Registry.EnsureACPClient).
+func (p aguiProvider) EnsureBindable(ctx context.Context, sessionID, userID string) (aguitransport.Bindable, bool) {
+	c, ok := p.registry.EnsureACPClient(ctx, sessionID, userID)
+	if !ok {
+		return nil, false
+	}
+	return c, true
+}
+
 // SessionWorkflows отдаёт workflow-запуски харнесса для панели фоновых задач,
 // конвертируя session.WorkflowInfo в wire-форму транспорта.
 func (p aguiProvider) SessionWorkflows(ctx context.Context, sessionID, userID string) ([]aguitransport.WorkflowInfo, bool) {

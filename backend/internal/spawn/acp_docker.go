@@ -52,15 +52,30 @@ func (d *DockerACPSpawner) StartDaemon(ctx context.Context, spec Spec, stateID, 
 		image = defaultImage
 	}
 
-	var homeMount mount.Mount
+	// home НЕ монтируется целиком: bind'ятся отдельные подпути, чтобы сессия видела в
+	// ~/workspace только свою папку (весь home расшаривал per-session подкаталоги между
+	// сессиями пользователя). Общий per-user стейт (.claude, .ssh) и durable-журнал демона
+	// (.brigade/<id>) — отдельными mount'ами; .claude.json намеренно НЕ монтируем (single-file
+	// bind рвётся при atomic-rename Claude'ом; логин идёт через env CLAUDE_CODE_OAUTH_TOKEN).
+	// Прочие dotfiles (~/.gitconfig и т.п.) при этом эфемерны. Source-каталоги готовит
+	// registry.homeHost/provisionAgentSSH на хосте. Docker сам сортирует mount'ы по глубине
+	// target — вложенность корректна.
+	var mounts []mount.Mount
 	if spec.HomeHost != "" {
-		homeMount = mount.Mount{Type: mount.TypeBind, Source: spec.HomeHost, Target: AgentHome}
+		mounts = []mount.Mount{
+			{Type: mount.TypeBind, Source: spec.HomeHost + "/.claude", Target: AgentHome + "/.claude"},
+			{Type: mount.TypeBind, Source: spec.HomeHost + "/.ssh", Target: AgentHome + "/.ssh"},
+			{Type: mount.TypeBind, Source: spec.HomeHost + "/.brigade/" + spec.SessionID, Target: AgentHome + daemonLogDir + "/" + spec.SessionID},
+			{Type: mount.TypeBind, Source: spec.HomeHost + "/workspace/" + spec.SessionID, Target: ContainerWorkdir + "/" + spec.SessionID},
+		}
 	} else {
+		// Fallback без персонального home: named volume per-session на весь home. Утечки между
+		// сессиями нет (том свой), всё durable внутри своей сессии.
 		volName := ACPVolumeName(stateID)
 		if _, err := cli.VolumeCreate(ctx, volume.CreateOptions{Name: volName}); err != nil {
 			return "", fmt.Errorf("spawn: acp volume create: %w", err)
 		}
-		homeMount = mount.Mount{Type: mount.TypeVolume, Source: volName, Target: AgentHome}
+		mounts = []mount.Mount{{Type: mount.TypeVolume, Source: volName, Target: AgentHome}}
 	}
 
 	daemonNatPort := nat.Port(fmt.Sprintf("%d/tcp", daemonPort))
@@ -86,7 +101,7 @@ func (d *DockerACPSpawner) StartDaemon(ctx context.Context, spec Spec, stateID, 
 		Init:        &initProcess,
 		ExtraHosts:  []string{"host.docker.internal:host-gateway"},
 		NetworkMode: d.spawner.netMode(),
-		Mounts:      []mount.Mount{homeMount},
+		Mounts:      mounts,
 		// Публикуем порт демона на 127.0.0.1:<эфемерный> — для host-режима brigade (процесс на
 		// хосте не достаёт bridge-IP контейнера). В container-режиме (brigade на общей сети)
 		// используется прямой IP:port (см. daemonAddr).

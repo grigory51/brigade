@@ -46,9 +46,15 @@ type TokenVerifier interface {
 // реестром живых сессий (session.Registry). threadId AG-UI-запроса соответствует
 // brigade sessionID.
 type ClientProvider interface {
-	// Bindable возвращает биндер ACP-клиента сессии для пользователя. ok=false, если
-	// сессия неизвестна, не в ACP-режиме или принадлежит другому пользователю.
+	// Bindable возвращает биндер ACP-клиента сессии для пользователя (лёгкий lookup, без
+	// пере-подъёма среды). Используется управляющими/read-ручками (история, статус, отмена).
+	// ok=false, если сессия неизвестна, не в ACP-режиме или принадлежит другому пользователю.
 	Bindable(sessionID, userID string) (b Bindable, ok bool)
+	// EnsureBindable — как Bindable, но перед выдачей пере-поднимает мёртвую среду агента
+	// (docker-контейнер/local-адаптер, умерший вне рестарта brigade) с resume — отсюда ctx.
+	// Вызывается только турном (/run), чтобы открытие сессии (история/статус) не поднимало
+	// остановленный контейнер зря. ok=false — сессия недоступна либо среду не удалось поднять.
+	EnsureBindable(ctx context.Context, sessionID, userID string) (b Bindable, ok bool)
 }
 
 // WorkflowInfo — состояние workflow-запуска харнесса агента для панели фоновых задач
@@ -249,7 +255,7 @@ func runHandler(verifier TokenVerifier, provider ClientProvider, perms *Permissi
 			return
 		}
 
-		bindable, ok := provider.Bindable(in.ThreadID, userID)
+		bindable, ok := provider.EnsureBindable(r.Context(), in.ThreadID, userID)
 		if !ok {
 			http.Error(w, "session not found", http.StatusNotFound)
 			return

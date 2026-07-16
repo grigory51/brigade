@@ -77,6 +77,9 @@ type acpSession interface {
 	Cancel(ctx context.Context) error
 	FinishStreams()
 	Messages() []acp.Message
+	// SeedMessages засеивает ленту снимком родителя при fork (session/fork историю не
+	// реплеит — без засева чат ветки пуст). Разворачивается в начало Messages().
+	SeedMessages(msgs []acp.Message)
 	Commands() []agui.AvailableCommand
 	ConfigOptions() []acpsdk.SessionConfigOption
 	SetConfigOption(ctx context.Context, configID, value string) ([]acpsdk.SessionConfigOption, error)
@@ -142,6 +145,10 @@ type Registry struct {
 	// удаляет → exec в удалённый контейнер). Доступ к map — под mu; сами локи
 	// держатся дольше (на время docker-вызовов).
 	userLocks map[string]*sync.Mutex
+	// sessionLocks сериализует ленивую пере-подъёмку среды сессии (EnsureACPClient):
+	// без лока два параллельных turn'а на мёртвую сессию подняли бы два контейнера/адаптера.
+	// Доступ к map — под mu; сам лок держится на время respawn. Ключ — sessionID.
+	sessionLocks map[string]*sync.Mutex
 }
 
 // NewRegistry собирает реестр. spawner соответствует режиму инстанса (mode); mode
@@ -163,6 +170,7 @@ func NewRegistry(st *store.Store, spawner spawn.Spawner, mode store.SessionMode,
 		live:          make(map[string]*live),
 		tearingDown:   make(map[string]struct{}),
 		userLocks:     make(map[string]*sync.Mutex),
+		sessionLocks:  make(map[string]*sync.Mutex),
 	}
 }
 
@@ -175,6 +183,20 @@ func (r *Registry) lockUser(userID string) (unlock func()) {
 	if !ok {
 		l = &sync.Mutex{}
 		r.userLocks[userID] = l
+	}
+	r.mu.Unlock()
+	l.Lock()
+	return l.Unlock
+}
+
+// lockSession берёт per-session лок ленивой пере-подъёмки среды и возвращает функцию
+// освобождения. Локи живут в map навсегда (как userLocks — сессий немного, утечка незначима).
+func (r *Registry) lockSession(sessionID string) (unlock func()) {
+	r.mu.Lock()
+	l, ok := r.sessionLocks[sessionID]
+	if !ok {
+		l = &sync.Mutex{}
+		r.sessionLocks[sessionID] = l
 	}
 	r.mu.Unlock()
 	l.Lock()
@@ -230,13 +252,23 @@ func (r *Registry) homeHost(sess store.Session) string {
 	// в несуществующей директории с ошибкой. Каталог на сессию изолирует Claude-проект
 	// (memory/транскрипты/todos выводятся из cwd). Сам home и общий workspace создаются
 	// попутно (MkdirAll — все уровни).
+	//
+	// В ACP-режиме home НЕ монтируется целиком: bind'ятся отдельные подпути
+	// (.claude, .ssh, .brigade/<id>, workspace/<id>) — см. spawn.StartDaemon. Поэтому
+	// source-каталоги этих mount'ов должны существовать на хосте заранее, иначе docker
+	// создаст их root-owned и агент (uid 1001) упрётся в EACCES. .ssh готовит
+	// provisionAgentSSH; .claude и .brigade/<id> создаём здесь.
 	ws := filepath.Join(home, "workspace")
 	sessWs := filepath.Join(ws, sess.ID)
-	if err := os.MkdirAll(sessWs, 0o700); err != nil {
-		log.Printf("session: create home %s: %v", home, err)
-		return ""
+	claudeDir := filepath.Join(home, ".claude")
+	sessBrigade := filepath.Join(home, ".brigade", sess.ID)
+	for _, dir := range []string{sessWs, claudeDir, sessBrigade} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			log.Printf("session: create home dir %s: %v", dir, err)
+			return ""
+		}
 	}
-	for _, dir := range []string{home, ws, sessWs} {
+	for _, dir := range []string{home, ws, sessWs, claudeDir, filepath.Dir(sessBrigade), sessBrigade} {
 		if err := os.Chown(dir, spawn.AgentUID, spawn.AgentGID); err != nil {
 			log.Printf("session: chown %s to %d:%d: %v", dir, spawn.AgentUID, spawn.AgentGID, err)
 		}
@@ -723,7 +755,10 @@ func (r *Registry) installSkill(sess store.Session) {
 		// по дереву вторым — отсюда дубль в slash-меню.
 		_ = os.RemoveAll(filepath.Join(home, "workspace", ".claude", "skills", "brigade-preview"))
 	}
-	if err := preview.InstallSkill(dir); err != nil {
+	// marketplaceID уникален на сессию: Claude Code кеширует локальный marketplace глобально
+	// по ID и пинит его на каталог первой сессии — при константном ID новые сессии грузили бы
+	// старые скиллы. "brigade-<sessionID>" даёт каждой сессии свежую регистрацию из её каталога.
+	if err := preview.InstallSkill(dir, "brigade-"+sess.ID); err != nil {
 		log.Printf("session: install preview skill %s: %v", sess.ID, err)
 	}
 }
@@ -903,6 +938,112 @@ func (r *Registry) ACPClient(sessionID, userID string) (acpSession, bool) {
 	return lv.client, true
 }
 
+// EnsureACPClient возвращает живого ACP-клиента сессии, при необходимости пере-подняв среду
+// агента с resume. Нужен для случая, когда среда умерла ВНЕ рестарта brigade (RestoreAll не
+// сработал): docker-контейнер демона остановлен (`docker stop`) или убит, local-адаптер упал.
+// In-memory клиент при этом указывает на мёртвую среду — первый же turn упёрся бы в отказ.
+// Проверяем живость (docker — по контейнеру демона, local — по Alive адаптера) и, если мертва,
+// пере-поднимаем через resume (session/load реплеит thread из durable-состояния), подменяя
+// живой объект. ok=false — сессия неизвестна/чужая/не ACP либо respawn не удался. Вызывается
+// AG-UI-транспортом перед выдачей Bindable для turn'а.
+func (r *Registry) EnsureACPClient(ctx context.Context, sessionID, userID string) (acpSession, bool) {
+	r.mu.Lock()
+	lv, ok := r.live[sessionID]
+	r.mu.Unlock()
+	if !ok || lv.owner != userID || lv.client == nil || lv.kind != store.SessionKindACP {
+		return nil, false
+	}
+	if r.acpAlive(ctx, lv, sessionID) {
+		return lv.client, true
+	}
+
+	// Мертва — сериализуем respawn per-session (без лока два turn'а подняли бы две среды).
+	unlock := r.lockSession(sessionID)
+	defer unlock()
+	// Повторная проверка под локом: параллельный ensure мог уже пере-поднять среду.
+	r.mu.Lock()
+	lv = r.live[sessionID]
+	r.mu.Unlock()
+	if lv == nil || lv.client == nil {
+		return nil, false
+	}
+	if r.acpAlive(ctx, lv, sessionID) {
+		return lv.client, true
+	}
+
+	sess, err := r.Get(ctx, sessionID, userID)
+	if err != nil {
+		log.Printf("session: ensure acp %s: get session: %v", sessionID, err)
+		return nil, false
+	}
+	newLv, err := r.reviveACP(ctx, sess)
+	if err != nil {
+		log.Printf("session: ensure acp %s: revive: %v", sessionID, err)
+		return nil, false
+	}
+	r.mu.Lock()
+	old := r.live[sessionID]
+	r.live[sessionID] = newLv
+	r.mu.Unlock()
+	if old != nil && old.client != nil {
+		_ = old.client.Close() // старый поток мёртв — отцепляем без ожидания
+	}
+	return newLv.client, true
+}
+
+// acpAlive проверяет живость среды ACP-сессии: docker — существует ли запущенный контейнер
+// демона с опубликованным портом (тот же зонд, что и RestoreAll); local — жив ли процесс
+// адаптера (Alive у *acp.Client). Спавнер не docker или клиент без Alive — считаем живым
+// (не мешаем работать, respawn не по адресу).
+func (r *Registry) acpAlive(ctx context.Context, lv *live, sessionID string) bool {
+	if lv.mode == store.SessionModeDocker {
+		ds, ok := r.spawner.(*spawn.DockerSpawner)
+		if !ok {
+			return true
+		}
+		_, alive := ds.ACP().DaemonAddr(ctx, sessionID)
+		return alive
+	}
+	if a, ok := lv.client.(interface{ Alive() bool }); ok {
+		return a.Alive()
+	}
+	return true
+}
+
+// reviveACP пере-поднимает среду ACP-сессии с resume и возвращает новый live-объект (в реестр
+// НЕ пишет — это делает вызывающий). docker: пересоздаёт контейнер демона (StartDaemon сносит
+// остановленный и поднимает свежий) + session/load; local: новый subprocess-адаптер + session/load.
+// Диалог сохраняется — агент реплеит thread по agent_session_id.
+func (r *Registry) reviveACP(ctx context.Context, sess store.Session) (*live, error) {
+	token := r.userClaudeToken(ctx, sess.UserID)
+	if sess.Mode == store.SessionModeDocker {
+		lv, sid, _, err := r.spawnACPDaemon(ctx, sess, token, "", sess.AgentSessionID, "")
+		if err != nil {
+			return nil, err
+		}
+		if err := r.store.UpdateSessionResume(ctx, sess.ID, sid, ""); err != nil {
+			_ = lv.client.Close()
+			return nil, fmt.Errorf("persist acp resume: %w", err)
+		}
+		return lv, nil
+	}
+	client, err := acp.New(ctx, acp.Options{
+		Cwd:             sess.Cwd,
+		OAuthToken:      token,
+		ResumeSessionID: sess.AgentSessionID,
+		ExtraEnv:        r.previewEnv(sess),
+	})
+	if err != nil {
+		return nil, err
+	}
+	client.OnTurnEnd = r.turnEndHook(sess)
+	if err := r.store.UpdateSessionResume(ctx, sess.ID, client.SessionID(), ""); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("persist acp resume: %w", err)
+	}
+	return &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, client: client}, nil
+}
+
 // ReloadAgent переинициализирует ACP-агента сессии, чтобы подхватить обновлённые скиллы/плагины
 // (напр. после апгрейда brigade, переименовавшего скилл). Плагины ACP статичны на время сессии
 // (грузятся один раз при session/new|load), горячей перезагрузки в SDK/ACP нет — поэтому
@@ -1048,6 +1189,7 @@ func (r *Registry) Fork(ctx context.Context, sessionID, userID string) (store.Se
 			OAuthToken:        token,
 			ForkFromSessionID: src.AgentSessionID,
 			ExtraEnv:          r.previewEnv(sess),
+			PluginDirs:        r.acpPluginDirs(sess),
 		})
 		if err != nil {
 			// Ветка не создалась — запись убираем целиком, полусозданное состояние хуже ошибки.
@@ -1064,6 +1206,18 @@ func (r *Registry) Fork(ctx context.Context, sessionID, userID string) (store.Se
 		return store.Session{}, err
 	}
 	sess.AgentSessionID = sid
+
+	// session/fork (в отличие от session/load) историю НЕ реплеит — агент новую сессию
+	// сообщениями не наполняет, поэтому ledger ветки пуст и её чат открывается пустым.
+	// Засеиваем ветку снимком ленты родителя, который brigade уже держит в памяти (тот же
+	// источник, что кормит GetHistory). Родитель не в памяти (напр. не открыт после рестарта) —
+	// baseline пустой; допустимая деградация, т.к. форкают обычно открытую сессию.
+	r.mu.Lock()
+	srcLive := r.live[src.ID]
+	r.mu.Unlock()
+	if srcLive != nil && srcLive.client != nil {
+		lv.client.SeedMessages(srcLive.client.Messages())
+	}
 
 	r.mu.Lock()
 	r.live[sess.ID] = lv
@@ -1370,11 +1524,15 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 			return nil
 		}
 		// local: adapter-subprocess пере-спавнится + session/load (агент реплеит thread).
+		// PluginDirs обязателен и здесь (как в Create/ReloadAgent): session/load шлёт плагин-мета
+		// из него, иначе resume-агент не перечитает скиллы и оставит их из старого состояния
+		// сессии (напр. переименованный скилл не подхватится при рестарте brigade).
 		client, err := acp.New(ctx, acp.Options{
 			Cwd:             sess.Cwd,
 			OAuthToken:      token,
 			ResumeSessionID: sess.AgentSessionID,
 			ExtraEnv:        r.previewEnv(sess),
+			PluginDirs:      r.acpPluginDirs(sess),
 		})
 		if err != nil {
 			return fmt.Errorf("reattach acp: %w", err)

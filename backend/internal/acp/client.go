@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	acpsdk "github.com/coder/acp-go-sdk"
@@ -108,6 +109,10 @@ type Client struct {
 	// closeOnce гарантирует однократный teardown: повторный Close безопасен и не шлёт
 	// сигналы уже завершённому процессу.
 	closeOnce sync.Once
+	// exited — процесс adapter'а завершился (сам упал или закрыт). Ставит фоновый
+	// watchProc; читает Alive. Реестр по Alive решает, жив ли local-адаптер, и при смерти
+	// вне рестарта brigade пере-поднимает сессию с resume (см. Registry.EnsureACPClient).
+	exited atomic.Bool
 	// promptMu сериализует turn'ы: ACP-сессия обрабатывает ходы строго последовательно,
 	// а brigade допускает параллельные POST /api/ag-ui/run в один тред. Без сериализации
 	// потоковые сообщения двух turn'ов пересеклись бы в общем sink (START одного между
@@ -134,6 +139,12 @@ type Client struct {
 	// (см. emit/SessionUpdate). Permission-запросы в историю не пишутся: их повторный
 	// показ после ответа некорректен (см. emit).
 	history []agui.Event
+	// baseline — снимок ленты РОДИТЕЛЯ, засеянный при создании форк-сессии. session/fork (в
+	// отличие от session/load) историю НЕ реплеит — агент новую сессию сообщениями не наполняет,
+	// поэтому без засева ledger ветки пуст и GetHistory возвращает пустой чат. Разворачивается
+	// в начало Messages(); живой history ветки дописывается поверх (ветка расходится). См.
+	// Registry.Fork и SeedMessages.
+	baseline []Message
 	// lastUsage — последнее событие расхода контекста. Хранится отдельно от history,
 	// потому что usage_update приходит высокочастотно (на каждый прирост токенов): в
 	// ленте важно лишь актуальное значение, а не вся последовательность. Реплеится в
@@ -214,8 +225,21 @@ func New(ctx context.Context, opts Options) (*Client, error) {
 		_ = proc.Wait()
 		return nil, err
 	}
+	// Фоновый reap: как только процесс adapter'а завершится (сам или по Close), помечаем
+	// клиента мёртвым и реапим (без зомби). Wait идемпотентен (localProc.waitOnce), поэтому
+	// повторный Wait в Close вернёт кешированный результат мгновенно.
+	go func() {
+		_ = proc.Wait()
+		c.exited.Store(true)
+	}()
 	return c, nil
 }
+
+// Alive сообщает, жив ли процесс adapter'а (local-режим). false — процесс завершился, и
+// клиент указывает на мёртвый adapter: turn упрётся в закрытый stdio, нужна пере-подъёмка
+// с resume. Для docker-режима живость проверяется иначе (по контейнеру демона), этот метод
+// там не используется.
+func (c *Client) Alive() bool { return !c.exited.Load() }
 
 // handshake выполняет Initialize и заводит сессию: при заданном ResumeSessionID и
 // поддержке агентом session/load — загружает существующую (LoadSession), иначе создаёт
@@ -394,7 +418,9 @@ func (c *Client) Messages() []Message {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	var out []Message
+	// Ветка форка стартует со снимка родителя (baseline), поверх которого разворачивается её
+	// собственная живая история. Пусто у обычных сессий.
+	out := append([]Message(nil), c.baseline...)
 	idx := make(map[string]int)     // messageId → позиция в out (текстовые сообщения)
 	toolIdx := make(map[string]int) // toolCallId → позиция в out (карточки инструментов)
 	for _, evt := range c.history {
@@ -438,6 +464,15 @@ func (c *Client) Messages() []Message {
 		}
 	}
 	return out
+}
+
+// SeedMessages засеивает ленту снимком (обычно родителя при fork): Messages() вернёт его
+// перед живой историей ветки. Вызывается один раз сразу после создания форк-клиента, до
+// первого turn'а. См. Registry.Fork.
+func (c *Client) SeedMessages(msgs []Message) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.baseline = msgs
 }
 
 // backgroundIdleWindow — окно тишины, после которого фоновый turn считается

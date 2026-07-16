@@ -44,6 +44,10 @@ type Client struct {
 	// deliveredSeq — seq последнего события, доставленного текущему sink (streamLoop). По нему
 	// FinishStreams дожидается, что закрывающие потоки события доехали до SSE до RUN_FINISHED.
 	deliveredSeq int64
+	// baseline — снимок ленты родителя, засеянный при fork. Демон форк-сессии историю не
+	// реплеит (session/fork ≠ session/load), поэтому его GetMessages пуст — разворачиваем
+	// baseline перед лентой демона в Messages(). См. Registry.Fork.
+	baseline []acp.Message
 
 	// promptMu сериализует turn'ы, как acp.Client.promptMu: brigade допускает параллельные
 	// /run в один тред, а привязка sink нового прогона (onTurnStart) должна происходить
@@ -258,15 +262,26 @@ func (c *Client) waitDelivered(target int64, timeout time.Duration) {
 	}
 }
 
-// Messages → проекция истории из демона.
+// Messages → проекция истории из демона (с baseline родителя впереди, если это форк).
 func (c *Client) Messages() []acp.Message {
+	c.mu.Lock()
+	out := append([]acp.Message(nil), c.baseline...)
+	c.mu.Unlock()
 	resp, err := c.rpc.GetMessages(context.Background(), authReq(c.sign(), &v1.Empty{}))
 	if err != nil {
-		return nil
+		return out
 	}
-	var out []acp.Message
-	_ = json.Unmarshal(resp.Msg.Json, &out)
-	return out
+	var live []acp.Message
+	_ = json.Unmarshal(resp.Msg.Json, &live)
+	return append(out, live...)
+}
+
+// SeedMessages засеивает ленту снимком родителя при fork: демон форка историю не реплеит,
+// поэтому baseline разворачивается перед его лентой. Вызывается один раз при создании форка.
+func (c *Client) SeedMessages(msgs []acp.Message) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.baseline = msgs
 }
 
 // Commands → последний список slash-команд из демона.
