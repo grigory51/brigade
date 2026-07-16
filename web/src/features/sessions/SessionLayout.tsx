@@ -600,10 +600,20 @@ function SessionItem({
           if (!locked) startEdit();
         }}
         tooltip={label}
-        // Правый паддинг под ряд hover-иконок: у ACP их 5 (перезагрузка/архив/ветка/
-        // переименовать/удалить), у CLI — 2 (переименовать/удалить), поэтому места нужно больше.
-        className={`${
-          session.kind === SessionKind.ACP ? "pr-36" : "pr-16"
+        // Правый паддинг под ряд hover-иконок применяем ТОЛЬКО при наведении/фокусе (как и
+        // появление самих иконок): иконки абсолютные (вне потока), поэтому ширину имени задаёт
+        // лишь padding — постоянный отступ вечно сжимал бы название. На hover имя ужимается,
+        // освобождая место иконкам (ACP их 5, CLI — 2). important (trailing `!`) перебивает
+        // базовый `group-has-[menu-action]:pr-8` из sidebarMenuButtonVariants.
+        //
+        // Подсветку строки вешаем на group-hover/menu-item (весь <li>), а не на :hover самой
+        // кнопки: иконки-сиблинги (absolute, поверх) перехватывают hover, между ними щели —
+        // из-за этого фон кнопки мигал бы. transition-none: паддинг меняется мгновенно, в такт
+        // мгновенному появлению иконок (иначе имя доанимировалось бы уже после их показа).
+        className={`transition-none! group-hover/menu-item:bg-sidebar-accent group-hover/menu-item:text-sidebar-accent-foreground ${
+          session.kind === SessionKind.ACP
+            ? "group-hover/menu-item:pr-36! group-focus-within/menu-item:pr-36!"
+            : "group-hover/menu-item:pr-16! group-focus-within/menu-item:pr-16!"
         }${locked ? " opacity-60" : ""}`}
         // Ветки визуально вкладываются под родителя (см. ordered в SessionLayout).
         style={depth > 0 ? { paddingLeft: `${8 + depth * 16}px` } : undefined}

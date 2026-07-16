@@ -1,10 +1,10 @@
 import { createContext, useContext, useRef, useState } from "react";
-import { useComposerRuntime } from "@assistant-ui/react";
 import { ConnectError } from "@connectrpc/connect";
 import { Loader2, Paperclip } from "lucide-react";
 import { toast } from "sonner";
 
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
+import { usePendingContext } from "@/components/assistant-ui/composer-context";
 
 // UploadFn заливает файл и возвращает путь, по которому агент прочитает его (относительно
 // своей рабочей директории). Реализация — на стороне фичи (сессия знает свой id).
@@ -14,12 +14,13 @@ export type UploadFn = (file: File) => Promise<string>;
 // (readonly-лента архива), тогда кнопка не рендерится.
 export const ComposerUploadContext = createContext<UploadFn | null>(null);
 
-// ComposerUploadButton — кнопка «приложить файл» в composer. Транспорт AG-UI текстовый,
-// поэтому файл заливается в рабочую директорию агента, а в текст сообщения вставляется путь —
-// агент читает файл сам (Read умеет и картинки, и текст).
+// ComposerUploadButton — кнопка «приложить файл» в composer. Транспорт AG-UI текстовый, поэтому
+// файл заливается в рабочую директорию агента (uploads/<...>), а его путь кладётся в зону
+// контекста над инпутом (чипом) и подмешивается в промпт при отправке — агент читает файл сам
+// (Read умеет и картинки, и текст). Раньше путь пихался прямо в текст сообщения.
 export function ComposerUploadButton() {
   const upload = useContext(ComposerUploadContext);
-  const composer = useComposerRuntime();
+  const pending = usePendingContext();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
 
@@ -31,9 +32,7 @@ export function ComposerUploadButton() {
     try {
       for (const file of Array.from(files)) {
         const path = await upload(file);
-        const cur = composer.getState().text;
-        const ref = `[файл: ${path}]`;
-        composer.setText(cur ? `${cur}\n${ref}` : ref);
+        pending?.add({ kind: "file", path, name: file.name });
       }
     } catch (err) {
       toast.error(

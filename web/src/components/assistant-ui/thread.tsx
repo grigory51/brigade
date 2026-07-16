@@ -2,6 +2,10 @@
 
 import { UserMessageAttachments } from "@/components/assistant-ui/attachment";
 import { ComposerUploadButton } from "@/components/assistant-ui/composer-upload";
+import {
+  ComposerContextZone,
+  useComposerContextSend,
+} from "@/components/assistant-ui/composer-context";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import {
   Reasoning,
@@ -55,6 +59,7 @@ import {
   useState,
   type ComponentType,
   type FC,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PropsWithChildren,
   type ReactNode,
 } from "react";
@@ -281,27 +286,59 @@ const Composer: FC = () => {
         data-slot="aui_composer-shell"
         className="border-border/60 focus-within:border-border dark:border-muted-foreground/15 dark:focus-within:border-muted-foreground/30 relative flex w-full flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) shadow-[0_4px_16px_-8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] transition-[border-color,box-shadow] focus-within:shadow-[0_6px_24px_-8px_rgba(0,0,0,0.12),0_1px_2px_rgba(0,0,0,0.05)] dark:shadow-none"
       >
+        <ComposerContextZone />
         <SlashMenu />
-        <ComposerPrimitive.Input
-            placeholder={
-              historyLoading
-                ? "Загрузка истории…"
-                : "Сообщение агенту…  (/ — команды)"
-            }
-            disabled={historyLoading}
-            className="aui-composer-input placeholder:text-muted-foreground/80 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none disabled:opacity-60"
-            rows={1}
-            autoFocus
-            // На тач-устройствах (мобильный браузер) нет Shift, поэтому Shift+Enter
-            // для переноса строки недоступен. Проп заставляет plain Enter вставлять
-            // \n на touch-primary устройствах; отправка — кнопкой Send. На десктопе
-            // (есть точный указатель) поведение прежнее: Enter отправляет.
-            unstable_insertNewlineOnTouchEnter
-            aria-label="Message input"
-          />
+        <ComposerInput historyLoading={historyLoading} />
           <ComposerAction />
         </div>
     </ComposerPrimitive.Root>
+  );
+};
+
+// isCoarsePointer — тач-устройство (мобильный браузер): там Enter вставляет перенос строки,
+// а отправка — кнопкой, поэтому Enter-перехват контекста на нём не включаем.
+function isCoarsePointer(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(pointer: coarse)").matches
+  );
+}
+
+// ComposerInput — поле ввода с перехватом Enter: когда в зоне контекста есть элементы,
+// desktop-Enter отправляет через sendWithContext (дописывает контекст к промпту), иначе —
+// нативная отправка примитива. Перехват в capture-фазе, чтобы опередить встроенный Enter→send.
+const ComposerInput: FC<{ historyLoading: boolean }> = ({ historyLoading }) => {
+  const { hasItems, sendWithContext } = useComposerContextSend();
+  const onKeyDownCapture = (e: ReactKeyboardEvent) => {
+    if (
+      hasItems &&
+      e.key === "Enter" &&
+      !e.shiftKey &&
+      !e.nativeEvent.isComposing &&
+      !isCoarsePointer()
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+      sendWithContext();
+    }
+  };
+  return (
+    <ComposerPrimitive.Input
+      placeholder={
+        historyLoading ? "Загрузка истории…" : "Сообщение агенту…  (/ — команды)"
+      }
+      disabled={historyLoading}
+      className="aui-composer-input placeholder:text-muted-foreground/80 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none disabled:opacity-60"
+      rows={1}
+      autoFocus
+      // На тач-устройствах (мобильный браузер) нет Shift → Shift+Enter недоступен. Проп
+      // заставляет plain Enter вставлять \n на touch-primary устройствах; отправка — кнопкой.
+      // На десктопе Enter отправляет.
+      unstable_insertNewlineOnTouchEnter
+      aria-label="Message input"
+      onKeyDownCapture={onKeyDownCapture}
+    />
   );
 };
 
@@ -472,6 +509,45 @@ const ConfigSelectors: FC = () => {
   );
 };
 
+// SendButton — кнопка отправки. При непустой зоне контекста шлёт через sendWithContext
+// (дописывает контекст к промпту), иначе — нативная ComposerPrimitive.Send (с её disabled-
+// логикой на пустой ввод). AuiIf в ComposerAction рендерит её только когда не идёт генерация.
+const SendButton: FC = () => {
+  const { hasItems, sendWithContext } = useComposerContextSend();
+  const icon = <ArrowUpIcon className="aui-composer-send-icon size-4.5" />;
+  if (!hasItems) {
+    return (
+      <ComposerPrimitive.Send asChild>
+        <TooltipIconButton
+          tooltip="Send message"
+          side="bottom"
+          type="button"
+          variant="default"
+          size="icon"
+          className="aui-composer-send size-7 rounded-full"
+          aria-label="Send message"
+        >
+          {icon}
+        </TooltipIconButton>
+      </ComposerPrimitive.Send>
+    );
+  }
+  return (
+    <TooltipIconButton
+      tooltip="Send message"
+      side="bottom"
+      type="button"
+      variant="default"
+      size="icon"
+      className="aui-composer-send size-7 rounded-full"
+      aria-label="Send message"
+      onClick={sendWithContext}
+    >
+      {icon}
+    </TooltipIconButton>
+  );
+};
+
 const ComposerAction: FC = () => {
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between gap-1">
@@ -516,19 +592,7 @@ const ComposerAction: FC = () => {
           </AuiIf>
         </AuiIf>
         <AuiIf condition={(s) => !s.thread.isRunning}>
-          <ComposerPrimitive.Send asChild>
-            <TooltipIconButton
-              tooltip="Send message"
-              side="bottom"
-              type="button"
-              variant="default"
-              size="icon"
-              className="aui-composer-send size-7 rounded-full"
-              aria-label="Send message"
-            >
-              <ArrowUpIcon className="aui-composer-send-icon size-4.5" />
-            </TooltipIconButton>
-          </ComposerPrimitive.Send>
+          <SendButton />
         </AuiIf>
         <AuiIf condition={(s) => s.thread.isRunning}>
           <ComposerPrimitive.Cancel asChild>

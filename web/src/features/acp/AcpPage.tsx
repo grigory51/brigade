@@ -14,7 +14,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { PendingContextProvider } from "@/components/assistant-ui/composer-context";
 import { AcpThread } from "./AcpThread";
+import { SelectionMenu } from "./SelectionMenu";
 import {
   useAcpRuntime,
   type AgentStatus,
@@ -63,6 +65,7 @@ function AcpSessionInner({
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
+      <PendingContextProvider>
       <div className="relative flex h-full flex-col">
         <div className="min-h-0 flex-1">
           <AcpThread
@@ -90,6 +93,8 @@ function AcpSessionInner({
           permission && resolvePermission(permission.id, decision)
         }
       />
+      <SelectionMenu />
+      </PendingContextProvider>
     </AssistantRuntimeProvider>
   );
 }
@@ -254,14 +259,21 @@ function PermissionDialog({
 }) {
   return (
     <Dialog open={permission !== null}>
-      <DialogContent showCloseButton={false} className="sm:max-w-md">
+      <DialogContent showCloseButton={false} className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{permission?.title}</DialogTitle>
+          <DialogTitle>Разрешить действие?</DialogTitle>
           <DialogDescription>
-            Агент запрашивает разрешение на действие.
+            Агент запрашивает разрешение на выполнение команды.
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter className="flex-row justify-end gap-2">
+        {/* title часто содержит саму команду (напр. curl) — показываем её отдельным
+            моноширинным скролл-боксом, а не гигантским заголовком. */}
+        {permission && (
+          <pre className="max-h-56 overflow-auto rounded-md border bg-muted/50 p-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap text-muted-foreground">
+            {permission.title}
+          </pre>
+        )}
+        <DialogFooter className="flex-row flex-wrap justify-end gap-2">
           {permission?.options.map((o) => {
             const reject = o.kind?.startsWith("reject");
             return (
