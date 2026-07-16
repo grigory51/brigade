@@ -28,7 +28,7 @@ export function parseDiffResult(result: unknown): DiffBlock[] | null {
   return blocks.length > 0 ? blocks : null;
 }
 
-export type DiffLine = {
+type DiffLine = {
   kind: "ctx" | "del" | "add";
   text: string;
   oldNo?: number;
