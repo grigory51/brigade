@@ -1,14 +1,11 @@
 name: pages
 
 # Деплой лендинга (site/) на GitHub Pages. Статика отдаётся как есть — сборки нет.
-# Запускается только при изменении самого лендинга (или этого workflow), чтобы не
-# гонять деплой на каждый коммит в main.
+# Публикуется ТОЛЬКО на релизных тегах v* (в такт docker-CI), а не на каждый пуш в main —
+# лендинг обновляется вместе с релизом. Ручной запуск — через workflow_dispatch.
 on:
   push:
-    branches: [main]
-    paths:
-      - "site/**"
-      - ".github/workflows/pages.yml"
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
