@@ -12,15 +12,31 @@ import acpsdk "github.com/coder/acp-go-sdk"
 // которым brigade даёт модели вызываемые тулы.
 const ContainerMCPServerPath = "/opt/brigade-mcp/brigade-tools.mjs"
 
+// localMCPServerPath — путь к brigade-tools.mjs на ХОСТЕ для local/desktop-режима, где
+// контейнерного /opt/brigade-mcp нет. Задаётся при старте из desktop-обёртки по бандлу
+// (Resources/brigade-mcp, см. SetLocalMCPServerPath). Пусто → используется контейнерный путь
+// (docker). Без валидного пути node-subprocess MCP-сервера не стартует и кастомные UI-инструменты
+// (render_ui/show_choice, т.е. карточки /note) недоступны — агент падает в текстовый fallback.
+var localMCPServerPath string
+
+// SetLocalMCPServerPath задаёт хостовый путь к MCP-серверу для local/desktop-режима. Вызывается
+// один раз при старте (до создания сессий), поэтому синхронизация не нужна.
+func SetLocalMCPServerPath(p string) { localMCPServerPath = p }
+
 // BrigadeMCPServer собирает конфиг stdio MCP-сервера brigade для session/new (и load/fork).
 // Имя "brigade" задаёт префикс имён инструментов — модель видит mcp__brigade__render_ui, по
 // нему их и матчит web-клиент (см. ToolFallback). Stdio-транспорт обязан поддерживаться
-// всеми ACP-агентами (в отличие от http/sse, зависящих от capability).
+// всеми ACP-агентами (в отличие от http/sse, зависящих от capability). Путь к скрипту — по
+// режиму: local/desktop (localMCPServerPath) либо контейнерный (docker) по умолчанию.
 func BrigadeMCPServer() acpsdk.McpServer {
+	path := ContainerMCPServerPath
+	if localMCPServerPath != "" {
+		path = localMCPServerPath
+	}
 	return acpsdk.McpServer{Stdio: &acpsdk.McpServerStdio{
 		Name:    "brigade",
 		Command: "node",
-		Args:    []string{ContainerMCPServerPath},
+		Args:    []string{path},
 		Env:     []acpsdk.EnvVariable{},
 	}}
 }

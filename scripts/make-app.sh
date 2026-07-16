@@ -99,4 +99,13 @@ echo '{ "name": "brigade-agent-bundle", "private": true }' > "$RES/agent/package
 ( cd "$RES/agent" && npm install --omit=dev --no-audit --no-fund --loglevel=error \
     "$CLAUDE_SPEC" "$ADAPTER_SPEC" )
 
-echo "make-app: собрано $OUT (self-contained: node + claude-agent-acp + claude-code)"
+# MCP-сервер brigade (render_ui/show_choice) — в docker он в /opt/brigade-mcp; в бандле кладём в
+# Resources/brigade-mcp с зависимостями (@modelcontextprotocol/sdk), чтобы local-режим тоже
+# показывал A2UI-карточки (напр. черновик заметки в /note). Путь бинарю задаёт prependBundledTools.
+echo "make-app: ставлю MCP-сервер brigade (render_ui)…"
+mkdir -p "$RES/brigade-mcp"
+cp "$REPO/docker/claude-agent/mcp/brigade-tools.mjs" \
+   "$REPO/docker/claude-agent/mcp/package.json" "$RES/brigade-mcp/"
+( cd "$RES/brigade-mcp" && npm install --omit=dev --no-audit --no-fund --loglevel=error )
+
+echo "make-app: собрано $OUT (self-contained: node + claude-agent-acp + claude-code + mcp)"

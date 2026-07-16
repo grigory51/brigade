@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/grigory51/brigade/backend/internal/acp"
 )
 
 // Десктоп-режим: `brigade desktop` — «в один клик» на локальной машине. Готовит
@@ -171,6 +173,13 @@ func prependBundledTools() {
 	}
 	// exe: <Brigade.app>/Contents/MacOS/brigade-bin → Resources рядом с MacOS.
 	res := filepath.Join(filepath.Dir(exe), "..", "Resources")
+	// Встроенный MCP-сервер brigade (render_ui/show_choice) лежит в Resources/brigade-mcp с
+	// установленными зависимостями. В docker путь контейнерный (этот вызов не при чём). Без него
+	// local-режим не показывал бы A2UI-карточки (напр. черновик заметки в /note).
+	mcp := filepath.Join(res, "brigade-mcp", "brigade-tools.mjs")
+	if _, err := os.Stat(mcp); err == nil {
+		acp.SetLocalMCPServerPath(mcp)
+	}
 	dirs := []string{
 		filepath.Join(res, "node", "bin"),
 		filepath.Join(res, "agent", "node_modules", ".bin"),
