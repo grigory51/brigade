@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
 } from "react";
 import {
   Link,
@@ -54,7 +55,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -274,6 +274,12 @@ export function SessionLayout() {
 
   const openCreate = useCallback(() => setCreateOpen(true), []);
 
+  // acpActive — открытая сессия работает в ACP-режиме: её вспомогательный терминал
+  // рисует SessionDock, а не докнутая полоса снизу.
+  const acpActive =
+    activeId !== undefined &&
+    sessions.find((s) => s.id === activeId)?.kind === SessionKind.ACP;
+
   // Дерево веток в сайдбаре: корневые сессии в исходном порядке (новые сверху), после
   // каждой — её ветки с отступом. Ветка с удалённым родителем показывается как корневая.
   const ordered = useMemo(() => {
@@ -303,7 +309,8 @@ export function SessionLayout() {
   return (
     <SessionShellContext.Provider value={{ openCreate }}>
       <SessionHeaderProvider>
-        <SidebarProvider>
+        {/* 260px — ширина рейла по макету (дефолт shadcn 16rem/256px). */}
+        <SidebarProvider style={{ "--sidebar-width": "260px" } as CSSProperties}>
           <Sidebar collapsible="icon">
             <SidebarHeader>
               <div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:justify-center">
@@ -311,7 +318,11 @@ export function SessionLayout() {
                   to="/sessions"
                   className="flex shrink-0 items-center gap-2 px-1 font-semibold"
                 >
-                  <img src="/logo.svg" alt="" className="size-7 shrink-0 rounded-md" />
+                  <img
+                    src="/logo.svg"
+                    alt=""
+                    className="size-[26px] shrink-0 rounded-[7px]"
+                  />
                   <span className="group-data-[collapsible=icon]:hidden">
                     brigade
                   </span>
@@ -319,9 +330,8 @@ export function SessionLayout() {
                 <SidebarTrigger className="group-data-[collapsible=icon]:hidden" />
               </div>
               <Button
-                size="sm"
                 onClick={openCreate}
-                className="justify-start gap-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+                className="h-auto justify-start gap-2 rounded-[9px] py-[9px] text-[13px] font-medium group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
               >
                 <Plus className="size-4 shrink-0" />
                 <span className="group-data-[collapsible=icon]:hidden">
@@ -330,16 +340,28 @@ export function SessionLayout() {
               </Button>
             </SidebarHeader>
 
-            <SidebarContent>
-              <SidebarGroup>
-                <SidebarGroupLabel className="justify-between pr-1">
-                  Сессии
+            {/* overflow-hidden: скролл живёт внутри списка сессий (max-h-[52%] ниже), а не
+                на всей колонке — «Заметки»/«Архив» и профиль остаются на виду. */}
+            <SidebarContent className="overflow-hidden">
+              <SidebarGroup className="gap-0 pb-0">
+                {/* Заголовок группы: сам никуда не ведёт, поэтому без hover-подсветки и
+                    курсора — иначе выглядел бы кликабельным пунктом меню. Кликается только
+                    иконка обновления справа. */}
+                <div className="flex h-8 items-center gap-2 px-2 text-[13px] group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+                  <MessagesSquare className="size-4 shrink-0" />
+                  <span className="flex-1 group-data-[collapsible=icon]:hidden">
+                    Сессии
+                  </span>
+                  <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-secondary px-1.5 text-[10.5px] text-muted-foreground group-data-[collapsible=icon]:hidden">
+                    {sessions.length}
+                  </span>
                   <button
                     type="button"
                     onClick={() => void load()}
                     disabled={state === "loading"}
-                    aria-label="Обновить список"
-                    className="flex size-5 items-center justify-center rounded text-sidebar-foreground/60 transition-colors hover:text-sidebar-foreground disabled:opacity-50"
+                    aria-label="Обновить список сессий"
+                    title="Обновить список сессий"
+                    className="flex size-5 items-center justify-center rounded text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground disabled:opacity-50 group-data-[collapsible=icon]:hidden"
                   >
                     <RefreshCw
                       className={
@@ -349,8 +371,8 @@ export function SessionLayout() {
                       }
                     />
                   </button>
-                </SidebarGroupLabel>
-                <SidebarGroupContent>
+                </div>
+                <SidebarGroupContent className="mt-1.5 max-h-[52%] overflow-y-auto">
                   <SidebarMenu>
                     {state === "loading" &&
                       Array.from({ length: 5 }).map((_, i) => (
@@ -404,31 +426,39 @@ export function SessionLayout() {
                   </SidebarMenu>
                 </SidebarGroupContent>
               </SidebarGroup>
+
+              {/* Разделитель отделяет список сессий от постоянных разделов; над профилем
+                  внизу разделителя по макету нет. */}
+              <div className="mx-3 mt-1.5 h-px shrink-0 bg-sidebar-border" />
+              <SidebarGroup className="py-2">
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      onClick={() => navigate("/memory")}
+                      isActive={location.pathname.startsWith("/memory")}
+                      tooltip="Заметки"
+                      className="rounded-[8px] text-[13px] text-sidebar-foreground/70"
+                    >
+                      <NotebookPen className="size-4" />
+                      Заметки
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      onClick={() => navigate("/archive")}
+                      isActive={location.pathname.startsWith("/archive")}
+                      tooltip="Архив"
+                      className="rounded-[8px] text-[13px] text-sidebar-foreground/70"
+                    >
+                      <Archive className="size-4" />
+                      Архив
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroup>
             </SidebarContent>
 
             <SidebarFooter>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => navigate("/memory")}
-                    isActive={location.pathname.startsWith("/memory")}
-                    tooltip="Заметки"
-                  >
-                    <NotebookPen className="size-4" />
-                    Заметки
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => navigate("/archive")}
-                    isActive={location.pathname.startsWith("/archive")}
-                    tooltip="Архив"
-                  >
-                    <Archive className="size-4" />
-                    Архив
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
               <UserMenu />
             </SidebarFooter>
             <SidebarRail />
@@ -440,9 +470,13 @@ export function SessionLayout() {
               <div className="min-h-0 flex-1">
                 <Outlet />
               </div>
-              {/* Вспомогательный шелл активной сессии. key пересоздаёт панель при
-                  переключении сессии: шелл принадлежит конкретной сессии. */}
-              {activeId && <ShellPanel key={activeId} sessionId={activeId} />}
+              {/* Вспомогательный шелл активной CLI-сессии. key пересоздаёт панель при
+                  переключении сессии: шелл принадлежит конкретной сессии. У ACP-сессий
+                  терминал живёт плавающим окном в SessionDock — докнутая полоса дала бы
+                  второй шелл рядом с ним. */}
+              {activeId && !acpActive && (
+                <ShellPanel key={activeId} sessionId={activeId} />
+              )}
               {/* Оверлей контента открытой сессии на время её удаления: блокируется
                   только эта сессия, сайдбар доступен — можно перейти к другой. */}
               {activeId && deletingIds.has(activeId) && (
@@ -610,7 +644,7 @@ function SessionItem({
         // кнопки: иконки-сиблинги (absolute, поверх) перехватывают hover, между ними щели —
         // из-за этого фон кнопки мигал бы. transition-none: паддинг меняется мгновенно, в такт
         // мгновенному появлению иконок (иначе имя доанимировалось бы уже после их показа).
-        className={`transition-none! group-hover/menu-item:bg-sidebar-accent group-hover/menu-item:text-sidebar-accent-foreground ${
+        className={`rounded-[8px] text-[13px] transition-none! group-hover/menu-item:bg-sidebar-accent group-hover/menu-item:text-sidebar-accent-foreground ${
           session.kind === SessionKind.ACP
             ? "group-hover/menu-item:pr-36! group-focus-within/menu-item:pr-36!"
             : "group-hover/menu-item:pr-16! group-focus-within/menu-item:pr-16!"

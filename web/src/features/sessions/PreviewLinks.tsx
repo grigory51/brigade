@@ -4,11 +4,10 @@ import { sessionClient } from "@/api/client";
 import type { Preview } from "@/api/gen/brigade/v1/session_pb";
 
 /**
- * PreviewLinks — ссылки на dev-серверы, которые агент поднял и зарегистрировал в
- * сессии (brigade preview). Список опрашивается раз в 5 секунд, пока компонент
- * смонтирован; при пустом списке ничего не рендерится.
+ * usePreviews — dev-серверы, которые агент поднял и зарегистрировал в сессии
+ * (brigade preview). Список опрашивается раз в 5 секунд, пока хук смонтирован.
  */
-export function PreviewLinks({ sessionId }: { sessionId: string }) {
+export function usePreviews(sessionId: string): Preview[] {
   const [previews, setPreviews] = useState<Preview[]>([]);
 
   useEffect(() => {
@@ -30,6 +29,16 @@ export function PreviewLinks({ sessionId }: { sessionId: string }) {
       clearInterval(timer);
     };
   }, [sessionId]);
+
+  return previews;
+}
+
+/**
+ * PreviewLinks — те же ссылки строкой чипов в баре вспомогательного шелла
+ * (CLI-сессии). При пустом списке ничего не рендерится.
+ */
+export function PreviewLinks({ sessionId }: { sessionId: string }) {
+  const previews = usePreviews(sessionId);
 
   if (previews.length === 0) return null;
 

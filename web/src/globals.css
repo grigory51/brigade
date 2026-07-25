@@ -180,4 +180,70 @@
     background: transparent;
     padding: 0;
   }
+
+  /* Якорь сообщения ленты (см. features/acp/dock): переход держим на самом элементе,
+     а не на классе подсветки — иначе снятие класса гасило бы подсветку рывком. */
+  [data-nav-id] {
+    transition:
+      box-shadow 0.3s ease,
+      background 0.3s ease;
+  }
+  .msg-flash {
+    border-radius: 14px;
+    box-shadow: 0 0 0 2px var(--primary);
+    background: color-mix(in oklab, var(--primary) 10%, transparent);
+  }
+}
+
+/* Анимации плавающей обвязки страницы сессии (чипы, окна, шкала навигации). */
+@keyframes win-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes chip-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes rail-in {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* Тултип шкалы центрирован по пилюле через translateY(-50%) — сдвиг сохраняем в
+   обоих кадрах, иначе появление уводило бы его вниз. */
+@keyframes tip-in {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) translateX(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%);
+  }
+}
+@keyframes now-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 8px 1px rgba(201, 100, 66, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 14px 3px rgba(201, 100, 66, 0.25);
+  }
 }

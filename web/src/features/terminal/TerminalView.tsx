@@ -9,13 +9,14 @@ import { streamUrl } from "@/api/ws";
 // забота вызывающего экрана: TerminalView сообщает только о самом соединении.
 export type TermConnState = "connecting" | "open" | "closed" | "error";
 
-// Палитра терминала согласована с тёмной темой brigade (см. globals.css).
+// Палитра терминала согласована с тёмной темой brigade (см. globals.css): фон —
+// самый тёмный тон тёплой палитры, цвета ANSI остаются github-dark.
 const TERMINAL_THEME = {
-  background: "#15191f",
+  background: "#1c1b1a",
   foreground: "#e6edf3",
   cursor: "#4493f8",
   selectionBackground: "rgba(68,147,248,0.3)",
-  black: "#15191f",
+  black: "#1c1b1a",
   red: "#f85149",
   green: "#3fb950",
   yellow: "#d29922",
@@ -226,7 +227,7 @@ export function TerminalView({
   }, [kind, sessionId, attempt, sendResize, setConn]);
 
   return (
-    <div className="relative h-full overflow-hidden bg-[#15191f]">
+    <div className="relative h-full overflow-hidden bg-[#1c1b1a]">
       {/* overflow-hidden обязателен: скролл должен жить внутри viewport самого
           xterm, а не на этом контейнере. Иначе появление/исчезновение скроллбара
           на контейнере меняет его ширину и запускает петлю ResizeObserver→fit. */}
