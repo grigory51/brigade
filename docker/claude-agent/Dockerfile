@@ -49,7 +49,7 @@ RUN apt-get update \
 # Плавающий минор ^0.57 держит adapter актуальным. (Исторически ≥0.54: в 0.52
 # session/set_config_option рассинхронивался с SDK — adapter рапортовал новую модель, а
 # отвечала старая.)
-RUN npm install -g @anthropic-ai/claude-code "@agentclientprotocol/claude-agent-acp@^0.57.0" \
+RUN npm install -g @anthropic-ai/claude-code "@agentclientprotocol/claude-agent-acp@^0.62.0" \
     && npm cache clean --force
 
 # brigade MCP-сервер кастомных UI-инструментов (render_ui, show_choice). Сток-адаптер

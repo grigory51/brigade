@@ -1,18 +1,39 @@
-import { useCallback, useContext } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  type PropsWithChildren,
+} from "react";
 import { Loader2, Wrench, ChevronRight } from "lucide-react";
 import { type ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { A2uiSurface } from "@a2ui/react/v0_9";
 import { sessionClient } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Thread } from "@/components/assistant-ui/thread";
+import { Thread, type ThreadGroupPart } from "@/components/assistant-ui/thread";
 import {
   ComposerUploadContext,
   type UploadFn,
 } from "@/components/assistant-ui/composer-upload";
-import { FRONTEND_TOOL_NAMES, RENDER_UI_TOOL_NAME } from "./frontendTools";
+import {
+  FRONTEND_TOOL_NAMES,
+  RENDER_UI_TOOL_NAME,
+  SAVE_NOTE_TOOL_NAME,
+} from "./frontendTools";
 import { A2uiContext } from "./a2ui/context";
 import { RenderUiCard } from "./a2ui/renderUi";
+import { SaveNoteCard } from "./SaveNoteCard";
+
+// AcpSessionContext — id текущей ACP-сессии для tool-карточек (SaveNoteCard шлёт его как
+// провенанс session заметки). undefined в readonly-архиве / вне сессии.
+const AcpSessionContext = createContext<string | undefined>(undefined);
+
+// AcpToolGroup заменяет дефолтный аккордеон «N tool calls»: все вызовы тулов рендерятся
+// ПЛОСКО, прямо в ленте — карточки (save_note, render_ui/A2UI, diff, терминал, файл) и
+// generic-блоки видны сразу, а не спрятаны в свёртке. Детей рисуем как есть.
+function AcpToolGroup({ children }: PropsWithChildren<{ group: ThreadGroupPart }>) {
+  return <div className="space-y-2">{children}</div>;
+}
 import type {
   AvailableCommand,
   A2uiState,
@@ -63,18 +84,20 @@ export function AcpThread({
 
   return (
     <A2uiContext.Provider value={a2ui}>
-      <ComposerUploadContext.Provider
-        value={readonly || !sessionId ? null : uploadFile}
-      >
-        <Thread
-          commands={commands}
-          components={{ ToolFallback }}
-          footer={readonly ? undefined : <PlanPanel plan={plan} />}
-          configOptions={configOptions}
-          onConfigChange={onConfigChange}
-          readonly={readonly}
-        />
-      </ComposerUploadContext.Provider>
+      <AcpSessionContext.Provider value={sessionId}>
+        <ComposerUploadContext.Provider
+          value={readonly || !sessionId ? null : uploadFile}
+        >
+          <Thread
+            commands={commands}
+            components={{ ToolFallback, ToolGroup: AcpToolGroup }}
+            footer={readonly ? undefined : <PlanPanel plan={plan} />}
+            configOptions={configOptions}
+            onConfigChange={onConfigChange}
+            readonly={readonly}
+          />
+        </ComposerUploadContext.Provider>
+      </AcpSessionContext.Provider>
     </A2uiContext.Provider>
   );
 }
@@ -94,7 +117,27 @@ function bareToolName(name: string): string {
 
 const ToolFallback: ToolCallMessagePartComponent = (props) => {
   const a2ui = useContext(A2uiContext);
+  const sessionId = useContext(AcpSessionContext);
   const toolName = bareToolName(props.toolName);
+
+  // save_note — нативная карточка добавления заметки (навык /note). Сохраняет НАПРЯМУЮ через
+  // brigade API, без агента. Ждём завершения tool-call'а, чтобы взять полный черновик из args
+  // (при стриминге args ещё частичны, а форма инициализируется из них один раз).
+  if (toolName === SAVE_NOTE_TOOL_NAME) {
+    if (props.status.type !== "complete") {
+      return (
+        <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+          Готовлю карточку…
+        </div>
+      );
+    }
+    return (
+      <SaveNoteCard
+        args={(props.args ?? {}) as Parameters<typeof SaveNoteCard>[0]["args"]}
+        sessionId={sessionId}
+      />
+    );
+  }
 
   // render_ui — generative UI от агента: строит и рендерит собственную A2UI-поверхность
   // (со скелетоном при стриминге и error boundary на невалидные пропсы). Обрабатывается

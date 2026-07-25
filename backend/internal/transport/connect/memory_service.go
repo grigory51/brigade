@@ -60,7 +60,7 @@ func (s *MemoryService) CreateNote(ctx context.Context, req *connect.Request[v1.
 	if err != nil {
 		return nil, err
 	}
-	n, sha, err := s.memory.Create(ctx, userID, memory.Note{
+	note := memory.Note{
 		Title:   req.Msg.Title,
 		Body:    req.Msg.Body,
 		Type:    req.Msg.Type,
@@ -70,7 +70,16 @@ func (s *MemoryService) CreateNote(ctx context.Context, req *connect.Request[v1.
 		TopicID: req.Msg.TopicId,
 		Sub:     req.Msg.Sub,
 		From:    req.Msg.From,
-	})
+	}
+	// topic (имя) приоритетнее topic_id: тема резолвится по имени, создаётся при отсутствии
+	// (карточка /note задаёт тему именем). Пусто — обычный Create по topic_id.
+	var n memory.Note
+	var sha string
+	if req.Msg.Topic != "" {
+		n, sha, err = s.memory.CreateNoteInTopic(ctx, userID, req.Msg.Topic, note)
+	} else {
+		n, sha, err = s.memory.Create(ctx, userID, note)
+	}
 	if err != nil {
 		return nil, memoryError(err)
 	}

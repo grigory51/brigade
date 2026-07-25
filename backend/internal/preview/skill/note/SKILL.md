@@ -26,57 +26,40 @@ raw material for the note.** Combine it with whatever the user typed after `/not
 draft. If the user named a topic/subtopic/type in their text ("in DIY, reference", "тема Работа,
 решение"), use those as defaults; otherwise infer sensible ones.
 
-## /note → show an editable card, then save on confirm
+## /note → show a save card (brigade saves it, not you)
 
-Do **not** save silently. Render a review card in the chat and save **only** when the user
-clicks Сохранить. This is a two-step tool flow:
+Call the **`save_note`** tool with a draft, then **STOP**. brigade renders a native, editable
+card in the chat; the user tweaks the fields and clicks Сохранить, and **brigade saves the note
+directly** through its own API. You do **NOT** save it: do not call any API/curl, do not wait for
+a follow-up message, do not parse any action. Your only job is a good draft.
 
-**Step 1 — draw the card** with the `render_ui` tool. Prefill `dataModel` from the draft
-(title, body, topic, sub, type). Use exactly this shape:
+Fill the tool arguments from the `Контекст:` block + what the user typed:
 
-```json
-{
-  "components": [
-    {"id":"root","component":"Card","child":"col"},
-    {"id":"col","component":"Column","children":["h","f_title","f_body","f_topic","f_sub","f_type","save"]},
-    {"id":"h","component":"Text","text":"Добавить в память","variant":"h4"},
-    {"id":"f_title","component":"TextField","label":"Заголовок","value":{"path":"/title"}},
-    {"id":"f_body","component":"TextField","label":"Текст заметки","variant":"longText","value":{"path":"/body"}},
-    {"id":"f_topic","component":"TextField","label":"Тема","value":{"path":"/topic"}},
-    {"id":"f_sub","component":"TextField","label":"Подтема","value":{"path":"/sub"}},
-    {"id":"f_type","component":"ChoicePicker","variant":"mutuallyExclusive","displayStyle":"chips","value":{"path":"/type"},"options":[{"value":"idea","label":"идея"},{"value":"decision","label":"решение"},{"value":"insight","label":"инсайт"},{"value":"todo","label":"todo"},{"value":"question","label":"вопрос"},{"value":"reference","label":"справка"}]},
-    {"id":"save_label","component":"Text","text":"Сохранить"},
-    {"id":"save","component":"Button","child":"save_label","action":{"event":{"name":"save_note","context":{"title":{"path":"/title"},"body":{"path":"/body"},"topic":{"path":"/topic"},"sub":{"path":"/sub"},"type":{"path":"/type"}}}}}
-  ],
-  "dataModel": {"title":"Аккумуляторы для Bosch GKS 18V-57","body":"Совместимы GBA 18V / ProCORE18V (BAT609/618/619).","topic":"DIY","sub":"Аккумуляторы","type":["reference"]}
-}
-```
+- `title` — one-line summary.
+- `body` — the note text (markdown), distilled from the quoted fragments and the user's words.
+- `topic` — topic name **if the user implied one** (e.g. `"DIY"`), else leave empty (→ «Общее»).
+- `sub` — subtopic name if implied (e.g. `"3D"`), else empty.
+- `type` — a single string, one of `idea|decision|insight|todo|question|reference`.
+- `tags` — optional search labels.
 
-Rules for the card:
-- `dataModel` holds your draft; the user edits the fields in place. `type` is a **list** (single
-  selection → one element).
-- Keep `body` as markdown. If topic/sub aren't clear from context, leave them empty — the user
-  picks. Don't invent a topic the user didn't imply.
-- After calling `render_ui`, **stop and wait**. Do not save yet, do not narrate the JSON.
+Example: `save_note {"title":"PLA — филамент для 3D-печати","body":"**PLA** — биопластик из кукурузы…","topic":"DIY","sub":"3D","type":"reference","tags":["3d-printing"]}`.
 
-**Step 2 — on confirm, save.** The click arrives as a new user message:
-`Действие в интерфейсе: save_note {"title":"…","body":"…","topic":"…","sub":"…","type":["reference"]}`.
-Take those (edited) values — `type` is a list, use its first element — and POST them:
+Make **exactly one** `save_note` call and **nothing else**: no other tool, no text before or
+after — not even "карточка добавлена". The card is self-explanatory and the user acts on it. Any
+extra output is noise. Don't invent a topic the user didn't imply — leave it empty, the user picks.
+
+## Distill a session into layered memory
+
+When asked to "save this session to memory" (or the session got long and valuable), don't use
+the card — save the notes directly with a plain POST (no card, they're many). Both layers, into
+a fitting `topic`:
 
 ```sh
 curl -sf -X POST "$BRIGADE_API_URL/brigade.v1.AgentBridgeService/CreateMemoryNote" \
   -H "Authorization: Bearer $BRIGADE_PREVIEW_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"sessionId\": \"$BRIGADE_SESSION_ID\", \"topic\": \"DIY\", \"sub\": \"Аккумуляторы\", \"title\": \"Аккумуляторы для Bosch GKS 18V-57\", \"body\": \"Совместимы GBA 18V / ProCORE18V (BAT609/618/619).\", \"type\": \"reference\", \"tags\": [\"bosch\"]}"
+  -d "{\"sessionId\": \"$BRIGADE_SESSION_ID\", \"topic\": \"DIY\", \"sub\": \"3D\", \"title\": \"…\", \"body\": \"…\", \"type\": \"reference\", \"tags\": []}"
 ```
-
-The response is `{"id": "...", "commitSha": "..."}` — `commitSha` proves it's durably pushed.
-Tell the user it's saved and into which topic/subtopic.
-
-## Distill a session into layered memory
-
-When asked to "save this session to memory" (or the session got long and valuable), skip the
-card — save directly with the `curl` above, both layers (pick a fitting `topic`):
 
 1. **One `episodic` note** — the session summary. `layer: "episodic"`, `type: "summary"`, body:
 

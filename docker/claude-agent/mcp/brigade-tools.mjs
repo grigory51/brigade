@@ -127,6 +127,31 @@ const TOOLS = [
       required: ["title", "options"],
     },
   },
+  {
+    name: "save_note",
+    description: [
+      "Показать нативную карточку «Добавить в память» с ЧЕРНОВИКОМ заметки и на этом ОСТАНОВИТЬСЯ.",
+      "Пользователь сам правит поля и жмёт «Сохранить» — brigade сохраняет заметку НАПРЯМУЮ, без",
+      "твоего участия. После вызова НЕ дёргай никаких API/curl и НЕ жди ответа: сохранение вне тебя.",
+      "Заполни поля черновиком из накопленного контекста и промпта пользователя.",
+    ].join("\n"),
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Заголовок заметки в одну строку" },
+        body: { type: "string", description: "Текст заметки (markdown)" },
+        topic: { type: "string", description: "Имя темы, напр. DIY (пусто → «Общее»)" },
+        sub: { type: "string", description: "Подтема, напр. 3D (пусто → «Общее»)" },
+        type: {
+          type: "string",
+          enum: ["idea", "decision", "insight", "todo", "question", "reference"],
+          description: "Тип заметки",
+        },
+        tags: { type: "array", items: { type: "string" }, description: "Опц. метки для поиска" },
+      },
+      required: ["title", "body"],
+    },
+  },
 ];
 
 const server = new Server(
@@ -136,15 +161,15 @@ const server = new Server(
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 
-// Любой вызов — no-op с подсказкой: рисует клиент, а модель должна дождаться реакции
-// пользователя, а не продолжать генерировать UI в цикле.
-server.setRequestHandler(CallToolRequestSchema, async () => ({
-  content: [
-    {
-      type: "text",
-      text: "Интерфейс показан пользователю в чате. Дождись его ответа или действия, прежде чем продолжать.",
-    },
-  ],
-}));
+// Любой вызов — no-op с подсказкой: рисует клиент. Для save_note сохранение целиком на стороне
+// пользователя (кнопка в карточке шлёт запрос сама), поэтому модель НЕ должна ждать/дёргать API;
+// для остальных (render_ui/show_choice) — дождаться реакции пользователя, не крутя UI в цикле.
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const text =
+    request.params?.name === "save_note"
+      ? "Карточка добавления в память показана. Сохранение — на стороне пользователя (кнопка «Сохранить» шлёт запрос сама); больше ничего делать не нужно."
+      : "Интерфейс показан пользователю в чате. Дождись его ответа или действия, прежде чем продолжать.";
+  return { content: [{ type: "text", text }] };
+});
 
 await server.connect(new StdioServerTransport());

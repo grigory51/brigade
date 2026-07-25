@@ -840,16 +840,20 @@ func (x *DeleteTopicResponse) GetCommitSha() string {
 }
 
 type CreateNoteRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Title         string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
-	Body          string                 `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
-	Tags          []string               `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty"`
-	Session       string                 `protobuf:"bytes,5,opt,name=session,proto3" json:"session,omitempty"`                // опционально: провенанс
-	Layer         string                 `protobuf:"bytes,6,opt,name=layer,proto3" json:"layer,omitempty"`                    // legacy: semantic (дефолт) | episodic
-	TopicId       string                 `protobuf:"bytes,7,opt,name=topic_id,json=topicId,proto3" json:"topic_id,omitempty"` // тема-владелец (пусто — «Общее»)
-	Sub           string                 `protobuf:"bytes,8,opt,name=sub,proto3" json:"sub,omitempty"`                        // подтема (пусто — дефолтная тема темы)
-	From          string                 `protobuf:"bytes,9,opt,name=from,proto3" json:"from,omitempty"`                      // человекочитаемый провенанс
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Title   string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
+	Body    string                 `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Type    string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	Tags    []string               `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty"`
+	Session string                 `protobuf:"bytes,5,opt,name=session,proto3" json:"session,omitempty"`                // опционально: провенанс
+	Layer   string                 `protobuf:"bytes,6,opt,name=layer,proto3" json:"layer,omitempty"`                    // legacy: semantic (дефолт) | episodic
+	TopicId string                 `protobuf:"bytes,7,opt,name=topic_id,json=topicId,proto3" json:"topic_id,omitempty"` // тема-владелец (пусто — «Общее»)
+	Sub     string                 `protobuf:"bytes,8,opt,name=sub,proto3" json:"sub,omitempty"`                        // подтема (пусто — дефолтная тема темы)
+	From    string                 `protobuf:"bytes,9,opt,name=from,proto3" json:"from,omitempty"`                      // человекочитаемый провенанс
+	// topic — ИМЯ темы (человекочитаемое, напр. "DIY"): тема создаётся, если её нет, иначе
+	// совпадение по slug/имени. Приоритетнее topic_id. Нужен, когда тема задаётся именем
+	// (карточка /note), а не id (дашборд, где id уже известен).
+	Topic         string `protobuf:"bytes,10,opt,name=topic,proto3" json:"topic,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -943,6 +947,13 @@ func (x *CreateNoteRequest) GetSub() string {
 func (x *CreateNoteRequest) GetFrom() string {
 	if x != nil {
 		return x.From
+	}
+	return ""
+}
+
+func (x *CreateNoteRequest) GetTopic() string {
+	if x != nil {
+		return x.Topic
 	}
 	return ""
 }
@@ -1638,7 +1649,7 @@ const file_brigade_v1_memory_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"4\n" +
 	"\x13DeleteTopicResponse\x12\x1d\n" +
 	"\n" +
-	"commit_sha\x18\x01 \x01(\tR\tcommitSha\"\xd6\x01\n" +
+	"commit_sha\x18\x01 \x01(\tR\tcommitSha\"\xec\x01\n" +
 	"\x11CreateNoteRequest\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x12\n" +
 	"\x04body\x18\x02 \x01(\tR\x04body\x12\x12\n" +
@@ -1648,7 +1659,9 @@ const file_brigade_v1_memory_proto_rawDesc = "" +
 	"\x05layer\x18\x06 \x01(\tR\x05layer\x12\x19\n" +
 	"\btopic_id\x18\a \x01(\tR\atopicId\x12\x10\n" +
 	"\x03sub\x18\b \x01(\tR\x03sub\x12\x12\n" +
-	"\x04from\x18\t \x01(\tR\x04from\"Y\n" +
+	"\x04from\x18\t \x01(\tR\x04from\x12\x14\n" +
+	"\x05topic\x18\n" +
+	" \x01(\tR\x05topic\"Y\n" +
 	"\x12CreateNoteResponse\x12$\n" +
 	"\x04note\x18\x01 \x01(\v2\x10.brigade.v1.NoteR\x04note\x12\x1d\n" +
 	"\n" +

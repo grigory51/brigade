@@ -779,6 +779,15 @@ export class CreateNoteRequest extends Message<CreateNoteRequest> {
    */
   from = "";
 
+  /**
+   * topic — ИМЯ темы (человекочитаемое, напр. "DIY"): тема создаётся, если её нет, иначе
+   * совпадение по slug/имени. Приоритетнее topic_id. Нужен, когда тема задаётся именем
+   * (карточка /note), а не id (дашборд, где id уже известен).
+   *
+   * @generated from field: string topic = 10;
+   */
+  topic = "";
+
   constructor(data?: PartialMessage<CreateNoteRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -796,6 +805,7 @@ export class CreateNoteRequest extends Message<CreateNoteRequest> {
     { no: 7, name: "topic_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 8, name: "sub", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 9, name: "from", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 10, name: "topic", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CreateNoteRequest {
