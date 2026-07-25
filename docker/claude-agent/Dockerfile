@@ -46,10 +46,15 @@ RUN apt-get update \
 # Adapter держим в ногу с claude-code (тот ставится latest): каретка ^0.54.1 капалась на
 # 0.54.x, отставая от свежего SDK на несколько миноров — старый adapter не прорелеивал через
 # ACP новые механизмы (напр. structured-output инструмента Workflow ломался на фазе Scope).
-# Плавающий минор ^0.57 держит adapter актуальным. (Исторически ≥0.54: в 0.52
+# Плавающий минор держит adapter актуальным. (Исторически ≥0.54: в 0.52
 # session/set_config_option рассинхронивался с SDK — adapter рапортовал новую модель, а
 # отвечала старая.)
-RUN npm install -g @anthropic-ai/claude-code "@agentclientprotocol/claude-agent-acp@^0.62.0" \
+#
+# Эта строка ARG — ЕДИНЫЙ источник версии адаптера: scripts/make-app.sh вычитывает её
+# отсюда для агент-рантайма в Brigade.app, чтобы .app и контейнер не разъезжались.
+# Формат строки (`ARG ACP_ADAPTER_VERSION=<spec>`) менять только вместе со скриптом.
+ARG ACP_ADAPTER_VERSION=^0.62.0
+RUN npm install -g @anthropic-ai/claude-code "@agentclientprotocol/claude-agent-acp@${ACP_ADAPTER_VERSION}" \
     && npm cache clean --force
 
 # brigade MCP-сервер кастомных UI-инструментов (render_ui, show_choice). Сток-адаптер
