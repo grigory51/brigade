@@ -132,11 +132,6 @@ func runServer(configPath string) {
 		log.Fatalf("brigade: restore sessions: %v", err)
 	}
 
-	// Одноразовый перенос прежнего архива из БД в личную память пользователей (см.
-	// session.MigrateArchivesToMemory). После успешного переноса схема архива в БД
-	// сносится; повторный старт — no-op.
-	registry.MigrateArchivesToMemory(ctx)
-
 	mux := http.NewServeMux()
 
 	// ConnectRPC — основной API-слой brigade (типизированные unary-вызовы). Interceptor
