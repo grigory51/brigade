@@ -311,6 +311,7 @@ export function SessionLayout() {
       <SessionHeaderProvider>
         {/* 260px — ширина рейла по макету (дефолт shadcn 16rem/256px). */}
         <SidebarProvider style={{ "--sidebar-width": "260px" } as CSSProperties}>
+          <SidebarAutoClose />
           <Sidebar collapsible="icon">
             <SidebarHeader>
               <div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:justify-center">
@@ -526,6 +527,19 @@ export function SessionLayout() {
       </SessionHeaderProvider>
     </SessionShellContext.Provider>
   );
+}
+
+// SidebarAutoClose закрывает выезжающее меню на мобильном при смене маршрута: выбрал
+// сессию — меню ушло, второй тап по затемнению не нужен. Реагируем на маршрут, а не на
+// каждый обработчик: в меню полдюжины пунктов навигации (сессии, ветки, заметки, архив,
+// настройки, логотип), и переход из любого должен закрывать панель.
+function SidebarAutoClose() {
+  const { isMobile, setOpenMobile } = useSidebar();
+  const { pathname } = useLocation();
+  useEffect(() => {
+    if (isMobile) setOpenMobile(false);
+  }, [pathname, isMobile, setOpenMobile]);
+  return null;
 }
 
 // SessionItem — пункт списка сессий: иконка типа, подпись (агент + тип), точка
