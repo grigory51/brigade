@@ -2,22 +2,32 @@
 # Собирает Brigade.app из готового darwin-бинаря brigade. Кроме бинаря и иконки бандл включает
 # САМОДОСТАТОЧНЫЙ агент-рантайм (node + claude-agent-acp + claude-code, пиннутые как в
 # docker-образе), чтобы local-режим не зависел от глобального npm хоста. Иконка генерируется
-# встроенными sips + iconutil; node и npm-пакеты тянутся из сети на этапе сборки.
+# встроенными sips + iconutil; node и npm-пакеты тянутся из сети на этапе сборки и кешируются
+# между сборками (см. CACHE ниже).
 #
 #   scripts/make-app.sh <путь-к-бинарю> <выходной-.app>
 #
 # Пример: scripts/make-app.sh backend/bin/brigade-darwin dist/Brigade.app
 set -euo pipefail
 
-# Версии агент-рантайма. claude-agent-acp/claude-code держим в ногу с docker/claude-agent/Dockerfile.
-ADAPTER_SPEC="@agentclientprotocol/claude-agent-acp@^0.57.0"
-CLAUDE_SPEC="@anthropic-ai/claude-code@latest"
-
 BIN="${1:?usage: make-app.sh <binary> <output.app>}"
 OUT="${2:?usage: make-app.sh <binary> <output.app>}"
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 PKG="$REPO/packaging/macos"
+AGENT_DOCKERFILE="$REPO/docker/claude-agent/Dockerfile"
+
+# Версии агент-рантайма. Версию адаптера НЕ дублируем: единственный источник —
+# `ARG ACP_ADAPTER_VERSION` в образе агента, иначе .app и контейнер тихо разъезжаются
+# (так и случилось: скрипт застрял на ^0.57, пока образ ушёл на ^0.62). claude-code в
+# обоих местах ставится latest.
+ADAPTER_VERSION="$(sed -n 's/^ARG ACP_ADAPTER_VERSION=//p' "$AGENT_DOCKERFILE")"
+if [ -z "$ADAPTER_VERSION" ]; then
+  echo "make-app: не нашёл ARG ACP_ADAPTER_VERSION в $AGENT_DOCKERFILE" >&2
+  exit 1
+fi
+ADAPTER_SPEC="@agentclientprotocol/claude-agent-acp@${ADAPTER_VERSION}"
+CLAUDE_SPEC="@anthropic-ai/claude-code@latest"
 
 if [ ! -f "$BIN" ]; then
   echo "make-app: бинарь не найден: $BIN" >&2
@@ -90,22 +100,39 @@ NODE_SRC="$DL/${NODE_TARBALL%.tar.gz}"
 mkdir -p "$RES/node/bin"
 cp "$NODE_SRC/bin/node" "$RES/node/bin/node"
 
+# npm_cached <подкаталог-кеша> <куда-в-бандл> [specs…] — ставит пакеты в ПЕРСИСТЕНТНОЕ дерево
+# в кеше и клонирует готовое в бандл. Свежий node_modules каждой сборки перекачивал сотни
+# мегабайт; в кеше npm сверяет уже установленное и лезет в сеть только за реально
+# изменившимся (@latest остаётся latest — свежесть не теряем).
+npm_cached() {
+  local dir="$CACHE/$1" dest="$2"
+  shift 2
+  ( cd "$dir" && npm install --omit=dev --no-audit --no-fund --loglevel=error \
+      --prefer-offline "$@" )
+  mkdir -p "$dest"
+  # -c — clonefile APFS: копия дерева мгновенна и не занимает места. На не-APFS томе
+  # (или старом cp) откатываемся на обычное копирование.
+  cp -Rc "$dir/." "$dest/" 2>/dev/null || cp -R "$dir/." "$dest/"
+}
+
 # Агент-пакеты ставим ХОСТОВЫМ npm: node_modules портативен (JS + prebuilt darwin-arm64
 # бинарники, нативных ABI-аддонов нет), поэтому сборка любым npm, а рантайм — встроенным node.
-# Specs передаём прямо в npm install — он сам впишет их в package.json.
+# Specs передаём прямо в npm install — он сам впишет их в package.json (потому и создаём
+# манифест только при первой сборке: дальше в нём уже стоят разрешённые версии).
 echo "make-app: ставлю агент-пакеты ($ADAPTER_SPEC, $CLAUDE_SPEC)…"
-mkdir -p "$RES/agent"
-echo '{ "name": "brigade-agent-bundle", "private": true }' > "$RES/agent/package.json"
-( cd "$RES/agent" && npm install --omit=dev --no-audit --no-fund --loglevel=error \
-    "$CLAUDE_SPEC" "$ADAPTER_SPEC" )
+mkdir -p "$CACHE/agent"
+[ -f "$CACHE/agent/package.json" ] \
+  || echo '{ "name": "brigade-agent-bundle", "private": true }' > "$CACHE/agent/package.json"
+npm_cached agent "$RES/agent" "$CLAUDE_SPEC" "$ADAPTER_SPEC"
 
 # MCP-сервер brigade (render_ui/show_choice) — в docker он в /opt/brigade-mcp; в бандле кладём в
 # Resources/brigade-mcp с зависимостями (@modelcontextprotocol/sdk), чтобы local-режим тоже
 # показывал A2UI-карточки (напр. черновик заметки в /note). Путь бинарю задаёт prependBundledTools.
+# Манифест и скрипт кладём в кеш из репо: правка в репозитории переустановит зависимости.
 echo "make-app: ставлю MCP-сервер brigade (render_ui)…"
-mkdir -p "$RES/brigade-mcp"
+mkdir -p "$CACHE/brigade-mcp"
 cp "$REPO/docker/claude-agent/mcp/brigade-tools.mjs" \
-   "$REPO/docker/claude-agent/mcp/package.json" "$RES/brigade-mcp/"
-( cd "$RES/brigade-mcp" && npm install --omit=dev --no-audit --no-fund --loglevel=error )
+   "$REPO/docker/claude-agent/mcp/package.json" "$CACHE/brigade-mcp/"
+npm_cached brigade-mcp "$RES/brigade-mcp"
 
 echo "make-app: собрано $OUT (self-contained: node + claude-agent-acp + claude-code + mcp)"

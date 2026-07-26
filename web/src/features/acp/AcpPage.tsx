@@ -17,6 +17,7 @@ import {
 import { PendingContextProvider } from "@/components/assistant-ui/composer-context";
 import { AcpThread } from "./AcpThread";
 import { SelectionMenu } from "./SelectionMenu";
+import { SessionDock } from "./dock/SessionDock";
 import {
   useAcpRuntime,
   type AgentStatus,
@@ -85,6 +86,9 @@ function AcpSessionInner({
           refreshStatus={refreshStatus}
         />
         <WorkflowsPanel workflows={workflows} />
+        {/* Плавающая обвязка сессии: чипы окон, шкала навигации по ленте, терминал.
+            Внутри провайдера рантайма — шкале и ссылкам нужна лента сообщений. */}
+        <SessionDock sessionId={sessionId} />
       </div>
 
       <PermissionDialog
