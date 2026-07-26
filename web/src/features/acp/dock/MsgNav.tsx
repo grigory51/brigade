@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuiState } from "@assistant-ui/react";
 import { messagePlainText } from "./links";
 import { jumpToMessage } from "./jumpToMessage";
@@ -29,9 +29,24 @@ const LABEL_MAX = 70;
 // растягивается на всю высоту.
 const STEP = 23;
 
+// Сколько длится возврат шкалы к актуальному фокусу после ухода курсора.
+const RELEASE_MS = 400;
+const RELEASE_EASE = "cubic-bezier(.2,.8,.2,1)";
+
 export function MsgNav() {
   const messages = useAuiState((s) => s.thread.messages);
+  // hover — дробная позиция курсора в шкале (-1, когда курсора на ней нет).
   const [hover, setHover] = useState(-1);
+  // pinned — фокус, зафиксированный на время, пока курсор находится на шкале (см. ниже).
+  const [pinned, setPinned] = useState<number | null>(null);
+  // releasing — короткое окно после ухода курсора, когда замороженная раскладка
+  // догоняет актуальный фокус. Только на это время включаются переходы: в остальном
+  // размеры меняются покадрово вслед за прокруткой и курсором, и анимация там лишняя.
+  const [releasing, setReleasing] = useState(false);
+  const releaseTimer = useRef(0);
+  const railRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => () => clearTimeout(releaseTimer.current), []);
 
   // Пилюля — не сообщение, а СЕРИЯ подряд идущих реплик одной стороны, с якорем на первой
   // из них. На один запрос агент выдаёт десяток сообщений (текст, вызовы инструментов,
@@ -50,16 +65,13 @@ export function MsgNav() {
       }
       series.push({ id: m.id, isUser, text });
     }
-    return series.map((s) => {
-      const who = s.isUser ? "Вы" : "Агент";
-      const text =
-        s.text.length > LABEL_MAX ? `${s.text.slice(0, LABEL_MAX)}…` : s.text;
-      return {
-        id: s.id,
-        isUser: s.isUser,
-        label: text ? `${who} · ${text}` : who,
-      };
-    });
+    // Кто говорит, видно по цвету пилюли — в подписи остаётся только текст реплики.
+    return series.map((s) => ({
+      id: s.id,
+      isUser: s.isUser,
+      label:
+        s.text.length > LABEL_MAX ? `${s.text.slice(0, LABEL_MAX)}…` : s.text,
+    }));
   }, [messages]);
 
   const n = pills.length;
@@ -124,23 +136,64 @@ export function MsgNav() {
   if (n === 0) return null;
 
   const cur = Math.min(Math.max(focus, 0), n - 1);
-  // Возраст пилюли — близость к фокусу. Когда лента прокручена в конец (cur = n-1),
+  // Пока курсор на шкале, раскладка считается от ЗАМОРОЖЕННОГО фокуса. Иначе клик по
+  // пилюле уводил бы её из-под курсора: прыжок меняет фокус, фокус — доли строк, и под
+  // мышью оказывается уже соседняя пилюля. Заморожена только геометрия — подсветка
+  // текущей серии продолжает жить, так что видно, куда именно перепрыгнули.
+  const layoutCur = pinned ?? cur;
+  const layoutSpan = Math.max(layoutCur, n - 1 - layoutCur, 1);
+  // Возраст пилюли — близость к фокусу. Когда лента прокручена в конец (фокус = n-1),
   // выражение вырождается в исходное «старое сверху мелкое, сейчас снизу крупное».
-  const span = Math.max(cur, n - 1 - cur, 1);
-  const ageAt = (i: number) => 1 - Math.abs(i - cur) / span;
+  const ageAt = (i: number) => 1 - Math.abs(i - layoutCur) / layoutSpan;
+
+  // Магнификация считается от РЕАЛЬНОЙ позиции курсора, переведённой в дробный индекс
+  // (3.4 — курсор между четвёртой и пятой пилюлями, ближе к четвёртой). От индекса
+  // строки под курсором она переключалась бы ступенями: внутри одной строки картинка
+  // не менялась бы вовсе, а на границе прыгала целиком.
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const rail = railRef.current;
+    if (!rail) return;
+    setPinned((p) => p ?? cur);
+    const y = e.clientY - rail.getBoundingClientRect().top;
+    const centers = Array.from(rail.children, (row) => {
+      const el = row as HTMLElement;
+      return el.offsetTop + el.offsetHeight / 2;
+    });
+    if (centers.length === 0) return;
+    if (y <= centers[0]) return setHover(0);
+    if (y >= centers[centers.length - 1]) return setHover(centers.length - 1);
+    for (let i = 0; i < centers.length - 1; i++) {
+      if (y < centers[i + 1]) {
+        const gap = centers[i + 1] - centers[i];
+        return setHover(gap > 0 ? i + (y - centers[i]) / gap : i);
+      }
+    }
+  };
 
   return (
     <div
       // На узких экранах шкалу прячем: она встала бы поверх композера, а места для
       // магнификации и тултипа всё равно нет.
       className="pointer-events-none absolute inset-y-0 right-[18px] z-10 hidden w-[46px] animate-[rail-in_0.35s_ease] flex-col justify-center py-4 lg:flex"
-      onMouseLeave={() => setHover(-1)}
     >
       <div
+        ref={railRef}
+        onPointerMove={onPointerMove}
+        onPointerLeave={() => {
+          setHover(-1);
+          setPinned(null);
+          setReleasing(true);
+          clearTimeout(releaseTimer.current);
+          releaseTimer.current = window.setTimeout(
+            () => setReleasing(false),
+            RELEASE_MS + 40,
+          );
+        }}
         // Высота задана здесь и только здесь: строки внутри делят её flex-grow'ом, поэтому
-        // ни магнификация, ни смена фокуса не меняют габарит блока.
+        // ни магнификация, ни смена фокуса не меняют габарит блока. relative — чтобы
+        // offsetTop строк считался от шкалы (см. onPointerMove).
         style={{ height: n * STEP }}
-        className="flex max-h-full flex-col items-end"
+        className="pointer-events-auto relative flex max-h-full flex-col items-end"
       >
         {pills.map((p, i) => {
           const t = ageAt(i);
@@ -162,37 +215,48 @@ export function MsgNav() {
           return (
             <div
               key={p.id}
-              onMouseEnter={() => setHover(i)}
               onClick={() => jumpToMessage(p.id)}
               // Строки идут вплотную и делят высоту пропорционально близости к фокусу:
               // у фокуса просторнее, вдали гуще. Мёртвых зон между пилюлями нет — вся
               // строка кликабельна, поэтому ховер перетекает.
-              style={{ flexGrow: 1 + t, flexBasis: 0 }}
-              className="pointer-events-auto relative flex min-h-0 w-full cursor-pointer items-center justify-end pl-6"
+              style={{
+                flexGrow: 1 + t,
+                flexBasis: 0,
+                transition: releasing
+                  ? `flex-grow ${RELEASE_MS}ms ${RELEASE_EASE}`
+                  : undefined,
+              }}
+              className="pointer-events-auto relative min-h-0 w-full cursor-pointer"
             >
-              {hover === i && (
-                <div className="pointer-events-none absolute top-1/2 right-[52px] z-10 animate-[tip-in_0.18s_cubic-bezier(0.2,0.8,0.2,1)] rounded-[9px] border border-white/8 bg-[rgba(28,27,26,0.82)] px-3 py-[7px] text-[11.5px] whitespace-nowrap text-[#f0efe9] shadow-[0_12px_32px_rgba(0,0,0,0.5)] backdrop-blur-[14px] backdrop-saturate-150">
+              {Math.round(hover) === i && p.label && (
+                // -translate-y-1/2 обязателен в базовом классе, а не только в кадрах
+                // анимации: без fill-mode тултип по её окончании возвращается к своему
+                // стилю и «съезжал» бы вниз на половину высоты.
+                <div className="pointer-events-none absolute top-1/2 right-[52px] z-10 -translate-y-1/2 animate-[tip-in_0.18s_cubic-bezier(0.2,0.8,0.2,1)] rounded-[9px] border border-white/8 bg-[rgba(28,27,26,0.82)] px-3 py-[7px] text-[11.5px] whitespace-nowrap text-[#f0efe9] shadow-[0_12px_32px_rgba(0,0,0,0.5)] backdrop-blur-[14px] backdrop-saturate-150">
                   {p.label}
                 </div>
               )}
+              {/* Пилюля вынута из потока строки: её рост под курсором иначе распирал бы
+                  строку, вся раскладка шкалы ехала бы вниз, а тултип — вместе с ней
+                  (успевал отрисоваться у прежнего места и переползал на новое). */}
               <div
                 style={{
                   width,
                   height,
                   opacity,
                   background,
-                  // Переход по размеру нужен только магнификации под курсором. От
-                  // прокрутки размеры и так меняются покадрово — там transition давал бы
-                  // запаздывание вместо непрерывного отклика.
-                  transition:
-                    hover >= 0
-                      ? "width .26s cubic-bezier(.25,1,.4,1), height .26s cubic-bezier(.25,1,.4,1), opacity .26s ease, background .26s ease"
-                      : "background .26s ease",
+                  // В обычном состоянии переход короткий: и прокрутка, и курсор меняют
+                  // размеры покадрово, он лишь сглаживает шаг между кадрами. На время
+                  // возврата после ухода курсора удлиняется, чтобы пилюли перетекали
+                  // в такт со строками, а не приезжали раньше них.
+                  transition: releasing
+                    ? `width ${RELEASE_MS}ms ${RELEASE_EASE}, height ${RELEASE_MS}ms ${RELEASE_EASE}, opacity ${RELEASE_MS}ms ${RELEASE_EASE}, background .26s ease`
+                    : "width .12s linear, height .12s linear, opacity .12s linear, background .26s ease",
                 }}
                 className={
                   active
-                    ? "shrink-0 animate-[now-glow_2.6s_ease-in-out_infinite] rounded-full"
-                    : "shrink-0 rounded-full"
+                    ? "absolute top-1/2 right-0 -translate-y-1/2 animate-[now-glow_2.6s_ease-in-out_infinite] rounded-full"
+                    : "absolute top-1/2 right-0 -translate-y-1/2 rounded-full"
                 }
               />
             </div>

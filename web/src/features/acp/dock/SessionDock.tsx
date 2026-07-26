@@ -16,44 +16,35 @@ import { TerminalWindow } from "./TerminalWindow";
  * Монтируется внутри AssistantRuntimeProvider: шкале и ссылкам нужна лента сообщений.
  */
 
-type DockState = {
-  // panel — какое из взаимоисключающих окон открыто (в фазе 1 их одно).
-  panel: "" | "links";
-  terminal: boolean;
-};
-
 const STORE_KEY = "brigade.dock";
 
-// Состояние окон общее для всех сессий и переживает перезагрузку страницы. Терминал
-// по умолчанию закрыт: его раскрытие спавнит pty в среде агента.
-function loadState(): DockState {
+// Переживает перезагрузку только терминал: он часть рабочего места, и держать его
+// открытым — осознанный выбор. Справочные окна (ссылки) открываются под конкретный
+// вопрос и всплывать сами при следующем заходе не должны. Терминал стартует закрытым
+// до первого открытия: его раскрытие спавнит pty в среде агента.
+function loadTerminalOpen(): boolean {
   try {
     const raw = localStorage.getItem(STORE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<DockState>;
-      return {
-        panel: parsed.panel === "links" ? "links" : "",
-        terminal: parsed.terminal === true,
-      };
-    }
+    return raw ? (JSON.parse(raw) as { terminal?: boolean }).terminal === true : false;
   } catch {
     // Повреждённое или недоступное хранилище — просто стартуем с дефолта.
+    return false;
   }
-  return { panel: "", terminal: false };
 }
 
 export function SessionDock({ sessionId }: { sessionId: string }) {
-  const [dock, setDock] = useState<DockState>(loadState);
+  const [panel, setPanel] = useState<"" | "links">("");
+  const [terminal, setTerminal] = useState(loadTerminalOpen);
   const messages = useAuiState((s) => s.thread.messages);
   const previews = usePreviews(sessionId);
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORE_KEY, JSON.stringify(dock));
+      localStorage.setItem(STORE_KEY, JSON.stringify({ terminal }));
     } catch {
       // Приватный режим/переполнение — состояние просто не переживёт перезагрузку.
     }
-  }, [dock]);
+  }, [terminal]);
 
   const links = useMemo(() => {
     const previewUrls = new Set(previews.map((p) => p.url));
@@ -71,10 +62,8 @@ export function SessionDock({ sessionId }: { sessionId: string }) {
         <Chip
           icon={Link2}
           label="Ссылки"
-          active={dock.panel === "links"}
-          onClick={() =>
-            setDock((d) => ({ ...d, panel: d.panel === "links" ? "" : "links" }))
-          }
+          active={panel === "links"}
+          onClick={() => setPanel((p) => (p === "links" ? "" : "links"))}
         >
           <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-lg bg-secondary px-1 text-[10px] text-muted-foreground">
             {linksCount}
@@ -83,30 +72,30 @@ export function SessionDock({ sessionId }: { sessionId: string }) {
         <Chip
           icon={SquareTerminal}
           label="Терминал"
-          active={dock.terminal}
-          onClick={() => setDock((d) => ({ ...d, terminal: !d.terminal }))}
+          active={terminal}
+          onClick={() => setTerminal((v) => !v)}
         >
           <span
             className={cn(
               "size-1.5 rounded-full",
-              dock.terminal ? "bg-success" : "bg-muted-foreground/50",
+              terminal ? "bg-success" : "bg-muted-foreground/50",
             )}
           />
         </Chip>
       </div>
 
-      {dock.panel === "links" && (
+      {panel === "links" && (
         <LinksWindow
           links={links}
           previews={previews}
-          onClose={() => setDock((d) => ({ ...d, panel: "" }))}
+          onClose={() => setPanel("")}
         />
       )}
 
-      {dock.terminal && (
+      {terminal && (
         <TerminalWindow
           sessionId={sessionId}
-          onClose={() => setDock((d) => ({ ...d, terminal: false }))}
+          onClose={() => setTerminal(false)}
         />
       )}
     </>
@@ -132,6 +121,9 @@ function Chip({
     <button
       type="button"
       onClick={onClick}
+      // Метка для окон, закрывающихся по клику мимо: клик по своему чипу — это
+      // переключение, а не «мимо» (см. LinksWindow).
+      data-dock-chip
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border bg-[rgba(31,30,29,0.85)] px-3 py-1.5 text-xs shadow-[0_4px_14px_rgba(0,0,0,0.3)] backdrop-blur-[8px] transition-colors hover:border-[#5a4034] hover:text-foreground",
         active

@@ -1,4 +1,10 @@
-import type { ComponentType, PropsWithChildren, ReactNode } from "react";
+import type {
+  ComponentType,
+  CSSProperties,
+  PropsWithChildren,
+  ReactNode,
+  Ref,
+} from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -10,11 +16,20 @@ import { cn } from "@/lib/utils";
  */
 export function FloatingWindow({
   className,
+  style,
+  ref,
   titlebar,
   children,
-}: PropsWithChildren<{ className?: string; titlebar: ReactNode }>) {
+}: PropsWithChildren<{
+  className?: string;
+  style?: CSSProperties;
+  ref?: Ref<HTMLDivElement>;
+  titlebar: ReactNode;
+}>) {
   return (
     <div
+      ref={ref}
+      style={style}
       className={cn(
         "absolute flex flex-col overflow-hidden rounded-[14px] border border-[#4a4843] bg-[rgba(38,38,36,0.97)] shadow-[0_26px_64px_rgba(0,0,0,0.55)] backdrop-blur-[10px]",
         "animate-[win-in_0.22s_cubic-bezier(0.2,0.8,0.2,1)]",
