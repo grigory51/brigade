@@ -3,14 +3,15 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ArchivedHistoryRequest, ArchivedHistoryResponse, ListArchivedRequest, ListArchivedResponse } from "./archive_pb.js";
+import { ArchivedHistoryRequest, ArchivedHistoryResponse, DeleteArchivedRequest, ListArchivedRequest, ListArchivedResponse } from "./archive_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
+import { Empty } from "./auth_pb.js";
 
 /**
- * ArchiveService — чтение архива сессий: список архивных сессий (карточки title+summary)
- * и снимок истории чата для readonly-просмотра. Сам переход в архив (recap + снимок +
- * остановка контейнера) выполняет SessionService.Archive — здесь только чтение уже
- * заархивированного, без живого агента.
+ * ArchiveService — архив сессий в личной памяти пользователя (git-репозиторий заметок,
+ * каталог archive/): список карточек title+summary, снимок истории чата для readonly-
+ * просмотра и удаление. Сам переход в архив (recap + снимок + остановка контейнера)
+ * выполняет SessionService.Archive — здесь только уже заархивированное, без живого агента.
  *
  * @generated from service brigade.v1.ArchiveService
  */
@@ -29,7 +30,7 @@ export const ArchiveService = {
       kind: MethodKind.Unary,
     },
     /**
-     * GetHistory — снимок ленты чата архивной сессии (из БД, без живого агента) для
+     * GetHistory — снимок ленты чата архивной сессии (без живого агента) для
      * readonly-рендера.
      *
      * @generated from rpc brigade.v1.ArchiveService.GetHistory
@@ -38,6 +39,18 @@ export const ArchiveService = {
       name: "GetHistory",
       I: ArchivedHistoryRequest,
       O: ArchivedHistoryResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Delete удаляет сессию из архива насовсем (файлы уходят коммитом в репозиторий
+     * памяти). Живых сессий не касается — их удаляет SessionService.Delete.
+     *
+     * @generated from rpc brigade.v1.ArchiveService.Delete
+     */
+    delete: {
+      name: "Delete",
+      I: DeleteArchivedRequest,
+      O: Empty,
       kind: MethodKind.Unary,
     },
   }

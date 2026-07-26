@@ -2,6 +2,7 @@ package connectsvc
 
 import (
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
+	"github.com/grigory51/brigade/backend/internal/memory"
 	"github.com/grigory51/brigade/backend/internal/store"
 )
 
@@ -70,7 +71,22 @@ func sessionToProto(s store.Session) *v1.Session {
 		CreatedAt:      s.CreatedAt.Unix(),
 		Name:           s.Name,
 		ParentId:       s.ParentID,
-		Archived:       s.Archived,
-		Summary:        s.Summary,
+	}
+}
+
+// archivedToProto переводит заархивированную сессию (она живёт в личной памяти, а не в БД)
+// в то же proto-сообщение Session: клиенту архив выглядит списком сессий с recap'ом.
+// Полей живой сессии (режим, контейнер, cwd) у архива нет — агента за ней уже не стоит.
+func archivedToProto(s memory.ArchivedSession) *v1.Session {
+	return &v1.Session{
+		Id:        s.ID,
+		Kind:      kindToProto(store.SessionKind(s.Kind)),
+		AgentType: s.AgentType,
+		Status:    v1.SessionStatus_SESSION_STATUS_STOPPED,
+		CreatedAt: s.Created.Unix(),
+		Name:      s.Name,
+		ParentId:  s.ParentID,
+		Archived:  true,
+		Summary:   s.Summary,
 	}
 }

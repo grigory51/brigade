@@ -123,7 +123,7 @@ func runServer(configPath string) {
 
 	// Реестр живых сессий поверх store и спавнера. Режим фиксируется в каждой сессии;
 	// подписочный токен Claude берётся per-user из store при создании сессии.
-	registry := session.NewRegistry(st, spawner, store.SessionMode(cfg.Mode), cfg.WorkDir, cfg.ClaudeHomeDir, cfg.MaxContainers, previewSvc, notifySvc, authSvc)
+	registry := session.NewRegistry(st, spawner, store.SessionMode(cfg.Mode), cfg.WorkDir, cfg.ClaudeHomeDir, cfg.MaxContainers, previewSvc, notifySvc, authSvc, memorySvc)
 	defer registry.Close()
 
 	// Восстановление живых сессий после рестарта: упавшие помечаются failed и не
@@ -131,6 +131,11 @@ func runServer(configPath string) {
 	if err := registry.RestoreAll(ctx); err != nil {
 		log.Fatalf("brigade: restore sessions: %v", err)
 	}
+
+	// Одноразовый перенос прежнего архива из БД в личную память пользователей (см.
+	// session.MigrateArchivesToMemory). После успешного переноса схема архива в БД
+	// сносится; повторный старт — no-op.
+	registry.MigrateArchivesToMemory(ctx)
 
 	mux := http.NewServeMux()
 

@@ -114,6 +114,43 @@ export class ArchivedHistoryRequest extends Message<ArchivedHistoryRequest> {
 }
 
 /**
+ * @generated from message brigade.v1.DeleteArchivedRequest
+ */
+export class DeleteArchivedRequest extends Message<DeleteArchivedRequest> {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId = "";
+
+  constructor(data?: PartialMessage<DeleteArchivedRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.DeleteArchivedRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DeleteArchivedRequest {
+    return new DeleteArchivedRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): DeleteArchivedRequest {
+    return new DeleteArchivedRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): DeleteArchivedRequest {
+    return new DeleteArchivedRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: DeleteArchivedRequest | PlainMessage<DeleteArchivedRequest> | undefined, b: DeleteArchivedRequest | PlainMessage<DeleteArchivedRequest> | undefined): boolean {
+    return proto3.util.equals(DeleteArchivedRequest, a, b);
+  }
+}
+
+/**
  * @generated from message brigade.v1.ArchivedHistoryResponse
  */
 export class ArchivedHistoryResponse extends Message<ArchivedHistoryResponse> {

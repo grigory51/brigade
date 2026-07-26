@@ -34,12 +34,12 @@ func (s *ArchiveService) List(ctx context.Context, _ *connect.Request[v1.ListArc
 	}
 	resp := &v1.ListArchivedResponse{}
 	for _, sess := range list {
-		resp.Sessions = append(resp.Sessions, sessionToProto(sess))
+		resp.Sessions = append(resp.Sessions, archivedToProto(sess))
 	}
 	return connect.NewResponse(resp), nil
 }
 
-// GetHistory отдаёт снимок ленты чата архивной сессии из БД (без живого агента) — тот же
+// GetHistory отдаёт снимок ленты чата архивной сессии из личной памяти — тот же
 // формат AcpMessage, что и живая AcpService.GetHistory.
 func (s *ArchiveService) GetHistory(ctx context.Context, req *connect.Request[v1.ArchivedHistoryRequest]) (*connect.Response[v1.ArchivedHistoryResponse], error) {
 	userID, err := requireUser(ctx)
@@ -58,4 +58,16 @@ func (s *ArchiveService) GetHistory(ctx context.Context, req *connect.Request[v1
 		})
 	}
 	return connect.NewResponse(resp), nil
+}
+
+// Delete удаляет сессию из архива насовсем (файлы уходят коммитом в репозиторий памяти).
+func (s *ArchiveService) Delete(ctx context.Context, req *connect.Request[v1.DeleteArchivedRequest]) (*connect.Response[v1.Empty], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.registry.DeleteArchived(ctx, req.Msg.SessionId, userID); err != nil {
+		return nil, sessionError(err)
+	}
+	return connect.NewResponse(&v1.Empty{}), nil
 }

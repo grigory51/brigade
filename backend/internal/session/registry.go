@@ -34,6 +34,7 @@ import (
 	"github.com/grigory51/brigade/backend/internal/acp/acpremote"
 	"github.com/grigory51/brigade/backend/internal/cliremote"
 	"github.com/grigory51/brigade/backend/internal/agui"
+	"github.com/grigory51/brigade/backend/internal/memory"
 	"github.com/grigory51/brigade/backend/internal/notify"
 	"github.com/grigory51/brigade/backend/internal/preview"
 	"github.com/grigory51/brigade/backend/internal/spawn"
@@ -104,6 +105,17 @@ type AgentKeyProvider interface {
 	EnsureAgentSSHKey(ctx context.Context, userID string) (privatePEM, publicKey string, err error)
 }
 
+// SessionArchive — хранилище архива сессий. Архив живёт в личной памяти пользователя
+// (git-репозиторий заметок, каталог archive/), а не в БД brigade: у пользователя одно
+// хранилище личных данных, и оно переживает пересоздание инстанса. Реализуется
+// memory.Service.
+type SessionArchive interface {
+	ArchiveSession(ctx context.Context, userID string, sess memory.ArchivedSession, messages []byte) error
+	ListArchivedSessions(ctx context.Context, userID string) ([]memory.ArchivedSession, error)
+	ArchivedMessages(ctx context.Context, userID, sessionID string) ([]byte, error)
+	DeleteArchivedSession(ctx context.Context, userID, sessionID string) error
+}
+
 // Registry — реестр живых сессий поверх store и спавнера.
 //
 // Режим спавна (local|docker) — свойство ИНСТАНСА (BRIGADE_MODE), не сессии:
@@ -132,6 +144,9 @@ type Registry struct {
 	// agentKeys выдаёт (генерируя при отсутствии) per-user SSH-ключ агента для провижининга
 	// в контейнер сессии. Может быть nil (тесты) — тогда ключ не подкладывается.
 	agentKeys AgentKeyProvider
+	// archive — хранилище архива сессий (репозиторий личной памяти пользователя). Может
+	// быть nil (тесты) — тогда архивация недоступна.
+	archive SessionArchive
 
 	mu   sync.Mutex
 	live map[string]*live
@@ -156,7 +171,7 @@ type Registry struct {
 // (дефолт Cwd сессии); claudeHomeDir — базовый каталог per-user ~/.claude (docker);
 // previews — сервис публикации dev-серверов. Подписочный токен Claude берётся
 // per-user из store при создании сессии.
-func NewRegistry(st *store.Store, spawner spawn.Spawner, mode store.SessionMode, workDir, claudeHomeDir string, maxContainers int, previews *preview.Service, notifier *notify.Service, agentKeys AgentKeyProvider) *Registry {
+func NewRegistry(st *store.Store, spawner spawn.Spawner, mode store.SessionMode, workDir, claudeHomeDir string, maxContainers int, previews *preview.Service, notifier *notify.Service, agentKeys AgentKeyProvider, archive SessionArchive) *Registry {
 	return &Registry{
 		store:         st,
 		spawner:       spawner,
@@ -167,6 +182,7 @@ func NewRegistry(st *store.Store, spawner spawn.Spawner, mode store.SessionMode,
 		previews:      previews,
 		notify:        notifier,
 		agentKeys:     agentKeys,
+		archive:       archive,
 		live:          make(map[string]*live),
 		tearingDown:   make(map[string]struct{}),
 		userLocks:     make(map[string]*sync.Mutex),
@@ -1397,26 +1413,27 @@ const archiveRecapPrompt = "Кратко, в 1–2 предложениях, с�
 // readonly-просмотра без агента) и генерирует recap (summary), затем останавливает
 // контейнер как Stop и помечает сессию archived. Идемпотентно для уже архивной. Снимок и
 // recap возможны только для ACP с живым клиентом; для прочих summary остаётся пустым.
-func (r *Registry) Archive(ctx context.Context, sessionID, userID string) (store.Session, error) {
+func (r *Registry) Archive(ctx context.Context, sessionID, userID string) (memory.ArchivedSession, error) {
 	sess, err := r.Get(ctx, sessionID, userID)
 	if err != nil {
-		return store.Session{}, err
+		return memory.ArchivedSession{}, err
 	}
-	if sess.Archived {
-		return sess, nil
+	if r.archive == nil {
+		return memory.ArchivedSession{}, errors.New("session: архив недоступен — не настроена память")
 	}
 
 	r.mu.Lock()
 	lv := r.live[sessionID]
 	r.mu.Unlock()
 
+	var messages []byte
 	summary := ""
 	if lv != nil && lv.client != nil {
 		// Снимок ленты ДО recap: служебный recap-turn не должен попасть в архивную историю.
 		if data, err := json.Marshal(lv.client.Messages()); err != nil {
 			log.Printf("session: archive %s marshal history: %v", sessionID, err)
-		} else if err := r.store.SaveSessionSnapshot(ctx, sessionID, string(data), time.Now()); err != nil {
-			log.Printf("session: archive %s save snapshot: %v", sessionID, err)
+		} else {
+			messages = data
 		}
 		// Recap на неотменяемом контексте: RPC мог вернуться раньше, чем агент ответит.
 		if s, err := lv.client.Summarize(context.WithoutCancel(ctx), archiveRecapPrompt); err != nil {
@@ -1426,12 +1443,23 @@ func (r *Registry) Archive(ctx context.Context, sessionID, userID string) (store
 		}
 	}
 
-	if err := r.store.SetSessionArchived(ctx, sessionID, summary); err != nil {
-		return store.Session{}, err
+	archived := memory.ArchivedSession{
+		ID:        sess.ID,
+		Name:      sess.Name,
+		AgentType: sess.AgentType,
+		Kind:      string(sess.Kind),
+		ParentID:  sess.ParentID,
+		Summary:   summary,
+		Created:   sess.CreatedAt,
+		Archived:  time.Now(),
+	}
+	// Перенос в память — ДО удаления из БД: пока сессия не уехала в git (а значит и на
+	// remote пользователя), удалять её нельзя, иначе сбой push'а стоил бы всей истории.
+	if err := r.archive.ArchiveSession(ctx, userID, archived, messages); err != nil {
+		return memory.ArchivedSession{}, fmt.Errorf("session: archive %s: %w", sessionID, err)
 	}
 
-	// Teardown контейнера (как Stop): снять live-объект, завершить, статус stopped. Если
-	// teardown уже идёт (гонка) — флаг archived уже выставлен, этого достаточно.
+	// Teardown контейнера (как Stop): снять live-объект и завершить среду.
 	if tv, err := r.beginTeardown(sessionID); err == nil {
 		defer r.endTeardown(sessionID)
 		if tv != nil {
@@ -1441,33 +1469,44 @@ func (r *Registry) Archive(ctx context.Context, sessionID, userID string) (store
 		}
 		r.previews.Drop(sessionID)
 		r.releaseUserContainerIfIdle(userID)
-		_ = r.store.UpdateSessionStatus(ctx, sessionID, store.SessionStatusStopped)
+	}
+	// Сессия целиком переехала в память — в БД ей больше не место.
+	if err := r.store.DeleteSession(ctx, sessionID); err != nil {
+		log.Printf("session: archive %s delete row: %v", sessionID, err)
 	}
 
 	log.Printf("session: archived %s by user=%s", sessionID, userID)
-	sess.Archived = true
-	sess.Summary = summary
-	sess.Status = store.SessionStatusStopped
-	return sess, nil
+	return archived, nil
 }
 
-// ListArchived возвращает архивные сессии пользователя (новые первыми).
-func (r *Registry) ListArchived(ctx context.Context, userID string) ([]store.Session, error) {
-	return r.store.ListArchivedByUser(ctx, userID)
-}
-
-// ArchivedHistory возвращает снимок ленты чата архивной сессии (из БД, без живого агента)
-// для readonly-рендера. Проверяет владение; ErrNotFound, если снимка нет.
-func (r *Registry) ArchivedHistory(ctx context.Context, sessionID, userID string) ([]acp.Message, error) {
-	if _, err := r.Get(ctx, sessionID, userID); err != nil {
-		return nil, err
+// ListArchived возвращает архивные сессии пользователя из памяти (новые первыми).
+func (r *Registry) ListArchived(ctx context.Context, userID string) ([]memory.ArchivedSession, error) {
+	if r.archive == nil {
+		return nil, nil
 	}
-	data, err := r.store.GetSessionSnapshot(ctx, sessionID)
+	return r.archive.ListArchivedSessions(ctx, userID)
+}
+
+// DeleteArchived удаляет сессию из архива насовсем.
+func (r *Registry) DeleteArchived(ctx context.Context, sessionID, userID string) error {
+	if r.archive == nil {
+		return store.ErrNotFound
+	}
+	return r.archive.DeleteArchivedSession(ctx, userID, sessionID)
+}
+
+// ArchivedHistory возвращает снимок ленты чата архивной сессии для readonly-рендера.
+// Владение проверять не нужно: архив читается из репозитория самого пользователя.
+func (r *Registry) ArchivedHistory(ctx context.Context, sessionID, userID string) ([]acp.Message, error) {
+	if r.archive == nil {
+		return nil, store.ErrNotFound
+	}
+	data, err := r.archive.ArchivedMessages(ctx, userID, sessionID)
 	if err != nil {
 		return nil, err
 	}
 	var msgs []acp.Message
-	if err := json.Unmarshal([]byte(data), &msgs); err != nil {
+	if err := json.Unmarshal(data, &msgs); err != nil {
 		return nil, fmt.Errorf("session: unmarshal snapshot %s: %w", sessionID, err)
 	}
 	return msgs, nil

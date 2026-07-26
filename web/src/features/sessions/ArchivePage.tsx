@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ConnectError } from "@connectrpc/connect";
 import { Archive, ChevronLeft, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { archiveClient, sessionClient } from "@/api/client";
+import { archiveClient } from "@/api/client";
 import type { Session } from "@/api/gen/brigade/v1/session_pb";
 import { cn } from "@/lib/utils";
 import { AcpThread } from "@/features/acp/AcpThread";
@@ -35,7 +35,7 @@ export function ArchivePage() {
   async function onDelete(id: string) {
     setDeletingIds((prev) => new Set(prev).add(id));
     try {
-      await sessionClient.delete({ sessionId: id });
+      await archiveClient.delete({ sessionId: id });
       setSessions((prev) => (prev ?? []).filter((s) => s.id !== id));
       toast.success("Сессия удалена из архива");
     } catch (err) {

@@ -38,15 +38,20 @@ const (
 	// ArchiveServiceGetHistoryProcedure is the fully-qualified name of the ArchiveService's GetHistory
 	// RPC.
 	ArchiveServiceGetHistoryProcedure = "/brigade.v1.ArchiveService/GetHistory"
+	// ArchiveServiceDeleteProcedure is the fully-qualified name of the ArchiveService's Delete RPC.
+	ArchiveServiceDeleteProcedure = "/brigade.v1.ArchiveService/Delete"
 )
 
 // ArchiveServiceClient is a client for the brigade.v1.ArchiveService service.
 type ArchiveServiceClient interface {
 	// List — архивные сессии пользователя (для страницы архива).
 	List(context.Context, *connect.Request[v1.ListArchivedRequest]) (*connect.Response[v1.ListArchivedResponse], error)
-	// GetHistory — снимок ленты чата архивной сессии (из БД, без живого агента) для
+	// GetHistory — снимок ленты чата архивной сессии (без живого агента) для
 	// readonly-рендера.
 	GetHistory(context.Context, *connect.Request[v1.ArchivedHistoryRequest]) (*connect.Response[v1.ArchivedHistoryResponse], error)
+	// Delete удаляет сессию из архива насовсем (файлы уходят коммитом в репозиторий
+	// памяти). Живых сессий не касается — их удаляет SessionService.Delete.
+	Delete(context.Context, *connect.Request[v1.DeleteArchivedRequest]) (*connect.Response[v1.Empty], error)
 }
 
 // NewArchiveServiceClient constructs a client for the brigade.v1.ArchiveService service. By
@@ -72,6 +77,12 @@ func NewArchiveServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(archiveServiceMethods.ByName("GetHistory")),
 			connect.WithClientOptions(opts...),
 		),
+		delete: connect.NewClient[v1.DeleteArchivedRequest, v1.Empty](
+			httpClient,
+			baseURL+ArchiveServiceDeleteProcedure,
+			connect.WithSchema(archiveServiceMethods.ByName("Delete")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -79,6 +90,7 @@ func NewArchiveServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 type archiveServiceClient struct {
 	list       *connect.Client[v1.ListArchivedRequest, v1.ListArchivedResponse]
 	getHistory *connect.Client[v1.ArchivedHistoryRequest, v1.ArchivedHistoryResponse]
+	delete     *connect.Client[v1.DeleteArchivedRequest, v1.Empty]
 }
 
 // List calls brigade.v1.ArchiveService.List.
@@ -91,13 +103,21 @@ func (c *archiveServiceClient) GetHistory(ctx context.Context, req *connect.Requ
 	return c.getHistory.CallUnary(ctx, req)
 }
 
+// Delete calls brigade.v1.ArchiveService.Delete.
+func (c *archiveServiceClient) Delete(ctx context.Context, req *connect.Request[v1.DeleteArchivedRequest]) (*connect.Response[v1.Empty], error) {
+	return c.delete.CallUnary(ctx, req)
+}
+
 // ArchiveServiceHandler is an implementation of the brigade.v1.ArchiveService service.
 type ArchiveServiceHandler interface {
 	// List — архивные сессии пользователя (для страницы архива).
 	List(context.Context, *connect.Request[v1.ListArchivedRequest]) (*connect.Response[v1.ListArchivedResponse], error)
-	// GetHistory — снимок ленты чата архивной сессии (из БД, без живого агента) для
+	// GetHistory — снимок ленты чата архивной сессии (без живого агента) для
 	// readonly-рендера.
 	GetHistory(context.Context, *connect.Request[v1.ArchivedHistoryRequest]) (*connect.Response[v1.ArchivedHistoryResponse], error)
+	// Delete удаляет сессию из архива насовсем (файлы уходят коммитом в репозиторий
+	// памяти). Живых сессий не касается — их удаляет SessionService.Delete.
+	Delete(context.Context, *connect.Request[v1.DeleteArchivedRequest]) (*connect.Response[v1.Empty], error)
 }
 
 // NewArchiveServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -119,12 +139,20 @@ func NewArchiveServiceHandler(svc ArchiveServiceHandler, opts ...connect.Handler
 		connect.WithSchema(archiveServiceMethods.ByName("GetHistory")),
 		connect.WithHandlerOptions(opts...),
 	)
+	archiveServiceDeleteHandler := connect.NewUnaryHandler(
+		ArchiveServiceDeleteProcedure,
+		svc.Delete,
+		connect.WithSchema(archiveServiceMethods.ByName("Delete")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/brigade.v1.ArchiveService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ArchiveServiceListProcedure:
 			archiveServiceListHandler.ServeHTTP(w, r)
 		case ArchiveServiceGetHistoryProcedure:
 			archiveServiceGetHistoryHandler.ServeHTTP(w, r)
+		case ArchiveServiceDeleteProcedure:
+			archiveServiceDeleteHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -140,4 +168,8 @@ func (UnimplementedArchiveServiceHandler) List(context.Context, *connect.Request
 
 func (UnimplementedArchiveServiceHandler) GetHistory(context.Context, *connect.Request[v1.ArchivedHistoryRequest]) (*connect.Response[v1.ArchivedHistoryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.ArchiveService.GetHistory is not implemented"))
+}
+
+func (UnimplementedArchiveServiceHandler) Delete(context.Context, *connect.Request[v1.DeleteArchivedRequest]) (*connect.Response[v1.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.ArchiveService.Delete is not implemented"))
 }

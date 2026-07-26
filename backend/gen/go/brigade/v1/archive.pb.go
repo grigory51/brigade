@@ -145,6 +145,50 @@ func (x *ArchivedHistoryRequest) GetSessionId() string {
 	return ""
 }
 
+type DeleteArchivedRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteArchivedRequest) Reset() {
+	*x = DeleteArchivedRequest{}
+	mi := &file_brigade_v1_archive_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteArchivedRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteArchivedRequest) ProtoMessage() {}
+
+func (x *DeleteArchivedRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_archive_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteArchivedRequest.ProtoReflect.Descriptor instead.
+func (*DeleteArchivedRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_archive_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *DeleteArchivedRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
 type ArchivedHistoryResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// messages — снимок ленты (тот же формат, что и живая AcpService.GetHistory).
@@ -155,7 +199,7 @@ type ArchivedHistoryResponse struct {
 
 func (x *ArchivedHistoryResponse) Reset() {
 	*x = ArchivedHistoryResponse{}
-	mi := &file_brigade_v1_archive_proto_msgTypes[3]
+	mi := &file_brigade_v1_archive_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -167,7 +211,7 @@ func (x *ArchivedHistoryResponse) String() string {
 func (*ArchivedHistoryResponse) ProtoMessage() {}
 
 func (x *ArchivedHistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_archive_proto_msgTypes[3]
+	mi := &file_brigade_v1_archive_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -180,7 +224,7 @@ func (x *ArchivedHistoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArchivedHistoryResponse.ProtoReflect.Descriptor instead.
 func (*ArchivedHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_archive_proto_rawDescGZIP(), []int{3}
+	return file_brigade_v1_archive_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ArchivedHistoryResponse) GetMessages() []*AcpMessage {
@@ -195,19 +239,23 @@ var File_brigade_v1_archive_proto protoreflect.FileDescriptor
 const file_brigade_v1_archive_proto_rawDesc = "" +
 	"\n" +
 	"\x18brigade/v1/archive.proto\x12\n" +
-	"brigade.v1\x1a\x18brigade/v1/session.proto\x1a\x14brigade/v1/acp.proto\"\x15\n" +
+	"brigade.v1\x1a\x18brigade/v1/session.proto\x1a\x14brigade/v1/acp.proto\x1a\x15brigade/v1/auth.proto\"\x15\n" +
 	"\x13ListArchivedRequest\"G\n" +
 	"\x14ListArchivedResponse\x12/\n" +
 	"\bsessions\x18\x01 \x03(\v2\x13.brigade.v1.SessionR\bsessions\"7\n" +
 	"\x16ArchivedHistoryRequest\x12\x1d\n" +
 	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"6\n" +
+	"\x15DeleteArchivedRequest\x12\x1d\n" +
+	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\"M\n" +
 	"\x17ArchivedHistoryResponse\x122\n" +
-	"\bmessages\x18\x01 \x03(\v2\x16.brigade.v1.AcpMessageR\bmessages2\xb6\x01\n" +
+	"\bmessages\x18\x01 \x03(\v2\x16.brigade.v1.AcpMessageR\bmessages2\xf8\x01\n" +
 	"\x0eArchiveService\x12K\n" +
 	"\x04List\x12\x1f.brigade.v1.ListArchivedRequest\x1a .brigade.v1.ListArchivedResponse\"\x00\x12W\n" +
 	"\n" +
-	"GetHistory\x12\".brigade.v1.ArchivedHistoryRequest\x1a#.brigade.v1.ArchivedHistoryResponse\"\x00B\xa9\x01\n" +
+	"GetHistory\x12\".brigade.v1.ArchivedHistoryRequest\x1a#.brigade.v1.ArchivedHistoryResponse\"\x00\x12@\n" +
+	"\x06Delete\x12!.brigade.v1.DeleteArchivedRequest\x1a\x11.brigade.v1.Empty\"\x00B\xa9\x01\n" +
 	"\x0ecom.brigade.v1B\fArchiveProtoP\x01Z@github.com/grigory51/brigade/backend/gen/go/brigade/v1;brigadev1\xa2\x02\x03BXX\xaa\x02\n" +
 	"Brigade.V1\xca\x02\n" +
 	"Brigade\\V1\xe2\x02\x16Brigade\\V1\\GPBMetadata\xea\x02\vBrigade::V1b\x06proto3"
@@ -224,24 +272,28 @@ func file_brigade_v1_archive_proto_rawDescGZIP() []byte {
 	return file_brigade_v1_archive_proto_rawDescData
 }
 
-var file_brigade_v1_archive_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_brigade_v1_archive_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_brigade_v1_archive_proto_goTypes = []any{
 	(*ListArchivedRequest)(nil),     // 0: brigade.v1.ListArchivedRequest
 	(*ListArchivedResponse)(nil),    // 1: brigade.v1.ListArchivedResponse
 	(*ArchivedHistoryRequest)(nil),  // 2: brigade.v1.ArchivedHistoryRequest
-	(*ArchivedHistoryResponse)(nil), // 3: brigade.v1.ArchivedHistoryResponse
-	(*Session)(nil),                 // 4: brigade.v1.Session
-	(*AcpMessage)(nil),              // 5: brigade.v1.AcpMessage
+	(*DeleteArchivedRequest)(nil),   // 3: brigade.v1.DeleteArchivedRequest
+	(*ArchivedHistoryResponse)(nil), // 4: brigade.v1.ArchivedHistoryResponse
+	(*Session)(nil),                 // 5: brigade.v1.Session
+	(*AcpMessage)(nil),              // 6: brigade.v1.AcpMessage
+	(*Empty)(nil),                   // 7: brigade.v1.Empty
 }
 var file_brigade_v1_archive_proto_depIdxs = []int32{
-	4, // 0: brigade.v1.ListArchivedResponse.sessions:type_name -> brigade.v1.Session
-	5, // 1: brigade.v1.ArchivedHistoryResponse.messages:type_name -> brigade.v1.AcpMessage
+	5, // 0: brigade.v1.ListArchivedResponse.sessions:type_name -> brigade.v1.Session
+	6, // 1: brigade.v1.ArchivedHistoryResponse.messages:type_name -> brigade.v1.AcpMessage
 	0, // 2: brigade.v1.ArchiveService.List:input_type -> brigade.v1.ListArchivedRequest
 	2, // 3: brigade.v1.ArchiveService.GetHistory:input_type -> brigade.v1.ArchivedHistoryRequest
-	1, // 4: brigade.v1.ArchiveService.List:output_type -> brigade.v1.ListArchivedResponse
-	3, // 5: brigade.v1.ArchiveService.GetHistory:output_type -> brigade.v1.ArchivedHistoryResponse
-	4, // [4:6] is the sub-list for method output_type
-	2, // [2:4] is the sub-list for method input_type
+	3, // 4: brigade.v1.ArchiveService.Delete:input_type -> brigade.v1.DeleteArchivedRequest
+	1, // 5: brigade.v1.ArchiveService.List:output_type -> brigade.v1.ListArchivedResponse
+	4, // 6: brigade.v1.ArchiveService.GetHistory:output_type -> brigade.v1.ArchivedHistoryResponse
+	7, // 7: brigade.v1.ArchiveService.Delete:output_type -> brigade.v1.Empty
+	5, // [5:8] is the sub-list for method output_type
+	2, // [2:5] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name
 	2, // [2:2] is the sub-list for extension extendee
 	0, // [0:2] is the sub-list for field type_name
@@ -254,13 +306,14 @@ func file_brigade_v1_archive_proto_init() {
 	}
 	file_brigade_v1_session_proto_init()
 	file_brigade_v1_acp_proto_init()
+	file_brigade_v1_auth_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_brigade_v1_archive_proto_rawDesc), len(file_brigade_v1_archive_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

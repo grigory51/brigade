@@ -4,17 +4,21 @@ package brigade.v1;
 
 import "brigade/v1/session.proto";
 import "brigade/v1/acp.proto";
+import "brigade/v1/auth.proto";
 
-// ArchiveService — чтение архива сессий: список архивных сессий (карточки title+summary)
-// и снимок истории чата для readonly-просмотра. Сам переход в архив (recap + снимок +
-// остановка контейнера) выполняет SessionService.Archive — здесь только чтение уже
-// заархивированного, без живого агента.
+// ArchiveService — архив сессий в личной памяти пользователя (git-репозиторий заметок,
+// каталог archive/): список карточек title+summary, снимок истории чата для readonly-
+// просмотра и удаление. Сам переход в архив (recap + снимок + остановка контейнера)
+// выполняет SessionService.Archive — здесь только уже заархивированное, без живого агента.
 service ArchiveService {
   // List — архивные сессии пользователя (для страницы архива).
   rpc List(ListArchivedRequest) returns (ListArchivedResponse) {}
-  // GetHistory — снимок ленты чата архивной сессии (из БД, без живого агента) для
+  // GetHistory — снимок ленты чата архивной сессии (без живого агента) для
   // readonly-рендера.
   rpc GetHistory(ArchivedHistoryRequest) returns (ArchivedHistoryResponse) {}
+  // Delete удаляет сессию из архива насовсем (файлы уходят коммитом в репозиторий
+  // памяти). Живых сессий не касается — их удаляет SessionService.Delete.
+  rpc Delete(DeleteArchivedRequest) returns (Empty) {}
 }
 
 message ListArchivedRequest {}
@@ -24,6 +28,10 @@ message ListArchivedResponse {
 }
 
 message ArchivedHistoryRequest {
+  string session_id = 1;
+}
+
+message DeleteArchivedRequest {
   string session_id = 1;
 }
 

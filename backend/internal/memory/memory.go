@@ -971,7 +971,11 @@ func scanNotes(dir string) ([]noteFile, error) {
 			return err
 		}
 		if d.IsDir() {
-			if d.Name() == ".git" {
+			// archive/ в КОРНЕ — заархивированные сессии (см. archive.go): их session.md
+			// несёт собственный frontmatter с id и без пропуска попал бы в список заметок.
+			// Сравниваем относительный путь, а не имя: одноимённая подтема внутри темы —
+			// обычные заметки, их скрывать нельзя.
+			if rel, _ := filepath.Rel(dir, path); d.Name() == ".git" || rel == archiveDir {
 				return filepath.SkipDir
 			}
 			return nil

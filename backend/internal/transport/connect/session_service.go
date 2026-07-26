@@ -174,8 +174,9 @@ func (s *SessionService) UploadFile(ctx context.Context, req *connect.Request[v1
 	return connect.NewResponse(&v1.UploadFileResponse{Path: uploadPath}), nil
 }
 
-// Archive переносит сессию в архив: агент генерирует recap, brigade сохраняет снимок
-// истории, останавливает контейнер и помечает сессию archived. Чтение архива — ArchiveService.
+// Archive переносит сессию в архив: агент генерирует recap, brigade кладёт recap и снимок
+// ленты в личную память пользователя (git), останавливает контейнер и удаляет сессию из БД.
+// Чтение архива — ArchiveService.
 func (s *SessionService) Archive(ctx context.Context, req *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error) {
 	userID, err := requireUser(ctx)
 	if err != nil {
@@ -185,7 +186,7 @@ func (s *SessionService) Archive(ctx context.Context, req *connect.Request[v1.Ar
 	if err != nil {
 		return nil, sessionError(err)
 	}
-	return connect.NewResponse(&v1.ArchiveSessionResponse{Session: sessionToProto(sess)}), nil
+	return connect.NewResponse(&v1.ArchiveSessionResponse{Session: archivedToProto(sess)}), nil
 }
 
 // IssueStreamTicket выпускает одноразовый тикет для апгрейда WS к указанной сессии.
