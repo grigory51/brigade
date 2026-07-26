@@ -38,7 +38,11 @@ fi
 rm -rf "$OUT"
 mkdir -p "$OUT/Contents/MacOS" "$OUT/Contents/Resources"
 
-cp "$PKG/Info.plist" "$OUT/Contents/Info.plist"
+# Версия бандла = последний git-тег (единственный источник версии проекта). Её показывает
+# системное меню «О программе» — отдельного пункта с версией в интерфейсе нет.
+APP_VERSION="$(git -C "$REPO" describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')"
+APP_VERSION="${APP_VERSION:-0.0.0}"
+sed "s/__VERSION__/$APP_VERSION/g" "$PKG/Info.plist" > "$OUT/Contents/Info.plist"
 
 # Бинарь + launcher (он же CFBundleExecutable): exec заменяет процесс на месте, поэтому
 # webview крутится на главном потоке настоящего app-процесса. Имена РАЗЛИЧАЮТСЯ регистром и

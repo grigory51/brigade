@@ -20,6 +20,9 @@ type AuthState = {
   ready: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  // desktop — локальный однопользовательский запуск (Brigade.app): вход выполнен
+  // автоматически, поэтому выхода и смены пользователя в интерфейсе нет.
+  desktop: boolean;
   // getAccessToken возвращает access-JWT из памяти (выдан Login) для запросов,
   // требующих заголовок Authorization: Bearer, — это AG-UI-эндпоинт ACP-режима,
   // который не читает httpOnly-cookie. null, если токен в памяти отсутствует
@@ -82,9 +85,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const getAccessToken = useCallback(() => accessTokenRef.current, []);
 
+  // Режим сервера спрашиваем после появления пользователя: метод проходит общий
+  // интерсептор авторизации, а до логина ответ всё равно ни на что не влияет.
+  const [desktop, setDesktop] = useState(false);
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    void authClient
+      .getServerInfo({})
+      .then((info) => !cancelled && setDesktop(info.desktop))
+      .catch(() => {
+        // Старый сервер без метода — считаем обычным веб-режимом.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
   const value = useMemo<AuthState>(
-    () => ({ user, ready, login, logout, getAccessToken }),
-    [user, ready, login, logout, getAccessToken],
+    () => ({ user, ready, login, logout, getAccessToken, desktop }),
+    [user, ready, login, logout, getAccessToken, desktop],
   );
 
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;

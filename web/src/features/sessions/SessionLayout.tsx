@@ -777,12 +777,32 @@ function StatusDot({ status }: { status: SessionStatus }) {
   return null;
 }
 
-// UserMenu — пункт пользователя в подвале sidebar: аватар, имя и выход. Логика
-// перенесена из прежнего Layout без изменений (useAuth → logout).
+// UserMenu — подвал sidebar. В десктопе (Brigade.app) учётной записи как понятия нет:
+// вход выполняется автоматически, выходить и переключать пользователя некуда, а версию
+// показывает системное меню «О программе». Поэтому там остаётся один пункт — настройки.
 function UserMenu() {
-  const { user, logout } = useAuth();
+  const { user, logout, desktop } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const initial = user?.username?.[0]?.toUpperCase() ?? "?";
+
+  if (desktop) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            onClick={() => navigate("/settings")}
+            isActive={location.pathname.startsWith("/settings")}
+            tooltip="Настройки"
+            className="rounded-[8px] text-[13px] text-sidebar-foreground/70"
+          >
+            <Settings className="size-4" />
+            Настройки
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    );
+  }
 
   return (
     <SidebarMenu>
