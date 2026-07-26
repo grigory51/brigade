@@ -9,6 +9,7 @@ import type { Session } from "@/api/gen/brigade/v1/session_pb";
 import { cn } from "@/lib/utils";
 import { AcpThread } from "@/features/acp/AcpThread";
 import { useArchivedRuntime } from "@/features/acp/useArchivedRuntime";
+import { SessionDock } from "@/features/acp/dock/SessionDock";
 
 // sessionTitle — подпись сессии для карточки: имя, либо производная (тип агента) для
 // сессий без имени.
@@ -161,12 +162,13 @@ export function ArchiveSessionPage() {
 }
 
 // ArchivedAcpSession — readonly ACP-лента архивной сессии: рантайм из снимка истории,
-// composer скрыт (AcpThread readonly).
+// composer скрыт (AcpThread readonly). Плавающая обвязка та же, что у живой сессии, но в
+// readonly-режиме: лента — обычный чат, и навигация по нему со ссылками нужна здесь так же.
 function ArchivedAcpSession({ sessionId }: { sessionId: string }) {
   const { runtime, a2ui } = useArchivedRuntime(sessionId);
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <div className="h-full">
+      <div className="relative h-full">
         <AcpThread
           commands={[]}
           plan={[]}
@@ -175,6 +177,7 @@ function ArchivedAcpSession({ sessionId }: { sessionId: string }) {
           onConfigChange={() => {}}
           readonly
         />
+        <SessionDock sessionId={sessionId} readonly />
       </div>
     </AssistantRuntimeProvider>
   );

@@ -11,6 +11,8 @@ export function usePreviews(sessionId: string): Preview[] {
   const [previews, setPreviews] = useState<Preview[]>([]);
 
   useEffect(() => {
+    // Пустой id — сессии нет (архивный просмотр): опрашивать нечего.
+    if (!sessionId) return;
     let stopped = false;
 
     const poll = async () => {

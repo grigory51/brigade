@@ -32,11 +32,19 @@ function loadTerminalOpen(): boolean {
   }
 }
 
-export function SessionDock({ sessionId }: { sessionId: string }) {
+export function SessionDock({
+  sessionId,
+  readonly = false,
+}: {
+  sessionId: string;
+  // readonly — архивная сессия: лента та же, но живого агента за ней нет. Шкала и ссылки
+  // работают как обычно, терминал и dev-серверы недоступны — их некому обслуживать.
+  readonly?: boolean;
+}) {
   const [panel, setPanel] = useState<"" | "links">("");
   const [terminal, setTerminal] = useState(loadTerminalOpen);
   const messages = useAuiState((s) => s.thread.messages);
-  const previews = usePreviews(sessionId);
+  const previews = usePreviews(readonly ? "" : sessionId);
 
   useEffect(() => {
     try {
@@ -69,19 +77,21 @@ export function SessionDock({ sessionId }: { sessionId: string }) {
             {linksCount}
           </span>
         </Chip>
-        <Chip
-          icon={SquareTerminal}
-          label="Терминал"
-          active={terminal}
-          onClick={() => setTerminal((v) => !v)}
-        >
-          <span
-            className={cn(
-              "size-1.5 rounded-full",
-              terminal ? "bg-success" : "bg-muted-foreground/50",
-            )}
-          />
-        </Chip>
+        {!readonly && (
+          <Chip
+            icon={SquareTerminal}
+            label="Терминал"
+            active={terminal}
+            onClick={() => setTerminal((v) => !v)}
+          >
+            <span
+              className={cn(
+                "size-1.5 rounded-full",
+                terminal ? "bg-success" : "bg-muted-foreground/50",
+              )}
+            />
+          </Chip>
+        )}
       </div>
 
       {panel === "links" && (
@@ -92,7 +102,7 @@ export function SessionDock({ sessionId }: { sessionId: string }) {
         />
       )}
 
-      {terminal && (
+      {terminal && !readonly && (
         <TerminalWindow
           sessionId={sessionId}
           onClose={() => setTerminal(false)}
