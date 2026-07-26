@@ -8,6 +8,7 @@ package notify
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -76,6 +77,24 @@ func (s *Service) TurnEnded(ctx context.Context, userID, sessionLabel, stopReaso
 	if err := s.post(ctx, set, title, message); err != nil {
 		log.Printf("notify: post %s: %v", userID, err)
 	}
+}
+
+// Test отправляет пробное уведомление по сохранённым настройкам пользователя — проверка
+// топика/сервера/токена прямо из UI. В отличие от событийных уведомлений, список включённых
+// событий не смотрит (отправку запросил сам пользователь) и ошибку НЕ проглатывает: смысл
+// проверки в том, чтобы неверные настройки были видны сразу, а не по молчанию в сессии.
+func (s *Service) Test(ctx context.Context, userID string) error {
+	if s == nil {
+		return errors.New("notify: сервис уведомлений недоступен")
+	}
+	set, err := s.settings.GetUserSettings(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("notify: get settings: %w", err)
+	}
+	if strings.TrimSpace(set.NtfyTopic) == "" {
+		return errors.New("notify: топик не задан — уведомления отправлять некуда")
+	}
+	return s.post(ctx, set, "brigade", "Тестовое уведомление — настройки работают.")
 }
 
 // render строит заголовок и тело уведомления по событию.

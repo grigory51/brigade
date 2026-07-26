@@ -1,508 +1,937 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { ConnectError } from "@connectrpc/connect";
-import { Check, Loader2 } from "lucide-react";
+import {
+  Bell,
+  Bot,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Eye,
+  EyeOff,
+  Info,
+  KeyRound,
+  Loader2,
+  Lock,
+  NotebookText,
+  RefreshCw,
+  Send,
+} from "lucide-react";
 import { toast } from "sonner";
 import { authClient } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 /**
- * SettingsPage — персональные настройки пользователя. Раздел Claude: подписочный
- * токен Claude Code. После сохранения значение не показывается — сервер отдаёт
- * только флаг «токен задан».
+ * SettingsPage — персональные настройки пользователя: колонка разделов слева, детали
+ * одного раздела справа. Раздел — часть URL (/settings/:section), поэтому на него можно
+ * дать ссылку и работают кнопки «назад/вперёд».
+ *
+ * Claude лежит не разделом верхнего уровня, а агентом внутри группы «Агенты»: brigade
+ * говорит с агентами по ACP, и Claude Code — один из них. Добавление второго ACP-агента
+ * не потребует менять навигацию.
+ *
+ * Секреты (токен Claude, приватный SSH-ключ, токен ntfy) с сервера не приходят никогда —
+ * в поле всегда пустой драфт, а состояние показывается флагом «задан».
  */
+
+type SectionId = "claude" | "memory" | "ssh" | "ntfy";
+
+const SECTIONS: SectionId[] = ["claude", "memory", "ssh", "ntfy"];
+
+const AGENTS_OPEN_KEY = "brigade.settings.agentsOpen";
+
 export function SettingsPage() {
-  const [tokenSet, setTokenSet] = useState<boolean | null>(null); // null = загрузка
-  const [draft, setDraft] = useState("");
-  const [saving, setSaving] = useState(false);
+  const { section } = useParams<{ section: string }>();
+  const navigate = useNavigate();
+  const active = (SECTIONS as string[]).includes(section ?? "")
+    ? (section as SectionId)
+    : "claude";
 
-  const load = useCallback(async () => {
-    try {
-      const res = await authClient.getClaudeSettings({});
-      setTokenSet(res.tokenSet);
-    } catch {
-      setTokenSet(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const save = useCallback(async () => {
-    setSaving(true);
-    try {
-      const res = await authClient.setClaudeToken({ token: draft.trim() });
-      setTokenSet(res.tokenSet);
-      setDraft(""); // токен из UI сразу убираем — он больше не показывается
-      toast.success(
-        res.tokenSet ? "Токен Claude сохранён" : "Токен Claude очищен",
-      );
-    } catch (err) {
-      toast.error(
-        err instanceof ConnectError
-          ? err.rawMessage
-          : "Не удалось сохранить токен",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }, [draft]);
-
-  return (
-    <div className="mx-auto w-full max-w-2xl p-6">
-      <h1 className="mb-4 text-lg font-semibold">Настройки</h1>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Claude</CardTitle>
-          <CardDescription>
-            Подписочный токен Claude Code (создаётся командой{" "}
-            <code className="text-xs">claude setup-token</code>). Используется для
-            авторизации агентов в ваших сессиях. После сохранения токен не
-            отображается.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {tokenSet === null ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
-              Загрузка…
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 text-sm">
-              {tokenSet ? (
-                <>
-                  <Check className="size-4 text-success" />
-                  <span className="text-muted-foreground">Токен задан</span>
-                </>
-              ) : (
-                <span className="text-muted-foreground">Токен не задан</span>
-              )}
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <Label htmlFor="claude-token">
-              {tokenSet ? "Новый токен" : "Токен"}
-            </Label>
-            <Input
-              id="claude-token"
-              type="password"
-              placeholder="sk-ant-oat01-…"
-              autoComplete="off"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button onClick={() => void save()} disabled={saving || !draft.trim()}>
-              {saving && <Loader2 className="size-4 animate-spin" />}
-              Сохранить
-            </Button>
-            {tokenSet && (
-              <Button
-                variant="outline"
-                disabled={saving}
-                onClick={() => {
-                  setDraft("");
-                  void authClient
-                    .setClaudeToken({ token: "" })
-                    .then((res) => {
-                      setTokenSet(res.tokenSet);
-                      toast.success("Токен Claude очищен");
-                    })
-                    .catch(() => toast.error("Не удалось очистить токен"));
-                }}
-              >
-                Очистить
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <MemoryCard />
-      <SshCard />
-      <NtfyCard />
-    </div>
+  const [agentsOpen, setAgentsOpen] = useState(
+    () => localStorage.getItem(AGENTS_OPEN_KEY) !== "0",
   );
-}
+  useEffect(() => {
+    localStorage.setItem(AGENTS_OPEN_KEY, agentsOpen ? "1" : "0");
+  }, [agentsOpen]);
 
-/**
- * SshCard — раздел «SSH-ключ агента»: стабильный per-user ключ, который brigade генерирует и
- * подкладывает в контейнер сессии. Публичную часть пользователь добавляет в GitHub (Settings →
- * SSH and GPG keys или deploy key репозитория), после чего агент может пушить по git@github.com.
- * Приватный ключ на сервере зашифрован и наружу не отдаётся. Ключ генерируется при первом
- * открытии; «Перевыпустить» создаёт новую пару (старый публичный ключ в GitHub перестаёт работать).
- */
-function SshCard() {
-  const [publicKey, setPublicKey] = useState<string | null>(null); // null = загрузка
-  const [busy, setBusy] = useState(false);
+  // Состояние всех разделов живёт здесь: точки в навигации показывают статус каждого
+  // раздела, не открывая его. Статус считается от текущих значений формы — меняется
+  // сразу, не дожидаясь сохранения.
+  const [claudeTokenSet, setClaudeTokenSet] = useState<boolean | null>(null);
+  const [remote, setRemote] = useState<string | null>(null);
+  const [publicKey, setPublicKey] = useState<string | null>(null);
+  const [ntfy, setNtfy] = useState<NtfyState | null>(null);
 
   useEffect(() => {
     let alive = true;
-    authClient
+    void authClient
+      .getClaudeSettings({})
+      .then((r) => alive && setClaudeTokenSet(r.tokenSet))
+      .catch(() => alive && setClaudeTokenSet(false));
+    void authClient
+      .getMemorySettings({})
+      .then((r) => alive && setRemote(r.remote))
+      .catch(() => alive && setRemote(""));
+    void authClient
       .getSSHSettings({})
-      .then((r) => {
-        if (alive) setPublicKey(r.publicKey);
-      })
-      .catch(() => {
-        if (alive) setPublicKey("");
-      });
+      .then((r) => alive && setPublicKey(r.publicKey))
+      .catch(() => alive && setPublicKey(""));
+    void authClient
+      .getNtfySettings({})
+      .then(
+        (r) =>
+          alive &&
+          setNtfy({
+            server: r.server,
+            topic: r.topic,
+            tokenSet: r.tokenSet,
+            events: r.events,
+          }),
+      )
+      .catch(
+        () =>
+          alive &&
+          setNtfy({ server: "", topic: "", tokenSet: false, events: [] }),
+      );
     return () => {
       alive = false;
     };
   }, []);
+
+  const go = useCallback(
+    (id: SectionId) => navigate(`/settings/${id}`),
+    [navigate],
+  );
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      {/* px-5 — заголовок стоит на одной вертикали с иконками пунктов ниже
+          (отступ колонки 10px + внутренний отступ строки 10px). */}
+      <header className="shrink-0 border-b px-5 pt-[22px] pb-4">
+        <h1 className="text-[20px] font-semibold tracking-[-0.01em]">
+          Настройки
+        </h1>
+      </header>
+
+      <div className="flex min-h-0 flex-1">
+        <nav className="flex w-[222px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r px-2.5 pt-4 pb-5">
+          <NavRow
+            icon={Bot}
+            label="Агенты"
+            onClick={() => setAgentsOpen((v) => !v)}
+            trailing={
+              <ChevronDown
+                className={cn(
+                  "size-3.5 text-muted-foreground/70 transition-transform duration-[180ms]",
+                  !agentsOpen && "-rotate-90",
+                )}
+              />
+            }
+          />
+          {agentsOpen && (
+            <div className="ml-[19px] border-l pl-[11px]">
+              <button
+                type="button"
+                onClick={() => go("claude")}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-[7px] px-[9px] py-[7px] text-[12.5px] transition-colors",
+                  active === "claude"
+                    ? "bg-card text-foreground"
+                    : "text-[#e7e5df] hover:bg-card hover:text-foreground",
+                )}
+              >
+                <AgentMark />
+                <span className="min-w-0 flex-1 truncate text-left">
+                  Claude Code
+                </span>
+                <StatusDot on={claudeTokenSet === true} />
+              </button>
+            </div>
+          )}
+          <NavRow
+            icon={NotebookText}
+            label="Память"
+            active={active === "memory"}
+            onClick={() => go("memory")}
+            trailing={<StatusDot on={Boolean(remote?.trim())} />}
+          />
+          <NavRow
+            icon={KeyRound}
+            label="SSH-ключ"
+            active={active === "ssh"}
+            onClick={() => go("ssh")}
+            trailing={<StatusDot on={Boolean(publicKey)} />}
+          />
+          <NavRow
+            icon={Bell}
+            label="Уведомления"
+            active={active === "ntfy"}
+            onClick={() => go("ntfy")}
+            trailing={<StatusDot on={ntfyEnabled(ntfy)} />}
+          />
+        </nav>
+
+        <div className="min-h-0 flex-1 overflow-y-auto scroll-smooth">
+          {/* key — чтобы смена раздела заново проигрывала вход и сбрасывала локальное
+              состояние деталей (подтверждение перевыпуска ключа, «Скопировано»). */}
+          <div
+            key={active}
+            className="mx-auto flex max-w-[680px] animate-[section-in_0.24s_cubic-bezier(0.2,0.8,0.2,1)] flex-col gap-[18px] px-[34px] pt-6 pb-[90px]"
+          >
+            {active === "claude" && (
+              <ClaudeSection
+                tokenSet={claudeTokenSet}
+                onChange={setClaudeTokenSet}
+              />
+            )}
+            {active === "memory" && (
+              <MemorySection
+                remote={remote}
+                onChange={setRemote}
+                onGoSsh={() => go("ssh")}
+              />
+            )}
+            {active === "ssh" && (
+              <SshSection publicKey={publicKey} onChange={setPublicKey} />
+            )}
+            {active === "ntfy" && (
+              <NtfySection state={ntfy} onChange={setNtfy} />
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type NtfyState = {
+  server: string;
+  topic: string;
+  tokenSet: boolean;
+  events: string[];
+};
+
+// Уведомления считаются включёнными, только когда есть куда слать И что слать.
+function ntfyEnabled(state: NtfyState | null): boolean {
+  return Boolean(state?.topic.trim() && state.events.length > 0);
+}
+
+// ─── Общие элементы разделов ──────────────────────────────────────────────────
+
+function NavRow({
+  icon: Icon,
+  label,
+  active = false,
+  onClick,
+  trailing,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+  trailing: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] transition-colors",
+        active
+          ? "bg-card text-foreground"
+          : "text-[#e7e5df] hover:bg-card hover:text-foreground",
+      )}
+    >
+      <Icon className="size-4 shrink-0" />
+      <span className="flex-1 text-left">{label}</span>
+      {trailing}
+    </button>
+  );
+}
+
+function StatusDot({ on }: { on: boolean }) {
+  return (
+    <span
+      className={cn("size-1.5 shrink-0 rounded-full", on ? "bg-success" : "bg-input")}
+    />
+  );
+}
+
+// AgentMark — квадратная марка агента в навигации и заголовке раздела. Пока агент один,
+// но марка задаётся здесь же, чтобы добавление второго свелось к новому элементу списка.
+function AgentMark({ large = false }: { large?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "flex shrink-0 items-center justify-center bg-primary font-semibold text-white",
+        large
+          ? "size-[34px] rounded-[9px] text-[15px]"
+          : "size-4 rounded-[5px] text-[9.5px]",
+      )}
+    >
+      C
+    </span>
+  );
+}
+
+// Badge — капсула состояния у заголовка раздела.
+function Badge({ on, children }: { on: boolean; children: ReactNode }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[10.5px]",
+        on ? "bg-success/12 text-[#8dbf82]" : "bg-secondary text-muted-foreground",
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+// SecretNote — заметка о судьбе секрета. Стоит под своим полем, а не общим дисклеймером
+// в подвале: вопрос «а куда денется мой токен» возникает ровно в момент ввода.
+function SecretNote({ children }: { children: ReactNode }) {
+  return (
+    <p className="flex items-start gap-1.5 text-[11.5px] leading-[1.55] text-[#6c695f]">
+      <Lock className="mt-0.5 size-3 shrink-0" />
+      <span>{children}</span>
+    </p>
+  );
+}
+
+function SectionHeader({
+  title,
+  badge,
+  children,
+}: {
+  title: string;
+  badge: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2.5">
+        <h2 className="text-[16.5px] font-semibold">{title}</h2>
+        {badge}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// Code — инлайновый код в описаниях разделов (команды, схемы remote).
+function Code({ children }: { children: ReactNode }) {
+  return (
+    <code className="rounded-[5px] border bg-[#1c1b1a] px-1.5 py-px font-mono text-[11.5px]">
+      {children}
+    </code>
+  );
+}
+
+function Description({ children }: { children: ReactNode }) {
+  return (
+    <p className="text-[12.5px] leading-[1.65] text-muted-foreground/70">
+      {children}
+    </p>
+  );
+}
+
+function ExternalLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="text-primary transition-colors hover:text-[#f0a184]"
+    >
+      {children}
+    </a>
+  );
+}
+
+function FieldLabel({ children }: { children: ReactNode }) {
+  return <span className="text-xs text-muted-foreground">{children}</span>;
+}
+
+// DangerZone — отбитый сверху блок необратимых действий.
+function DangerZone({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-t pt-3.5">
+      <div className="min-w-0">
+        <div className="text-[13px] text-[#e7e5df]">{title}</div>
+        <div className="text-[11.5px] text-[#6c695f]">{hint}</div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Loading() {
+  return (
+    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <Loader2 className="size-4 animate-spin" />
+      Загрузка…
+    </div>
+  );
+}
+
+// errorText вытаскивает человекочитаемое сообщение из ошибки Connect.
+function errorText(err: unknown, fallback: string): string {
+  return err instanceof ConnectError ? err.rawMessage : fallback;
+}
+
+// ─── Агенты → Claude Code ─────────────────────────────────────────────────────
+
+function ClaudeSection({
+  tokenSet,
+  onChange,
+}: {
+  tokenSet: boolean | null;
+  onChange: (v: boolean) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const [reveal, setReveal] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const save = useCallback(
+    async (token: string) => {
+      setSaving(true);
+      try {
+        const res = await authClient.setClaudeToken({ token });
+        onChange(res.tokenSet);
+        setDraft("");
+        setReveal(false);
+        toast.success(res.tokenSet ? "Токен Claude сохранён" : "Токен Claude очищен");
+      } catch (err) {
+        toast.error(errorText(err, "Не удалось сохранить токен"));
+      } finally {
+        setSaving(false);
+      }
+    },
+    [onChange],
+  );
+
+  if (tokenSet === null) return <Loading />;
+
+  return (
+    <>
+      <div className="flex items-center gap-1.5 text-[11.5px] text-[#7a776f]">
+        Агенты
+        <ChevronRight className="size-3" />
+        <span className="text-muted-foreground">Claude</span>
+      </div>
+
+      <div className="flex flex-col gap-[18px]">
+        <div className="flex items-center gap-3">
+          <AgentMark large />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5">
+              <h2 className="text-[16.5px] font-semibold">Claude Code</h2>
+              <Badge on={tokenSet}>
+                {tokenSet ? "токен задан" : "токен не задан"}
+              </Badge>
+            </div>
+            {/* Техстрока: видно, что это обычный ACP-агент, а не особая сущность. */}
+            <div className="font-mono text-[11.5px] text-[#7a776f]">
+              acp · claude-code · подписочный токен
+            </div>
+          </div>
+        </div>
+
+        <Description>
+          Подписочный токен Claude Code — создаётся командой{" "}
+          <Code>claude setup-token</Code>. Используется для авторизации агента в ваших
+          сессиях.
+        </Description>
+
+        <div className="flex flex-col gap-2">
+          <FieldLabel>{tokenSet ? "Новый токен" : "Токен"}</FieldLabel>
+          <div className="flex items-start gap-2">
+            <div className="relative flex-1">
+              <Input
+                type={reveal ? "text" : "password"}
+                placeholder="sk-ant-oat01-…"
+                autoComplete="off"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                className="h-[41px] bg-[#1c1b1a] pr-10 font-mono text-[12.5px] focus-visible:border-[#5a4034]"
+              />
+              <button
+                type="button"
+                onClick={() => setReveal((v) => !v)}
+                aria-label={reveal ? "Скрыть токен" : "Показать токен"}
+                className="absolute inset-y-0 right-0 flex w-[33px] items-center justify-center rounded-r-md text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+              >
+                {reveal ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+            </div>
+            <Button
+              className="h-[41px]"
+              disabled={saving || !draft.trim()}
+              onClick={() => void save(draft.trim())}
+            >
+              {saving && <Loader2 className="size-4 animate-spin" />}
+              Сохранить
+            </Button>
+          </div>
+          <SecretNote>
+            Шифруется на сервере, после сохранения не отображается — только флаг «задан»
+          </SecretNote>
+        </div>
+
+        {tokenSet && (
+          <DangerZone
+            title="Отключить агента"
+            hint="Сессии с этим агентом перестанут создаваться"
+          >
+            <Button
+              variant="outline"
+              disabled={saving}
+              onClick={() => void save("")}
+            >
+              Очистить токен
+            </Button>
+          </DangerZone>
+        )}
+      </div>
+    </>
+  );
+}
+
+// ─── Память ───────────────────────────────────────────────────────────────────
+
+function MemorySection({
+  remote,
+  onChange,
+  onGoSsh,
+}: {
+  remote: string | null;
+  onChange: (v: string) => void;
+  onGoSsh: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+
+  const save = useCallback(async () => {
+    setSaving(true);
+    try {
+      const res = await authClient.setMemorySettings({
+        remote: (remote ?? "").trim(),
+      });
+      onChange(res.remote);
+      toast.success("Настройки памяти сохранены");
+    } catch (err) {
+      toast.error(errorText(err, "Не удалось сохранить настройки памяти"));
+    } finally {
+      setSaving(false);
+    }
+  }, [remote, onChange]);
+
+  if (remote === null) return <Loading />;
+  const filled = Boolean(remote.trim());
+
+  return (
+    <>
+      <SectionHeader
+        title="Память"
+        badge={<Badge on={filled}>{filled ? "подключена" : "выключена"}</Badge>}
+      >
+        <Description>
+          Приватный git-репозиторий заметок: агент читает его в начале сессии и
+          дописывает в конце. Репозиторий один на пользователя и общий для всех агентов.
+        </Description>
+      </SectionHeader>
+
+      <div className="flex flex-col gap-2">
+        <FieldLabel>Git-remote</FieldLabel>
+        <div className="flex items-start gap-2">
+          <Input
+            placeholder="git@gitlab.com:you/brigade-memory.git"
+            autoComplete="off"
+            value={remote}
+            onChange={(e) => onChange(e.target.value)}
+            className="h-[41px] flex-1 bg-[#1c1b1a] font-mono text-[12.5px] focus-visible:border-[#5a4034]"
+          />
+          <Button className="h-[41px]" disabled={saving} onClick={() => void save()}>
+            {saving && <Loader2 className="size-4 animate-spin" />}
+            Сохранить
+          </Button>
+        </div>
+        <p
+          className={cn(
+            "flex items-start gap-1.5 text-[11.5px] leading-[1.55]",
+            filled ? "text-[#6c695f]" : "text-warning",
+          )}
+        >
+          <Info className="mt-0.5 size-3 shrink-0" />
+          <span>
+            {filled
+              ? "Агент клонирует репозиторий в контейнер сессии при старте"
+              : "Память выключена — агент начинает каждую сессию с нуля"}
+          </span>
+        </p>
+      </div>
+
+      <DangerZone
+        title="Доступ к репозиторию"
+        hint="Для git@-remote используется SSH-ключ агента — отдельный ключ не нужен"
+      >
+        <Button variant="outline" onClick={onGoSsh}>
+          К ключу
+        </Button>
+      </DangerZone>
+    </>
+  );
+}
+
+// ─── SSH-ключ агента ──────────────────────────────────────────────────────────
+
+function SshSection({
+  publicKey,
+  onChange,
+}: {
+  publicKey: string | null;
+  onChange: (v: string) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [regen, setRegen] = useState<"idle" | "ask">("idle");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1600);
+    return () => clearTimeout(timer);
+  }, [copied]);
 
   const copy = useCallback(() => {
     if (!publicKey) return;
     void navigator.clipboard
       .writeText(publicKey)
-      .then(() => toast.success("Публичный ключ скопирован"))
+      .then(() => setCopied(true))
       .catch(() => toast.error("Не удалось скопировать"));
   }, [publicKey]);
 
   const regenerate = useCallback(async () => {
-    if (
-      !window.confirm(
-        "Перевыпустить SSH-ключ? Старый публичный ключ, добавленный в GitHub, перестанет работать — нужно будет добавить новый.",
-      )
-    ) {
-      return;
-    }
     setBusy(true);
     try {
       const res = await authClient.regenerateSSHKey({});
-      setPublicKey(res.publicKey);
+      onChange(res.publicKey);
+      setRegen("idle");
+      setCopied(false); // ключ другой — прежнее «Скопировано» вводило бы в заблуждение
       toast.success("SSH-ключ перевыпущен — обновите ключ в GitHub");
     } catch (err) {
-      toast.error(
-        err instanceof ConnectError
-          ? err.rawMessage
-          : "Не удалось перевыпустить ключ",
-      );
+      toast.error(errorText(err, "Не удалось перевыпустить ключ"));
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [onChange]);
+
+  if (publicKey === null) return <Loading />;
 
   return (
-    <Card className="mt-4">
-      <CardHeader>
-        <CardTitle>SSH-ключ агента</CardTitle>
-        <CardDescription>
+    <>
+      <SectionHeader
+        title="SSH-ключ агента"
+        badge={<Badge on={Boolean(publicKey)}>ключ создан</Badge>}
+      >
+        <Description>
           Стабильный ключ, который brigade подкладывает в контейнер ваших сессий.
           Добавьте публичный ключ в{" "}
-          <a
-            href="https://github.com/settings/keys"
-            target="_blank"
-            rel="noreferrer"
-            className="underline"
-          >
+          <ExternalLink href="https://github.com/settings/keys">
             GitHub → SSH keys
-          </a>{" "}
+          </ExternalLink>{" "}
           (или как deploy key репозитория) — и агент сможет пушить по{" "}
-          <code className="text-xs">git@github.com</code>. Приватный ключ хранится
-          на сервере зашифрованным и наружу не отдаётся.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {publicKey === null ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            Загрузка…
-          </div>
+          <Code>git@github.com</Code>.
+        </Description>
+      </SectionHeader>
+
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <FieldLabel>Публичный ключ</FieldLabel>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={copy}
+            className={cn(
+              "h-7 gap-1.5 text-xs",
+              copied && "border-success/35 text-[#8dbf82]",
+            )}
+          >
+            {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+            {copied ? "Скопировано" : "Скопировать"}
+          </Button>
+        </div>
+        <div className="rounded-[10px] border bg-[#1c1b1a] px-[13px] py-3 font-mono text-[11.5px] leading-[1.7] break-all text-muted-foreground select-all">
+          {publicKey}
+        </div>
+        <SecretNote>
+          Приватная часть хранится на сервере зашифрованной и наружу не отдаётся
+        </SecretNote>
+      </div>
+
+      <DangerZone
+        title="Перевыпустить ключ"
+        hint="Старый публичный ключ в GitHub перестанет работать"
+      >
+        {/* Подтверждение инлайновое: window.confirm выбивает из интерфейса и на нём
+            невозможно объяснить последствия в том же визуальном языке. */}
+        {regen === "idle" ? (
+          <Button
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => setRegen("ask")}
+          >
+            <RefreshCw className="size-3.5" />
+            Перевыпустить
+          </Button>
         ) : (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="ssh-pub">Публичный ключ</Label>
-              <Textarea
-                id="ssh-pub"
-                readOnly
-                rows={3}
-                className="font-mono text-xs"
-                value={publicKey}
-                onFocus={(e) => e.currentTarget.select()}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={copy} disabled={!publicKey}>
-                Скопировать
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => void regenerate()}
-                disabled={busy}
-              >
-                {busy && <Loader2 className="size-4 animate-spin" />}
-                Перевыпустить
-              </Button>
-            </div>
-          </>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              disabled={busy}
+              onClick={() => void regenerate()}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {busy && <Loader2 className="size-4 animate-spin" />}
+              Да, новый ключ
+            </Button>
+            <Button
+              variant="ghost"
+              disabled={busy}
+              onClick={() => setRegen("idle")}
+            >
+              Отмена
+            </Button>
+          </div>
         )}
-      </CardContent>
-    </Card>
+      </DangerZone>
+    </>
   );
 }
 
+// ─── Уведомления ──────────────────────────────────────────────────────────────
+
 /** Событие уведомления: ключ совпадает с backend (internal/notify). */
-const NTFY_EVENTS: { key: string; label: string }[] = [
-  { key: "turn_end", label: "Агент завершил ответ" },
-  { key: "error", label: "Ошибка в turn'е" },
+const NTFY_EVENTS: { key: string; label: string; hint: string }[] = [
+  {
+    key: "turn_end",
+    label: "Агент завершил ответ",
+    hint: "Turn закончился, агент ждёт вас",
+  },
+  {
+    key: "error",
+    label: "Ошибка в turn'е",
+    hint: "Агент упал или инструмент вернул ошибку",
+  },
 ];
 
-/**
- * NtfyCard — раздел «Уведомления»: персональный push через ntfy. Пользователь задаёт топик
- * (обязателен), опционально свой сервер и токен доступа, и выбирает события. Токен на сервере
- * шифруется и наружу не отдаётся (только флаг «задан»); пустой при сохранении оставляет прежний.
- */
-function NtfyCard() {
-  const [loaded, setLoaded] = useState(false);
-  const [server, setServer] = useState("");
-  const [topic, setTopic] = useState("");
-  const [tokenSet, setTokenSet] = useState(false);
+function NtfySection({
+  state,
+  onChange,
+}: {
+  state: NtfyState | null;
+  onChange: (v: NtfyState) => void;
+}) {
   const [tokenDraft, setTokenDraft] = useState("");
-  const [events, setEvents] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [tested, setTested] = useState(false);
+  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
-    let alive = true;
-    authClient
-      .getNtfySettings({})
-      .then((r) => {
-        if (!alive) return;
-        setServer(r.server);
-        setTopic(r.topic);
-        setTokenSet(r.tokenSet);
-        setEvents(r.events);
-      })
-      .finally(() => {
-        if (alive) setLoaded(true);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const toggleEvent = useCallback((key: string) => {
-    setEvents((prev) =>
-      prev.includes(key) ? prev.filter((e) => e !== key) : [...prev, key],
-    );
-  }, []);
+    if (!tested) return;
+    const timer = setTimeout(() => setTested(false), 2200);
+    return () => clearTimeout(timer);
+  }, [tested]);
 
   const save = useCallback(async () => {
+    if (!state) return;
     setSaving(true);
     try {
       const res = await authClient.setNtfySettings({
-        server: server.trim(),
-        topic: topic.trim(),
+        server: state.server.trim(),
+        topic: state.topic.trim(),
         token: tokenDraft,
-        events,
+        events: state.events,
       });
-      setServer(res.server);
-      setTopic(res.topic);
-      setTokenSet(res.tokenSet);
-      setEvents(res.events);
-      setTokenDraft(""); // токен из UI сразу убираем — он больше не показывается
+      onChange({
+        server: res.server,
+        topic: res.topic,
+        tokenSet: res.tokenSet,
+        events: res.events,
+      });
+      setTokenDraft("");
       toast.success("Настройки уведомлений сохранены");
     } catch (err) {
-      toast.error(
-        err instanceof ConnectError
-          ? err.rawMessage
-          : "Не удалось сохранить настройки уведомлений",
-      );
+      toast.error(errorText(err, "Не удалось сохранить настройки уведомлений"));
     } finally {
       setSaving(false);
     }
-  }, [server, topic, tokenDraft, events]);
+  }, [state, tokenDraft, onChange]);
 
-  return (
-    <Card className="mt-4">
-      <CardHeader>
-        <CardTitle>Уведомления</CardTitle>
-        <CardDescription>
-          Персональный push через <code className="text-xs">ntfy</code> (
-          <a
-            href="https://ntfy.sh"
-            target="_blank"
-            rel="noreferrer"
-            className="underline"
-          >
-            ntfy.sh
-          </a>{" "}
-          или свой сервер). Укажите топик, подпишитесь на него в приложении ntfy —
-          и получайте пуш о выбранных событиях сессий. Токен нужен только для
-          защищённых топиков; после сохранения он не отображается.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {!loaded ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            Загрузка…
-          </div>
-        ) : (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="ntfy-topic">Топик</Label>
-              <Input
-                id="ntfy-topic"
-                placeholder="brigade-alerts-a8f3"
-                autoComplete="off"
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="ntfy-server">Сервер (необязательно)</Label>
-              <Input
-                id="ntfy-server"
-                placeholder="https://ntfy.sh"
-                autoComplete="off"
-                value={server}
-                onChange={(e) => setServer(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="ntfy-token">
-                {tokenSet ? "Новый токен доступа" : "Токен доступа (необязательно)"}
-              </Label>
-              <Input
-                id="ntfy-token"
-                type="password"
-                placeholder={
-                  tokenSet ? "Оставьте пустым, чтобы не менять" : "tk_…"
-                }
-                autoComplete="off"
-                value={tokenDraft}
-                onChange={(e) => setTokenDraft(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>События</Label>
-              <div className="space-y-1.5">
-                {NTFY_EVENTS.map((ev) => (
-                  <label
-                    key={ev.key}
-                    className="flex items-center gap-2 text-sm text-muted-foreground"
-                  >
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-primary"
-                      checked={events.includes(ev.key)}
-                      onChange={() => toggleEvent(ev.key)}
-                    />
-                    {ev.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <Button
-              onClick={() => void save()}
-              disabled={saving || !topic.trim()}
-            >
-              {saving && <Loader2 className="size-4 animate-spin" />}
-              Сохранить
-            </Button>
-          </>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-/**
- * MemoryCard — раздел «Память»: приватный git-репозиторий заметок пользователя. Репозиторий
- * ПЕР-ЮЗЕРНЫЙ. Для git@-remote доступ идёт по SSH-ключу агента (см. раздел «SSH-ключ агента»):
- * отдельный ключ памяти задавать не нужно — добавьте публичный ключ агента в git-хост.
- */
-function MemoryCard() {
-  const [loaded, setLoaded] = useState(false);
-  const [remote, setRemote] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    authClient
-      .getMemorySettings({})
-      .then((r) => {
-        if (alive) setRemote(r.remote);
-      })
-      .finally(() => {
-        if (alive) setLoaded(true);
-      });
-    return () => {
-      alive = false;
-    };
+  // Тест шлётся по СОХРАНЁННЫМ настройкам — сервер других не знает. Поэтому ошибку
+  // показываем как есть: чаще всего это неверный топик или токен.
+  const test = useCallback(async () => {
+    setTesting(true);
+    try {
+      await authClient.testNtfy({});
+      setTested(true);
+    } catch (err) {
+      toast.error(errorText(err, "Не удалось отправить уведомление"));
+    } finally {
+      setTesting(false);
+    }
   }, []);
 
-  const save = useCallback(async () => {
-    setSaving(true);
-    try {
-      const res = await authClient.setMemorySettings({ remote: remote.trim() });
-      setRemote(res.remote);
-      toast.success("Настройки памяти сохранены");
-    } catch (err) {
-      toast.error(
-        err instanceof ConnectError
-          ? err.rawMessage
-          : "Не удалось сохранить настройки памяти",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }, [remote]);
+  if (!state) return <Loading />;
+
+  const patch = (next: Partial<NtfyState>) => onChange({ ...state, ...next });
+  const toggle = (key: string) =>
+    patch({
+      events: state.events.includes(key)
+        ? state.events.filter((e) => e !== key)
+        : [...state.events, key],
+    });
 
   return (
-    <Card className="mt-4">
-      <CardHeader>
-        <CardTitle>Память</CardTitle>
-        <CardDescription>
-          Ваш приватный git-репозиторий заметок (пер-юзерный). Для{" "}
-          <code className="text-xs">git@</code>-remote доступ идёт по SSH-ключу агента —
-          отдельный ключ задавать не нужно, добавьте публичный ключ из раздела ниже в свой
-          git-хост.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {!loaded ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            Загрузка…
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <Label htmlFor="memory-remote">Git-remote</Label>
-            <Input
-              id="memory-remote"
-              placeholder="git@gitlab.com:you/brigade-memory.git"
-              autoComplete="off"
-              value={remote}
-              onChange={(e) => setRemote(e.target.value)}
-            />
-          </div>
-        )}
+    <>
+      <SectionHeader
+        title="Уведомления"
+        badge={
+          <Badge on={ntfyEnabled(state)}>
+            {ntfyEnabled(state) ? "включены" : "выключены"}
+          </Badge>
+        }
+      >
+        <Description>
+          Персональный push через <ExternalLink href="https://ntfy.sh">ntfy</ExternalLink>
+          . Подпишитесь на свой топик в приложении ntfy — и получайте уведомления о
+          выбранных событиях сессий.
+        </Description>
+      </SectionHeader>
 
-        <Button onClick={() => void save()} disabled={saving || !loaded}>
+      <div className="flex flex-col gap-2">
+        <FieldLabel>Топик</FieldLabel>
+        <Input
+          placeholder="brigade-alerts-a8f3"
+          autoComplete="off"
+          value={state.topic}
+          onChange={(e) => patch({ topic: e.target.value })}
+          className="h-[41px] bg-[#1c1b1a] font-mono text-[12.5px] focus-visible:border-[#5a4034]"
+        />
+        <p className="text-[11.5px] leading-[1.55] text-[#6c695f]">
+          Кто знает топик — читает ваши уведомления. Придумайте неочевидный.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3.5">
+        <div className="flex flex-col gap-2">
+          <FieldLabel>Сервер</FieldLabel>
+          <Input
+            placeholder="https://ntfy.sh"
+            autoComplete="off"
+            value={state.server}
+            onChange={(e) => patch({ server: e.target.value })}
+            className="h-[41px] bg-[#1c1b1a] font-mono text-[12.5px] focus-visible:border-[#5a4034]"
+          />
+          <p className="text-[11.5px] leading-[1.55] text-[#6c695f]">
+            Пусто — публичный ntfy.sh
+          </p>
+        </div>
+        <div className="flex flex-col gap-2">
+          <FieldLabel>
+            {state.tokenSet ? "Новый токен доступа" : "Токен доступа · необязательно"}
+          </FieldLabel>
+          <Input
+            type="password"
+            placeholder={state.tokenSet ? "Пусто — не менять" : "tk_…"}
+            autoComplete="off"
+            value={tokenDraft}
+            onChange={(e) => setTokenDraft(e.target.value)}
+            className="h-[41px] bg-[#1c1b1a] font-mono text-[12.5px] focus-visible:border-[#5a4034]"
+          />
+          <SecretNote>Шифруется на сервере, обратно не отдаётся</SecretNote>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <FieldLabel>События</FieldLabel>
+        <div className="divide-y overflow-hidden rounded-[11px] border bg-[#1c1b1a]">
+          {NTFY_EVENTS.map((ev) => (
+            <button
+              key={ev.key}
+              type="button"
+              onClick={() => toggle(ev.key)}
+              className="flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-[#232221]"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13px]">{ev.label}</span>
+                <span className="block text-[11.5px] text-[#6c695f]">{ev.hint}</span>
+              </span>
+              <Toggle on={state.events.includes(ev.key)} />
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Button
+          className="h-[38px]"
+          disabled={saving || !state.topic.trim()}
+          onClick={() => void save()}
+        >
           {saving && <Loader2 className="size-4 animate-spin" />}
           Сохранить
         </Button>
-      </CardContent>
-    </Card>
+        <Button
+          variant="outline"
+          className="h-[38px] gap-1.5"
+          disabled={testing || !state.topic.trim()}
+          onClick={() => void test()}
+        >
+          {testing ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Send className="size-3.5" />
+          )}
+          Тестовый push
+        </Button>
+        {tested && <span className="text-xs text-[#8dbf82]">Отправлено</span>}
+      </div>
+    </>
+  );
+}
+
+// Toggle — переключатель события. Своя разметка, а не чекбокс: строка целиком служит
+// кнопкой, а переключателю нужен только вид состояния.
+function Toggle({ on }: { on: boolean }) {
+  return (
+    <span
+      className={cn(
+        "flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors duration-200",
+        on ? "bg-primary" : "bg-secondary",
+      )}
+    >
+      <span
+        className={cn(
+          "size-4 rounded-full bg-white transition-transform duration-200 ease-[cubic-bezier(.25,1,.4,1)]",
+          on && "translate-x-4",
+        )}
+      />
+    </span>
   );
 }

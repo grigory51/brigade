@@ -695,6 +695,53 @@ func (x *SSHSettings) GetPublicKey() string {
 	return ""
 }
 
+// ServerInfo — режим работы сервера, от которого зависит интерфейс клиента.
+// desktop=true у локального однопользовательского запуска (`brigade desktop`): там
+// авто-логин сид-пользователя, поэтому ни входа, ни выхода, ни смены пользователя нет.
+type ServerInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Desktop       bool                   `protobuf:"varint,1,opt,name=desktop,proto3" json:"desktop,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ServerInfo) Reset() {
+	*x = ServerInfo{}
+	mi := &file_brigade_v1_auth_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ServerInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServerInfo) ProtoMessage() {}
+
+func (x *ServerInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_auth_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServerInfo.ProtoReflect.Descriptor instead.
+func (*ServerInfo) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ServerInfo) GetDesktop() bool {
+	if x != nil {
+		return x.Desktop
+	}
+	return false
+}
+
 var File_brigade_v1_auth_proto protoreflect.FileDescriptor
 
 const file_brigade_v1_auth_proto_rawDesc = "" +
@@ -737,18 +784,23 @@ const file_brigade_v1_auth_proto_rawDesc = "" +
 	"\x06events\x18\x04 \x03(\tR\x06events\",\n" +
 	"\vSSHSettings\x12\x1d\n" +
 	"\n" +
-	"public_key\x18\x01 \x01(\tR\tpublicKey2\xc1\x06\n" +
+	"public_key\x18\x01 \x01(\tR\tpublicKey\"&\n" +
+	"\n" +
+	"ServerInfo\x12\x18\n" +
+	"\adesktop\x18\x01 \x01(\bR\adesktop2\xb3\a\n" +
 	"\vAuthService\x12>\n" +
 	"\x05Login\x12\x18.brigade.v1.LoginRequest\x1a\x19.brigade.v1.LoginResponse\"\x00\x12D\n" +
 	"\aRefresh\x12\x1a.brigade.v1.RefreshRequest\x1a\x1b.brigade.v1.RefreshResponse\"\x00\x12+\n" +
-	"\x02Me\x12\x11.brigade.v1.Empty\x1a\x10.brigade.v1.User\"\x00\x120\n" +
+	"\x02Me\x12\x11.brigade.v1.Empty\x1a\x10.brigade.v1.User\"\x00\x12<\n" +
+	"\rGetServerInfo\x12\x11.brigade.v1.Empty\x1a\x16.brigade.v1.ServerInfo\"\x00\x120\n" +
 	"\x06Logout\x12\x11.brigade.v1.Empty\x1a\x11.brigade.v1.Empty\"\x00\x12D\n" +
 	"\x11GetClaudeSettings\x12\x11.brigade.v1.Empty\x1a\x1a.brigade.v1.ClaudeSettings\"\x00\x12Q\n" +
 	"\x0eSetClaudeToken\x12!.brigade.v1.SetClaudeTokenRequest\x1a\x1a.brigade.v1.ClaudeSettings\"\x00\x12D\n" +
 	"\x11GetMemorySettings\x12\x11.brigade.v1.Empty\x1a\x1a.brigade.v1.MemorySettings\"\x00\x12W\n" +
 	"\x11SetMemorySettings\x12$.brigade.v1.SetMemorySettingsRequest\x1a\x1a.brigade.v1.MemorySettings\"\x00\x12@\n" +
 	"\x0fGetNtfySettings\x12\x11.brigade.v1.Empty\x1a\x18.brigade.v1.NtfySettings\"\x00\x12Q\n" +
-	"\x0fSetNtfySettings\x12\".brigade.v1.SetNtfySettingsRequest\x1a\x18.brigade.v1.NtfySettings\"\x00\x12>\n" +
+	"\x0fSetNtfySettings\x12\".brigade.v1.SetNtfySettingsRequest\x1a\x18.brigade.v1.NtfySettings\"\x00\x122\n" +
+	"\bTestNtfy\x12\x11.brigade.v1.Empty\x1a\x11.brigade.v1.Empty\"\x00\x12>\n" +
 	"\x0eGetSSHSettings\x12\x11.brigade.v1.Empty\x1a\x17.brigade.v1.SSHSettings\"\x00\x12@\n" +
 	"\x10RegenerateSSHKey\x12\x11.brigade.v1.Empty\x1a\x17.brigade.v1.SSHSettings\"\x00B\xa6\x01\n" +
 	"\x0ecom.brigade.v1B\tAuthProtoP\x01Z@github.com/grigory51/brigade/backend/gen/go/brigade/v1;brigadev1\xa2\x02\x03BXX\xaa\x02\n" +
@@ -767,7 +819,7 @@ func file_brigade_v1_auth_proto_rawDescGZIP() []byte {
 	return file_brigade_v1_auth_proto_rawDescData
 }
 
-var file_brigade_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_brigade_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_brigade_v1_auth_proto_goTypes = []any{
 	(*Empty)(nil),                    // 0: brigade.v1.Empty
 	(*User)(nil),                     // 1: brigade.v1.User
@@ -782,35 +834,40 @@ var file_brigade_v1_auth_proto_goTypes = []any{
 	(*NtfySettings)(nil),             // 10: brigade.v1.NtfySettings
 	(*SetNtfySettingsRequest)(nil),   // 11: brigade.v1.SetNtfySettingsRequest
 	(*SSHSettings)(nil),              // 12: brigade.v1.SSHSettings
+	(*ServerInfo)(nil),               // 13: brigade.v1.ServerInfo
 }
 var file_brigade_v1_auth_proto_depIdxs = []int32{
 	1,  // 0: brigade.v1.LoginResponse.user:type_name -> brigade.v1.User
 	2,  // 1: brigade.v1.AuthService.Login:input_type -> brigade.v1.LoginRequest
 	4,  // 2: brigade.v1.AuthService.Refresh:input_type -> brigade.v1.RefreshRequest
 	0,  // 3: brigade.v1.AuthService.Me:input_type -> brigade.v1.Empty
-	0,  // 4: brigade.v1.AuthService.Logout:input_type -> brigade.v1.Empty
-	0,  // 5: brigade.v1.AuthService.GetClaudeSettings:input_type -> brigade.v1.Empty
-	7,  // 6: brigade.v1.AuthService.SetClaudeToken:input_type -> brigade.v1.SetClaudeTokenRequest
-	0,  // 7: brigade.v1.AuthService.GetMemorySettings:input_type -> brigade.v1.Empty
-	9,  // 8: brigade.v1.AuthService.SetMemorySettings:input_type -> brigade.v1.SetMemorySettingsRequest
-	0,  // 9: brigade.v1.AuthService.GetNtfySettings:input_type -> brigade.v1.Empty
-	11, // 10: brigade.v1.AuthService.SetNtfySettings:input_type -> brigade.v1.SetNtfySettingsRequest
-	0,  // 11: brigade.v1.AuthService.GetSSHSettings:input_type -> brigade.v1.Empty
-	0,  // 12: brigade.v1.AuthService.RegenerateSSHKey:input_type -> brigade.v1.Empty
-	3,  // 13: brigade.v1.AuthService.Login:output_type -> brigade.v1.LoginResponse
-	5,  // 14: brigade.v1.AuthService.Refresh:output_type -> brigade.v1.RefreshResponse
-	1,  // 15: brigade.v1.AuthService.Me:output_type -> brigade.v1.User
-	0,  // 16: brigade.v1.AuthService.Logout:output_type -> brigade.v1.Empty
-	6,  // 17: brigade.v1.AuthService.GetClaudeSettings:output_type -> brigade.v1.ClaudeSettings
-	6,  // 18: brigade.v1.AuthService.SetClaudeToken:output_type -> brigade.v1.ClaudeSettings
-	8,  // 19: brigade.v1.AuthService.GetMemorySettings:output_type -> brigade.v1.MemorySettings
-	8,  // 20: brigade.v1.AuthService.SetMemorySettings:output_type -> brigade.v1.MemorySettings
-	10, // 21: brigade.v1.AuthService.GetNtfySettings:output_type -> brigade.v1.NtfySettings
-	10, // 22: brigade.v1.AuthService.SetNtfySettings:output_type -> brigade.v1.NtfySettings
-	12, // 23: brigade.v1.AuthService.GetSSHSettings:output_type -> brigade.v1.SSHSettings
-	12, // 24: brigade.v1.AuthService.RegenerateSSHKey:output_type -> brigade.v1.SSHSettings
-	13, // [13:25] is the sub-list for method output_type
-	1,  // [1:13] is the sub-list for method input_type
+	0,  // 4: brigade.v1.AuthService.GetServerInfo:input_type -> brigade.v1.Empty
+	0,  // 5: brigade.v1.AuthService.Logout:input_type -> brigade.v1.Empty
+	0,  // 6: brigade.v1.AuthService.GetClaudeSettings:input_type -> brigade.v1.Empty
+	7,  // 7: brigade.v1.AuthService.SetClaudeToken:input_type -> brigade.v1.SetClaudeTokenRequest
+	0,  // 8: brigade.v1.AuthService.GetMemorySettings:input_type -> brigade.v1.Empty
+	9,  // 9: brigade.v1.AuthService.SetMemorySettings:input_type -> brigade.v1.SetMemorySettingsRequest
+	0,  // 10: brigade.v1.AuthService.GetNtfySettings:input_type -> brigade.v1.Empty
+	11, // 11: brigade.v1.AuthService.SetNtfySettings:input_type -> brigade.v1.SetNtfySettingsRequest
+	0,  // 12: brigade.v1.AuthService.TestNtfy:input_type -> brigade.v1.Empty
+	0,  // 13: brigade.v1.AuthService.GetSSHSettings:input_type -> brigade.v1.Empty
+	0,  // 14: brigade.v1.AuthService.RegenerateSSHKey:input_type -> brigade.v1.Empty
+	3,  // 15: brigade.v1.AuthService.Login:output_type -> brigade.v1.LoginResponse
+	5,  // 16: brigade.v1.AuthService.Refresh:output_type -> brigade.v1.RefreshResponse
+	1,  // 17: brigade.v1.AuthService.Me:output_type -> brigade.v1.User
+	13, // 18: brigade.v1.AuthService.GetServerInfo:output_type -> brigade.v1.ServerInfo
+	0,  // 19: brigade.v1.AuthService.Logout:output_type -> brigade.v1.Empty
+	6,  // 20: brigade.v1.AuthService.GetClaudeSettings:output_type -> brigade.v1.ClaudeSettings
+	6,  // 21: brigade.v1.AuthService.SetClaudeToken:output_type -> brigade.v1.ClaudeSettings
+	8,  // 22: brigade.v1.AuthService.GetMemorySettings:output_type -> brigade.v1.MemorySettings
+	8,  // 23: brigade.v1.AuthService.SetMemorySettings:output_type -> brigade.v1.MemorySettings
+	10, // 24: brigade.v1.AuthService.GetNtfySettings:output_type -> brigade.v1.NtfySettings
+	10, // 25: brigade.v1.AuthService.SetNtfySettings:output_type -> brigade.v1.NtfySettings
+	0,  // 26: brigade.v1.AuthService.TestNtfy:output_type -> brigade.v1.Empty
+	12, // 27: brigade.v1.AuthService.GetSSHSettings:output_type -> brigade.v1.SSHSettings
+	12, // 28: brigade.v1.AuthService.RegenerateSSHKey:output_type -> brigade.v1.SSHSettings
+	15, // [15:29] is the sub-list for method output_type
+	1,  // [1:15] is the sub-list for method input_type
 	1,  // [1:1] is the sub-list for extension type_name
 	1,  // [1:1] is the sub-list for extension extendee
 	0,  // [0:1] is the sub-list for field type_name
@@ -827,7 +884,7 @@ func file_brigade_v1_auth_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_brigade_v1_auth_proto_rawDesc), len(file_brigade_v1_auth_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -71,7 +71,9 @@ export function App() {
             <Route path="/archive/:sessionId" element={<ArchiveSessionPage />} />
             <Route path="/memory" element={<MemoryPage />} />
             <Route path="/memory/:topicId" element={<TopicPage />} />
+            {/* Раздел настроек — часть URL: работают прямые ссылки и назад/вперёд. */}
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/settings/:section" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/sessions" replace />} />
         </Routes>

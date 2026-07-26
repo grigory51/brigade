@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ClaudeSettings, Empty, LoginRequest, LoginResponse, MemorySettings, NtfySettings, RefreshRequest, RefreshResponse, SetClaudeTokenRequest, SetMemorySettingsRequest, SetNtfySettingsRequest, SSHSettings, User } from "./auth_pb.js";
+import { ClaudeSettings, Empty, LoginRequest, LoginResponse, MemorySettings, NtfySettings, RefreshRequest, RefreshResponse, ServerInfo, SetClaudeTokenRequest, SetMemorySettingsRequest, SetNtfySettingsRequest, SSHSettings, User } from "./auth_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -41,6 +41,17 @@ export const AuthService = {
       name: "Me",
       I: Empty,
       O: User,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * GetServerInfo сообщает клиенту режим работы сервера (см. ServerInfo).
+     *
+     * @generated from rpc brigade.v1.AuthService.GetServerInfo
+     */
+    getServerInfo: {
+      name: "GetServerInfo",
+      I: Empty,
+      O: ServerInfo,
       kind: MethodKind.Unary,
     },
     /**
@@ -120,6 +131,19 @@ export const AuthService = {
       name: "SetNtfySettings",
       I: SetNtfySettingsRequest,
       O: NtfySettings,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * TestNtfy шлёт пробное уведомление по СОХРАНЁННЫМ настройкам пользователя: проверка
+     * топика/сервера/токена из UI. Ошибка доставки возвращается вызывающему — иначе
+     * неверные настройки обнаруживались бы только по молчанию в реальной сессии.
+     *
+     * @generated from rpc brigade.v1.AuthService.TestNtfy
+     */
+    testNtfy: {
+      name: "TestNtfy",
+      I: Empty,
+      O: Empty,
       kind: MethodKind.Unary,
     },
     /**

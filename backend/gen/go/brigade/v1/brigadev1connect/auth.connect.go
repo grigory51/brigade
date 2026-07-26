@@ -39,6 +39,9 @@ const (
 	AuthServiceRefreshProcedure = "/brigade.v1.AuthService/Refresh"
 	// AuthServiceMeProcedure is the fully-qualified name of the AuthService's Me RPC.
 	AuthServiceMeProcedure = "/brigade.v1.AuthService/Me"
+	// AuthServiceGetServerInfoProcedure is the fully-qualified name of the AuthService's GetServerInfo
+	// RPC.
+	AuthServiceGetServerInfoProcedure = "/brigade.v1.AuthService/GetServerInfo"
 	// AuthServiceLogoutProcedure is the fully-qualified name of the AuthService's Logout RPC.
 	AuthServiceLogoutProcedure = "/brigade.v1.AuthService/Logout"
 	// AuthServiceGetClaudeSettingsProcedure is the fully-qualified name of the AuthService's
@@ -59,6 +62,8 @@ const (
 	// AuthServiceSetNtfySettingsProcedure is the fully-qualified name of the AuthService's
 	// SetNtfySettings RPC.
 	AuthServiceSetNtfySettingsProcedure = "/brigade.v1.AuthService/SetNtfySettings"
+	// AuthServiceTestNtfyProcedure is the fully-qualified name of the AuthService's TestNtfy RPC.
+	AuthServiceTestNtfyProcedure = "/brigade.v1.AuthService/TestNtfy"
 	// AuthServiceGetSSHSettingsProcedure is the fully-qualified name of the AuthService's
 	// GetSSHSettings RPC.
 	AuthServiceGetSSHSettingsProcedure = "/brigade.v1.AuthService/GetSSHSettings"
@@ -73,6 +78,8 @@ type AuthServiceClient interface {
 	Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error)
 	// Me возвращает текущего пользователя по access-токену (из cookie или Bearer).
 	Me(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.User], error)
+	// GetServerInfo сообщает клиенту режим работы сервера (см. ServerInfo).
+	GetServerInfo(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.ServerInfo], error)
 	Logout(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.Empty], error)
 	// GetClaudeSettings возвращает состояние Claude-настроек пользователя (только флаг
 	// token_set — значение токена не раскрывается).
@@ -90,6 +97,10 @@ type AuthServiceClient interface {
 	// SetNtfySettings задаёт server/topic/token/events персональных ntfy-уведомлений.
 	// Возвращает обновлённое состояние.
 	SetNtfySettings(context.Context, *connect.Request[v1.SetNtfySettingsRequest]) (*connect.Response[v1.NtfySettings], error)
+	// TestNtfy шлёт пробное уведомление по СОХРАНЁННЫМ настройкам пользователя: проверка
+	// топика/сервера/токена из UI. Ошибка доставки возвращается вызывающему — иначе
+	// неверные настройки обнаруживались бы только по молчанию в реальной сессии.
+	TestNtfy(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.Empty], error)
 	// GetSSHSettings возвращает публичный SSH-ключ агента пользователя, генерируя пару при
 	// первом обращении (приватный ключ наружу не отдаётся).
 	GetSSHSettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error)
@@ -125,6 +136,12 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+AuthServiceMeProcedure,
 			connect.WithSchema(authServiceMethods.ByName("Me")),
+			connect.WithClientOptions(opts...),
+		),
+		getServerInfo: connect.NewClient[v1.Empty, v1.ServerInfo](
+			httpClient,
+			baseURL+AuthServiceGetServerInfoProcedure,
+			connect.WithSchema(authServiceMethods.ByName("GetServerInfo")),
 			connect.WithClientOptions(opts...),
 		),
 		logout: connect.NewClient[v1.Empty, v1.Empty](
@@ -169,6 +186,12 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("SetNtfySettings")),
 			connect.WithClientOptions(opts...),
 		),
+		testNtfy: connect.NewClient[v1.Empty, v1.Empty](
+			httpClient,
+			baseURL+AuthServiceTestNtfyProcedure,
+			connect.WithSchema(authServiceMethods.ByName("TestNtfy")),
+			connect.WithClientOptions(opts...),
+		),
 		getSSHSettings: connect.NewClient[v1.Empty, v1.SSHSettings](
 			httpClient,
 			baseURL+AuthServiceGetSSHSettingsProcedure,
@@ -189,6 +212,7 @@ type authServiceClient struct {
 	login             *connect.Client[v1.LoginRequest, v1.LoginResponse]
 	refresh           *connect.Client[v1.RefreshRequest, v1.RefreshResponse]
 	me                *connect.Client[v1.Empty, v1.User]
+	getServerInfo     *connect.Client[v1.Empty, v1.ServerInfo]
 	logout            *connect.Client[v1.Empty, v1.Empty]
 	getClaudeSettings *connect.Client[v1.Empty, v1.ClaudeSettings]
 	setClaudeToken    *connect.Client[v1.SetClaudeTokenRequest, v1.ClaudeSettings]
@@ -196,6 +220,7 @@ type authServiceClient struct {
 	setMemorySettings *connect.Client[v1.SetMemorySettingsRequest, v1.MemorySettings]
 	getNtfySettings   *connect.Client[v1.Empty, v1.NtfySettings]
 	setNtfySettings   *connect.Client[v1.SetNtfySettingsRequest, v1.NtfySettings]
+	testNtfy          *connect.Client[v1.Empty, v1.Empty]
 	getSSHSettings    *connect.Client[v1.Empty, v1.SSHSettings]
 	regenerateSSHKey  *connect.Client[v1.Empty, v1.SSHSettings]
 }
@@ -213,6 +238,11 @@ func (c *authServiceClient) Refresh(ctx context.Context, req *connect.Request[v1
 // Me calls brigade.v1.AuthService.Me.
 func (c *authServiceClient) Me(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.User], error) {
 	return c.me.CallUnary(ctx, req)
+}
+
+// GetServerInfo calls brigade.v1.AuthService.GetServerInfo.
+func (c *authServiceClient) GetServerInfo(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.ServerInfo], error) {
+	return c.getServerInfo.CallUnary(ctx, req)
 }
 
 // Logout calls brigade.v1.AuthService.Logout.
@@ -250,6 +280,11 @@ func (c *authServiceClient) SetNtfySettings(ctx context.Context, req *connect.Re
 	return c.setNtfySettings.CallUnary(ctx, req)
 }
 
+// TestNtfy calls brigade.v1.AuthService.TestNtfy.
+func (c *authServiceClient) TestNtfy(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.Empty], error) {
+	return c.testNtfy.CallUnary(ctx, req)
+}
+
 // GetSSHSettings calls brigade.v1.AuthService.GetSSHSettings.
 func (c *authServiceClient) GetSSHSettings(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error) {
 	return c.getSSHSettings.CallUnary(ctx, req)
@@ -266,6 +301,8 @@ type AuthServiceHandler interface {
 	Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error)
 	// Me возвращает текущего пользователя по access-токену (из cookie или Bearer).
 	Me(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.User], error)
+	// GetServerInfo сообщает клиенту режим работы сервера (см. ServerInfo).
+	GetServerInfo(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.ServerInfo], error)
 	Logout(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.Empty], error)
 	// GetClaudeSettings возвращает состояние Claude-настроек пользователя (только флаг
 	// token_set — значение токена не раскрывается).
@@ -283,6 +320,10 @@ type AuthServiceHandler interface {
 	// SetNtfySettings задаёт server/topic/token/events персональных ntfy-уведомлений.
 	// Возвращает обновлённое состояние.
 	SetNtfySettings(context.Context, *connect.Request[v1.SetNtfySettingsRequest]) (*connect.Response[v1.NtfySettings], error)
+	// TestNtfy шлёт пробное уведомление по СОХРАНЁННЫМ настройкам пользователя: проверка
+	// топика/сервера/токена из UI. Ошибка доставки возвращается вызывающему — иначе
+	// неверные настройки обнаруживались бы только по молчанию в реальной сессии.
+	TestNtfy(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.Empty], error)
 	// GetSSHSettings возвращает публичный SSH-ключ агента пользователя, генерируя пару при
 	// первом обращении (приватный ключ наружу не отдаётся).
 	GetSSHSettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error)
@@ -314,6 +355,12 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		AuthServiceMeProcedure,
 		svc.Me,
 		connect.WithSchema(authServiceMethods.ByName("Me")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceGetServerInfoHandler := connect.NewUnaryHandler(
+		AuthServiceGetServerInfoProcedure,
+		svc.GetServerInfo,
+		connect.WithSchema(authServiceMethods.ByName("GetServerInfo")),
 		connect.WithHandlerOptions(opts...),
 	)
 	authServiceLogoutHandler := connect.NewUnaryHandler(
@@ -358,6 +405,12 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("SetNtfySettings")),
 		connect.WithHandlerOptions(opts...),
 	)
+	authServiceTestNtfyHandler := connect.NewUnaryHandler(
+		AuthServiceTestNtfyProcedure,
+		svc.TestNtfy,
+		connect.WithSchema(authServiceMethods.ByName("TestNtfy")),
+		connect.WithHandlerOptions(opts...),
+	)
 	authServiceGetSSHSettingsHandler := connect.NewUnaryHandler(
 		AuthServiceGetSSHSettingsProcedure,
 		svc.GetSSHSettings,
@@ -378,6 +431,8 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceRefreshHandler.ServeHTTP(w, r)
 		case AuthServiceMeProcedure:
 			authServiceMeHandler.ServeHTTP(w, r)
+		case AuthServiceGetServerInfoProcedure:
+			authServiceGetServerInfoHandler.ServeHTTP(w, r)
 		case AuthServiceLogoutProcedure:
 			authServiceLogoutHandler.ServeHTTP(w, r)
 		case AuthServiceGetClaudeSettingsProcedure:
@@ -392,6 +447,8 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceGetNtfySettingsHandler.ServeHTTP(w, r)
 		case AuthServiceSetNtfySettingsProcedure:
 			authServiceSetNtfySettingsHandler.ServeHTTP(w, r)
+		case AuthServiceTestNtfyProcedure:
+			authServiceTestNtfyHandler.ServeHTTP(w, r)
 		case AuthServiceGetSSHSettingsProcedure:
 			authServiceGetSSHSettingsHandler.ServeHTTP(w, r)
 		case AuthServiceRegenerateSSHKeyProcedure:
@@ -415,6 +472,10 @@ func (UnimplementedAuthServiceHandler) Refresh(context.Context, *connect.Request
 
 func (UnimplementedAuthServiceHandler) Me(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.User], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.Me is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) GetServerInfo(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.ServerInfo], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.GetServerInfo is not implemented"))
 }
 
 func (UnimplementedAuthServiceHandler) Logout(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.Empty], error) {
@@ -443,6 +504,10 @@ func (UnimplementedAuthServiceHandler) GetNtfySettings(context.Context, *connect
 
 func (UnimplementedAuthServiceHandler) SetNtfySettings(context.Context, *connect.Request[v1.SetNtfySettingsRequest]) (*connect.Response[v1.NtfySettings], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.SetNtfySettings is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) TestNtfy(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.TestNtfy is not implemented"))
 }
 
 func (UnimplementedAuthServiceHandler) GetSSHSettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error) {

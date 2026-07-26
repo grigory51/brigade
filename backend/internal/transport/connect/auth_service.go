@@ -13,14 +13,30 @@ import (
 	"github.com/grigory51/brigade/backend/internal/auth"
 )
 
-// AuthService реализует brigade.v1.AuthService поверх auth.Service.
-type AuthService struct {
-	svc *auth.Service
+// NtfyTester шлёт пробное уведомление пользователю. Интерфейс, а не *notify.Service, —
+// транспорту хватает одной операции, а auth-сервис о доставке уведомлений не знает.
+type NtfyTester interface {
+	Test(ctx context.Context, userID string) error
 }
 
-// NewAuthService собирает реализацию AuthService.
-func NewAuthService(svc *auth.Service) *AuthService {
-	return &AuthService{svc: svc}
+// AuthService реализует brigade.v1.AuthService поверх auth.Service.
+type AuthService struct {
+	svc     *auth.Service
+	notify  NtfyTester
+	desktop bool
+}
+
+// NewAuthService собирает реализацию AuthService. notify может быть nil — тогда проверка
+// уведомлений недоступна, остальные методы работают. desktop — локальный
+// однопользовательский запуск (см. ServerInfo).
+func NewAuthService(svc *auth.Service, notify NtfyTester, desktop bool) *AuthService {
+	return &AuthService{svc: svc, notify: notify, desktop: desktop}
+}
+
+// GetServerInfo сообщает клиенту режим работы сервера. Авторизация не требуется по сути
+// вопроса, но метод проходит общий интерсептор — клиент зовёт его после проверки сессии.
+func (s *AuthService) GetServerInfo(_ context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.ServerInfo], error) {
+	return connect.NewResponse(&v1.ServerInfo{Desktop: s.desktop}), nil
 }
 
 // Login проверяет учётные данные, выпускает пару токенов и для web-клиента выставляет
@@ -186,6 +202,23 @@ func (s *AuthService) SetNtfySettings(ctx context.Context, req *connect.Request[
 	return connect.NewResponse(&v1.NtfySettings{
 		Server: server, Topic: topic, TokenSet: tokenSet, Events: splitEvents(ev),
 	}), nil
+}
+
+// TestNtfy шлёт пробное уведомление по сохранённым настройкам пользователя. Ошибку доставки
+// возвращаем как InvalidArgument: в подавляющем большинстве случаев это неверный топик,
+// сервер или токен — то есть данные пользователя, а не сбой brigade.
+func (s *AuthService) TestNtfy(ctx context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.Empty], error) {
+	u, ok := auth.UserFromContext(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
+	}
+	if s.notify == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("уведомления не сконфигурированы"))
+	}
+	if err := s.notify.Test(ctx, u.ID); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	return connect.NewResponse(&v1.Empty{}), nil
 }
 
 // GetSSHSettings возвращает публичный SSH-ключ агента текущего пользователя (генерируя пару

@@ -579,3 +579,44 @@ export class SSHSettings extends Message<SSHSettings> {
   }
 }
 
+/**
+ * ServerInfo — режим работы сервера, от которого зависит интерфейс клиента.
+ * desktop=true у локального однопользовательского запуска (`brigade desktop`): там
+ * авто-логин сид-пользователя, поэтому ни входа, ни выхода, ни смены пользователя нет.
+ *
+ * @generated from message brigade.v1.ServerInfo
+ */
+export class ServerInfo extends Message<ServerInfo> {
+  /**
+   * @generated from field: bool desktop = 1;
+   */
+  desktop = false;
+
+  constructor(data?: PartialMessage<ServerInfo>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.ServerInfo";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "desktop", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ServerInfo {
+    return new ServerInfo().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ServerInfo {
+    return new ServerInfo().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ServerInfo {
+    return new ServerInfo().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: ServerInfo | PlainMessage<ServerInfo> | undefined, b: ServerInfo | PlainMessage<ServerInfo> | undefined): boolean {
+    return proto3.util.equals(ServerInfo, a, b);
+  }
+}
+

@@ -143,7 +143,7 @@ func runServer(configPath string) {
 	// AcpService.ResolvePermission (доставляет решение) — создаётся здесь.
 	perms := aguitransport.NewPermissionStore()
 
-	authService := connectsvc.NewAuthService(authSvc)
+	authService := connectsvc.NewAuthService(authSvc, notifySvc, desktopMode)
 	mux.Handle(brigadev1connect.NewAuthServiceHandler(authService, interceptors))
 	// Десктоп-режим: авто-логин сид-пользователя без экрана входа (локальный
 	// однопользовательский запуск). /desktop/auth ставит сессионные cookie и редиректит на SPA;
