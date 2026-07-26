@@ -340,10 +340,10 @@ export function SessionLayout() {
               </Button>
             </SidebarHeader>
 
-            {/* overflow-hidden: скролл живёт внутри списка сессий (max-h-[52%] ниже), а не
-                на всей колонке — «Заметки»/«Архив» и профиль остаются на виду. */}
+            {/* Колонка не скроллится целиком: прокручивается только список сессий, а
+                «Заметки»/«Архив» и профиль остаются на виду при любой высоте окна. */}
             <SidebarContent className="overflow-hidden">
-              <SidebarGroup className="gap-0 pb-0">
+              <SidebarGroup className="min-h-0 flex-1 gap-0 pb-0">
                 {/* Заголовок группы: сам никуда не ведёт, поэтому без hover-подсветки и
                     курсора — иначе выглядел бы кликабельным пунктом меню. Кликается только
                     иконка обновления справа. */}
@@ -372,7 +372,10 @@ export function SessionLayout() {
                     />
                   </button>
                 </div>
-                <SidebarGroupContent className="mt-1.5 max-h-[52%] overflow-y-auto">
+                {/* Список забирает всю свободную высоту и скроллится внутри себя. Жёсткого
+                    потолка нет намеренно: с ним при высоком окне оставалась дыра, а при
+                    низком нижние разделы выдавливало за край колонки. */}
+                <SidebarGroupContent className="mt-1.5 min-h-0 flex-1 overflow-y-auto">
                   <SidebarMenu>
                     {state === "loading" &&
                       Array.from({ length: 5 }).map((_, i) => (
@@ -430,7 +433,7 @@ export function SessionLayout() {
               {/* Разделитель отделяет список сессий от постоянных разделов; над профилем
                   внизу разделителя по макету нет. */}
               <div className="mx-3 mt-1.5 h-px shrink-0 bg-sidebar-border" />
-              <SidebarGroup className="py-2">
+              <SidebarGroup className="shrink-0 py-2">
                 <SidebarMenu>
                   <SidebarMenuItem>
                     <SidebarMenuButton
