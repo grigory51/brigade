@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { DaemonConfigureRequest, DaemonConfigureResponse, DaemonEvent, DaemonOpenTerminalRequest, DaemonPayloadResponse, DaemonPromptRequest, DaemonPromptResponse, DaemonResolvePermissionRequest, DaemonSetConfigOptionRequest, DaemonStatusResponse, DaemonStreamEventsRequest, DaemonSummarizeRequest, DaemonSummarizeResponse, DaemonTerminalInputRequest, DaemonTerminalOutput, DaemonTerminalResizeRequest, DaemonWriteFileRequest } from "./agent_daemon_pb.js";
+import { DaemonConfigureRequest, DaemonConfigureResponse, DaemonEvent, DaemonOpenTerminalRequest, DaemonPayloadResponse, DaemonPromptRequest, DaemonPromptResponse, DaemonResolvePermissionRequest, DaemonSetConfigOptionRequest, DaemonSetSSHKeyRequest, DaemonStatusResponse, DaemonStreamEventsRequest, DaemonSummarizeRequest, DaemonSummarizeResponse, DaemonTerminalInputRequest, DaemonTerminalOutput, DaemonTerminalResizeRequest, DaemonWriteFileRequest } from "./agent_daemon_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { Empty } from "./auth_pb.js";
 
@@ -172,6 +172,20 @@ export const AgentDaemonService = {
     writeFile: {
       name: "WriteFile",
       I: DaemonWriteFileRequest,
+      O: Empty,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * SetSSHKey загружает приватный ключ пользователя в ssh-agent демона. Ключ остаётся
+     * ТОЛЬКО в памяти процесса: на диск среды не пишется и в окружение не попадает, наружу
+     * уходит лишь подпись через unix-сокет (его путь демон сам подставляет в SSH_AUTH_SOCK
+     * адаптеру и терминалам). Идемпотентна: повторная загрузка заменяет ключ в связке.
+     *
+     * @generated from rpc brigade.v1.AgentDaemonService.SetSSHKey
+     */
+    setSSHKey: {
+      name: "SetSSHKey",
+      I: DaemonSetSSHKeyRequest,
       O: Empty,
       kind: MethodKind.Unary,
     },

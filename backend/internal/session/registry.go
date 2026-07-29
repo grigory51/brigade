@@ -630,6 +630,7 @@ func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token
 
 	rc := acpremote.New(addr, "", r.daemonTokenFn(sess.ID))
 	rc.OnTurnEnd = r.turnEndHook(sess)
+	r.loadAgentSSHKey(ctx, sess.UserID, rc.SetSSHKey)
 	sid, err := rc.Configure(ctx, acpremote.ConfigureOptions{
 		OAuthToken:        token,
 		ExtraEnv:          r.previewEnv(sess), // preview-токен/URL — только адаптеру, не в env контейнера
@@ -679,6 +680,7 @@ func (r *Registry) spawnCLIDaemon(ctx context.Context, sess store.Session, token
 	// aud подписи = userID (per-user демон обслуживает все CLI-сессии пользователя); id
 	// терминала = sess.ID (сессия). OAuth-токен и preview-env — в env процесса, не контейнера.
 	hc := cliremote.New(addr, sess.ID, r.daemonTokenFn(sess.UserID))
+	r.loadAgentSSHKey(ctx, sess.UserID, hc.SetSSHKey)
 	if err := hc.Start(cmd, sess.Cwd, r.agentEnv(sess, token), 0, 0); err != nil {
 		return nil, "", "", fmt.Errorf("session: start cli terminal: %w", err)
 	}
@@ -794,58 +796,62 @@ func (r *Registry) installSkill(sess store.Session) {
 	}
 }
 
-// provisionAgentSSH подкладывает per-user SSH-ключ агента в его home на ХОСТЕ (docker-режим):
-// ~/.ssh/{id_ed25519, id_ed25519.pub, config}. home bind-mount'ится в контейнер, поэтому агент
-// видит ключ по ~/.ssh и может пушить в GitHub (git@github.com) без интерактива. Ключ стабилен
-// per-user (общий home пользователя); файлы перезаписываются каждый спавн — синхронизация с
-// перевыпущенным ключом. В local-режиме (home пуст) no-op: агент пользуется хостовым ~/.ssh.
-// Ошибки логируются, не роняют создание сессии — пуш вспомогателен.
-func (r *Registry) provisionAgentSSH(ctx context.Context, sess store.Session) {
+// loadAgentSSHKey отдаёт демону приватный ключ агента: тот держит его в ssh-agent'е в
+// памяти и подставляет SSH_AUTH_SOCK адаптеру и терминалам. Ключ идёт по RPC и НЕ пишется
+// в среду агента — иначе его мог бы забрать любой процесс, запущенный агентом (а в
+// docker-режиме home ещё и общий для сессий пользователя). Шлём на каждый спавн среды —
+// так подхватывается перевыпуск ключа. Ошибка не роняет сессию: без ключа не работает
+// только push по git@, агент остаётся рабочим.
+func (r *Registry) loadAgentSSHKey(ctx context.Context, userID string, load func(context.Context, string) error) {
 	if r.agentKeys == nil {
 		return
 	}
+	priv, _, err := r.agentKeys.EnsureAgentSSHKey(ctx, userID)
+	if err != nil {
+		log.Printf("session: ensure agent ssh key %s: %v", userID, err)
+		return
+	}
+	if err := load(ctx, priv); err != nil {
+		log.Printf("session: load agent ssh key %s: %v", userID, err)
+	}
+}
+
+// provisionAgentSSH готовит ~/.ssh агента в его home на ХОСТЕ (docker-режим): только
+// config, без ключей — приватный ключ живёт в ssh-agent демона (см. loadAgentSSHKey), а
+// публичный агенту не нужен. config задаёт accept-new, чтобы первый push по git@github.com
+// не повис на интерактивной проверке host key; IdentityFile намеренно НЕ указываем —
+// ключ приходит из агента, а IdentitiesOnly перекрыл бы его. В local-режиме (home пуст)
+// no-op: агент пользуется хостовым ~/.ssh. Ошибки логируются, не роняют создание сессии.
+func (r *Registry) provisionAgentSSH(_ context.Context, sess store.Session) {
 	home := r.homeHost(sess)
 	if home == "" {
 		return
 	}
-	priv, pub, err := r.agentKeys.EnsureAgentSSHKey(ctx, sess.UserID)
-	if err != nil {
-		log.Printf("session: ensure agent ssh key %s: %v", sess.UserID, err)
-		return
-	}
-
 	sshDir := filepath.Join(home, ".ssh")
 	if err := os.MkdirAll(sshDir, 0o700); err != nil {
 		log.Printf("session: mkdir .ssh %s: %v", sshDir, err)
 		return
 	}
-	// config направляет git@github.com на подложенный ключ и принимает host-key при первом
-	// подключении (accept-new пишет known_hosts), чтобы push не висел на интерактивной проверке.
+	// Ключи прежних версий: home bind-mount'ится и переживает обновление brigade, так что
+	// без явной уборки приватный ключ остался бы лежать в среде агента.
+	for _, stale := range []string{"id_ed25519", "id_ed25519.pub"} {
+		if err := os.Remove(filepath.Join(sshDir, stale)); err != nil && !os.IsNotExist(err) {
+			log.Printf("session: remove legacy key %s: %v", stale, err)
+		}
+	}
 	const sshConfig = "Host github.com\n" +
 		"    HostName github.com\n" +
 		"    User git\n" +
-		"    IdentityFile ~/.ssh/id_ed25519\n" +
-		"    IdentitiesOnly yes\n" +
 		"    StrictHostKeyChecking accept-new\n"
-	files := []struct {
-		path string
-		data []byte
-		mode os.FileMode
-	}{
-		{filepath.Join(sshDir, "id_ed25519"), []byte(priv), 0o600},
-		{filepath.Join(sshDir, "id_ed25519.pub"), []byte(pub + "\n"), 0o644},
-		{filepath.Join(sshDir, "config"), []byte(sshConfig), 0o600},
+	path := filepath.Join(sshDir, "config")
+	if err := os.WriteFile(path, []byte(sshConfig), 0o600); err != nil {
+		log.Printf("session: write %s: %v", path, err)
+		return
 	}
-	for _, f := range files {
-		if err := os.WriteFile(f.path, f.data, f.mode); err != nil {
-			log.Printf("session: write %s: %v", f.path, err)
-			return
-		}
-		if err := os.Chown(f.path, spawn.AgentUID, spawn.AgentGID); err != nil {
-			log.Printf("session: chown %s: %v", f.path, err)
-		}
+	if err := os.Chown(path, spawn.AgentUID, spawn.AgentGID); err != nil {
+		log.Printf("session: chown %s: %v", path, err)
 	}
-	// .ssh каталог — под агентом (иначе ssh откажется читать root-owned ключ у uid 1001).
+	// .ssh каталог — под агентом: ssh пишет в него known_hosts (accept-new).
 	if err := os.Chown(sshDir, spawn.AgentUID, spawn.AgentGID); err != nil {
 		log.Printf("session: chown %s: %v", sshDir, err)
 	}

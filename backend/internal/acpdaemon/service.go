@@ -182,6 +182,19 @@ func (s *service) WriteFile(ctx context.Context, req *connect.Request[v1.DaemonW
 	return connect.NewResponse(&v1.Empty{}), nil
 }
 
+// SetSSHKey загружает приватный ключ пользователя в ssh-agent демона (память процесса).
+// Идемпотентна: повторный вызов заменяет ключ — brigade шлёт его на каждый спавн среды,
+// чтобы перевыпуск подхватывался без пересоздания контейнера.
+func (s *service) SetSSHKey(_ context.Context, req *connect.Request[v1.DaemonSetSSHKeyRequest]) (*connect.Response[v1.Empty], error) {
+	if req.Msg.PrivateKey == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("empty private key"))
+	}
+	if err := s.d.setSSHKey(req.Msg.PrivateKey); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&v1.Empty{}), nil
+}
+
 // OpenTerminal спавнит команду в pty и стримит вывод. Эфемерный (durable=false): закрытие
 // стрима (ctx.Done) убивает pty — для /ws/shell. Durable: сначала scrollback, затем live-tail;
 // завершение процесса закрывает поток (сигнал выхода brigade), отцепление pty не гасит.
@@ -190,8 +203,11 @@ func (s *service) OpenTerminal(ctx context.Context, req *connect.Request[v1.Daem
 	if len(m.Cmd) == 0 {
 		return connect.NewError(connect.CodeInvalidArgument, errors.New("empty cmd"))
 	}
+	// sshEnv добавляет SSH_AUTH_SOCK: git/ssh в терминале подписывают ключом из памяти
+	// демона, самого ключа в среде нет.
+	env := append(append([]string{}, m.Env...), s.d.sshEnv()...)
 	t, err := s.d.terminals.open(openReq{
-		id: m.Id, cmd: m.Cmd, cwd: m.Cwd, env: m.Env,
+		id: m.Id, cmd: m.Cmd, cwd: m.Cwd, env: env,
 		cols: uint16(m.Cols), rows: uint16(m.Rows), durable: m.Durable,
 	})
 	if err != nil {

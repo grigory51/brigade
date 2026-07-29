@@ -32,6 +32,7 @@ import (
 	"github.com/grigory51/brigade/backend/internal/agentauth"
 	"github.com/grigory51/brigade/backend/internal/agui"
 	"github.com/grigory51/brigade/backend/internal/eventlog"
+	"github.com/grigory51/brigade/backend/internal/sshagent"
 )
 
 // customPermissionName — Name CUSTOM-события запроса разрешения (human-in-the-loop).
@@ -51,6 +52,9 @@ type Daemon struct {
 	mu     sync.Mutex
 	client *acp.Client // nil до Configure
 	unbind func()
+	// ssh — ssh-agent с ключом пользователя в памяти (nil, пока ключ не загружен).
+	// Приватный ключ на диск среды не пишется.
+	ssh *sshagent.Agent
 }
 
 // New создаёт демон с открытым журналом (durable по пути logPath).
@@ -124,9 +128,11 @@ func (d *Daemon) configure(ctx context.Context, req *v1ConfigureRequest) (string
 	}
 
 	client, err := acp.New(ctx, acp.Options{
-		Cwd:               req.Cwd,
-		OAuthToken:        req.OauthToken,
-		ExtraEnv:          req.ExtraEnv,
+		Cwd:        req.Cwd,
+		OAuthToken: req.OauthToken,
+		// sshEnv добавляет SSH_AUTH_SOCK: агент подписывает git-операции ключом из памяти
+		// демона, не имея самого ключа.
+		ExtraEnv:          append(append([]string{}, req.ExtraEnv...), d.sshEnvLocked()...),
 		AdapterCommand:    req.AdapterCommand,
 		ResumeSessionID:   req.ResumeSessionId,
 		ForkFromSessionID: req.ForkFromSessionId,
@@ -142,6 +148,39 @@ func (d *Daemon) configure(ctx context.Context, req *v1ConfigureRequest) (string
 	d.unbind = client.Bind(d.sink, d.resolve)
 	d.client = client
 	return client.SessionID(), nil
+}
+
+// setSSHKey загружает (или заменяет) ключ пользователя в ssh-agent демона, поднимая агента
+// при первом вызове. Замена нужна на перевыпуск ключа: демон живёт дольше сессии.
+func (d *Daemon) setSSHKey(privatePEM string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.ssh != nil {
+		return d.ssh.ReplaceKey(privatePEM)
+	}
+	// Сокет — в /tmp среды: демон один на среду, путь уходит потребителям в SSH_AUTH_SOCK.
+	a, err := sshagent.Start(filepath.Join(os.TempDir(), "brigade-ssh-agent.sock"), privatePEM)
+	if err != nil {
+		return err
+	}
+	d.ssh = a
+	return nil
+}
+
+// sshEnv — переменные окружения доступа к ssh-agent демона для порождаемых процессов
+// (адаптер, терминалы). Пусто, пока ключ не загружен.
+func (d *Daemon) sshEnv() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.sshEnvLocked()
+}
+
+// sshEnvLocked — то же под уже взятым d.mu (configure держит его на всё время).
+func (d *Daemon) sshEnvLocked() []string {
+	if d.ssh == nil {
+		return nil
+	}
+	return []string{"SSH_AUTH_SOCK=" + d.ssh.Path()}
 }
 
 // getClient возвращает настроенный клиент или ошибку FailedPrecondition (не сконфигурирован).
@@ -165,6 +204,13 @@ func (d *Daemon) Close() {
 	}
 	if c != nil {
 		_ = c.Close()
+	}
+	d.mu.Lock()
+	a := d.ssh
+	d.ssh = nil
+	d.mu.Unlock()
+	if a != nil {
+		a.Close()
 	}
 	_ = d.log.Close()
 }

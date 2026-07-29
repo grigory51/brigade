@@ -52,6 +52,12 @@ service AgentDaemonService {
   // brigade заливает вложения, не завязываясь на docker: демон пишет у себя внутри среды.
   rpc WriteFile(DaemonWriteFileRequest) returns (Empty) {}
 
+  // SetSSHKey загружает приватный ключ пользователя в ssh-agent демона. Ключ остаётся
+  // ТОЛЬКО в памяти процесса: на диск среды не пишется и в окружение не попадает, наружу
+  // уходит лишь подпись через unix-сокет (его путь демон сам подставляет в SSH_AUTH_SOCK
+  // адаптеру и терминалам). Идемпотентна: повторная загрузка заменяет ключ в связке.
+  rpc SetSSHKey(DaemonSetSSHKeyRequest) returns (Empty) {}
+
   // OpenTerminal спавнит команду в pty внутри среды агента и стримит её вывод. Через это
   // brigade даёт терминалы (вспом. шелл и — для CLI-режима — сам агент), не завязываясь на
   // docker-exec. durable=false — эфемерный (закрытие стрима убивает pty, для /ws/shell);
@@ -62,6 +68,10 @@ service AgentDaemonService {
   rpc TerminalInput(DaemonTerminalInputRequest) returns (Empty) {}
   // TerminalResize меняет размер TTY терминала.
   rpc TerminalResize(DaemonTerminalResizeRequest) returns (Empty) {}
+}
+
+message DaemonSetSSHKeyRequest {
+  string private_key = 1;  // OpenSSH PEM приватного ключа агента (per-user)
 }
 
 message DaemonOpenTerminalRequest {

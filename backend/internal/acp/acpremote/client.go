@@ -128,6 +128,13 @@ func (c *Client) Configure(ctx context.Context, opts ConfigureOptions) (string, 
 	return resp.Msg.SessionId, nil
 }
 
+// SetSSHKey загружает приватный ключ пользователя в ssh-agent демона. Ключ уходит по
+// защищённому каналу RPC и остаётся в памяти демона: на диск среды агента он не пишется.
+func (c *Client) SetSSHKey(ctx context.Context, privatePEM string) error {
+	_, err := c.rpc.SetSSHKey(ctx, authReq(c.sign(), &v1.DaemonSetSSHKeyRequest{PrivateKey: privatePEM}))
+	return err
+}
+
 // SessionID возвращает ACP session id (для persist как agent_session_id).
 func (c *Client) SessionID() string {
 	c.mu.Lock()

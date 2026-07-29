@@ -72,6 +72,9 @@ const (
 	// AgentDaemonServiceWriteFileProcedure is the fully-qualified name of the AgentDaemonService's
 	// WriteFile RPC.
 	AgentDaemonServiceWriteFileProcedure = "/brigade.v1.AgentDaemonService/WriteFile"
+	// AgentDaemonServiceSetSSHKeyProcedure is the fully-qualified name of the AgentDaemonService's
+	// SetSSHKey RPC.
+	AgentDaemonServiceSetSSHKeyProcedure = "/brigade.v1.AgentDaemonService/SetSSHKey"
 	// AgentDaemonServiceOpenTerminalProcedure is the fully-qualified name of the AgentDaemonService's
 	// OpenTerminal RPC.
 	AgentDaemonServiceOpenTerminalProcedure = "/brigade.v1.AgentDaemonService/OpenTerminal"
@@ -114,6 +117,11 @@ type AgentDaemonServiceClient interface {
 	// WriteFile кладёт файл в рабочую директорию агента (path — относительно cwd). Через это
 	// brigade заливает вложения, не завязываясь на docker: демон пишет у себя внутри среды.
 	WriteFile(context.Context, *connect.Request[v1.DaemonWriteFileRequest]) (*connect.Response[v1.Empty], error)
+	// SetSSHKey загружает приватный ключ пользователя в ssh-agent демона. Ключ остаётся
+	// ТОЛЬКО в памяти процесса: на диск среды не пишется и в окружение не попадает, наружу
+	// уходит лишь подпись через unix-сокет (его путь демон сам подставляет в SSH_AUTH_SOCK
+	// адаптеру и терминалам). Идемпотентна: повторная загрузка заменяет ключ в связке.
+	SetSSHKey(context.Context, *connect.Request[v1.DaemonSetSSHKeyRequest]) (*connect.Response[v1.Empty], error)
 	// OpenTerminal спавнит команду в pty внутри среды агента и стримит её вывод. Через это
 	// brigade даёт терминалы (вспом. шелл и — для CLI-режима — сам агент), не завязываясь на
 	// docker-exec. durable=false — эфемерный (закрытие стрима убивает pty, для /ws/shell);
@@ -215,6 +223,12 @@ func NewAgentDaemonServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(agentDaemonServiceMethods.ByName("WriteFile")),
 			connect.WithClientOptions(opts...),
 		),
+		setSSHKey: connect.NewClient[v1.DaemonSetSSHKeyRequest, v1.Empty](
+			httpClient,
+			baseURL+AgentDaemonServiceSetSSHKeyProcedure,
+			connect.WithSchema(agentDaemonServiceMethods.ByName("SetSSHKey")),
+			connect.WithClientOptions(opts...),
+		),
 		openTerminal: connect.NewClient[v1.DaemonOpenTerminalRequest, v1.DaemonTerminalOutput](
 			httpClient,
 			baseURL+AgentDaemonServiceOpenTerminalProcedure,
@@ -251,6 +265,7 @@ type agentDaemonServiceClient struct {
 	resolvePermission *connect.Client[v1.DaemonResolvePermissionRequest, v1.Empty]
 	summarize         *connect.Client[v1.DaemonSummarizeRequest, v1.DaemonSummarizeResponse]
 	writeFile         *connect.Client[v1.DaemonWriteFileRequest, v1.Empty]
+	setSSHKey         *connect.Client[v1.DaemonSetSSHKeyRequest, v1.Empty]
 	openTerminal      *connect.Client[v1.DaemonOpenTerminalRequest, v1.DaemonTerminalOutput]
 	terminalInput     *connect.Client[v1.DaemonTerminalInputRequest, v1.Empty]
 	terminalResize    *connect.Client[v1.DaemonTerminalResizeRequest, v1.Empty]
@@ -321,6 +336,11 @@ func (c *agentDaemonServiceClient) WriteFile(ctx context.Context, req *connect.R
 	return c.writeFile.CallUnary(ctx, req)
 }
 
+// SetSSHKey calls brigade.v1.AgentDaemonService.SetSSHKey.
+func (c *agentDaemonServiceClient) SetSSHKey(ctx context.Context, req *connect.Request[v1.DaemonSetSSHKeyRequest]) (*connect.Response[v1.Empty], error) {
+	return c.setSSHKey.CallUnary(ctx, req)
+}
+
 // OpenTerminal calls brigade.v1.AgentDaemonService.OpenTerminal.
 func (c *agentDaemonServiceClient) OpenTerminal(ctx context.Context, req *connect.Request[v1.DaemonOpenTerminalRequest]) (*connect.ServerStreamForClient[v1.DaemonTerminalOutput], error) {
 	return c.openTerminal.CallServerStream(ctx, req)
@@ -367,6 +387,11 @@ type AgentDaemonServiceHandler interface {
 	// WriteFile кладёт файл в рабочую директорию агента (path — относительно cwd). Через это
 	// brigade заливает вложения, не завязываясь на docker: демон пишет у себя внутри среды.
 	WriteFile(context.Context, *connect.Request[v1.DaemonWriteFileRequest]) (*connect.Response[v1.Empty], error)
+	// SetSSHKey загружает приватный ключ пользователя в ssh-agent демона. Ключ остаётся
+	// ТОЛЬКО в памяти процесса: на диск среды не пишется и в окружение не попадает, наружу
+	// уходит лишь подпись через unix-сокет (его путь демон сам подставляет в SSH_AUTH_SOCK
+	// адаптеру и терминалам). Идемпотентна: повторная загрузка заменяет ключ в связке.
+	SetSSHKey(context.Context, *connect.Request[v1.DaemonSetSSHKeyRequest]) (*connect.Response[v1.Empty], error)
 	// OpenTerminal спавнит команду в pty внутри среды агента и стримит её вывод. Через это
 	// brigade даёт терминалы (вспом. шелл и — для CLI-режима — сам агент), не завязываясь на
 	// docker-exec. durable=false — эфемерный (закрытие стрима убивает pty, для /ws/shell);
@@ -464,6 +489,12 @@ func NewAgentDaemonServiceHandler(svc AgentDaemonServiceHandler, opts ...connect
 		connect.WithSchema(agentDaemonServiceMethods.ByName("WriteFile")),
 		connect.WithHandlerOptions(opts...),
 	)
+	agentDaemonServiceSetSSHKeyHandler := connect.NewUnaryHandler(
+		AgentDaemonServiceSetSSHKeyProcedure,
+		svc.SetSSHKey,
+		connect.WithSchema(agentDaemonServiceMethods.ByName("SetSSHKey")),
+		connect.WithHandlerOptions(opts...),
+	)
 	agentDaemonServiceOpenTerminalHandler := connect.NewServerStreamHandler(
 		AgentDaemonServiceOpenTerminalProcedure,
 		svc.OpenTerminal,
@@ -510,6 +541,8 @@ func NewAgentDaemonServiceHandler(svc AgentDaemonServiceHandler, opts ...connect
 			agentDaemonServiceSummarizeHandler.ServeHTTP(w, r)
 		case AgentDaemonServiceWriteFileProcedure:
 			agentDaemonServiceWriteFileHandler.ServeHTTP(w, r)
+		case AgentDaemonServiceSetSSHKeyProcedure:
+			agentDaemonServiceSetSSHKeyHandler.ServeHTTP(w, r)
 		case AgentDaemonServiceOpenTerminalProcedure:
 			agentDaemonServiceOpenTerminalHandler.ServeHTTP(w, r)
 		case AgentDaemonServiceTerminalInputProcedure:
@@ -575,6 +608,10 @@ func (UnimplementedAgentDaemonServiceHandler) Summarize(context.Context, *connec
 
 func (UnimplementedAgentDaemonServiceHandler) WriteFile(context.Context, *connect.Request[v1.DaemonWriteFileRequest]) (*connect.Response[v1.Empty], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AgentDaemonService.WriteFile is not implemented"))
+}
+
+func (UnimplementedAgentDaemonServiceHandler) SetSSHKey(context.Context, *connect.Request[v1.DaemonSetSSHKeyRequest]) (*connect.Response[v1.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AgentDaemonService.SetSSHKey is not implemented"))
 }
 
 func (UnimplementedAgentDaemonServiceHandler) OpenTerminal(context.Context, *connect.Request[v1.DaemonOpenTerminalRequest], *connect.ServerStream[v1.DaemonTerminalOutput]) error {

@@ -69,6 +69,13 @@ func authReq[T any](token string, msg *T) *connect.Request[T] {
 	return r
 }
 
+// SetSSHKey загружает приватный ключ пользователя в ssh-agent демона: терминал агента
+// получит доступ к нему через SSH_AUTH_SOCK, самого ключа в среде не будет.
+func (c *Client) SetSSHKey(ctx context.Context, privatePEM string) error {
+	_, err := c.rpc.SetSSHKey(ctx, authReq(c.sign(), &v1.DaemonSetSSHKeyRequest{PrivateKey: privatePEM}))
+	return err
+}
+
 // Start открывает durable-терминал агента (cmd = claude ...). При reconnect после рестарта
 // brigade демон переотдаёт scrollback (восстановление экрана через Read) и продолжает живой
 // процесс; при мёртвом контейнере (respawn) cmd поднимает claude заново (--resume).

@@ -27,6 +27,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/grigory51/brigade/backend/internal/sshagent"
 	"github.com/grigory51/brigade/backend/internal/store"
 )
 
@@ -148,20 +149,68 @@ type Service struct {
 	settings  SettingsSource   // источник пер-юзерных настроек (remote)
 	agentKeys AgentKeyProvider // источник per-user SSH-ключа агента для git@-remote (может быть nil)
 	mu        sync.Mutex
+	// agents — ssh-agent на пользователя: ключ живёт в памяти процесса, а git получает
+	// только сокет. Держим между операциями (а не поднимаем на каждую) — операций в одной
+	// пользовательской правке несколько (add/commit/push), и переподнимать сокет на каждую
+	// git-команду смысла нет. Доступ — под mu, как и всё остальное в сервисе.
+	agents map[string]*sshagent.Agent
 }
 
 // NewService собирает Service. baseDir — база пер-юзерных клонов; settings — источник
 // пер-юзерных настроек (store); agentKeys — источник per-user SSH-ключа агента для доступа к
 // git@-remote (nil — без ключа, только публичные/https-remote).
 func NewService(baseDir string, settings SettingsSource, agentKeys AgentKeyProvider) *Service {
-	return &Service{baseDir: baseDir, settings: settings, agentKeys: agentKeys}
+	return &Service{
+		baseDir:   baseDir,
+		settings:  settings,
+		agentKeys: agentKeys,
+		agents:    make(map[string]*sshagent.Agent),
+	}
+}
+
+// Close останавливает ssh-agent'ы пользователей (сокеты убираются, ключи уходят из памяти).
+func (s *Service) Close() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id, a := range s.agents {
+		a.Close()
+		delete(s.agents, id)
+	}
+}
+
+// ensureAgentLocked поднимает (или переиспользует) ssh-agent пользователя с его ключом и
+// возвращает путь сокета. Ключ перезаписывается на каждый вызов — так подхватывается
+// перевыпуск, не требуя перезапуска brigade.
+func (s *Service) ensureAgentLocked(userDir, userID, privatePEM string) (string, error) {
+	if a, ok := s.agents[userID]; ok {
+		if err := a.ReplaceKey(privatePEM); err != nil {
+			return "", err
+		}
+		return a.Path(), nil
+	}
+	if err := os.MkdirAll(userDir, 0o700); err != nil {
+		return "", fmt.Errorf("memory: mkdir user dir: %w", err)
+	}
+	// Прежние версии материализовали ключ файлом рядом — убираем его, иначе переход на
+	// агента ничего бы не дал: ключ так и остался бы лежать на диске.
+	if err := os.Remove(filepath.Join(userDir, "id")); err != nil && !errors.Is(err, os.ErrNotExist) {
+		log.Printf("memory: remove legacy key file: %v", err)
+	}
+	a, err := sshagent.Start(filepath.Join(userDir, "ssh-agent.sock"), privatePEM)
+	if err != nil {
+		return "", err
+	}
+	s.agents[userID] = a
+	return a.Path(), nil
 }
 
 // space — разрешённое пер-юзерное окружение для git-операций.
 type space struct {
 	remote  string
 	repoDir string // рабочая копия: <baseDir>/<userID>/repo
-	keyPath string // путь к материализованному SSH-ключу ("" — ключа нет)
+	// authSock — сокет ssh-agent с ключом пользователя ("" — доступ без ключа, https-remote).
+	// Ключ живёт в памяти процесса и на диск не пишется, см. internal/sshagent.
+	authSock string
 }
 
 // Create записывает заметку в репозиторий пользователя, коммитит и синхронно пушит.
@@ -239,7 +288,7 @@ func (s *Service) Sync(ctx context.Context, userID string) error {
 	if err != nil {
 		return err
 	}
-	out, err := s.git(ctx, sp.repoDir, sp.keyPath, "pull", "--rebase", "origin", "HEAD")
+	out, err := s.git(ctx, sp.repoDir, sp.authSock, "pull", "--rebase", "origin", "HEAD")
 	if err != nil {
 		// Пустой remote (ни одного коммита) — синхронизировать нечего, не ошибка.
 		if bytes.Contains(out, []byte("couldn't find remote ref")) ||
@@ -248,7 +297,7 @@ func (s *Service) Sync(ctx context.Context, userID string) error {
 		}
 		// Конфликт rebase оставил бы клон в rebase-in-progress (проходит repoHealthy, но
 		// следующие операции падают) — откатываем и отдаём ошибку наверх.
-		_, _ = s.git(ctx, sp.repoDir, sp.keyPath, "rebase", "--abort")
+		_, _ = s.git(ctx, sp.repoDir, sp.authSock, "rebase", "--abort")
 		return fmt.Errorf("memory: sync: %w", err)
 	}
 	return nil
@@ -816,10 +865,11 @@ func (s *Service) prepareLocked(ctx context.Context, userID string) (space, erro
 		if err != nil {
 			return space{}, fmt.Errorf("memory: agent ssh key: %w", err)
 		}
-		sp.keyPath = filepath.Join(userDir, "id")
-		if err := writeKey(sp.keyPath, priv); err != nil {
+		sock, err := s.ensureAgentLocked(userDir, userID, priv)
+		if err != nil {
 			return space{}, err
 		}
+		sp.authSock = sock
 	}
 	if err := s.ensureCloneLocked(ctx, sp); err != nil {
 		return space{}, err
@@ -832,7 +882,7 @@ func (s *Service) prepareLocked(ctx context.Context, userID string) (space, erro
 func (s *Service) ensureCloneLocked(ctx context.Context, sp space) error {
 	if isGitRepo(sp.repoDir) {
 		if s.repoHealthy(ctx, sp) {
-			if _, err := s.git(ctx, sp.repoDir, sp.keyPath, "remote", "set-url", "origin", sp.remote); err != nil {
+			if _, err := s.git(ctx, sp.repoDir, sp.authSock, "remote", "set-url", "origin", sp.remote); err != nil {
 				return err
 			}
 			return s.configIdentityLocked(ctx, sp)
@@ -850,7 +900,7 @@ func (s *Service) ensureCloneLocked(ctx context.Context, sp space) error {
 	}
 	// Полный clone (не --depth 1): shallow-клон на части репозиториев провоцирует конфликт
 	// ref'ов при первом коммите; персональные репо памяти малы, экономия глубины не оправдана.
-	if _, err := s.git(ctx, "", sp.keyPath, "clone", sp.remote, sp.repoDir); err != nil {
+	if _, err := s.git(ctx, "", sp.authSock, "clone", sp.remote, sp.repoDir); err != nil {
 		return fmt.Errorf("memory: clone: %w", err)
 	}
 	return s.configIdentityLocked(ctx, sp)
@@ -860,19 +910,19 @@ func (s *Service) ensureCloneLocked(ctx context.Context, sp space) error {
 // валидный unborn-symref (пустой remote без коммитов). Повреждённый HEAD/ref (после сорванного
 // git-процесса) не проходит обе проверки — такой клон переклонируется.
 func (s *Service) repoHealthy(ctx context.Context, sp space) bool {
-	if _, err := s.git(ctx, sp.repoDir, sp.keyPath, "rev-parse", "--verify", "--quiet", "HEAD"); err == nil {
+	if _, err := s.git(ctx, sp.repoDir, sp.authSock, "rev-parse", "--verify", "--quiet", "HEAD"); err == nil {
 		return true
 	}
-	_, err := s.git(ctx, sp.repoDir, sp.keyPath, "symbolic-ref", "--quiet", "HEAD")
+	_, err := s.git(ctx, sp.repoDir, sp.authSock, "symbolic-ref", "--quiet", "HEAD")
 	return err == nil
 }
 
 // configIdentityLocked задаёт локальную git-идентичность клона (нужна для commit).
 func (s *Service) configIdentityLocked(ctx context.Context, sp space) error {
-	if _, err := s.git(ctx, sp.repoDir, sp.keyPath, "config", "user.email", "brigade@localhost"); err != nil {
+	if _, err := s.git(ctx, sp.repoDir, sp.authSock, "config", "user.email", "brigade@localhost"); err != nil {
 		return err
 	}
-	_, err := s.git(ctx, sp.repoDir, sp.keyPath, "config", "user.name", "brigade")
+	_, err := s.git(ctx, sp.repoDir, sp.authSock, "config", "user.name", "brigade")
 	return err
 }
 
@@ -880,28 +930,28 @@ func (s *Service) configIdentityLocked(ctx context.Context, sp space) error {
 // коммитит и синхронно пушит. При отклонении push (кто-то опередил) делает pull --rebase и
 // повторяет push один раз. Возвращает SHA HEAD.
 func (s *Service) commitPushLocked(ctx context.Context, sp space, msg string, rels ...string) (string, error) {
-	dir, key := sp.repoDir, sp.keyPath
-	if _, err := s.git(ctx, dir, key, append([]string{"add", "-A", "--"}, rels...)...); err != nil {
+	dir, sock := sp.repoDir, sp.authSock
+	if _, err := s.git(ctx, dir, sock, append([]string{"add", "-A", "--"}, rels...)...); err != nil {
 		return "", err
 	}
 	// commit может сообщить «nothing to commit» (перезапись идентичным содержимым) — это не
 	// ошибка: используем текущий HEAD.
-	if out, err := s.git(ctx, dir, key, "commit", "-m", msg); err != nil {
+	if out, err := s.git(ctx, dir, sock, "commit", "-m", msg); err != nil {
 		if !bytes.Contains(out, []byte("nothing to commit")) {
 			return "", err
 		}
 	}
-	if _, err := s.git(ctx, dir, key, "push", "origin", "HEAD"); err != nil {
+	if _, err := s.git(ctx, dir, sock, "push", "origin", "HEAD"); err != nil {
 		// Опередили — интегрируем remote и пробуем ещё раз (атомарные пофайловые заметки
 		// делают реальный конфликт редким; при нём rebase упадёт и вернёт ошибку наверх).
-		if _, perr := s.git(ctx, dir, key, "pull", "--rebase", "origin", "HEAD"); perr != nil {
+		if _, perr := s.git(ctx, dir, sock, "pull", "--rebase", "origin", "HEAD"); perr != nil {
 			return "", perr
 		}
-		if _, err := s.git(ctx, dir, key, "push", "origin", "HEAD"); err != nil {
+		if _, err := s.git(ctx, dir, sock, "push", "origin", "HEAD"); err != nil {
 			return "", err
 		}
 	}
-	out, err := s.git(ctx, dir, key, "rev-parse", "HEAD")
+	out, err := s.git(ctx, dir, sock, "rev-parse", "HEAD")
 	if err != nil {
 		return "", err
 	}
@@ -909,20 +959,22 @@ func (s *Service) commitPushLocked(ctx context.Context, sp space, msg string, re
 }
 
 // git выполняет git-команду в dir (пусто — без рабочего каталога). Интерактивный запрос
-// кредов отключён (GIT_TERMINAL_PROMPT=0). При заданном keyPath подставляет GIT_SSH_COMMAND
-// для доступа по git@-remote указанным ключом.
-func (s *Service) git(ctx context.Context, dir, keyPath string, args ...string) ([]byte, error) {
+// кредов отключён (GIT_TERMINAL_PROMPT=0). При заданном authSock направляет ssh в наш
+// ssh-agent — так git@-remote доступен без файла с ключом на диске.
+func (s *Service) git(ctx context.Context, dir, authSock string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	if dir != "" {
 		cmd.Dir = dir
 	}
 	env := append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	if keyPath != "" {
-		// IdentitiesOnly — не предлагать чужие ключи из ssh-agent; accept-new — доверяем host
-		// key при первом коннекте (TOFU) и отвергаем при его смене.
-		env = append(env, fmt.Sprintf(
-			"GIT_SSH_COMMAND=ssh -i %q -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new",
-			keyPath))
+	if authSock != "" {
+		// Ключ приходит из нашего ssh-agent (единственный в связке), поэтому -i не нужен —
+		// и файла с ключом не существует. IdentityAgent жёстко указывает наш сокет, чтобы
+		// не подхватился агент окружения. accept-new — доверяем host key при первом
+		// коннекте (TOFU) и отвергаем при его смене.
+		env = append(env,
+			"SSH_AUTH_SOCK="+authSock,
+			fmt.Sprintf("GIT_SSH_COMMAND=ssh -o IdentityAgent=%q -o StrictHostKeyChecking=accept-new", authSock))
 	}
 	cmd.Env = env
 	out, err := cmd.CombinedOutput()
@@ -940,18 +992,6 @@ func isSSHRemote(remote string) bool {
 
 // writeKey материализует приватный SSH-ключ в файл с правами 0600 (каталог 0700), гарантируя
 // завершающий перевод строки (иначе некоторые парсеры ключа привередничают).
-func writeKey(path, content string) error {
-	if !strings.HasSuffix(content, "\n") {
-		content += "\n"
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("memory: mkdir key dir: %w", err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		return fmt.Errorf("memory: write key: %w", err)
-	}
-	return nil
-}
 
 // topicMetaFile — имя файла-меты темы в каталоге topics/<id>/ (frontmatter + synthesis).
 const topicMetaFile = "_topic.md"

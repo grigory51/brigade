@@ -21,6 +21,50 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type DaemonSetSSHKeyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PrivateKey    string                 `protobuf:"bytes,1,opt,name=private_key,json=privateKey,proto3" json:"private_key,omitempty"` // OpenSSH PEM приватного ключа агента (per-user)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DaemonSetSSHKeyRequest) Reset() {
+	*x = DaemonSetSSHKeyRequest{}
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DaemonSetSSHKeyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DaemonSetSSHKeyRequest) ProtoMessage() {}
+
+func (x *DaemonSetSSHKeyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DaemonSetSSHKeyRequest.ProtoReflect.Descriptor instead.
+func (*DaemonSetSSHKeyRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *DaemonSetSSHKeyRequest) GetPrivateKey() string {
+	if x != nil {
+		return x.PrivateKey
+	}
+	return ""
+}
+
 type DaemonOpenTerminalRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`   // клиентский id терминала (для input/resize и reattach durable)
@@ -36,7 +80,7 @@ type DaemonOpenTerminalRequest struct {
 
 func (x *DaemonOpenTerminalRequest) Reset() {
 	*x = DaemonOpenTerminalRequest{}
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[0]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48,7 +92,7 @@ func (x *DaemonOpenTerminalRequest) String() string {
 func (*DaemonOpenTerminalRequest) ProtoMessage() {}
 
 func (x *DaemonOpenTerminalRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[0]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -61,7 +105,7 @@ func (x *DaemonOpenTerminalRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonOpenTerminalRequest.ProtoReflect.Descriptor instead.
 func (*DaemonOpenTerminalRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{0}
+	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *DaemonOpenTerminalRequest) GetId() string {
@@ -126,7 +170,7 @@ type DaemonTerminalOutput struct {
 
 func (x *DaemonTerminalOutput) Reset() {
 	*x = DaemonTerminalOutput{}
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[1]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -138,7 +182,7 @@ func (x *DaemonTerminalOutput) String() string {
 func (*DaemonTerminalOutput) ProtoMessage() {}
 
 func (x *DaemonTerminalOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[1]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -151,7 +195,7 @@ func (x *DaemonTerminalOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonTerminalOutput.ProtoReflect.Descriptor instead.
 func (*DaemonTerminalOutput) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{1}
+	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *DaemonTerminalOutput) GetData() []byte {
@@ -185,7 +229,7 @@ type DaemonTerminalInputRequest struct {
 
 func (x *DaemonTerminalInputRequest) Reset() {
 	*x = DaemonTerminalInputRequest{}
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[2]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -197,7 +241,7 @@ func (x *DaemonTerminalInputRequest) String() string {
 func (*DaemonTerminalInputRequest) ProtoMessage() {}
 
 func (x *DaemonTerminalInputRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[2]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -210,7 +254,7 @@ func (x *DaemonTerminalInputRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonTerminalInputRequest.ProtoReflect.Descriptor instead.
 func (*DaemonTerminalInputRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{2}
+	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *DaemonTerminalInputRequest) GetId() string {
@@ -238,7 +282,7 @@ type DaemonTerminalResizeRequest struct {
 
 func (x *DaemonTerminalResizeRequest) Reset() {
 	*x = DaemonTerminalResizeRequest{}
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[3]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -250,7 +294,7 @@ func (x *DaemonTerminalResizeRequest) String() string {
 func (*DaemonTerminalResizeRequest) ProtoMessage() {}
 
 func (x *DaemonTerminalResizeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[3]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -263,7 +307,7 @@ func (x *DaemonTerminalResizeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonTerminalResizeRequest.ProtoReflect.Descriptor instead.
 func (*DaemonTerminalResizeRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{3}
+	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *DaemonTerminalResizeRequest) GetId() string {
@@ -297,7 +341,7 @@ type DaemonWriteFileRequest struct {
 
 func (x *DaemonWriteFileRequest) Reset() {
 	*x = DaemonWriteFileRequest{}
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[4]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -309,7 +353,7 @@ func (x *DaemonWriteFileRequest) String() string {
 func (*DaemonWriteFileRequest) ProtoMessage() {}
 
 func (x *DaemonWriteFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[4]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -322,7 +366,7 @@ func (x *DaemonWriteFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonWriteFileRequest.ProtoReflect.Descriptor instead.
 func (*DaemonWriteFileRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{4}
+	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *DaemonWriteFileRequest) GetPath() string {
@@ -361,7 +405,7 @@ type DaemonConfigureRequest struct {
 
 func (x *DaemonConfigureRequest) Reset() {
 	*x = DaemonConfigureRequest{}
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[5]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -373,7 +417,7 @@ func (x *DaemonConfigureRequest) String() string {
 func (*DaemonConfigureRequest) ProtoMessage() {}
 
 func (x *DaemonConfigureRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[5]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -386,7 +430,7 @@ func (x *DaemonConfigureRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonConfigureRequest.ProtoReflect.Descriptor instead.
 func (*DaemonConfigureRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{5}
+	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *DaemonConfigureRequest) GetOauthToken() string {
@@ -455,7 +499,7 @@ type DaemonConfigureResponse struct {
 
 func (x *DaemonConfigureResponse) Reset() {
 	*x = DaemonConfigureResponse{}
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[6]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -467,7 +511,7 @@ func (x *DaemonConfigureResponse) String() string {
 func (*DaemonConfigureResponse) ProtoMessage() {}
 
 func (x *DaemonConfigureResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[6]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -480,7 +524,7 @@ func (x *DaemonConfigureResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonConfigureResponse.ProtoReflect.Descriptor instead.
 func (*DaemonConfigureResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{6}
+	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *DaemonConfigureResponse) GetSessionId() string {
@@ -499,7 +543,7 @@ type DaemonStreamEventsRequest struct {
 
 func (x *DaemonStreamEventsRequest) Reset() {
 	*x = DaemonStreamEventsRequest{}
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[7]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -511,7 +555,7 @@ func (x *DaemonStreamEventsRequest) String() string {
 func (*DaemonStreamEventsRequest) ProtoMessage() {}
 
 func (x *DaemonStreamEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[7]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -524,7 +568,7 @@ func (x *DaemonStreamEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonStreamEventsRequest.ProtoReflect.Descriptor instead.
 func (*DaemonStreamEventsRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{7}
+	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *DaemonStreamEventsRequest) GetFromSeq() int64 {
@@ -545,7 +589,7 @@ type DaemonEvent struct {
 
 func (x *DaemonEvent) Reset() {
 	*x = DaemonEvent{}
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[8]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -557,7 +601,7 @@ func (x *DaemonEvent) String() string {
 func (*DaemonEvent) ProtoMessage() {}
 
 func (x *DaemonEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[8]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -570,7 +614,7 @@ func (x *DaemonEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonEvent.ProtoReflect.Descriptor instead.
 func (*DaemonEvent) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{8}
+	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *DaemonEvent) GetSeq() int64 {
@@ -596,7 +640,7 @@ type DaemonPromptRequest struct {
 
 func (x *DaemonPromptRequest) Reset() {
 	*x = DaemonPromptRequest{}
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[9]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -608,7 +652,7 @@ func (x *DaemonPromptRequest) String() string {
 func (*DaemonPromptRequest) ProtoMessage() {}
 
 func (x *DaemonPromptRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[9]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -621,7 +665,7 @@ func (x *DaemonPromptRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonPromptRequest.ProtoReflect.Descriptor instead.
 func (*DaemonPromptRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{9}
+	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *DaemonPromptRequest) GetText() string {
@@ -640,7 +684,7 @@ type DaemonPromptResponse struct {
 
 func (x *DaemonPromptResponse) Reset() {
 	*x = DaemonPromptResponse{}
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[10]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -652,7 +696,7 @@ func (x *DaemonPromptResponse) String() string {
 func (*DaemonPromptResponse) ProtoMessage() {}
 
 func (x *DaemonPromptResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[10]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -665,7 +709,7 @@ func (x *DaemonPromptResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonPromptResponse.ProtoReflect.Descriptor instead.
 func (*DaemonPromptResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{10}
+	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *DaemonPromptResponse) GetStopReason() string {
@@ -685,7 +729,7 @@ type DaemonStatusResponse struct {
 
 func (x *DaemonStatusResponse) Reset() {
 	*x = DaemonStatusResponse{}
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[11]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -697,7 +741,7 @@ func (x *DaemonStatusResponse) String() string {
 func (*DaemonStatusResponse) ProtoMessage() {}
 
 func (x *DaemonStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[11]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -710,7 +754,7 @@ func (x *DaemonStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonStatusResponse.ProtoReflect.Descriptor instead.
 func (*DaemonStatusResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{11}
+	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *DaemonStatusResponse) GetGenerating() bool {
@@ -737,7 +781,7 @@ type DaemonPayloadResponse struct {
 
 func (x *DaemonPayloadResponse) Reset() {
 	*x = DaemonPayloadResponse{}
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[12]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -749,7 +793,7 @@ func (x *DaemonPayloadResponse) String() string {
 func (*DaemonPayloadResponse) ProtoMessage() {}
 
 func (x *DaemonPayloadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[12]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -762,7 +806,7 @@ func (x *DaemonPayloadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonPayloadResponse.ProtoReflect.Descriptor instead.
 func (*DaemonPayloadResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{12}
+	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DaemonPayloadResponse) GetJson() []byte {
@@ -782,7 +826,7 @@ type DaemonSetConfigOptionRequest struct {
 
 func (x *DaemonSetConfigOptionRequest) Reset() {
 	*x = DaemonSetConfigOptionRequest{}
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[13]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -794,7 +838,7 @@ func (x *DaemonSetConfigOptionRequest) String() string {
 func (*DaemonSetConfigOptionRequest) ProtoMessage() {}
 
 func (x *DaemonSetConfigOptionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[13]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -807,7 +851,7 @@ func (x *DaemonSetConfigOptionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonSetConfigOptionRequest.ProtoReflect.Descriptor instead.
 func (*DaemonSetConfigOptionRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{13}
+	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *DaemonSetConfigOptionRequest) GetConfigId() string {
@@ -834,7 +878,7 @@ type DaemonResolvePermissionRequest struct {
 
 func (x *DaemonResolvePermissionRequest) Reset() {
 	*x = DaemonResolvePermissionRequest{}
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[14]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -846,7 +890,7 @@ func (x *DaemonResolvePermissionRequest) String() string {
 func (*DaemonResolvePermissionRequest) ProtoMessage() {}
 
 func (x *DaemonResolvePermissionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[14]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -859,7 +903,7 @@ func (x *DaemonResolvePermissionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonResolvePermissionRequest.ProtoReflect.Descriptor instead.
 func (*DaemonResolvePermissionRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{14}
+	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *DaemonResolvePermissionRequest) GetId() string {
@@ -885,7 +929,7 @@ type DaemonSummarizeRequest struct {
 
 func (x *DaemonSummarizeRequest) Reset() {
 	*x = DaemonSummarizeRequest{}
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[15]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -897,7 +941,7 @@ func (x *DaemonSummarizeRequest) String() string {
 func (*DaemonSummarizeRequest) ProtoMessage() {}
 
 func (x *DaemonSummarizeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[15]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -910,7 +954,7 @@ func (x *DaemonSummarizeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonSummarizeRequest.ProtoReflect.Descriptor instead.
 func (*DaemonSummarizeRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{15}
+	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *DaemonSummarizeRequest) GetPrompt() string {
@@ -929,7 +973,7 @@ type DaemonSummarizeResponse struct {
 
 func (x *DaemonSummarizeResponse) Reset() {
 	*x = DaemonSummarizeResponse{}
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[16]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -941,7 +985,7 @@ func (x *DaemonSummarizeResponse) String() string {
 func (*DaemonSummarizeResponse) ProtoMessage() {}
 
 func (x *DaemonSummarizeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[16]
+	mi := &file_brigade_v1_agent_daemon_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -954,7 +998,7 @@ func (x *DaemonSummarizeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonSummarizeResponse.ProtoReflect.Descriptor instead.
 func (*DaemonSummarizeResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{16}
+	return file_brigade_v1_agent_daemon_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *DaemonSummarizeResponse) GetText() string {
@@ -969,7 +1013,10 @@ var File_brigade_v1_agent_daemon_proto protoreflect.FileDescriptor
 const file_brigade_v1_agent_daemon_proto_rawDesc = "" +
 	"\n" +
 	"\x1dbrigade/v1/agent_daemon.proto\x12\n" +
-	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\xa3\x01\n" +
+	"brigade.v1\x1a\x15brigade/v1/auth.proto\"9\n" +
+	"\x16DaemonSetSSHKeyRequest\x12\x1f\n" +
+	"\vprivate_key\x18\x01 \x01(\tR\n" +
+	"privateKey\"\xa3\x01\n" +
 	"\x19DaemonOpenTerminalRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x10\n" +
 	"\x03cmd\x18\x02 \x03(\tR\x03cmd\x12\x10\n" +
@@ -1032,7 +1079,8 @@ const file_brigade_v1_agent_daemon_proto_rawDesc = "" +
 	"\x16DaemonSummarizeRequest\x12\x16\n" +
 	"\x06prompt\x18\x01 \x01(\tR\x06prompt\"-\n" +
 	"\x17DaemonSummarizeResponse\x12\x12\n" +
-	"\x04text\x18\x01 \x01(\tR\x04text2\xe6\t\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text2\xac\n" +
+	"\n" +
 	"\x12AgentDaemonService\x12V\n" +
 	"\tConfigure\x12\".brigade.v1.DaemonConfigureRequest\x1a#.brigade.v1.DaemonConfigureResponse\"\x00\x12R\n" +
 	"\fStreamEvents\x12%.brigade.v1.DaemonStreamEventsRequest\x1a\x17.brigade.v1.DaemonEvent\"\x000\x01\x12M\n" +
@@ -1046,7 +1094,8 @@ const file_brigade_v1_agent_daemon_proto_rawDesc = "" +
 	"\x0fSetConfigOption\x12(.brigade.v1.DaemonSetConfigOptionRequest\x1a!.brigade.v1.DaemonPayloadResponse\"\x00\x12T\n" +
 	"\x11ResolvePermission\x12*.brigade.v1.DaemonResolvePermissionRequest\x1a\x11.brigade.v1.Empty\"\x00\x12V\n" +
 	"\tSummarize\x12\".brigade.v1.DaemonSummarizeRequest\x1a#.brigade.v1.DaemonSummarizeResponse\"\x00\x12D\n" +
-	"\tWriteFile\x12\".brigade.v1.DaemonWriteFileRequest\x1a\x11.brigade.v1.Empty\"\x00\x12[\n" +
+	"\tWriteFile\x12\".brigade.v1.DaemonWriteFileRequest\x1a\x11.brigade.v1.Empty\"\x00\x12D\n" +
+	"\tSetSSHKey\x12\".brigade.v1.DaemonSetSSHKeyRequest\x1a\x11.brigade.v1.Empty\"\x00\x12[\n" +
 	"\fOpenTerminal\x12%.brigade.v1.DaemonOpenTerminalRequest\x1a .brigade.v1.DaemonTerminalOutput\"\x000\x01\x12L\n" +
 	"\rTerminalInput\x12&.brigade.v1.DaemonTerminalInputRequest\x1a\x11.brigade.v1.Empty\"\x00\x12N\n" +
 	"\x0eTerminalResize\x12'.brigade.v1.DaemonTerminalResizeRequest\x1a\x11.brigade.v1.Empty\"\x00B\xad\x01\n" +
@@ -1066,62 +1115,65 @@ func file_brigade_v1_agent_daemon_proto_rawDescGZIP() []byte {
 	return file_brigade_v1_agent_daemon_proto_rawDescData
 }
 
-var file_brigade_v1_agent_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_brigade_v1_agent_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_brigade_v1_agent_daemon_proto_goTypes = []any{
-	(*DaemonOpenTerminalRequest)(nil),      // 0: brigade.v1.DaemonOpenTerminalRequest
-	(*DaemonTerminalOutput)(nil),           // 1: brigade.v1.DaemonTerminalOutput
-	(*DaemonTerminalInputRequest)(nil),     // 2: brigade.v1.DaemonTerminalInputRequest
-	(*DaemonTerminalResizeRequest)(nil),    // 3: brigade.v1.DaemonTerminalResizeRequest
-	(*DaemonWriteFileRequest)(nil),         // 4: brigade.v1.DaemonWriteFileRequest
-	(*DaemonConfigureRequest)(nil),         // 5: brigade.v1.DaemonConfigureRequest
-	(*DaemonConfigureResponse)(nil),        // 6: brigade.v1.DaemonConfigureResponse
-	(*DaemonStreamEventsRequest)(nil),      // 7: brigade.v1.DaemonStreamEventsRequest
-	(*DaemonEvent)(nil),                    // 8: brigade.v1.DaemonEvent
-	(*DaemonPromptRequest)(nil),            // 9: brigade.v1.DaemonPromptRequest
-	(*DaemonPromptResponse)(nil),           // 10: brigade.v1.DaemonPromptResponse
-	(*DaemonStatusResponse)(nil),           // 11: brigade.v1.DaemonStatusResponse
-	(*DaemonPayloadResponse)(nil),          // 12: brigade.v1.DaemonPayloadResponse
-	(*DaemonSetConfigOptionRequest)(nil),   // 13: brigade.v1.DaemonSetConfigOptionRequest
-	(*DaemonResolvePermissionRequest)(nil), // 14: brigade.v1.DaemonResolvePermissionRequest
-	(*DaemonSummarizeRequest)(nil),         // 15: brigade.v1.DaemonSummarizeRequest
-	(*DaemonSummarizeResponse)(nil),        // 16: brigade.v1.DaemonSummarizeResponse
-	(*Empty)(nil),                          // 17: brigade.v1.Empty
+	(*DaemonSetSSHKeyRequest)(nil),         // 0: brigade.v1.DaemonSetSSHKeyRequest
+	(*DaemonOpenTerminalRequest)(nil),      // 1: brigade.v1.DaemonOpenTerminalRequest
+	(*DaemonTerminalOutput)(nil),           // 2: brigade.v1.DaemonTerminalOutput
+	(*DaemonTerminalInputRequest)(nil),     // 3: brigade.v1.DaemonTerminalInputRequest
+	(*DaemonTerminalResizeRequest)(nil),    // 4: brigade.v1.DaemonTerminalResizeRequest
+	(*DaemonWriteFileRequest)(nil),         // 5: brigade.v1.DaemonWriteFileRequest
+	(*DaemonConfigureRequest)(nil),         // 6: brigade.v1.DaemonConfigureRequest
+	(*DaemonConfigureResponse)(nil),        // 7: brigade.v1.DaemonConfigureResponse
+	(*DaemonStreamEventsRequest)(nil),      // 8: brigade.v1.DaemonStreamEventsRequest
+	(*DaemonEvent)(nil),                    // 9: brigade.v1.DaemonEvent
+	(*DaemonPromptRequest)(nil),            // 10: brigade.v1.DaemonPromptRequest
+	(*DaemonPromptResponse)(nil),           // 11: brigade.v1.DaemonPromptResponse
+	(*DaemonStatusResponse)(nil),           // 12: brigade.v1.DaemonStatusResponse
+	(*DaemonPayloadResponse)(nil),          // 13: brigade.v1.DaemonPayloadResponse
+	(*DaemonSetConfigOptionRequest)(nil),   // 14: brigade.v1.DaemonSetConfigOptionRequest
+	(*DaemonResolvePermissionRequest)(nil), // 15: brigade.v1.DaemonResolvePermissionRequest
+	(*DaemonSummarizeRequest)(nil),         // 16: brigade.v1.DaemonSummarizeRequest
+	(*DaemonSummarizeResponse)(nil),        // 17: brigade.v1.DaemonSummarizeResponse
+	(*Empty)(nil),                          // 18: brigade.v1.Empty
 }
 var file_brigade_v1_agent_daemon_proto_depIdxs = []int32{
-	5,  // 0: brigade.v1.AgentDaemonService.Configure:input_type -> brigade.v1.DaemonConfigureRequest
-	7,  // 1: brigade.v1.AgentDaemonService.StreamEvents:input_type -> brigade.v1.DaemonStreamEventsRequest
-	9,  // 2: brigade.v1.AgentDaemonService.Prompt:input_type -> brigade.v1.DaemonPromptRequest
-	17, // 3: brigade.v1.AgentDaemonService.Cancel:input_type -> brigade.v1.Empty
-	17, // 4: brigade.v1.AgentDaemonService.FinishStreams:input_type -> brigade.v1.Empty
-	17, // 5: brigade.v1.AgentDaemonService.Status:input_type -> brigade.v1.Empty
-	17, // 6: brigade.v1.AgentDaemonService.GetMessages:input_type -> brigade.v1.Empty
-	17, // 7: brigade.v1.AgentDaemonService.GetCommands:input_type -> brigade.v1.Empty
-	17, // 8: brigade.v1.AgentDaemonService.GetConfigOptions:input_type -> brigade.v1.Empty
-	13, // 9: brigade.v1.AgentDaemonService.SetConfigOption:input_type -> brigade.v1.DaemonSetConfigOptionRequest
-	14, // 10: brigade.v1.AgentDaemonService.ResolvePermission:input_type -> brigade.v1.DaemonResolvePermissionRequest
-	15, // 11: brigade.v1.AgentDaemonService.Summarize:input_type -> brigade.v1.DaemonSummarizeRequest
-	4,  // 12: brigade.v1.AgentDaemonService.WriteFile:input_type -> brigade.v1.DaemonWriteFileRequest
-	0,  // 13: brigade.v1.AgentDaemonService.OpenTerminal:input_type -> brigade.v1.DaemonOpenTerminalRequest
-	2,  // 14: brigade.v1.AgentDaemonService.TerminalInput:input_type -> brigade.v1.DaemonTerminalInputRequest
-	3,  // 15: brigade.v1.AgentDaemonService.TerminalResize:input_type -> brigade.v1.DaemonTerminalResizeRequest
-	6,  // 16: brigade.v1.AgentDaemonService.Configure:output_type -> brigade.v1.DaemonConfigureResponse
-	8,  // 17: brigade.v1.AgentDaemonService.StreamEvents:output_type -> brigade.v1.DaemonEvent
-	10, // 18: brigade.v1.AgentDaemonService.Prompt:output_type -> brigade.v1.DaemonPromptResponse
-	17, // 19: brigade.v1.AgentDaemonService.Cancel:output_type -> brigade.v1.Empty
-	17, // 20: brigade.v1.AgentDaemonService.FinishStreams:output_type -> brigade.v1.Empty
-	11, // 21: brigade.v1.AgentDaemonService.Status:output_type -> brigade.v1.DaemonStatusResponse
-	12, // 22: brigade.v1.AgentDaemonService.GetMessages:output_type -> brigade.v1.DaemonPayloadResponse
-	12, // 23: brigade.v1.AgentDaemonService.GetCommands:output_type -> brigade.v1.DaemonPayloadResponse
-	12, // 24: brigade.v1.AgentDaemonService.GetConfigOptions:output_type -> brigade.v1.DaemonPayloadResponse
-	12, // 25: brigade.v1.AgentDaemonService.SetConfigOption:output_type -> brigade.v1.DaemonPayloadResponse
-	17, // 26: brigade.v1.AgentDaemonService.ResolvePermission:output_type -> brigade.v1.Empty
-	16, // 27: brigade.v1.AgentDaemonService.Summarize:output_type -> brigade.v1.DaemonSummarizeResponse
-	17, // 28: brigade.v1.AgentDaemonService.WriteFile:output_type -> brigade.v1.Empty
-	1,  // 29: brigade.v1.AgentDaemonService.OpenTerminal:output_type -> brigade.v1.DaemonTerminalOutput
-	17, // 30: brigade.v1.AgentDaemonService.TerminalInput:output_type -> brigade.v1.Empty
-	17, // 31: brigade.v1.AgentDaemonService.TerminalResize:output_type -> brigade.v1.Empty
-	16, // [16:32] is the sub-list for method output_type
-	0,  // [0:16] is the sub-list for method input_type
+	6,  // 0: brigade.v1.AgentDaemonService.Configure:input_type -> brigade.v1.DaemonConfigureRequest
+	8,  // 1: brigade.v1.AgentDaemonService.StreamEvents:input_type -> brigade.v1.DaemonStreamEventsRequest
+	10, // 2: brigade.v1.AgentDaemonService.Prompt:input_type -> brigade.v1.DaemonPromptRequest
+	18, // 3: brigade.v1.AgentDaemonService.Cancel:input_type -> brigade.v1.Empty
+	18, // 4: brigade.v1.AgentDaemonService.FinishStreams:input_type -> brigade.v1.Empty
+	18, // 5: brigade.v1.AgentDaemonService.Status:input_type -> brigade.v1.Empty
+	18, // 6: brigade.v1.AgentDaemonService.GetMessages:input_type -> brigade.v1.Empty
+	18, // 7: brigade.v1.AgentDaemonService.GetCommands:input_type -> brigade.v1.Empty
+	18, // 8: brigade.v1.AgentDaemonService.GetConfigOptions:input_type -> brigade.v1.Empty
+	14, // 9: brigade.v1.AgentDaemonService.SetConfigOption:input_type -> brigade.v1.DaemonSetConfigOptionRequest
+	15, // 10: brigade.v1.AgentDaemonService.ResolvePermission:input_type -> brigade.v1.DaemonResolvePermissionRequest
+	16, // 11: brigade.v1.AgentDaemonService.Summarize:input_type -> brigade.v1.DaemonSummarizeRequest
+	5,  // 12: brigade.v1.AgentDaemonService.WriteFile:input_type -> brigade.v1.DaemonWriteFileRequest
+	0,  // 13: brigade.v1.AgentDaemonService.SetSSHKey:input_type -> brigade.v1.DaemonSetSSHKeyRequest
+	1,  // 14: brigade.v1.AgentDaemonService.OpenTerminal:input_type -> brigade.v1.DaemonOpenTerminalRequest
+	3,  // 15: brigade.v1.AgentDaemonService.TerminalInput:input_type -> brigade.v1.DaemonTerminalInputRequest
+	4,  // 16: brigade.v1.AgentDaemonService.TerminalResize:input_type -> brigade.v1.DaemonTerminalResizeRequest
+	7,  // 17: brigade.v1.AgentDaemonService.Configure:output_type -> brigade.v1.DaemonConfigureResponse
+	9,  // 18: brigade.v1.AgentDaemonService.StreamEvents:output_type -> brigade.v1.DaemonEvent
+	11, // 19: brigade.v1.AgentDaemonService.Prompt:output_type -> brigade.v1.DaemonPromptResponse
+	18, // 20: brigade.v1.AgentDaemonService.Cancel:output_type -> brigade.v1.Empty
+	18, // 21: brigade.v1.AgentDaemonService.FinishStreams:output_type -> brigade.v1.Empty
+	12, // 22: brigade.v1.AgentDaemonService.Status:output_type -> brigade.v1.DaemonStatusResponse
+	13, // 23: brigade.v1.AgentDaemonService.GetMessages:output_type -> brigade.v1.DaemonPayloadResponse
+	13, // 24: brigade.v1.AgentDaemonService.GetCommands:output_type -> brigade.v1.DaemonPayloadResponse
+	13, // 25: brigade.v1.AgentDaemonService.GetConfigOptions:output_type -> brigade.v1.DaemonPayloadResponse
+	13, // 26: brigade.v1.AgentDaemonService.SetConfigOption:output_type -> brigade.v1.DaemonPayloadResponse
+	18, // 27: brigade.v1.AgentDaemonService.ResolvePermission:output_type -> brigade.v1.Empty
+	17, // 28: brigade.v1.AgentDaemonService.Summarize:output_type -> brigade.v1.DaemonSummarizeResponse
+	18, // 29: brigade.v1.AgentDaemonService.WriteFile:output_type -> brigade.v1.Empty
+	18, // 30: brigade.v1.AgentDaemonService.SetSSHKey:output_type -> brigade.v1.Empty
+	2,  // 31: brigade.v1.AgentDaemonService.OpenTerminal:output_type -> brigade.v1.DaemonTerminalOutput
+	18, // 32: brigade.v1.AgentDaemonService.TerminalInput:output_type -> brigade.v1.Empty
+	18, // 33: brigade.v1.AgentDaemonService.TerminalResize:output_type -> brigade.v1.Empty
+	17, // [17:34] is the sub-list for method output_type
+	0,  // [0:17] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name
@@ -1139,7 +1191,7 @@ func file_brigade_v1_agent_daemon_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_brigade_v1_agent_daemon_proto_rawDesc), len(file_brigade_v1_agent_daemon_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   17,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

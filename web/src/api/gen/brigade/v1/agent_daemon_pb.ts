@@ -7,6 +7,45 @@ import type { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialM
 import { Message, proto3, protoInt64 } from "@bufbuild/protobuf";
 
 /**
+ * @generated from message brigade.v1.DaemonSetSSHKeyRequest
+ */
+export class DaemonSetSSHKeyRequest extends Message<DaemonSetSSHKeyRequest> {
+  /**
+   * OpenSSH PEM приватного ключа агента (per-user)
+   *
+   * @generated from field: string private_key = 1;
+   */
+  privateKey = "";
+
+  constructor(data?: PartialMessage<DaemonSetSSHKeyRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.DaemonSetSSHKeyRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "private_key", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaemonSetSSHKeyRequest {
+    return new DaemonSetSSHKeyRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): DaemonSetSSHKeyRequest {
+    return new DaemonSetSSHKeyRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): DaemonSetSSHKeyRequest {
+    return new DaemonSetSSHKeyRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: DaemonSetSSHKeyRequest | PlainMessage<DaemonSetSSHKeyRequest> | undefined, b: DaemonSetSSHKeyRequest | PlainMessage<DaemonSetSSHKeyRequest> | undefined): boolean {
+    return proto3.util.equals(DaemonSetSSHKeyRequest, a, b);
+  }
+}
+
+/**
  * @generated from message brigade.v1.DaemonOpenTerminalRequest
  */
 export class DaemonOpenTerminalRequest extends Message<DaemonOpenTerminalRequest> {

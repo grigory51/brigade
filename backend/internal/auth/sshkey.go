@@ -15,7 +15,7 @@ import (
 
 // EnsureAgentSSHKey возвращает per-user SSH-ключ агента, генерируя пару при первом обращении.
 // Приватный ключ (OpenSSH PEM) и публичный (authorized_keys line) стабильны per-user: приватный
-// подкладывается в контейнер сессии (~/.ssh/id_ed25519), публичный пользователь добавляет в
+// уходит в ssh-agent демона сессии (только в память процесса), публичный пользователь добавляет в
 // GitHub. Приватный хранится в БД зашифрованным; наружу (в API) отдаётся только публичный.
 func (s *Service) EnsureAgentSSHKey(ctx context.Context, userID string) (privatePEM, publicKey string, err error) {
 	var encPriv, pub string
