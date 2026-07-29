@@ -15,7 +15,6 @@ import (
 	"encoding/json"
 	"io"
 	"log"
-	"net/http"
 	"sync"
 	"time"
 
@@ -24,17 +23,16 @@ import (
 	"github.com/google/uuid"
 
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
-	"github.com/grigory51/brigade/backend/gen/go/brigade/v1/brigadev1connect"
 	"github.com/grigory51/brigade/backend/internal/acp"
 	"github.com/grigory51/brigade/backend/internal/agui"
+	"github.com/grigory51/brigade/backend/internal/daemonrpc"
 )
 
 // Client — brigade-сторона ACP-сессии поверх демона. Реализует transport/agui.Bindable.
 type Client struct {
-	rpc brigadev1connect.AgentDaemonServiceClient
-	// signToken выписывает свежий подписанный токен на каждый вызов (asymmetric-auth: brigade
-	// подписывает приватным ключом, демон проверяет публичным из env).
-	signToken func() (string, error)
+	// Conn — транспорт к демону с подписью вызовов (asymmetric-auth: brigade подписывает
+	// приватным ключом, демон проверяет публичным из env).
+	daemonrpc.Conn
 
 	mu        sync.Mutex
 	sessionID string
@@ -64,30 +62,9 @@ type Client struct {
 // на каждый вызов (asymmetric-auth); передаётся реестром (замыкает preview.DaemonToken по id).
 func New(baseURL, sessionID string, signToken func() (string, error)) *Client {
 	return &Client{
-		rpc:       brigadev1connect.NewAgentDaemonServiceClient(http.DefaultClient, baseURL),
-		signToken: signToken,
+		Conn:      daemonrpc.Dial(baseURL, "acpremote", signToken),
 		sessionID: sessionID,
 	}
-}
-
-// sign выписывает свежий подписанный токен; ошибку логирует и возвращает пустую строку
-// (демон отвергнет вызов как Unauthenticated).
-func (c *Client) sign() string {
-	t, err := c.signToken()
-	if err != nil {
-		log.Printf("acpremote: sign daemon token: %v", err)
-		return ""
-	}
-	return t
-}
-
-// authReq оборачивает сообщение в connect.Request с подписанным токеном в Authorization.
-func authReq[T any](token string, msg *T) *connect.Request[T] {
-	r := connect.NewRequest(msg)
-	if token != "" {
-		r.Header().Set("Authorization", "Bearer "+token)
-	}
-	return r
 }
 
 // ConfigureOptions — параметры Configure (спавн адаптера в демоне).
@@ -109,7 +86,7 @@ func (c *Client) Configure(ctx context.Context, opts ConfigureOptions) (string, 
 	if len(opts.McpServers) > 0 {
 		mcpJSON, _ = json.Marshal(opts.McpServers)
 	}
-	resp, err := c.rpc.Configure(ctx, authReq(c.sign(), &v1.DaemonConfigureRequest{
+	resp, err := c.RPC.Configure(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonConfigureRequest{
 		OauthToken:        opts.OAuthToken,
 		ExtraEnv:          opts.ExtraEnv,
 		AdapterCommand:    opts.AdapterCommand,
@@ -131,7 +108,7 @@ func (c *Client) Configure(ctx context.Context, opts ConfigureOptions) (string, 
 // SetSSHKey загружает приватный ключ пользователя в ssh-agent демона. Ключ уходит по
 // защищённому каналу RPC и остаётся в памяти демона: на диск среды агента он не пишется.
 func (c *Client) SetSSHKey(ctx context.Context, privatePEM string) error {
-	_, err := c.rpc.SetSSHKey(ctx, authReq(c.sign(), &v1.DaemonSetSSHKeyRequest{PrivateKey: privatePEM}))
+	_, err := c.RPC.SetSSHKey(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonSetSSHKeyRequest{PrivateKey: privatePEM}))
 	return err
 }
 
@@ -159,7 +136,7 @@ func (c *Client) Bind(sink acp.EventSink, _ acp.PermissionResolver) (unbind func
 	c.mu.Unlock()
 
 	from := int64(0)
-	if st, err := c.rpc.Status(ctx, authReq(c.sign(), &v1.Empty{})); err == nil {
+	if st, err := c.RPC.Status(ctx, daemonrpc.Req(c.Sign(), &v1.Empty{})); err == nil {
 		from = st.Msg.Seq
 	}
 	go c.streamLoop(ctx, gen, from)
@@ -180,7 +157,7 @@ func (c *Client) Bind(sink acp.EventSink, _ acp.PermissionResolver) (unbind func
 // streamLoop читает StreamEvents и доставляет каждое событие текущему sink, пока привязка
 // актуальна (gen не сменился) и ctx не отменён.
 func (c *Client) streamLoop(ctx context.Context, gen uint64, from int64) {
-	stream, err := c.rpc.StreamEvents(ctx, authReq(c.sign(), &v1.DaemonStreamEventsRequest{FromSeq: from}))
+	stream, err := c.RPC.StreamEvents(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonStreamEventsRequest{FromSeq: from}))
 	if err != nil {
 		return
 	}
@@ -213,7 +190,7 @@ func (c *Client) Prompt(ctx context.Context, text string, onTurnStart func()) (s
 	if onTurnStart != nil {
 		onTurnStart()
 	}
-	resp, err := c.rpc.Prompt(ctx, authReq(c.sign(), &v1.DaemonPromptRequest{Text: text}))
+	resp, err := c.RPC.Prompt(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonPromptRequest{Text: text}))
 	stopReason := ""
 	if resp != nil {
 		stopReason = resp.Msg.StopReason
@@ -229,7 +206,7 @@ func (c *Client) Prompt(ctx context.Context, text string, onTurnStart func()) (s
 
 // Cancel → session/cancel в демоне.
 func (c *Client) Cancel(ctx context.Context) error {
-	_, err := c.rpc.Cancel(ctx, authReq(c.sign(), &v1.Empty{}))
+	_, err := c.RPC.Cancel(ctx, daemonrpc.Req(c.Sign(), &v1.Empty{}))
 	return err
 }
 
@@ -238,7 +215,7 @@ func (c *Client) Cancel(ctx context.Context) error {
 // журналит END, а он едет на SSE асинхронно через StreamEvents, тогда как RUN_FINISHED run.go
 // шлёт напрямую и обгоняет; клиент @ag-ui отвергает RUN_FINISHED «поверх открытого текста».
 func (c *Client) FinishStreams() {
-	if _, err := c.rpc.FinishStreams(context.Background(), authReq(c.sign(), &v1.Empty{})); err != nil {
+	if _, err := c.RPC.FinishStreams(context.Background(), daemonrpc.Req(c.Sign(), &v1.Empty{})); err != nil {
 		log.Printf("acpremote: finish streams: %v", err)
 		return
 	}
@@ -274,7 +251,7 @@ func (c *Client) Messages() []acp.Message {
 	c.mu.Lock()
 	out := append([]acp.Message(nil), c.baseline...)
 	c.mu.Unlock()
-	resp, err := c.rpc.GetMessages(context.Background(), authReq(c.sign(), &v1.Empty{}))
+	resp, err := c.RPC.GetMessages(context.Background(), daemonrpc.Req(c.Sign(), &v1.Empty{}))
 	if err != nil {
 		return out
 	}
@@ -293,7 +270,7 @@ func (c *Client) SeedMessages(msgs []acp.Message) {
 
 // Commands → последний список slash-команд из демона.
 func (c *Client) Commands() []agui.AvailableCommand {
-	resp, err := c.rpc.GetCommands(context.Background(), authReq(c.sign(), &v1.Empty{}))
+	resp, err := c.RPC.GetCommands(context.Background(), daemonrpc.Req(c.Sign(), &v1.Empty{}))
 	if err != nil {
 		return nil
 	}
@@ -304,7 +281,7 @@ func (c *Client) Commands() []agui.AvailableCommand {
 
 // ConfigOptions → текущие опции сессии из демона.
 func (c *Client) ConfigOptions() []acpsdk.SessionConfigOption {
-	resp, err := c.rpc.GetConfigOptions(context.Background(), authReq(c.sign(), &v1.Empty{}))
+	resp, err := c.RPC.GetConfigOptions(context.Background(), daemonrpc.Req(c.Sign(), &v1.Empty{}))
 	if err != nil {
 		return nil
 	}
@@ -315,7 +292,7 @@ func (c *Client) ConfigOptions() []acpsdk.SessionConfigOption {
 
 // SetConfigOption → изменение опции сессии в демоне.
 func (c *Client) SetConfigOption(ctx context.Context, configID, value string) ([]acpsdk.SessionConfigOption, error) {
-	resp, err := c.rpc.SetConfigOption(ctx, authReq(c.sign(), &v1.DaemonSetConfigOptionRequest{ConfigId: configID, Value: value}))
+	resp, err := c.RPC.SetConfigOption(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonSetConfigOptionRequest{ConfigId: configID, Value: value}))
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +303,7 @@ func (c *Client) SetConfigOption(ctx context.Context, configID, value string) ([
 
 // Status → генерация + durable seq журнала демона.
 func (c *Client) Status() (generating bool, seq int) {
-	resp, err := c.rpc.Status(context.Background(), authReq(c.sign(), &v1.Empty{}))
+	resp, err := c.RPC.Status(context.Background(), daemonrpc.Req(c.Sign(), &v1.Empty{}))
 	if err != nil {
 		return false, 0
 	}
@@ -336,13 +313,13 @@ func (c *Client) Status() (generating bool, seq int) {
 // ResolvePermission доставляет решение пользователя ожидающему turn'у в демоне (диалог
 // пришёл фронту CUSTOM-событием в StreamEvents; ответ идёт сюда через AcpService).
 func (c *Client) ResolvePermission(ctx context.Context, id, decision string) error {
-	_, err := c.rpc.ResolvePermission(ctx, authReq(c.sign(), &v1.DaemonResolvePermissionRequest{Id: id, Decision: decision}))
+	_, err := c.RPC.ResolvePermission(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonResolvePermissionRequest{Id: id, Decision: decision}))
 	return err
 }
 
 // Summarize → служебный recap-turn в демоне (архивация).
 func (c *Client) Summarize(ctx context.Context, prompt string) (string, error) {
-	resp, err := c.rpc.Summarize(ctx, authReq(c.sign(), &v1.DaemonSummarizeRequest{Prompt: prompt}))
+	resp, err := c.RPC.Summarize(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonSummarizeRequest{Prompt: prompt}))
 	if err != nil {
 		return "", err
 	}
@@ -352,7 +329,7 @@ func (c *Client) Summarize(ctx context.Context, prompt string) (string, error) {
 // WriteFile просит демон записать файл в рабочую директорию агента (path — относительно
 // cwd). Заливка вложений идёт через фасад, а не через docker-API brigade.
 func (c *Client) WriteFile(ctx context.Context, path string, content []byte) error {
-	_, err := c.rpc.WriteFile(ctx, authReq(c.sign(), &v1.DaemonWriteFileRequest{Path: path, Content: content}))
+	_, err := c.RPC.WriteFile(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonWriteFileRequest{Path: path, Content: content}))
 	return err
 }
 
@@ -362,7 +339,7 @@ func (c *Client) WriteFile(ctx context.Context, path string, content []byte) err
 func (c *Client) OpenShell(cwd string) (*ShellSession, error) {
 	id := uuid.NewString()
 	ctx, cancel := context.WithCancel(context.Background())
-	stream, err := c.rpc.OpenTerminal(ctx, authReq(c.sign(), &v1.DaemonOpenTerminalRequest{
+	stream, err := c.RPC.OpenTerminal(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonOpenTerminalRequest{
 		Id:      id,
 		Cmd:     []string{"/bin/bash"},
 		Cwd:     cwd,
@@ -402,7 +379,7 @@ func (sh *ShellSession) pump(stream *connect.ServerStreamForClient[v1.DaemonTerm
 func (sh *ShellSession) Read(p []byte) (int, error) { return sh.pr.Read(p) }
 
 func (sh *ShellSession) Write(p []byte) (int, error) {
-	_, err := sh.client.rpc.TerminalInput(context.Background(), authReq(sh.client.sign(),
+	_, err := sh.client.RPC.TerminalInput(context.Background(), daemonrpc.Req(sh.client.Sign(),
 		&v1.DaemonTerminalInputRequest{Id: sh.id, Data: p}))
 	if err != nil {
 		return 0, err
@@ -411,7 +388,7 @@ func (sh *ShellSession) Write(p []byte) (int, error) {
 }
 
 func (sh *ShellSession) Resize(cols, rows uint16) error {
-	_, err := sh.client.rpc.TerminalResize(context.Background(), authReq(sh.client.sign(),
+	_, err := sh.client.RPC.TerminalResize(context.Background(), daemonrpc.Req(sh.client.Sign(),
 		&v1.DaemonTerminalResizeRequest{Id: sh.id, Cols: uint32(cols), Rows: uint32(rows)}))
 	return err
 }

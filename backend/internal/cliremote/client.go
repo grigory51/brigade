@@ -14,22 +14,19 @@ package cliremote
 import (
 	"context"
 	"io"
-	"log"
-	"net/http"
 	"sync"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
-	"github.com/grigory51/brigade/backend/gen/go/brigade/v1/brigadev1connect"
+	"github.com/grigory51/brigade/backend/internal/daemonrpc"
 )
 
 // Client — brigade-сторона одной CLI-сессии (durable-терминал демона). Реализует spawn.Handle.
 type Client struct {
-	rpc       brigadev1connect.AgentDaemonServiceClient
-	signToken func() (string, error)
-	termID    string // id терминала = brigade session id (== agent session id для claude)
+	daemonrpc.Conn
+	termID string // id терминала = brigade session id (== agent session id для claude)
 
 	cancel context.CancelFunc // отменяет OpenTerminal-стрим (детач на Close)
 	pr     *io.PipeReader
@@ -45,34 +42,16 @@ type Client struct {
 // signToken подписывает вызовы (aud = идентификатор per-user демона).
 func New(baseURL, termID string, signToken func() (string, error)) *Client {
 	return &Client{
-		rpc:       brigadev1connect.NewAgentDaemonServiceClient(http.DefaultClient, baseURL),
-		signToken: signToken,
-		termID:    termID,
-		waitCh:    make(chan struct{}),
+		Conn:   daemonrpc.Dial(baseURL, "cliremote", signToken),
+		termID: termID,
+		waitCh: make(chan struct{}),
 	}
-}
-
-func (c *Client) sign() string {
-	t, err := c.signToken()
-	if err != nil {
-		log.Printf("cliremote: sign daemon token: %v", err)
-		return ""
-	}
-	return t
-}
-
-func authReq[T any](token string, msg *T) *connect.Request[T] {
-	r := connect.NewRequest(msg)
-	if token != "" {
-		r.Header().Set("Authorization", "Bearer "+token)
-	}
-	return r
 }
 
 // SetSSHKey загружает приватный ключ пользователя в ssh-agent демона: терминал агента
 // получит доступ к нему через SSH_AUTH_SOCK, самого ключа в среде не будет.
 func (c *Client) SetSSHKey(ctx context.Context, privatePEM string) error {
-	_, err := c.rpc.SetSSHKey(ctx, authReq(c.sign(), &v1.DaemonSetSSHKeyRequest{PrivateKey: privatePEM}))
+	_, err := c.RPC.SetSSHKey(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonSetSSHKeyRequest{PrivateKey: privatePEM}))
 	return err
 }
 
@@ -81,7 +60,7 @@ func (c *Client) SetSSHKey(ctx context.Context, privatePEM string) error {
 // процесс; при мёртвом контейнере (respawn) cmd поднимает claude заново (--resume).
 func (c *Client) Start(cmd []string, cwd string, env []string, cols, rows uint16) error {
 	ctx, cancel := context.WithCancel(context.Background())
-	stream, err := c.rpc.OpenTerminal(ctx, authReq(c.sign(), &v1.DaemonOpenTerminalRequest{
+	stream, err := c.RPC.OpenTerminal(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonOpenTerminalRequest{
 		Id:      c.termID,
 		Cmd:     cmd,
 		Cwd:     cwd,
@@ -134,7 +113,7 @@ func (c *Client) pump(stream *connect.ServerStreamForClient[v1.DaemonTerminalOut
 func (c *Client) Read(p []byte) (int, error) { return c.pr.Read(p) }
 
 func (c *Client) Write(p []byte) (int, error) {
-	_, err := c.rpc.TerminalInput(context.Background(), authReq(c.sign(),
+	_, err := c.RPC.TerminalInput(context.Background(), daemonrpc.Req(c.Sign(),
 		&v1.DaemonTerminalInputRequest{Id: c.termID, Data: p}))
 	if err != nil {
 		return 0, err
@@ -143,7 +122,7 @@ func (c *Client) Write(p []byte) (int, error) {
 }
 
 func (c *Client) Resize(cols, rows uint16) error {
-	_, err := c.rpc.TerminalResize(context.Background(), authReq(c.sign(),
+	_, err := c.RPC.TerminalResize(context.Background(), daemonrpc.Req(c.Sign(),
 		&v1.DaemonTerminalResizeRequest{Id: c.termID, Cols: uint32(cols), Rows: uint32(rows)}))
 	return err
 }
@@ -217,11 +196,10 @@ func (c *Client) ContainerLabel() string { return "" }
 // OpenShell поднимает вспомогательный шелл (bash в pty) на per-user демоне по baseURL и
 // возвращает ShellSession (реализует termws.Shell). Эфемерный: Terminate гасит pty в демоне.
 func OpenShell(baseURL, cwd string, signToken func() (string, error)) (*ShellSession, error) {
-	rpc := brigadev1connect.NewAgentDaemonServiceClient(http.DefaultClient, baseURL)
-	sh := &ShellSession{rpc: rpc, signToken: signToken, id: uuid.NewString()}
+	sh := &ShellSession{Conn: daemonrpc.Dial(baseURL, "cliremote", signToken), id: uuid.NewString()}
 	ctx, cancel := context.WithCancel(context.Background())
 	sh.cancel = cancel
-	stream, err := rpc.OpenTerminal(ctx, authReq(sh.sign(), &v1.DaemonOpenTerminalRequest{
+	stream, err := sh.RPC.OpenTerminal(ctx, daemonrpc.Req(sh.Sign(), &v1.DaemonOpenTerminalRequest{
 		Id:      sh.id,
 		Cmd:     []string{"/bin/bash"},
 		Cwd:     cwd,
@@ -239,21 +217,11 @@ func OpenShell(baseURL, cwd string, signToken func() (string, error)) (*ShellSes
 // ShellSession — brigade-сторона вспомогательного шелла CLI-сессии поверх Terminal RPC
 // per-user демона. Реализует termws.Shell.
 type ShellSession struct {
-	rpc       brigadev1connect.AgentDaemonServiceClient
-	signToken func() (string, error)
-	id        string
-	cancel    context.CancelFunc
-	pr        *io.PipeReader
-	pw        *io.PipeWriter
-}
-
-func (sh *ShellSession) sign() string {
-	t, err := sh.signToken()
-	if err != nil {
-		log.Printf("cliremote: sign daemon token: %v", err)
-		return ""
-	}
-	return t
+	daemonrpc.Conn
+	id     string
+	cancel context.CancelFunc
+	pr     *io.PipeReader
+	pw     *io.PipeWriter
 }
 
 func (sh *ShellSession) pump(stream *connect.ServerStreamForClient[v1.DaemonTerminalOutput]) {
@@ -268,7 +236,7 @@ func (sh *ShellSession) pump(stream *connect.ServerStreamForClient[v1.DaemonTerm
 func (sh *ShellSession) Read(p []byte) (int, error) { return sh.pr.Read(p) }
 
 func (sh *ShellSession) Write(p []byte) (int, error) {
-	_, err := sh.rpc.TerminalInput(context.Background(), authReq(sh.sign(),
+	_, err := sh.RPC.TerminalInput(context.Background(), daemonrpc.Req(sh.Sign(),
 		&v1.DaemonTerminalInputRequest{Id: sh.id, Data: p}))
 	if err != nil {
 		return 0, err
@@ -277,7 +245,7 @@ func (sh *ShellSession) Write(p []byte) (int, error) {
 }
 
 func (sh *ShellSession) Resize(cols, rows uint16) error {
-	_, err := sh.rpc.TerminalResize(context.Background(), authReq(sh.sign(),
+	_, err := sh.RPC.TerminalResize(context.Background(), daemonrpc.Req(sh.Sign(),
 		&v1.DaemonTerminalResizeRequest{Id: sh.id, Cols: uint32(cols), Rows: uint32(rows)}))
 	return err
 }
