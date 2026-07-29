@@ -14,12 +14,6 @@ import {
   ReasoningText,
   ReasoningTrigger,
 } from "@/components/assistant-ui/reasoning";
-import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
-import {
-  ToolGroupContent,
-  ToolGroupRoot,
-  ToolGroupTrigger,
-} from "@/components/assistant-ui/tool-group";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -77,26 +71,16 @@ import {
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 
 /**
- * Optional component overrides for the thread. `AssistantMessage` and
- * `Welcome` replace whole sections; the remaining slots override how the
- * assistant message renders tool calls and part groups. Tool UIs registered
- * by name (toolkit `render`, `useAssistantDataUI`) take precedence over
- * `ToolFallback`.
+ * Переопределения рендера ленты. Оба слота обязательны по смыслу: карточки
+ * инструментов и их группировку задаёт ACP-слой (см. features/acp/AcpThread).
  */
 export type ThreadComponents = {
-  AssistantMessage?: ComponentType | undefined;
-  Welcome?: ComponentType | undefined;
-  ToolFallback?: ToolCallMessagePartComponent | undefined;
-  ToolGroup?:
-    | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
-    | undefined;
-  ReasoningGroup?:
-    | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
-    | undefined;
+  ToolFallback: ToolCallMessagePartComponent;
+  ToolGroup: ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>;
 };
 
 export type ThreadProps = {
-  components?: ThreadComponents | undefined;
+  components: ThreadComponents;
   // commands — slash-команды агента для автокомплита в composer'е (см. SlashMenu).
   commands?: AvailableCommand[] | undefined;
   // footer — дополнительный блок над composer'ом (например, план агента).
@@ -110,10 +94,15 @@ export type ThreadProps = {
   readonly?: boolean | undefined;
 };
 
-const EMPTY_COMPONENTS: ThreadComponents = {};
+const ThreadComponentsContext = createContext<ThreadComponents | null>(null);
 
-const ThreadComponentsContext =
-  createContext<ThreadComponents>(EMPTY_COMPONENTS);
+// useThreadComponents — слоты рендера ленты. Провайдер ставит Thread, поэтому вне его
+// компоненты ленты не рендерятся.
+function useThreadComponents(): ThreadComponents {
+  const ctx = useContext(ThreadComponentsContext);
+  if (!ctx) throw new Error("Thread components context is missing");
+  return ctx;
+}
 
 // Контекст списка slash-команд: проброшен от Thread до вложенного Composer без
 // передачи пропом через все промежуточные компоненты registry-разметки.
@@ -136,7 +125,7 @@ const isNewChatView = (s: AssistantState) =>
   (!s.thread.isLoading || s.threads.isLoading);
 
 export const Thread: FC<ThreadProps> = ({
-  components = EMPTY_COMPONENTS,
+  components,
   commands = [],
   footer,
   configOptions = [],
@@ -165,8 +154,6 @@ const ThreadRoot: FC<{
   footer?: ReactNode;
   readonly?: boolean;
 }> = ({ isEmpty, footer, readonly = false }) => {
-  const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
-
   return (
     <ThreadPrimitive.Root
       className="aui-root aui-thread-root bg-background @container flex h-full flex-col"
@@ -193,7 +180,7 @@ const ThreadRoot: FC<{
           )}
         >
           <AuiIf condition={isNewChatView}>
-            <Welcome />
+            <ThreadWelcome />
           </AuiIf>
 
           <div
@@ -223,8 +210,6 @@ const ThreadRoot: FC<{
 };
 
 const ThreadMessage: FC = () => {
-  const { AssistantMessage: AssistantMessageComponent = AssistantMessage } =
-    useContext(ThreadComponentsContext);
   const role = useAuiState((s) => s.message.role);
   const isEditing = useAuiState((s) => s.message.composer.isEditing);
 
@@ -233,7 +218,7 @@ const ThreadMessage: FC = () => {
   // Системные уведомления (wake-up харнесса о фоновых задачах) бэкенд транслирует
   // role=system — компактная информационная карточка, не реплика диалога.
   if (role === "system") return <SystemMessage />;
-  return <AssistantMessageComponent />;
+  return <AssistantMessage />;
 };
 
 // SystemMessage — компактная системная карточка по центру ленты: уведомление о фоновой
@@ -624,11 +609,7 @@ const MessageError: FC = () => {
 };
 
 const AssistantMessage: FC = () => {
-  const {
-    ToolFallback: ToolFallbackComponent = ToolFallback,
-    ToolGroup,
-    ReasoningGroup,
-  } = useContext(ThreadComponentsContext);
+  const { ToolFallback, ToolGroup } = useThreadComponents();
   // navId — якорь для прыжка по шкале навигации и панели ссылок (см. dock/jumpToMessage).
   const navId = useAuiState((s) => s.message.id);
 
@@ -662,24 +643,8 @@ const AssistantMessage: FC = () => {
               case "group-chainOfThought":
                 return <div data-slot="aui_chain-of-thought">{children}</div>;
               case "group-tool":
-                if (ToolGroup) {
-                  return <ToolGroup group={part}>{children}</ToolGroup>;
-                }
-                return (
-                  <ToolGroupRoot variant="ghost">
-                    <ToolGroupTrigger
-                      count={part.indices.length}
-                      active={part.status.type === "running"}
-                    />
-                    <ToolGroupContent>{children}</ToolGroupContent>
-                  </ToolGroupRoot>
-                );
+                return <ToolGroup group={part}>{children}</ToolGroup>;
               case "group-reasoning": {
-                if (ReasoningGroup) {
-                  return (
-                    <ReasoningGroup group={part}>{children}</ReasoningGroup>
-                  );
-                }
                 const running = part.status.type === "running";
                 return (
                   <ReasoningRoot streaming={running}>
@@ -702,7 +667,7 @@ const AssistantMessage: FC = () => {
               case "reasoning":
                 return <Reasoning {...part} />;
               case "tool-call":
-                return part.toolUI ?? <ToolFallbackComponent {...part} />;
+                return part.toolUI ?? <ToolFallback {...part} />;
               case "data":
                 return part.dataRendererUI;
               case "indicator":
