@@ -259,8 +259,13 @@ func (s *DockerSpawner) runAsRoot(ctx context.Context, ref string, mounts []moun
 	}
 }
 
-// baseImageDigest — идентификатор базового образа: ключ версии runtime-volume'ов.
+// baseImageDigest — идентификатор базового образа: ключ версии runtime-volume'ов. Образ
+// при необходимости подтягивается: его могли удалить мимо brigade (`docker system prune`),
+// и в этом случае сессия должна дождаться загрузки, а не упасть.
 func (s *DockerSpawner) baseImageDigest(ctx context.Context) (string, error) {
+	if _, err := s.EnsureImage(ctx, s.baseImage); err != nil {
+		return "", fmt.Errorf("spawn: базовый образ %s недоступен: %w", s.baseImage, err)
+	}
 	insp, err := s.cli.ImageInspect(ctx, s.baseImage)
 	if err != nil {
 		return "", fmt.Errorf("spawn: базовый образ %s недоступен: %w", s.baseImage, err)

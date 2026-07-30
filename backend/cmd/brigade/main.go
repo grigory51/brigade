@@ -257,6 +257,11 @@ func applyRuntimeSettings(cfg *config.Config, store *runtimecfg.Store) string {
 	if !store.Editable() {
 		return ""
 	}
+	// Образ агента: приложение не собирает его локально, а конфиг создаётся один раз — у
+	// установок, заведённых до появления поля, оно пустое.
+	if cfg.AgentImage == "" {
+		cfg.AgentImage = desktopAgentImage
+	}
 	settings, err := store.Read()
 	if err != nil {
 		log.Printf("brigade: настройки режима: %v", err)

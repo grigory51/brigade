@@ -33,6 +33,12 @@ var desktopMode bool
 // инсталляции: там режим задаётся конфигом и из UI не меняется.
 var desktopRuntimePath string
 
+// desktopAgentImage — образ агента для docker-режима приложения. Локально собранного
+// образа на машине пользователя нет, поэтому берём опубликованный. Подставляется, когда
+// agent_image в конфиге не задан: конфиг создаётся один раз и у ранних установок этого
+// поля нет.
+const desktopAgentImage = "ghcr.io/grigory51/brigade-agent:latest"
+
 // runDesktop — точка входа подкоманды desktop.
 func runDesktop() {
 	appDir, err := desktopAppDir()
