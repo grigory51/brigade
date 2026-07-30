@@ -32,8 +32,10 @@ import (
 
 	"github.com/grigory51/brigade/backend/internal/acp"
 	"github.com/grigory51/brigade/backend/internal/acp/acpremote"
+	"github.com/grigory51/brigade/backend/internal/agent"
 	"github.com/grigory51/brigade/backend/internal/cliremote"
 	"github.com/grigory51/brigade/backend/internal/agui"
+	"github.com/grigory51/brigade/backend/internal/mcp"
 	"github.com/grigory51/brigade/backend/internal/memory"
 	"github.com/grigory51/brigade/backend/internal/notify"
 	"github.com/grigory51/brigade/backend/internal/preview"
@@ -415,11 +417,16 @@ func (r *Registry) endTeardown(sessionID string) {
 // и сохраняет resume-поля. Режим спавна берётся у инстанса (r.mode), не выбирается
 // пользователем. agentType — тип агента; cwd пустой означает дефолт workDir; prompt
 // передаётся ACP-агенту первым ходом (для CLI игнорируется — ввод идёт по WS).
-func (r *Registry) Create(ctx context.Context, userID string, kind store.SessionKind, agentType, cwd, prompt string) (store.Session, error) {
+func (r *Registry) Create(ctx context.Context, userID string, kind store.SessionKind, agentType, cwd, prompt string, mcpServerIDs []string, image string) (store.Session, error) {
 	// ACP стартует агента сразу (non-interactive) — без токена не авторизуется.
 	// CLI можно создать без токена: пользователь авторизуется в терминале.
 	if kind == store.SessionKindACP && r.userClaudeToken(ctx, userID) == "" {
 		return store.Session{}, ErrClaudeTokenRequired
+	}
+	// Набор MCP проверяем до записи сессии: сломанную ссылку на секрет пользователь должен
+	// увидеть сразу, а не отсутствием инструментов в готовой сессии.
+	if err := r.checkMcp(ctx, userID, mcpServerIDs); err != nil {
+		return store.Session{}, err
 	}
 	// Потолок на число docker-контейнеров: проверяем до записи сессии в store, чтобы не
 	// плодить failed-записи. Мягкий лимит (см. atContainerLimit).
@@ -450,15 +457,17 @@ func (r *Registry) Create(ctx context.Context, userID string, kind store.Session
 	}
 
 	sess := store.Session{
-		ID:        id,
-		UserID:    userID,
-		Mode:      r.mode,
-		Kind:      kind,
-		AgentType: agentType,
-		Status:    store.SessionStatusRunning,
-		Cwd:       cwd,
-		CreatedAt: time.Now(),
-		Name:      autoName(prompt),
+		ID:         id,
+		UserID:     userID,
+		Mode:       r.mode,
+		Kind:       kind,
+		AgentType:  agentType,
+		Status:     store.SessionStatusRunning,
+		Cwd:        cwd,
+		CreatedAt:  time.Now(),
+		Name:       autoName(prompt),
+		McpServers: mcpServerIDs,
+		Image:      image,
 	}
 	if err := r.store.CreateSession(ctx, sess); err != nil {
 		log.Printf("session: create %s failed (store): %v", sess.ID, err)
@@ -541,14 +550,9 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 			return r.spawnCLIDaemon(ctx, sess, token, "")
 		}
 		// local: claude-процесс в pty на хосте (LocalSpawner).
-		handle, err := r.spawner.Spawn(ctx, spawn.Spec{
-			SessionID: sess.ID,
-			UserID:    sess.UserID,
-			Cwd:       sess.Cwd,
-			Env:       r.agentEnv(sess, token),
-			HomeHost:  r.homeHost(sess),
-			Hostname:  r.userHostname(ctx, sess.UserID),
-		})
+		spec := r.agentSpec(ctx, sess)
+		spec.Env = r.agentEnv(ctx, sess, token)
+		handle, err := r.spawner.Spawn(ctx, spec)
 		if err != nil {
 			return nil, "", "", fmt.Errorf("session: spawn cli: %w", err)
 		}
@@ -567,7 +571,7 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 		}
 		// local: acp.New сам поднимает adapter-subprocess в процессе brigade (без демона —
 		// он умрёт с brigade, restore пере-спавнит через session/load).
-		client, err := acp.New(ctx, r.acpLocalOptions(sess, token))
+		client, err := acp.New(ctx, r.acpLocalOptions(ctx, sess, token))
 		if err != nil {
 			return nil, "", "", fmt.Errorf("session: spawn acp: %w", err)
 		}
@@ -618,12 +622,7 @@ func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token
 	if err != nil {
 		return nil, "", "", err
 	}
-	addr, err := ds.ACP().StartDaemon(ctx, spawn.Spec{
-		SessionID: sess.ID,
-		Cwd:       sess.Cwd,
-		HomeHost:  r.homeHost(sess),
-		Hostname:  r.userHostname(ctx, sess.UserID),
-	}, stateID, r.previews.DaemonPublicKey())
+	addr, err := ds.ACP().StartDaemon(ctx, r.agentSpec(ctx, sess), stateID, r.previews.DaemonPublicKey())
 	if err != nil {
 		return nil, "", "", fmt.Errorf("session: start acp daemon: %w", err)
 	}
@@ -634,10 +633,11 @@ func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token
 	sid, err := rc.Configure(ctx, acpremote.ConfigureOptions{
 		OAuthToken:        token,
 		ExtraEnv:          r.previewEnv(sess), // preview-токен/URL — только адаптеру, не в env контейнера
+		AdapterCommand:    agent.Get(sess.AgentType).CommandFor(store.SessionKindACP),
 		Cwd:               sess.Cwd,
 		ResumeSessionID:   resumeSessionID,
 		ForkFromSessionID: forkFromSessionID,
-		McpServers:        []acpsdk.McpServer{acp.BrigadeMCPServer()},
+		McpServers:        r.mcpServers(ctx, sess),
 		PluginDirs:        r.acpPluginDirs(sess),
 	})
 	if err != nil {
@@ -651,10 +651,6 @@ func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token
 	return lv, sid, "", nil
 }
 
-// cliAgentCommand — исполняемый файл CLI-агента внутри контейнера (та же команда, что и в
-// local-режиме spawn.agentCommand).
-const cliAgentCommand = "claude"
-
 // spawnCLIDaemon поднимает CLI-агента (claude) durable-терминалом per-user демона (общий
 // контейнер пользователя — логин claude привязан к контейнеру и переживает несколько сессий).
 // brigade ходит к демону по Terminal RPC, а не docker-exec'ом. resumeSessionID непусто →
@@ -665,28 +661,43 @@ func (r *Registry) spawnCLIDaemon(ctx context.Context, sess store.Session, token
 	if !ok {
 		return nil, "", "", fmt.Errorf("session: docker-режим без DockerSpawner")
 	}
-	addr, err := ds.EnsureUserDaemon(ctx, spawn.Spec{
-		UserID:   sess.UserID,
-		HomeHost: r.homeHost(sess),
-		Hostname: r.userHostname(ctx, sess.UserID),
-	}, r.previews.DaemonPublicKey())
+	addr, err := ds.EnsureUserDaemon(ctx, r.agentSpec(ctx, sess), r.previews.DaemonPublicKey())
 	if err != nil {
 		return nil, "", "", fmt.Errorf("session: ensure user daemon: %w", err)
 	}
-	cmd := []string{cliAgentCommand, "--session-id", sess.ID}
+	// Команда агента — из манифеста: терминальный режим у каждого агента свой.
+	bin := agent.Get(sess.AgentType).CommandFor(store.SessionKindCLI)
+	cmd := []string{bin, "--session-id", sess.ID}
 	if resumeSessionID != "" {
-		cmd = []string{cliAgentCommand, "--resume", resumeSessionID}
+		cmd = []string{bin, "--resume", resumeSessionID}
 	}
 	// aud подписи = userID (per-user демон обслуживает все CLI-сессии пользователя); id
 	// терминала = sess.ID (сессия). OAuth-токен и preview-env — в env процесса, не контейнера.
 	hc := cliremote.New(addr, sess.ID, r.daemonTokenFn(sess.UserID))
 	r.loadAgentSSHKey(ctx, sess.UserID, hc.SetSSHKey)
-	if err := hc.Start(cmd, sess.Cwd, r.agentEnv(sess, token), 0, 0); err != nil {
+	if err := hc.Start(cmd, sess.Cwd, r.agentEnv(ctx, sess, token), 0, 0); err != nil {
 		return nil, "", "", fmt.Errorf("session: start cli terminal: %w", err)
 	}
 	go r.watchExit(sess.ID, hc)
 	lv := &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, handle: hc}
 	return lv, hc.AgentSessionID(), hc.ContainerLabel(), nil
+}
+
+// agentSpec собирает спецификацию запуска сессии: образ (пользовательский либо дефолтный),
+// компоненты runtime и команду агента — всё из манифеста агента (internal/agent), чтобы
+// добавление второго агента не требовало правок здесь и в спавнере.
+func (r *Registry) agentSpec(ctx context.Context, sess store.Session) spawn.Spec {
+	at := agent.Get(sess.AgentType)
+	return spawn.Spec{
+		SessionID: sess.ID,
+		UserID:    sess.UserID,
+		Cwd:       sess.Cwd,
+		Image:     sess.Image,
+		Layers:    at.LayersFor(sess.Kind),
+		Command:   at.CommandFor(sess.Kind),
+		HomeHost:  r.homeHost(sess),
+		Hostname:  r.userHostname(ctx, sess.UserID),
+	}
 }
 
 // acpPluginDirs — плагин-директории агента (per-session плагин brigade со скиллами), если
@@ -698,19 +709,99 @@ func (r *Registry) acpPluginDirs(sess store.Session) []string {
 	return []string{sess.Cwd + "/" + preview.PluginDirRel}
 }
 
-// acpLocalOptions — общие опции local-адаптера ACP (acp.New): cwd, токен, preview-env, MCP-сервер
-// brigade (render_ui/show_choice) и каталог плагина со скиллами. ЕДИНАЯ точка, чтобы ВСЕ пути
-// (создание, restore, respawn, reload, fork) поднимали адаптер с одинаковым набором — иначе часть
-// путей теряет --plugin-dir/MCP и скиллы (/note) либо render_ui пропадают. Resume/Fork
-// вызывающий доставляет сам поверх.
-func (r *Registry) acpLocalOptions(sess store.Session, token string) acp.Options {
+// acpLocalOptions — общие опции local-адаптера ACP (acp.New): cwd, токен, preview-env, набор
+// MCP-серверов и каталог плагина со скиллами. ЕДИНАЯ точка, чтобы ВСЕ пути (создание, restore,
+// respawn, reload, fork) поднимали адаптер с одинаковым набором — иначе часть путей теряет
+// --plugin-dir/MCP и скиллы (/note) либо render_ui пропадают. Resume/Fork вызывающий
+// доставляет сам поверх.
+func (r *Registry) acpLocalOptions(ctx context.Context, sess store.Session, token string) acp.Options {
 	return acp.Options{
 		Cwd:        sess.Cwd,
 		OAuthToken: token,
 		ExtraEnv:   r.previewEnv(sess),
-		McpServers: []acpsdk.McpServer{acp.BrigadeMCPServer()},
+		McpServers: r.mcpServers(ctx, sess),
 		PluginDirs: r.acpPluginDirs(sess),
 	}
+}
+
+// mcpServers — набор MCP-серверов сессии: служебный сервер brigade (render_ui/show_choice)
+// плюс включённые пользователем (sess.McpServers). Вызывается на всех путях спавна и
+// переконфигурации агента.
+//
+// Сервер, чью ссылку на секрет развернуть не удалось, ИСКЛЮЧАЕТСЯ с записью в лог: пути
+// восстановления и resume не должны падать из-за удалённого секрета. Пользователь узнаёт о
+// проблеме раньше — checkMcp отвергает такой набор при создании сессии и при смене набора,
+// когда человек у экрана и может починить конфиг.
+func (r *Registry) mcpServers(ctx context.Context, sess store.Session) []acpsdk.McpServer {
+	// Путь к служебному серверу — из манифеста агента: агент, который его не объявляет,
+	// кастомных UI-инструментов не получает. В local-режиме сервер берётся с хоста (бандл
+	// приложения): контейнерных слоёв там нет, а путь манифеста ведёт внутрь контейнера.
+	var servers []acpsdk.McpServer
+	script := agent.Get(sess.AgentType).McpServerScript
+	if sess.Mode == store.SessionModeLocal {
+		script = acp.LocalMCPServerPath()
+	}
+	if script != "" {
+		servers = append(servers, acp.BrigadeMCPServer(script))
+	}
+	if len(sess.McpServers) == 0 {
+		return servers
+	}
+	selected, secrets, err := r.userMcpConfigs(ctx, sess.UserID, sess.McpServers)
+	if err != nil {
+		log.Printf("session %s: mcp: %v", sess.ID, err)
+		return servers
+	}
+	for _, srv := range selected {
+		built, err := mcp.Build([]store.McpServer{srv}, secrets)
+		if err != nil {
+			log.Printf("session %s: mcp-сервер пропущен: %v", sess.ID, err)
+			continue
+		}
+		servers = append(servers, built...)
+	}
+	return servers
+}
+
+// checkMcp проверяет, что набор серверов существует и все ссылки на секреты разрешимы.
+// Используется там, где ошибку видит пользователь: создание сессии и смена набора.
+func (r *Registry) checkMcp(ctx context.Context, userID string, serverIDs []string) error {
+	if len(serverIDs) == 0 {
+		return nil
+	}
+	selected, secrets, err := r.userMcpConfigs(ctx, userID, serverIDs)
+	if err != nil {
+		return err
+	}
+	if len(selected) != len(serverIDs) {
+		return fmt.Errorf("session: часть MCP-серверов не найдена")
+	}
+	_, err = mcp.Build(selected, secrets)
+	return err
+}
+
+// userMcpConfigs отбирает конфиги пользователя по идентификаторам (в порядке serverIDs) и
+// отдаёт их вместе с расшифрованными секретами vault.
+func (r *Registry) userMcpConfigs(ctx context.Context, userID string, serverIDs []string) ([]store.McpServer, map[string]string, error) {
+	all, err := r.store.ListMcpServers(ctx, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	byID := make(map[string]store.McpServer, len(all))
+	for _, srv := range all {
+		byID[srv.ID] = srv
+	}
+	selected := make([]store.McpServer, 0, len(serverIDs))
+	for _, id := range serverIDs {
+		if srv, ok := byID[id]; ok {
+			selected = append(selected, srv)
+		}
+	}
+	secrets, err := r.store.SecretValues(ctx, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return selected, secrets, nil
 }
 
 // acpDaemonTeardown — замыкание удаления контейнера ACP-демона (для live.teardown, docker).
@@ -727,12 +818,51 @@ func (r *Registry) acpDaemonTeardown(sessionID string) func(context.Context) err
 // Claude Code пользователя (CLAUDE_CODE_OAUTH_TOKEN, если задан) и, при включённом
 // preview, переменные публикации dev-серверов (см. previewEnv). token — per-user из
 // store; для CLI-режима агент дополнительно опирается на смонтированный ~/.claude.
-func (r *Registry) agentEnv(sess store.Session, token string) []string {
+func (r *Registry) agentEnv(ctx context.Context, sess store.Session, token string) []string {
 	var env []string
 	if token != "" {
 		env = append(env, "CLAUDE_CODE_OAUTH_TOKEN="+token)
 	}
-	return append(env, r.previewEnv(sess)...)
+	env = append(env, r.previewEnv(sess)...)
+	return append(env, r.installMcpProject(ctx, sess)...)
+}
+
+// installMcpProject раскладывает .mcp.json рядом с CLI-агентом и возвращает переменные
+// окружения со значениями секретов. CLI-агент (`claude` в терминале) читает набор серверов
+// из рабочей директории — по протоколу, как ACP-адаптеру, ему их не передать.
+//
+// Ошибка не прерывает запуск сессии: без MCP агент работоспособен, а сообщение в логе
+// говорит, что именно не сложилось.
+func (r *Registry) installMcpProject(ctx context.Context, sess store.Session) []string {
+	cwd := r.hostCwd(sess)
+	if cwd == "" {
+		return nil
+	}
+	selected, secrets, err := r.userMcpConfigs(ctx, sess.UserID, sess.McpServers)
+	if err != nil {
+		log.Printf("session %s: mcp: %v", sess.ID, err)
+		return nil
+	}
+	env, err := mcp.WriteProjectConfig(cwd, selected, secrets)
+	if err != nil {
+		log.Printf("session %s: mcp: %v", sess.ID, err)
+		return nil
+	}
+	return env
+}
+
+// hostCwd — рабочая директория сессии на ХОСТЕ (куда brigade кладёт файлы для агента).
+// В docker-режиме cwd сессии — путь внутри контейнера, а тот же каталог на хосте лежит в
+// персональном home пользователя. Пусто — класть некуда (эфемерный контейнер без home).
+func (r *Registry) hostCwd(sess store.Session) string {
+	if sess.Mode != store.SessionModeDocker {
+		return sess.Cwd
+	}
+	home := r.homeHost(sess)
+	if home == "" {
+		return ""
+	}
+	return filepath.Join(home, "workspace", sess.ID)
 }
 
 // previewEnv формирует preview-переменные агента: идентификатор сессии, токен
@@ -775,18 +905,15 @@ func (r *Registry) installSkill(sess store.Session) {
 	if !r.previews.Config().Enabled {
 		return
 	}
-	dir := sess.Cwd
+	dir := r.hostCwd(sess)
+	if dir == "" {
+		return // фича home выключена — скилл класть некуда (эфемерный контейнер)
+	}
 	if sess.Mode == store.SessionModeDocker {
-		home := r.homeHost(sess)
-		if home == "" {
-			return // фича home выключена — скилл класть некуда (эфемерный контейнер)
-		}
-		// Скилл кладём в per-session рабочий каталог (cwd агента на хосте).
-		dir = filepath.Join(home, "workspace", sess.ID)
 		// Убираем стейл-копию прежней схемы: раньше скилл ставился в ОБЩИЙ workspace
 		// (<home>/workspace/.claude/skills), и при cwd=<id> Claude Code находил его вверх
 		// по дереву вторым — отсюда дубль в slash-меню.
-		_ = os.RemoveAll(filepath.Join(home, "workspace", ".claude", "skills", "brigade-preview"))
+		_ = os.RemoveAll(filepath.Join(r.homeHost(sess), "workspace", ".claude", "skills", "brigade-preview"))
 	}
 	// marketplaceID уникален на сессию: Claude Code кеширует локальный marketplace глобально
 	// по ID и пинит его на каталог первой сессии — при константном ID новые сессии грузили бы
@@ -827,33 +954,16 @@ func (r *Registry) provisionAgentSSH(_ context.Context, sess store.Session) {
 	if home == "" {
 		return
 	}
+	// Ключи прежних версий: в CLI-контейнер home монтируется целиком и переживает
+	// обновление brigade, так что без явной уборки приватный ключ остался бы лежать в среде
+	// агента. Ничего другого brigade в ~/.ssh не кладёт: ключ живёт в ssh-agent демона, а
+	// config с путём к его сокету демон пишет сам внутри контейнера (см.
+	// acpdaemon.writeSSHConfig).
 	sshDir := filepath.Join(home, ".ssh")
-	if err := os.MkdirAll(sshDir, 0o700); err != nil {
-		log.Printf("session: mkdir .ssh %s: %v", sshDir, err)
-		return
-	}
-	// Ключи прежних версий: home bind-mount'ится и переживает обновление brigade, так что
-	// без явной уборки приватный ключ остался бы лежать в среде агента.
 	for _, stale := range []string{"id_ed25519", "id_ed25519.pub"} {
 		if err := os.Remove(filepath.Join(sshDir, stale)); err != nil && !os.IsNotExist(err) {
 			log.Printf("session: remove legacy key %s: %v", stale, err)
 		}
-	}
-	const sshConfig = "Host github.com\n" +
-		"    HostName github.com\n" +
-		"    User git\n" +
-		"    StrictHostKeyChecking accept-new\n"
-	path := filepath.Join(sshDir, "config")
-	if err := os.WriteFile(path, []byte(sshConfig), 0o600); err != nil {
-		log.Printf("session: write %s: %v", path, err)
-		return
-	}
-	if err := os.Chown(path, spawn.AgentUID, spawn.AgentGID); err != nil {
-		log.Printf("session: chown %s: %v", path, err)
-	}
-	// .ssh каталог — под агентом: ssh пишет в него known_hosts (accept-new).
-	if err := os.Chown(sshDir, spawn.AgentUID, spawn.AgentGID); err != nil {
-		log.Printf("session: chown %s: %v", sshDir, err)
 	}
 }
 
@@ -1119,7 +1229,7 @@ func (r *Registry) reviveACP(ctx context.Context, sess store.Session) (*live, er
 		}
 		return lv, nil
 	}
-	opts := r.acpLocalOptions(sess, token)
+	opts := r.acpLocalOptions(ctx, sess, token)
 	opts.ResumeSessionID = sess.AgentSessionID
 	client, err := acp.New(ctx, opts)
 	if err != nil {
@@ -1140,22 +1250,74 @@ func (r *Registry) reviveACP(ctx context.Context, sess store.Session) (*live, er
 // реплеит thread), а скиллы читаются заново. local — свежий subprocess; docker — повторный
 // Configure живого демона (контейнер не пересоздаётся). Во время генерации отказываем.
 func (r *Registry) ReloadAgent(ctx context.Context, sessionID, userID string) error {
+	lv, sess, err := r.reloadable(ctx, sessionID, userID)
+	if err != nil {
+		return err
+	}
+	return r.reinit(ctx, lv, sess)
+}
+
+// SetSessionMcpServers меняет набор MCP-серверов сессии. У ACP-сессии набор применяется
+// сразу — переинициализацией агента (session/load того же диалога: переписка сохраняется,
+// инструменты меняются). У CLI-сессии переписывается .mcp.json: `claude` читает его при
+// старте, поэтому новый набор подхватится при следующем запуске агента.
+//
+// Неразрешимая ссылка на секрет отвергается здесь, а не при следующем спавне: пользователь
+// у экрана и может починить конфиг.
+func (r *Registry) SetSessionMcpServers(ctx context.Context, sessionID, userID string, serverIDs []string) error {
+	sess, err := r.Get(ctx, sessionID, userID)
+	if err != nil {
+		return err
+	}
+	// Живой ACP-агент переинициализируется на месте — отказываем сразу, если он занят
+	// ходом, чтобы не сохранить набор, который не удастся применить.
+	var lv *live
+	if sess.Kind == store.SessionKindACP {
+		if lv, sess, err = r.reloadable(ctx, sessionID, userID); err != nil {
+			return err
+		}
+	}
+	if err := r.checkMcp(ctx, userID, serverIDs); err != nil {
+		return err
+	}
+	if err := r.store.UpdateSessionMcp(ctx, sessionID, serverIDs); err != nil {
+		return err
+	}
+	sess.McpServers = serverIDs
+	if lv == nil {
+		r.installMcpProject(ctx, sess)
+		return nil
+	}
+	return r.reinit(ctx, lv, sess)
+}
+
+// reloadable отдаёт живую ACP-сессию пользователя, готовую к переинициализации: чужая или
+// отсутствующая — ErrNotFound, генерирующая — ErrReloadWhileGenerating (переподнимать
+// адаптер посреди хода нельзя).
+func (r *Registry) reloadable(ctx context.Context, sessionID, userID string) (*live, store.Session, error) {
 	r.mu.Lock()
 	lv, ok := r.live[sessionID]
 	r.mu.Unlock()
 	if !ok || lv.owner != userID || lv.client == nil {
-		return store.ErrNotFound
+		return nil, store.Session{}, store.ErrNotFound
 	}
 	if gen, _ := lv.client.Status(); gen {
-		return ErrReloadWhileGenerating
+		return nil, store.Session{}, ErrReloadWhileGenerating
 	}
 	sess, err := r.store.GetSession(ctx, sessionID)
 	if err != nil {
-		return err
+		return nil, store.Session{}, err
 	}
+	return lv, sess, nil
+}
+
+// reinit переподнимает адаптер сессии с актуальными плагинами и MCP-серверами, сохраняя
+// диалог (session/load того же agent_session_id).
+func (r *Registry) reinit(ctx context.Context, lv *live, sess store.Session) error {
+	sessionID := sess.ID
 	// Обновляем файлы скиллов до реинициализации, чтобы свежая загрузка их прочитала.
 	r.installSkill(sess)
-	token := r.userClaudeToken(ctx, userID)
+	token := r.userClaudeToken(ctx, sess.UserID)
 
 	if sess.Mode == store.SessionModeDocker {
 		rc, ok := lv.client.(*acpremote.Client)
@@ -1169,7 +1331,7 @@ func (r *Registry) ReloadAgent(ctx context.Context, sessionID, userID string) er
 			ExtraEnv:        r.previewEnv(sess),
 			Cwd:             sess.Cwd,
 			ResumeSessionID: sess.AgentSessionID,
-			McpServers:      []acpsdk.McpServer{acp.BrigadeMCPServer()},
+			McpServers:      r.mcpServers(ctx, sess),
 			PluginDirs:      r.acpPluginDirs(sess),
 		}); err != nil {
 			return fmt.Errorf("session: reload acp daemon: %w", err)
@@ -1179,7 +1341,7 @@ func (r *Registry) ReloadAgent(ctx context.Context, sessionID, userID string) er
 
 	// local: переподнимаем subprocess-адаптер с resume — session/load читает свежие плагины из
 	// проектного settings.json (--setting-sources project). Новый клиент заменяет старый.
-	opts := r.acpLocalOptions(sess, token)
+	opts := r.acpLocalOptions(ctx, sess, token)
 	opts.ResumeSessionID = sess.AgentSessionID
 	client, err := acp.New(ctx, opts)
 	if err != nil {
@@ -1250,6 +1412,10 @@ func (r *Registry) Fork(ctx context.Context, sessionID, userID string) (store.Se
 		CreatedAt: time.Now(),
 		Name:      name + " · ветка",
 		ParentID:  src.ID,
+		// Ветка продолжает ту же работу — набор инструментов и образ наследуются от
+		// родителя.
+		McpServers: src.McpServers,
+		Image:      src.Image,
 	}
 	if err := r.store.CreateSession(ctx, sess); err != nil {
 		return store.Session{}, err
@@ -1270,7 +1436,7 @@ func (r *Registry) Fork(ctx context.Context, sessionID, userID string) (store.Se
 		}
 		lv, sid = l, s
 	} else {
-		opts := r.acpLocalOptions(sess, token)
+		opts := r.acpLocalOptions(ctx, sess, token)
 		opts.ForkFromSessionID = src.AgentSessionID
 		client, err := acp.New(context.WithoutCancel(ctx), opts)
 		if err != nil {
@@ -1632,7 +1798,7 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 		// PluginDirs обязателен и здесь (как в Create/ReloadAgent): session/load шлёт плагин-мета
 		// из него, иначе resume-агент не перечитает скиллы и оставит их из старого состояния
 		// сессии (напр. переименованный скилл не подхватится при рестарте brigade).
-		opts := r.acpLocalOptions(sess, token)
+		opts := r.acpLocalOptions(ctx, sess, token)
 		opts.ResumeSessionID = sess.AgentSessionID
 		client, err := acp.New(ctx, opts)
 		if err != nil {

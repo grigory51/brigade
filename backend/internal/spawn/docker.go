@@ -12,6 +12,8 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
+
+	"github.com/grigory51/brigade/backend/internal/agent"
 )
 
 // labelSessionID — ключ label, помечающий контейнер сессии brigade. По нему
@@ -32,8 +34,10 @@ const (
 // которого docker эскалирует до SIGKILL.
 const dockerStopTimeoutSeconds = 5
 
-// defaultImage — образ контейнера агента по умолчанию (если Spec.Image пуст).
-const defaultImage = "brigade/claude-agent:latest"
+// DefaultImage — образ контейнера агента по умолчанию: собирается локально из
+// docker/claude-agent/Dockerfile. Серверная инсталляция обычно переопределяет его
+// опубликованным образом (config: agent_image), десктопная — тянет его же из ghcr.
+const DefaultImage = "brigade/claude-agent:latest"
 
 // AgentUID/AgentGID — uid/gid пользователя agent в образе (зафиксированы в
 // docker/claude-agent/Dockerfile). brigade chown'ит персональный ~/.claude на них,
@@ -76,18 +80,28 @@ type DockerSpawner struct {
 	// selfHost — hostname, по которому агент обращается к API brigade: имя контейнера
 	// brigade в общей сети (self-container mode) либо "host.docker.internal" (host mode).
 	selfHost string
+	// baseImage — образ агента по умолчанию и донор runtime-слоёв (см. runtime.go).
+	baseImage string
+	// runtimeState — кеш подготовленных runtime-volume'ов (см. runtime.go).
+	runtimeState
 }
+
+// BaseImage — образ агента по умолчанию этого инстанса.
+func (s *DockerSpawner) BaseImage() string { return s.baseImage }
 
 // NewDockerSpawner создаёт DockerSpawner с клиентом Docker из окружения
 // (DOCKER_HOST и т. п.). Определяет собственную сеть brigade: если процесс работает
 // в docker-контейнере, контейнеры сессий будут спавниться в ту же сеть, чтобы агент
 // мог обратиться к API brigade по имени сервиса. Клиент следует закрыть через Close.
-func NewDockerSpawner() (*DockerSpawner, error) {
+func NewDockerSpawner(baseImage string) (*DockerSpawner, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, fmt.Errorf("spawn: docker client: %w", err)
 	}
-	s := &DockerSpawner{cli: cli, selfHost: "host.docker.internal"}
+	if baseImage == "" {
+		baseImage = DefaultImage
+	}
+	s := &DockerSpawner{cli: cli, baseImage: baseImage, selfHost: "host.docker.internal"}
 	s.detectSelfNetwork(context.Background())
 	return s, nil
 }
@@ -215,7 +229,7 @@ func (s *DockerSpawner) Reattach(context.Context, Persisted) (Handle, error) {
 // главный процесс — idle-якорь (sleep infinity), сессии живут exec'ами. Hostname и
 // bind home стабильны per-user — авторизация Claude переживает и сессии, и
 // пересоздание контейнера настолько, насколько её fingerprint опирается на них.
-func (s *DockerSpawner) ensureUserContainer(ctx context.Context, userID, image, homeHost, hostname, pubKey string) (string, error) {
+func (s *DockerSpawner) ensureUserContainer(ctx context.Context, userID, image, homeHost, hostname, pubKey string, layers []agent.Layer) (string, error) {
 	if id, state, err := s.findUserContainer(ctx, userID); err != nil {
 		return "", err
 	} else if id != "" {
@@ -226,7 +240,13 @@ func (s *DockerSpawner) ensureUserContainer(ctx context.Context, userID, image, 
 	}
 
 	if image == "" {
-		image = defaultImage
+		image = s.baseImage
+	}
+	// Компоненты brigade приезжают read-only volume'ами, а не берутся из образа (см.
+	// runtime.go): контейнер может быть построен на образе пользователя.
+	runtimeMounts, runtimePath, err := s.runtimeMounts(ctx, layers)
+	if err != nil {
+		return "", err
 	}
 	initProcess := true
 	daemonNatPort := nat.Port(fmt.Sprintf("%d/tcp", daemonPort))
@@ -235,16 +255,19 @@ func (s *DockerSpawner) ensureUserContainer(ctx context.Context, userID, image, 
 		// pid1 — per-user агент-демон brigade: CLI-сессии и вспом. шеллы он спавнит сам в pty
 		// (Terminal RPC), brigade ходит по Connect, а не docker-exec'ом. Контейнер общий на
 		// пользователя — логин claude (привязан к контейнеру) переживает несколько сессий.
-		Cmd:      []string{brigadeBinPath, "acp-agent"},
+		Cmd:      []string{daemonBinPath(), "acp-agent"},
+		User:     agentUser,
 		Hostname: hostname,
 		// Идентификатор демона (aud подписи) = userID: per-user демон обслуживает все CLI-сессии
 		// пользователя. Секретов в env нет — только публичный ключ.
-		Env: []string{
+		Env: sanitizedEnv([]string{
 			"BRIGADE_SESSION_ID=" + userID,
 			fmt.Sprintf("BRIGADE_DAEMON_PORT=%d", daemonPort),
 			"BRIGADE_DAEMON_PUBKEY=" + pubKey,
 			"BRIGADE_DAEMON_LOG=" + AgentHome + daemonLogDir + "/user-" + userID + "/events.jsonl",
-		},
+			"HOME=" + AgentHome,
+			"PATH=" + runtimePath + ":" + basePath,
+		}),
 		Labels: map[string]string{
 			labelUserID: userID,
 			labelKind:   labelKindCLIShare,
@@ -255,6 +278,7 @@ func (s *DockerSpawner) ensureUserContainer(ctx context.Context, userID, image, 
 		Init:        &initProcess,
 		ExtraHosts:  []string{"host.docker.internal:host-gateway"},
 		NetworkMode: s.netMode(),
+		Mounts:      runtimeMounts,
 		// Публикуем порт демона на 127.0.0.1:<эфемерный> для host-режима brigade (см. daemonAddrByID).
 		PortBindings: nat.PortMap{daemonNatPort: []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: ""}}},
 	}
@@ -283,7 +307,7 @@ func (s *DockerSpawner) ensureUserContainer(ctx context.Context, userID, image, 
 // сохраняет логин claude; CLI-сессии — durable-терминалы демона. pubKey — публичный ключ
 // brigade (asymmetric-auth). Вызывающий держит per-user лок (как прежняя shared-схема).
 func (s *DockerSpawner) EnsureUserDaemon(ctx context.Context, spec Spec, pubKey string) (string, error) {
-	id, err := s.ensureUserContainer(ctx, spec.UserID, spec.Image, spec.HomeHost, spec.Hostname, pubKey)
+	id, err := s.ensureUserContainer(ctx, spec.UserID, spec.Image, spec.HomeHost, spec.Hostname, pubKey, spec.Layers)
 	if err != nil {
 		return "", err
 	}

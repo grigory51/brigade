@@ -164,7 +164,38 @@ func (d *Daemon) setSSHKey(privatePEM string) error {
 		return err
 	}
 	d.ssh = a
+	writeSSHConfig(a.Path())
 	return nil
+}
+
+// writeSSHConfig раскладывает ~/.ssh/config в среде агента: путь к сокету ssh-agent и
+// приём хост-ключа при первом подключении. IdentityAgent дублирует SSH_AUTH_SOCK намеренно
+// — переменную окружения наследуют только процессы, порождённые демоном, а `ssh` может
+// запуститься из скрипта или сервиса с чистым окружением.
+//
+// Файл пишется здесь, а не кладётся brigade на хост: приватного ключа в нём нет, а среда
+// агента может быть чужим образом, куда каталог .ssh не монтируется.
+func writeSSHConfig(sockPath string) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		log.Printf("acpdaemon: ssh config: home: %v", err)
+		return
+	}
+	dir := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		log.Printf("acpdaemon: ssh config: mkdir: %v", err)
+		return
+	}
+	cfg := "Host *\n" +
+		"    IdentityAgent " + sockPath + "\n" +
+		"\n" +
+		"Host github.com\n" +
+		"    HostName github.com\n" +
+		"    User git\n" +
+		"    StrictHostKeyChecking accept-new\n"
+	if err := os.WriteFile(filepath.Join(dir, "config"), []byte(cfg), 0o600); err != nil {
+		log.Printf("acpdaemon: ssh config: write: %v", err)
+	}
 }
 
 // sshEnv — переменные окружения доступа к ssh-agent демона для порождаемых процессов

@@ -16,9 +16,9 @@ import (
 const (
 	// daemonPort — фиксированный порт Connect-сервера демона внутри контейнера сессии.
 	daemonPort = 8787
-	// brigadeBinPath — путь бинаря brigade в образе агента (COPY в Dockerfile); демон —
-	// это `brigade acp-agent`.
-	brigadeBinPath = "/usr/local/bin/brigade"
+	// basePath — системный PATH контейнера. Задаётся явно: при заполнении Env docker не
+	// склеивает его с PATH образа, а тот в чужом образе может быть каким угодно.
+	basePath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 	// daemonLogDir — базовый каталог durable-журналов демона в home (относительно AgentHome).
 	// Журнал кладётся в per-session подкаталог: home может быть per-user bind-mount
 	// (<claudeHomeDir>/<userID>, общий для сессий юзера), и без session id журналы
@@ -49,7 +49,7 @@ func (d *DockerACPSpawner) StartDaemon(ctx context.Context, spec Spec, stateID, 
 	cli := d.spawner.cli
 	image := spec.Image
 	if image == "" {
-		image = defaultImage
+		image = d.spawner.baseImage
 	}
 
 	// home НЕ монтируется целиком: bind'ятся отдельные подпути, чтобы сессия видела в
@@ -60,11 +60,20 @@ func (d *DockerACPSpawner) StartDaemon(ctx context.Context, spec Spec, stateID, 
 	// Прочие dotfiles (~/.gitconfig и т.п.) при этом эфемерны. Source-каталоги готовит
 	// registry.homeHost/provisionAgentSSH на хосте. Docker сам сортирует mount'ы по глубине
 	// target — вложенность корректна.
+	// Компоненты brigade (демон, node, адаптер, MCP-сервер) приезжают read-only
+	// volume'ами, а не берутся из образа: сессия может работать на образе пользователя, а
+	// демон, которому передаются секреты, остаётся нашим (см. runtime.go).
+	runtimeMounts, runtimePath, err := d.spawner.runtimeMounts(ctx, spec.Layers)
+	if err != nil {
+		return "", err
+	}
+
 	var mounts []mount.Mount
 	if spec.HomeHost != "" {
+		// .ssh не монтируется: приватный ключ живёт в ssh-agent демона, а ~/.ssh/config с
+		// путём к его сокету демон пишет сам внутри контейнера.
 		mounts = []mount.Mount{
 			{Type: mount.TypeBind, Source: spec.HomeHost + "/.claude", Target: AgentHome + "/.claude"},
-			{Type: mount.TypeBind, Source: spec.HomeHost + "/.ssh", Target: AgentHome + "/.ssh"},
 			{Type: mount.TypeBind, Source: spec.HomeHost + "/.brigade/" + spec.SessionID, Target: AgentHome + daemonLogDir + "/" + spec.SessionID},
 			{Type: mount.TypeBind, Source: spec.HomeHost + "/workspace/" + spec.SessionID, Target: ContainerWorkdir + "/" + spec.SessionID},
 		}
@@ -81,15 +90,21 @@ func (d *DockerACPSpawner) StartDaemon(ctx context.Context, spec Spec, stateID, 
 	daemonNatPort := nat.Port(fmt.Sprintf("%d/tcp", daemonPort))
 	cfg := &container.Config{
 		Image: image,
-		// pid1 контейнера — демон brigade; адаптер он спавнит сам (Configure).
-		Cmd: []string{brigadeBinPath, "acp-agent"},
+		// pid1 контейнера — демон brigade из runtime-слоя; адаптер он спавнит сам (Configure).
+		Cmd: []string{daemonBinPath(), "acp-agent"},
 		// Только несекретная конфигурация демона. Секреты (OAuth, preview-env) — в Configure.
-		Env: []string{
+		Env: sanitizedEnv([]string{
 			"BRIGADE_SESSION_ID=" + spec.SessionID,
 			fmt.Sprintf("BRIGADE_DAEMON_PORT=%d", daemonPort),
 			"BRIGADE_DAEMON_PUBKEY=" + pubKey,
 			"BRIGADE_DAEMON_LOG=" + AgentHome + daemonLogDir + "/" + spec.SessionID + "/acp-events.jsonl",
-		},
+			"HOME=" + AgentHome,
+			// PATH образа не наследуется автоматически при явном Env, поэтому склеиваем
+			// каталоги runtime с типовым системным PATH.
+			"PATH=" + runtimePath + ":" + basePath,
+		}),
+		// Пользователь задаётся числом: в чужом образе записи для этого uid может не быть.
+		User:         agentUser,
 		Hostname:     spec.Hostname,
 		WorkingDir:   specWorkdir(spec),
 		Labels:       map[string]string{labelSessionID: spec.SessionID},
@@ -101,7 +116,7 @@ func (d *DockerACPSpawner) StartDaemon(ctx context.Context, spec Spec, stateID, 
 		Init:        &initProcess,
 		ExtraHosts:  []string{"host.docker.internal:host-gateway"},
 		NetworkMode: d.spawner.netMode(),
-		Mounts:      mounts,
+		Mounts:      append(mounts, runtimeMounts...),
 		// Публикуем порт демона на 127.0.0.1:<эфемерный> — для host-режима brigade (процесс на
 		// хосте не достаёт bridge-IP контейнера). В container-режиме (brigade на общей сети)
 		// используется прямой IP:port (см. daemonAddr).

@@ -17,11 +17,13 @@ import (
 
 	"github.com/grigory51/brigade/backend/gen/go/brigade/v1/brigadev1connect"
 	"github.com/grigory51/brigade/backend/internal/acpdaemon"
+	"github.com/grigory51/brigade/backend/internal/agentimage"
 	"github.com/grigory51/brigade/backend/internal/auth"
 	"github.com/grigory51/brigade/backend/internal/config"
 	"github.com/grigory51/brigade/backend/internal/memory"
 	"github.com/grigory51/brigade/backend/internal/notify"
 	"github.com/grigory51/brigade/backend/internal/preview"
+	"github.com/grigory51/brigade/backend/internal/runtimecfg"
 	"github.com/grigory51/brigade/backend/internal/secret"
 	"github.com/grigory51/brigade/backend/internal/session"
 	"github.com/grigory51/brigade/backend/internal/spawn"
@@ -100,11 +102,31 @@ func runServer(configPath string) {
 	}
 	tickets := auth.NewTicketStore()
 
+	// Режим исполнения сессий: в серверной инсталляции — из конфига, в десктопной поверх
+	// него ложатся настройки из интерфейса (файл рядом с конфигом). Спавнер создаётся один
+	// раз, поэтому смена режима применяется перезапуском приложения.
+	runtimeStore := runtimecfg.NewStore(desktopRuntimePath)
+	dockerContext := applyRuntimeSettings(cfg, runtimeStore)
+	runtimeSvc := runtimecfg.NewService(runtimeStore, string(cfg.Mode), dockerContext, spawn.PingDocker)
+
 	// Спавнер выбирается по режиму инстанса (BRIGADE_MODE): local — pty в
 	// хост-процессе, docker — контейнер на сессию. Все сессии наследуют этот режим.
-	spawner, closeSpawner, err := buildSpawner(cfg.Mode)
+	spawner, closeSpawner, err := buildSpawner(cfg.Mode, cfg.AgentImage)
 	if err != nil {
-		log.Fatalf("brigade: spawner: %v", err)
+		// В десктопном приложении docker может быть не установлен или не запущен, а режим
+		// переключается из интерфейса. Падать нельзя: пользователь остался бы с
+		// незапускающимся приложением и без доступа к настройкам, чтобы вернуть local.
+		// Откатываемся, причину показывает раздел «Среда агента».
+		if !runtimeStore.Editable() {
+			log.Fatalf("brigade: spawner: %v", err)
+		}
+		log.Printf("brigade: docker недоступен (%v) — сессии идут локально", err)
+		cfg.Mode = config.ModeLocal
+		runtimeSvc.SetRunningMode(string(config.ModeLocal))
+		spawner, closeSpawner, err = buildSpawner(config.ModeLocal, cfg.AgentImage)
+		if err != nil {
+			log.Fatalf("brigade: spawner: %v", err)
+		}
 	}
 	defer closeSpawner()
 
@@ -122,6 +144,15 @@ func runServer(configPath string) {
 	// Персональные push-уведомления через ntfy: настройки (топик/токен/события) — из store
 	// per-user. Реестр вешает уведомление о завершении turn'а через этот сервис.
 	notifySvc := notify.New(st)
+
+	// Образы контейнера агента: пользователь может держать свои (со своими инструментами)
+	// и выбирать при создании сессии. Вне docker-режима спавнер не докерный — сервис
+	// отвечает «недоступно», а сессии идут на хостовом окружении.
+	var imageDocker agentimage.Docker
+	if ds, ok := spawner.(*spawn.DockerSpawner); ok {
+		imageDocker = ds
+	}
+	imagesSvc := agentimage.New(st, imageDocker, cfg.ImageQuotaBytes)
 
 	// Реестр живых сессий поверх store и спавнера. Режим фиксируется в каждой сессии;
 	// подписочный токен Claude берётся per-user из store при создании сессии.
@@ -145,7 +176,7 @@ func runServer(configPath string) {
 	// AcpService.ResolvePermission (доставляет решение) — создаётся здесь.
 	perms := aguitransport.NewPermissionStore()
 
-	authService := connectsvc.NewAuthService(authSvc, notifySvc, desktopMode)
+	authService := connectsvc.NewAuthService(authSvc, notifySvc, imagesSvc, runtimeSvc, desktopMode)
 	mux.Handle(brigadev1connect.NewAuthServiceHandler(authService, interceptors))
 	// Десктоп-режим: авто-логин сид-пользователя без экрана входа (локальный
 	// однопользовательский запуск). /desktop/auth ставит сессионные cookie и редиректит на SPA;
@@ -153,7 +184,7 @@ func runServer(configPath string) {
 	if desktopMode {
 		mux.HandleFunc("/desktop/auth", authService.DesktopLoginHandler(cfg.Seed.Username))
 	}
-	mux.Handle(brigadev1connect.NewSessionServiceHandler(connectsvc.NewSessionService(registry, tickets, previewSvc), interceptors))
+	mux.Handle(brigadev1connect.NewSessionServiceHandler(connectsvc.NewSessionService(registry, tickets, previewSvc, imagesSvc), interceptors))
 	mux.Handle(brigadev1connect.NewAgentServiceHandler(connectsvc.NewAgentService(), interceptors))
 	// AcpService — управляющие вызовы ACP-чата (история/статус/workflow/отмена/опции/
 	// permission-ответ). JWT-авторизация, как у прочих пользовательских сервисов.
@@ -162,6 +193,8 @@ func runServer(configPath string) {
 	mux.Handle(brigadev1connect.NewArchiveServiceHandler(connectsvc.NewArchiveService(registry), interceptors))
 	// MemoryService — личная память пользователя (список/чтение/создание заметок). JWT.
 	mux.Handle(brigadev1connect.NewMemoryServiceHandler(connectsvc.NewMemoryService(memorySvc), interceptors))
+	// McpService — персональные MCP-серверы и vault секретов для них. JWT.
+	mux.Handle(brigadev1connect.NewMcpServiceHandler(connectsvc.NewMcpService(st), interceptors))
 	// AgentBridgeService — вызовы ИЗ сессии (скилл в контейнере). БЕЗ JWT-интерсептора:
 	// авторизация — per-session HMAC-токен, проверяется в самом хендлере.
 	mux.Handle(brigadev1connect.NewAgentBridgeServiceHandler(connectsvc.NewAgentBridgeService(previewSvc, memorySvc, st)))
@@ -216,13 +249,45 @@ func runServer(configPath string) {
 	}
 }
 
+// applyRuntimeSettings накладывает настройки режима из интерфейса на конфиг и возвращает
+// применённый docker-контекст. В серверной инсталляции хранилище пустое — конфиг остаётся
+// как есть. Контекст превращается в DOCKER_HOST: docker-клиент читает его из окружения
+// (client.FromEnv), собственного механизма контекстов у библиотеки нет.
+func applyRuntimeSettings(cfg *config.Config, store *runtimecfg.Store) string {
+	if !store.Editable() {
+		return ""
+	}
+	settings, err := store.Read()
+	if err != nil {
+		log.Printf("brigade: настройки режима: %v", err)
+		return ""
+	}
+	if settings.Mode != "" {
+		cfg.Mode = config.Mode(settings.Mode)
+	}
+	if cfg.Mode != config.ModeDocker || settings.DockerContext == "" {
+		return ""
+	}
+	host := runtimecfg.DockerHost(settings.DockerContext)
+	if host == "" {
+		log.Printf("brigade: docker-контекст %q не найден — используется контекст по умолчанию", settings.DockerContext)
+		return ""
+	}
+	if err := os.Setenv("DOCKER_HOST", host); err != nil {
+		log.Printf("brigade: DOCKER_HOST: %v", err)
+		return ""
+	}
+	log.Printf("brigade: docker-контекст %s (%s)", settings.DockerContext, host)
+	return settings.DockerContext
+}
+
 // buildSpawner создаёт спавнер по режиму инстанса и возвращает функцию его остановки
 // (docker-клиент требует Close; local — no-op). Docker-режим проверяет достижимость
 // демона (Ping): недоступен → фатально, инстанс с mode=docker без docker бессмыслен.
-func buildSpawner(mode config.Mode) (spawn.Spawner, func(), error) {
+func buildSpawner(mode config.Mode, agentImage string) (spawn.Spawner, func(), error) {
 	switch mode {
 	case config.ModeDocker:
-		ds, err := spawn.NewDockerSpawner()
+		ds, err := spawn.NewDockerSpawner(agentImage)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -230,6 +295,14 @@ func buildSpawner(mode config.Mode) (spawn.Spawner, func(), error) {
 			_ = ds.Close()
 			return nil, nil, fmt.Errorf("docker daemon unreachable: %w", err)
 		}
+		// Базовый образ нужен и как среда сессии, и как донор runtime-слоёв. Тянем его в
+		// фоне: старт не должен ждать гигабайтную загрузку, а первая сессия дождётся сама
+		// (EnsureImage идемпотентен и вызывается на пути спавна).
+		go func() {
+			if _, err := ds.EnsureImage(context.Background(), ds.BaseImage()); err != nil {
+				log.Printf("brigade: образ агента %s недоступен: %v", ds.BaseImage(), err)
+			}
+		}()
 		return ds, func() { _ = ds.Close() }, nil
 	default:
 		return spawn.NewLocalSpawner(), func() {}, nil

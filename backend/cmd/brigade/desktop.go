@@ -28,6 +28,11 @@ const desktopAddr = "127.0.0.1:8787"
 // /desktop/auth). Выставляется runDesktop до старта сервера; в серверном режиме остаётся false.
 var desktopMode bool
 
+// desktopRuntimePath — файл настроек режима исполнения сессий (local|docker и
+// docker-контекст), который правится из интерфейса приложения. Пуст в серверной
+// инсталляции: там режим задаётся конфигом и из UI не меняется.
+var desktopRuntimePath string
+
 // runDesktop — точка входа подкоманды desktop.
 func runDesktop() {
 	appDir, err := desktopAppDir()
@@ -38,6 +43,9 @@ func runDesktop() {
 	if err := ensureDesktopConfig(appDir, cfgPath); err != nil {
 		log.Fatalf("brigade desktop: config: %v", err)
 	}
+	// Режим исполнения сессий правится из настроек приложения — отдельным файлом, чтобы не
+	// переписывать пользовательский config.yaml (и не терять его комментарии).
+	desktopRuntimePath = filepath.Join(appDir, "runtime.json")
 	enrichPATH()
 	prependBundledTools()
 
@@ -85,9 +93,12 @@ func ensureDesktopConfig(appDir, cfgPath string) error {
 		return err
 	}
 	yaml := fmt.Sprintf(`# Конфиг локального Brigade.app. Правьте под себя; секрет и пути стабильны.
-# Чтобы переключить режим на изоляцию в контейнерах — mode: docker (нужен запущенный Docker
-# Desktop) и перезапустите приложение.
+# Режим исполнения сессий (local | docker) переключается в приложении: Настройки → Среда
+# агента. Выбор хранится рядом, в runtime.json, и перекрывает mode отсюда.
 mode: local
+# Образ агента для docker-режима: опубликованный, локально его собирать не нужно —
+# brigade подтянет его сам при первом запуске в этом режиме.
+agent_image: "ghcr.io/grigory51/brigade-agent:latest"
 addr: %q
 sqlite_path: %q
 jwt:

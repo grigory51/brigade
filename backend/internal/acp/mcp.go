@@ -2,15 +2,14 @@ package acp
 
 import acpsdk "github.com/coder/acp-go-sdk"
 
-// ContainerMCPServerPath — путь к brigade MCP-серверу внутри образа агента
-// (docker/claude-agent, см. Dockerfile и mcp/brigade-tools.mjs). Сервер экспонирует
-// кастомные UI-инструменты (render_ui, show_choice) модели через stdio.
+// Сервер экспонирует кастомные UI-инструменты (render_ui, show_choice) модели через stdio.
+// Путь к скрипту в среде агента задаёт манифест агента (agent.Type.McpServerScript) —
+// сервер приезжает в контейнер runtime-слоем, а не берётся из образа сессии.
 //
 // Почему MCP, а не _meta: сток-адаптер @agentclientprotocol/claude-agent-acp игнорирует
 // кастомные meta-ключи, но пробрасывает ACP mcpServers в Claude Agent SDK; SDK стартует
 // этот сервер как stdio-subprocess внутри контейнера сессии. Это единственный канал,
 // которым brigade даёт модели вызываемые тулы.
-const ContainerMCPServerPath = "/opt/brigade-mcp/brigade-tools.mjs"
 
 // localMCPServerPath — путь к brigade-tools.mjs на ХОСТЕ для local/desktop-режима, где
 // контейнерного /opt/brigade-mcp нет. Задаётся при старте из desktop-обёртки по бандлу
@@ -23,20 +22,23 @@ var localMCPServerPath string
 // один раз при старте (до создания сессий), поэтому синхронизация не нужна.
 func SetLocalMCPServerPath(p string) { localMCPServerPath = p }
 
+// LocalMCPServerPath — хостовый путь к MCP-серверу (пусто, если не задан). Выбор между ним и
+// контейнерным путём делает реестр по режиму сессии: в desktop оба варианта задаются
+// одновременно, но хостовый путь внутри контейнера не существует.
+func LocalMCPServerPath() string { return localMCPServerPath }
+
 // BrigadeMCPServer собирает конфиг stdio MCP-сервера brigade для session/new (и load/fork).
 // Имя "brigade" задаёт префикс имён инструментов — модель видит mcp__brigade__render_ui, по
 // нему их и матчит web-клиент (см. ToolFallback). Stdio-транспорт обязан поддерживаться
-// всеми ACP-агентами (в отличие от http/sse, зависящих от capability). Путь к скрипту — по
-// режиму: local/desktop (localMCPServerPath) либо контейнерный (docker) по умолчанию.
-func BrigadeMCPServer() acpsdk.McpServer {
-	path := ContainerMCPServerPath
-	if localMCPServerPath != "" {
-		path = localMCPServerPath
-	}
+// всеми ACP-агентами (в отличие от http/sse, зависящих от capability).
+//
+// script — путь к скрипту в среде агента: контейнерный (runtime-слой) либо хостовый
+// (local/desktop, см. LocalMCPServerPath). Выбирает его вызывающий по режиму сессии.
+func BrigadeMCPServer(script string) acpsdk.McpServer {
 	return acpsdk.McpServer{Stdio: &acpsdk.McpServerStdio{
 		Name:    "brigade",
 		Command: "node",
-		Args:    []string{path},
+		Args:    []string{script},
 		Env:     []acpsdk.EnvVariable{},
 	}}
 }
@@ -71,13 +73,23 @@ func pluginsMeta(pluginDirs []string) map[string]any {
 }
 
 // toUnstableMcpServers оборачивает стабильные McpServer в unstable-вариант для session/fork.
-// brigade использует только stdio-транспорт (тип McpServerStdio общий для обоих вариантов);
-// http/sse-поля unstable-типа несовместимы со стабильными и не переносятся — они не
-// используются.
+// Stdio-тип общий для обоих вариантов, http/sse описаны отдельными (структурно совпадающими)
+// типами — переносим поле в поле, иначе ветка теряет пользовательские http/sse-серверы.
 func toUnstableMcpServers(servers []acpsdk.McpServer) []acpsdk.UnstableMcpServer {
 	out := make([]acpsdk.UnstableMcpServer, 0, len(servers))
 	for _, s := range servers {
-		out = append(out, acpsdk.UnstableMcpServer{Stdio: s.Stdio})
+		u := acpsdk.UnstableMcpServer{Stdio: s.Stdio}
+		if s.Http != nil {
+			u.Http = &acpsdk.UnstableMcpServerHttp{
+				Name: s.Http.Name, Url: s.Http.Url, Headers: s.Http.Headers, Type: "http",
+			}
+		}
+		if s.Sse != nil {
+			u.Sse = &acpsdk.UnstableMcpServerSse{
+				Name: s.Sse.Name, Url: s.Sse.Url, Headers: s.Sse.Headers, Type: "sse",
+			}
+		}
+		out = append(out, u)
 	}
 	return out
 }

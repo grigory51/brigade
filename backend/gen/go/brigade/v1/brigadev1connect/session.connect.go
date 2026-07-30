@@ -50,6 +50,9 @@ const (
 	// SessionServiceReloadAgentProcedure is the fully-qualified name of the SessionService's
 	// ReloadAgent RPC.
 	SessionServiceReloadAgentProcedure = "/brigade.v1.SessionService/ReloadAgent"
+	// SessionServiceSetSessionMcpServersProcedure is the fully-qualified name of the SessionService's
+	// SetSessionMcpServers RPC.
+	SessionServiceSetSessionMcpServersProcedure = "/brigade.v1.SessionService/SetSessionMcpServers"
 	// SessionServiceArchiveProcedure is the fully-qualified name of the SessionService's Archive RPC.
 	SessionServiceArchiveProcedure = "/brigade.v1.SessionService/Archive"
 	// SessionServiceIssueStreamTicketProcedure is the fully-qualified name of the SessionService's
@@ -76,6 +79,9 @@ type SessionServiceClient interface {
 	// подхватить обновлённые скиллы/плагины без пересоздания сессии. Только ACP; не во время
 	// генерации.
 	ReloadAgent(context.Context, *connect.Request[v1.ReloadAgentRequest]) (*connect.Response[v1.Empty], error)
+	// SetSessionMcpServers меняет набор MCP-серверов ACP-сессии и применяет его
+	// переинициализацией агента. Не во время генерации.
+	SetSessionMcpServers(context.Context, *connect.Request[v1.SetSessionMcpServersRequest]) (*connect.Response[v1.Empty], error)
 	// Archive переносит сессию в архив (recap + снимок истории + остановка контейнера).
 	// Чтение архива (список, история) — в отдельном ArchiveService.
 	Archive(context.Context, *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error)
@@ -146,6 +152,12 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(sessionServiceMethods.ByName("ReloadAgent")),
 			connect.WithClientOptions(opts...),
 		),
+		setSessionMcpServers: connect.NewClient[v1.SetSessionMcpServersRequest, v1.Empty](
+			httpClient,
+			baseURL+SessionServiceSetSessionMcpServersProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("SetSessionMcpServers")),
+			connect.WithClientOptions(opts...),
+		),
 		archive: connect.NewClient[v1.ArchiveSessionRequest, v1.ArchiveSessionResponse](
 			httpClient,
 			baseURL+SessionServiceArchiveProcedure,
@@ -175,18 +187,19 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 
 // sessionServiceClient implements SessionServiceClient.
 type sessionServiceClient struct {
-	create            *connect.Client[v1.CreateSessionRequest, v1.CreateSessionResponse]
-	list              *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
-	get               *connect.Client[v1.GetSessionRequest, v1.GetSessionResponse]
-	update            *connect.Client[v1.UpdateSessionRequest, v1.UpdateSessionResponse]
-	fork              *connect.Client[v1.ForkSessionRequest, v1.ForkSessionResponse]
-	stop              *connect.Client[v1.StopSessionRequest, v1.Empty]
-	delete            *connect.Client[v1.DeleteSessionRequest, v1.Empty]
-	reloadAgent       *connect.Client[v1.ReloadAgentRequest, v1.Empty]
-	archive           *connect.Client[v1.ArchiveSessionRequest, v1.ArchiveSessionResponse]
-	issueStreamTicket *connect.Client[v1.IssueStreamTicketRequest, v1.IssueStreamTicketResponse]
-	listPreviews      *connect.Client[v1.ListPreviewsRequest, v1.ListPreviewsResponse]
-	uploadFile        *connect.Client[v1.UploadFileRequest, v1.UploadFileResponse]
+	create               *connect.Client[v1.CreateSessionRequest, v1.CreateSessionResponse]
+	list                 *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
+	get                  *connect.Client[v1.GetSessionRequest, v1.GetSessionResponse]
+	update               *connect.Client[v1.UpdateSessionRequest, v1.UpdateSessionResponse]
+	fork                 *connect.Client[v1.ForkSessionRequest, v1.ForkSessionResponse]
+	stop                 *connect.Client[v1.StopSessionRequest, v1.Empty]
+	delete               *connect.Client[v1.DeleteSessionRequest, v1.Empty]
+	reloadAgent          *connect.Client[v1.ReloadAgentRequest, v1.Empty]
+	setSessionMcpServers *connect.Client[v1.SetSessionMcpServersRequest, v1.Empty]
+	archive              *connect.Client[v1.ArchiveSessionRequest, v1.ArchiveSessionResponse]
+	issueStreamTicket    *connect.Client[v1.IssueStreamTicketRequest, v1.IssueStreamTicketResponse]
+	listPreviews         *connect.Client[v1.ListPreviewsRequest, v1.ListPreviewsResponse]
+	uploadFile           *connect.Client[v1.UploadFileRequest, v1.UploadFileResponse]
 }
 
 // Create calls brigade.v1.SessionService.Create.
@@ -229,6 +242,11 @@ func (c *sessionServiceClient) ReloadAgent(ctx context.Context, req *connect.Req
 	return c.reloadAgent.CallUnary(ctx, req)
 }
 
+// SetSessionMcpServers calls brigade.v1.SessionService.SetSessionMcpServers.
+func (c *sessionServiceClient) SetSessionMcpServers(ctx context.Context, req *connect.Request[v1.SetSessionMcpServersRequest]) (*connect.Response[v1.Empty], error) {
+	return c.setSessionMcpServers.CallUnary(ctx, req)
+}
+
 // Archive calls brigade.v1.SessionService.Archive.
 func (c *sessionServiceClient) Archive(ctx context.Context, req *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error) {
 	return c.archive.CallUnary(ctx, req)
@@ -262,6 +280,9 @@ type SessionServiceHandler interface {
 	// подхватить обновлённые скиллы/плагины без пересоздания сессии. Только ACP; не во время
 	// генерации.
 	ReloadAgent(context.Context, *connect.Request[v1.ReloadAgentRequest]) (*connect.Response[v1.Empty], error)
+	// SetSessionMcpServers меняет набор MCP-серверов ACP-сессии и применяет его
+	// переинициализацией агента. Не во время генерации.
+	SetSessionMcpServers(context.Context, *connect.Request[v1.SetSessionMcpServersRequest]) (*connect.Response[v1.Empty], error)
 	// Archive переносит сессию в архив (recap + снимок истории + остановка контейнера).
 	// Чтение архива (список, история) — в отдельном ArchiveService.
 	Archive(context.Context, *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error)
@@ -328,6 +349,12 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		connect.WithSchema(sessionServiceMethods.ByName("ReloadAgent")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sessionServiceSetSessionMcpServersHandler := connect.NewUnaryHandler(
+		SessionServiceSetSessionMcpServersProcedure,
+		svc.SetSessionMcpServers,
+		connect.WithSchema(sessionServiceMethods.ByName("SetSessionMcpServers")),
+		connect.WithHandlerOptions(opts...),
+	)
 	sessionServiceArchiveHandler := connect.NewUnaryHandler(
 		SessionServiceArchiveProcedure,
 		svc.Archive,
@@ -370,6 +397,8 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 			sessionServiceDeleteHandler.ServeHTTP(w, r)
 		case SessionServiceReloadAgentProcedure:
 			sessionServiceReloadAgentHandler.ServeHTTP(w, r)
+		case SessionServiceSetSessionMcpServersProcedure:
+			sessionServiceSetSessionMcpServersHandler.ServeHTTP(w, r)
 		case SessionServiceArchiveProcedure:
 			sessionServiceArchiveHandler.ServeHTTP(w, r)
 		case SessionServiceIssueStreamTicketProcedure:
@@ -417,6 +446,10 @@ func (UnimplementedSessionServiceHandler) Delete(context.Context, *connect.Reque
 
 func (UnimplementedSessionServiceHandler) ReloadAgent(context.Context, *connect.Request[v1.ReloadAgentRequest]) (*connect.Response[v1.Empty], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.ReloadAgent is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) SetSessionMcpServers(context.Context, *connect.Request[v1.SetSessionMcpServersRequest]) (*connect.Response[v1.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.SetSessionMcpServers is not implemented"))
 }
 
 func (UnimplementedSessionServiceHandler) Archive(context.Context, *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error) {

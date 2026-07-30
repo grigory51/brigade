@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
+	"github.com/grigory51/brigade/backend/internal/agentimage"
 	"github.com/grigory51/brigade/backend/internal/auth"
 	"github.com/grigory51/brigade/backend/internal/preview"
 	"github.com/grigory51/brigade/backend/internal/session"
@@ -20,11 +21,13 @@ type SessionService struct {
 	registry *session.Registry
 	tickets  *auth.TicketStore
 	previews *preview.Service
+	images   *agentimage.Service
 }
 
-// NewSessionService собирает реализацию SessionService.
-func NewSessionService(registry *session.Registry, tickets *auth.TicketStore, previews *preview.Service) *SessionService {
-	return &SessionService{registry: registry, tickets: tickets, previews: previews}
+// NewSessionService собирает реализацию SessionService. images проверяет, что выбранный
+// образ принадлежит пользователю.
+func NewSessionService(registry *session.Registry, tickets *auth.TicketStore, previews *preview.Service, images *agentimage.Service) *SessionService {
+	return &SessionService{registry: registry, tickets: tickets, previews: previews, images: images}
 }
 
 // Create создаёт сессию для аутентифицированного пользователя и спавнит агента.
@@ -34,9 +37,16 @@ func (s *SessionService) Create(ctx context.Context, req *connect.Request[v1.Cre
 		return nil, err
 	}
 
+	// Образ берётся только из списка пользователя: иначе Create поднял бы контейнер на
+	// произвольном образе в обход квоты и проверки совместимости.
+	image, err := s.images.Resolve(ctx, userID, req.Msg.Image)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+
 	sess, err := s.registry.Create(ctx, userID,
 		kindFromProto(req.Msg.Kind),
-		req.Msg.AgentType, req.Msg.Cwd, req.Msg.Prompt)
+		req.Msg.AgentType, req.Msg.Cwd, req.Msg.Prompt, req.Msg.McpServerIds, image)
 	if err != nil {
 		if errors.Is(err, session.ErrClaudeTokenRequired) {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
@@ -133,6 +143,19 @@ func (s *SessionService) ReloadAgent(ctx context.Context, req *connect.Request[v
 		return nil, err
 	}
 	if err := s.registry.ReloadAgent(ctx, req.Msg.SessionId, userID); err != nil {
+		return nil, sessionError(err)
+	}
+	return connect.NewResponse(&v1.Empty{}), nil
+}
+
+// SetSessionMcpServers меняет набор MCP-серверов ACP-сессии и применяет его
+// переинициализацией агента.
+func (s *SessionService) SetSessionMcpServers(ctx context.Context, req *connect.Request[v1.SetSessionMcpServersRequest]) (*connect.Response[v1.Empty], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.registry.SetSessionMcpServers(ctx, req.Msg.SessionId, userID, req.Msg.McpServerIds); err != nil {
 		return nil, sessionError(err)
 	}
 	return connect.NewResponse(&v1.Empty{}), nil

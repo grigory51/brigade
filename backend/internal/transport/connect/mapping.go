@@ -71,6 +71,8 @@ func sessionToProto(s store.Session) *v1.Session {
 		CreatedAt:      s.CreatedAt.Unix(),
 		Name:           s.Name,
 		ParentId:       s.ParentID,
+		McpServerIds:   s.McpServers,
+		Image:          s.Image,
 	}
 }
 

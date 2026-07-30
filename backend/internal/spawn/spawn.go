@@ -16,6 +16,8 @@ package spawn
 import (
 	"context"
 	"io"
+
+	"github.com/grigory51/brigade/backend/internal/agent"
 )
 
 // Spec описывает параметры первичного запуска агента.
@@ -44,8 +46,18 @@ type Spec struct {
 	Env []string
 
 	// Image — образ контейнера (только docker-режим). Если пусто, используется
-	// значение по умолчанию реализации.
+	// значение по умолчанию реализации. Может быть образом пользователя — компоненты
+	// brigade в него приезжают отдельно (см. Layers).
 	Image string
+
+	// Layers — компоненты runtime brigade, которые монтируются в контейнер read-only
+	// (демон, node, CLI/адаптер, MCP-сервер). Состав задаёт манифест агента
+	// (agent.Type.LayersFor) и зависит от вида сессии.
+	Layers []agent.Layer
+
+	// Command — исполняемый файл агента (манифест: agent.Type.CommandFor). Пусто —
+	// дефолт реализации.
+	Command string
 
 	// HomeHost — путь на хосте к персональному home пользователя
 	// (<claude_home_dir>/<userID>), bind-mount'ится в /home/agent контейнера целиком.
@@ -83,6 +95,9 @@ type Persisted struct {
 	Cwd   string
 	Env   []string
 	Image string
+
+	// Command — исполняемый файл агента (манифест агента); пусто — дефолт реализации.
+	Command string
 
 	// UserID, HomeHost, Hostname — параметры общего per-user контейнера (docker CLI,
 	// shared-схема): по UserID контейнер находится/пересоздаётся, HomeHost/Hostname

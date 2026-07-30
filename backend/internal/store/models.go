@@ -54,6 +54,9 @@ type UserSettings struct {
 	NtfyTopic  string
 	NtfyToken  string
 	NtfyEvents string
+	// AgentImages — образы контейнеров агента, доступные пользователю при создании сессии.
+	// В БД лежат JSON-массивом.
+	AgentImages []string
 }
 
 // Session — сессия агента. Поля agent_session_id и container_label несут
@@ -74,4 +77,47 @@ type Session struct {
 	Name string
 	// ParentID — сессия-родитель для веток (Fork). Пустое — корневая сессия.
 	ParentID string
+	// McpServers — идентификаторы MCP-серверов пользователя, включённых в этой сессии
+	// (только ACP). В БД лежат CSV-строкой.
+	McpServers []string
+	// Image — образ контейнера сессии (docker-режим). Пусто — базовый образ brigade.
+	Image string
+}
+
+// McpTransport — способ связи агента с MCP-сервером.
+type McpTransport string
+
+const (
+	McpTransportStdio McpTransport = "stdio"
+	McpTransportHTTP  McpTransport = "http"
+	McpTransportSSE   McpTransport = "sse"
+)
+
+// McpKeyValue — переменная окружения (stdio) или HTTP-заголовок (http|sse). Value — либо
+// литерал, либо ссылка "${secret.NAME}" на секрет пользователя (см. UserSecret).
+type McpKeyValue struct {
+	Name  string
+	Value string
+}
+
+// McpServer — персональный MCP-сервер пользователя. Заполнены поля своего транспорта:
+// stdio — Command/Args/Env, http|sse — URL/Headers.
+type McpServer struct {
+	ID        string
+	UserID    string
+	Name      string
+	Transport McpTransport
+	Command   string
+	Args      []string
+	Env       []McpKeyValue
+	URL       string
+	Headers   []McpKeyValue
+	CreatedAt time.Time
+}
+
+// UserSecret — запись vault без значения: наружу отдаются только имя и время изменения.
+// Значения читает лишь сервер, собирая конфиг MCP (см. Store.SecretValues).
+type UserSecret struct {
+	Name      string
+	UpdatedAt time.Time
 }

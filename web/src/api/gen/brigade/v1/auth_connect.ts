@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ClaudeSettings, Empty, LoginRequest, LoginResponse, MemorySettings, NtfySettings, RefreshRequest, RefreshResponse, ServerInfo, SetClaudeTokenRequest, SetMemorySettingsRequest, SetNtfySettingsRequest, SSHSettings, User } from "./auth_pb.js";
+import { AgentImagesSettings, AgentRuntimeSettings, ClaudeSettings, Empty, LoginRequest, LoginResponse, MemorySettings, NtfySettings, RefreshRequest, RefreshResponse, ServerInfo, SetAgentImagesRequest, SetAgentRuntimeRequest, SetClaudeTokenRequest, SetMemorySettingsRequest, SetNtfySettingsRequest, SSHSettings, User } from "./auth_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -131,6 +131,53 @@ export const AuthService = {
       name: "SetNtfySettings",
       I: SetNtfySettingsRequest,
       O: NtfySettings,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * GetAgentRuntime возвращает режим исполнения сессий (local|docker), доступные
+     * docker-контексты и признак «нужен перезапуск».
+     *
+     * @generated from rpc brigade.v1.AuthService.GetAgentRuntime
+     */
+    getAgentRuntime: {
+      name: "GetAgentRuntime",
+      I: Empty,
+      O: AgentRuntimeSettings,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * SetAgentRuntime задаёт режим и docker-контекст (только десктопная инсталляция).
+     *
+     * @generated from rpc brigade.v1.AuthService.SetAgentRuntime
+     */
+    setAgentRuntime: {
+      name: "SetAgentRuntime",
+      I: SetAgentRuntimeRequest,
+      O: AgentRuntimeSettings,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * GetAgentImages возвращает образы контейнеров агента пользователя, базовый образ и
+     * состояние квоты.
+     *
+     * @generated from rpc brigade.v1.AuthService.GetAgentImages
+     */
+    getAgentImages: {
+      name: "GetAgentImages",
+      I: Empty,
+      O: AgentImagesSettings,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * SetAgentImages перезаписывает список образов пользователя. Образ, который не удалось
+     * подтянуть, не пригоден для сессий или не влезает в квоту, отклоняет весь запрос.
+     *
+     * @generated from rpc brigade.v1.AuthService.SetAgentImages
+     */
+    setAgentImages: {
+      name: "SetAgentImages",
+      I: SetAgentImagesRequest,
+      O: AgentImagesSettings,
       kind: MethodKind.Unary,
     },
     /**

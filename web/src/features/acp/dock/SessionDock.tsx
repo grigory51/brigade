@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState, type ComponentType } from "react";
-import { Link2, SquareTerminal } from "lucide-react";
+import { Link2, Plug, SquareTerminal } from "lucide-react";
 import { useAuiState } from "@assistant-ui/react";
+import { sessionClient } from "@/api/client";
 import { usePreviews } from "@/features/sessions/PreviewLinks";
 import { cn } from "@/lib/utils";
 import { extractLinks } from "./links";
 import { LinksWindow } from "./LinksWindow";
+import { McpWindow } from "./McpWindow";
 import { MsgNav } from "./MsgNav";
 import { TerminalWindow } from "./TerminalWindow";
 
@@ -41,10 +43,28 @@ export function SessionDock({
   // работают как обычно, терминал и dev-серверы недоступны — их некому обслуживать.
   readonly?: boolean;
 }) {
-  const [panel, setPanel] = useState<"" | "links">("");
+  const [panel, setPanel] = useState<"" | "links" | "mcp">("");
   const [terminal, setTerminal] = useState(loadTerminalOpen);
   const messages = useAuiState((s) => s.thread.messages);
   const previews = usePreviews(readonly ? "" : sessionId);
+  // Набор MCP-серверов сессии: нужен чипу для счётчика и окну как исходное состояние.
+  const [mcpEnabled, setMcpEnabled] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (readonly) return;
+    let cancelled = false;
+    sessionClient
+      .get({ sessionId })
+      .then((res) => {
+        if (!cancelled) setMcpEnabled(res.session?.mcpServerIds ?? []);
+      })
+      .catch(() => {
+        // Набор не загрузился — чип покажет ноль, окно откроет актуальный список сам.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, readonly]);
 
   useEffect(() => {
     try {
@@ -79,6 +99,18 @@ export function SessionDock({
         </Chip>
         {!readonly && (
           <Chip
+            icon={Plug}
+            label="MCP"
+            active={panel === "mcp"}
+            onClick={() => setPanel((p) => (p === "mcp" ? "" : "mcp"))}
+          >
+            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-lg bg-secondary px-1 text-[10px] text-muted-foreground">
+              {mcpEnabled.length}
+            </span>
+          </Chip>
+        )}
+        {!readonly && (
+          <Chip
             icon={SquareTerminal}
             label="Терминал"
             active={terminal}
@@ -98,6 +130,15 @@ export function SessionDock({
         <LinksWindow
           links={links}
           previews={previews}
+          onClose={() => setPanel("")}
+        />
+      )}
+
+      {panel === "mcp" && !readonly && (
+        <McpWindow
+          sessionId={sessionId}
+          enabled={mcpEnabled}
+          onApplied={setMcpEnabled}
           onClose={() => setPanel("")}
         />
       )}

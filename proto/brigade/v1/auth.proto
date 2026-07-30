@@ -85,6 +85,64 @@ message SSHSettings {
   string public_key = 1;
 }
 
+// DockerContext — контекст docker CLI на машине (docker context ls): имя и адрес демона.
+message DockerContext {
+  string name = 1;
+  string host = 2;
+  // current — контекст, выбранный в самом docker CLI (`docker context use`).
+  bool current = 3;
+}
+
+// AgentRuntimeSettings — режим исполнения сессий и подключение к докеру.
+//
+// В серверной инсталляции режим задан конфигом: editable=false, клиент только показывает
+// его. В десктопном приложении режим правится из интерфейса и применяется перезапуском
+// приложения — до него mode отличается от running_mode, и restart_required=true.
+message AgentRuntimeSettings {
+  string mode = 1;
+  string running_mode = 2;
+  string docker_context = 3;
+  string running_context = 4;
+  bool editable = 5;
+  bool restart_required = 6;
+  repeated DockerContext contexts = 7;
+  // docker_error — почему docker недоступен (пусто — доступен): демон не установлен, не
+  // запущен либо выбранный контекст не отвечает. Если инстанс поднимался в docker-режиме и
+  // не смог, running_mode будет local, а здесь — причина.
+  string docker_error = 8;
+}
+
+// SetAgentRuntimeRequest — новый режим и (для docker) контекст. Доступен только там, где
+// настройки редактируемы.
+message SetAgentRuntimeRequest {
+  string mode = 1;
+  string docker_context = 2;
+}
+
+// AgentImage — образ контейнера агента в списке пользователя. size_bytes — вес образа за
+// вычетом слоёв, общих с другими его образами (реальный прирост занятого места).
+message AgentImage {
+  string image = 1;
+  int64 size_bytes = 2;
+}
+
+// AgentImagesSettings — образы контейнеров агента, доступные пользователю при создании
+// сессии, и состояние квоты. default_image — базовый образ brigade (подставляется, когда
+// пользователь не выбрал свой).
+message AgentImagesSettings {
+  repeated AgentImage images = 1;
+  string default_image = 2;
+  int64 used_bytes = 3;
+  int64 quota_bytes = 4;
+}
+
+// SetAgentImagesRequest — новый список образов (перезаписывается целиком). Каждый образ
+// проверяется: подтягивается при отсутствии, проверяется на пригодность для сессий и на
+// квоту.
+message SetAgentImagesRequest {
+  repeated string images = 1;
+}
+
 // ServerInfo — режим работы сервера, от которого зависит интерфейс клиента.
 // desktop=true у локального однопользовательского запуска (`brigade desktop`): там
 // авто-логин сид-пользователя, поэтому ни входа, ни выхода, ни смены пользователя нет.
@@ -117,6 +175,17 @@ service AuthService {
   // SetNtfySettings задаёт server/topic/token/events персональных ntfy-уведомлений.
   // Возвращает обновлённое состояние.
   rpc SetNtfySettings(SetNtfySettingsRequest) returns (NtfySettings) {}
+  // GetAgentRuntime возвращает режим исполнения сессий (local|docker), доступные
+  // docker-контексты и признак «нужен перезапуск».
+  rpc GetAgentRuntime(Empty) returns (AgentRuntimeSettings) {}
+  // SetAgentRuntime задаёт режим и docker-контекст (только десктопная инсталляция).
+  rpc SetAgentRuntime(SetAgentRuntimeRequest) returns (AgentRuntimeSettings) {}
+  // GetAgentImages возвращает образы контейнеров агента пользователя, базовый образ и
+  // состояние квоты.
+  rpc GetAgentImages(Empty) returns (AgentImagesSettings) {}
+  // SetAgentImages перезаписывает список образов пользователя. Образ, который не удалось
+  // подтянуть, не пригоден для сессий или не влезает в квоту, отклоняет весь запрос.
+  rpc SetAgentImages(SetAgentImagesRequest) returns (AgentImagesSettings) {}
   // TestNtfy шлёт пробное уведомление по СОХРАНЁННЫМ настройкам пользователя: проверка
   // топика/сервера/токена из UI. Ошибка доставки возвращается вызывающему — иначе
   // неверные настройки обнаруживались бы только по молчанию в реальной сессии.

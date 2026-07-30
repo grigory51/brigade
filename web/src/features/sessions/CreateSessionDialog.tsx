@@ -2,10 +2,18 @@ import { useEffect, useState } from "react";
 import { ConnectError } from "@connectrpc/connect";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { agentClient, authClient, sessionClient } from "@/api/client";
+import {
+  agentClient,
+  authClient,
+  mcpClient,
+  sessionClient,
+} from "@/api/client";
 import { AgentType } from "@/api/gen/brigade/v1/agent_pb";
+import type { AgentImagesSettings } from "@/api/gen/brigade/v1/auth_pb";
+import { McpServer } from "@/api/gen/brigade/v1/mcp_pb";
 import { Session, SessionKind } from "@/api/gen/brigade/v1/session_pb";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +30,34 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+// Набор MCP-серверов и образ последнего запуска. Хранятся локально, а не на сервере: это
+// удобство ввода, а не настройка пользователя.
+const MCP_SELECTION_KEY = "brigade.mcp.lastSelection";
+const IMAGE_KEY = "brigade.session.lastImage";
+
+// BASE_IMAGE — значение пункта «Базовый образ» в селекте. Отдельный маркер нужен потому,
+// что пустое значение у пункта Radix Select запрещено, а серверу базовый образ передаётся
+// именно пустой строкой.
+const BASE_IMAGE = "__base__";
+
+function loadMcpSelection(): string[] {
+  try {
+    const raw = localStorage.getItem(MCP_SELECTION_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? (parsed as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveMcpSelection(ids: string[]) {
+  try {
+    localStorage.setItem(MCP_SELECTION_KEY, JSON.stringify(ids));
+  } catch {
+    // Приватный режим/переполнение — выбор просто не переживёт перезагрузку.
+  }
+}
 
 export function CreateSessionDialog({
   open,
@@ -40,6 +76,15 @@ export function CreateSessionDialog({
   // (non-interactive), поэтому без токена не поднимется — ACP-опцию дизейблим. CLI
   // же можно авторизовать вручную в терминале (/login), поэтому доступен всегда.
   const [tokenSet, setTokenSet] = useState<boolean | null>(null);
+  // MCP-серверы пользователя и выбранный набор. Выбор помнится между запусками: набор
+  // инструментов у человека обычно постоянный, отмечать его заново каждый раз незачем.
+  const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
+  const [mcpSelected, setMcpSelected] = useState<string[]>(loadMcpSelection);
+  // Образы контейнера агента: пустой выбор — базовый образ brigade.
+  const [images, setImages] = useState<AgentImagesSettings | null>(null);
+  const [image, setImage] = useState<string>(
+    () => localStorage.getItem(IMAGE_KEY) ?? "",
+  );
 
   // Список типов агентов подгружается один раз при первом открытии диалога.
   // Режим взаимодействия (kind) выбирается независимо от агента, поэтому при
@@ -83,6 +128,49 @@ export function CreateSessionDialog({
     };
   }, [open]);
 
+  // Список MCP-серверов перечитывается при открытии: он мог измениться в настройках.
+  // Удалённые серверы вычищаются из запомненного выбора.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    mcpClient
+      .listServers({})
+      .then((res) => {
+        if (cancelled) return;
+        setMcpServers(res.servers);
+        const alive = new Set(res.servers.map((s) => s.id));
+        setMcpSelected((prev) => prev.filter((id) => alive.has(id)));
+      })
+      .catch(() => {
+        if (!cancelled) setMcpServers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  // Образы перечитываются при открытии (могли измениться в настройках). Удалённый образ
+  // не должен остаться выбранным — откатываемся на базовый.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    authClient
+      .getAgentImages({})
+      .then((res) => {
+        if (cancelled) return;
+        setImages(res);
+        setImage((prev) =>
+          prev && !res.images.some((i) => i.image === prev) ? "" : prev,
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setImages(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
   // Если токен не задан, а выбран ACP (например, статус догрузился после выбора) —
   // откатываем на CLI, чтобы нельзя было создать заведомо нерабочую ACP-сессию.
   useEffect(() => {
@@ -95,10 +183,14 @@ export function CreateSessionDialog({
     if (!agentId) return;
     setBusy(true);
     try {
+      saveMcpSelection(mcpSelected);
+      localStorage.setItem(IMAGE_KEY, image);
       const res = await sessionClient.create({
         agentType: agentId,
         kind,
         prompt: "",
+        mcpServerIds: mcpSelected,
+        image,
       });
       const session = res.session;
       if (!session) throw new Error("пустой ответ Create");
@@ -185,6 +277,67 @@ export function CreateSessionDialog({
                 </p>
               )}
             </div>
+
+            {images !== null && images.images.length > 0 && (
+              <div className="space-y-2">
+                <Label>Образ</Label>
+                <Select
+                  value={image || BASE_IMAGE}
+                  onValueChange={(v) => setImage(v === BASE_IMAGE ? "" : v)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {/* Наружу базовый образ уходит пустой строкой (сервер подставит его
+                        сам), но у пункта списка значение должно быть непустым. */}
+                    <SelectItem value={BASE_IMAGE}>
+                      Базовый ({images.defaultImage})
+                    </SelectItem>
+                    {images.images.map((img) => (
+                      <SelectItem key={img.image} value={img.image}>
+                        {img.image}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {kind === SessionKind.CLI && (
+                  <p className="text-xs text-muted-foreground">
+                    У CLI-сессий контейнер общий на пользователя: образ задаёт первая
+                    сессия, смена применится, когда все они закрыты.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {mcpServers.length > 0 && (
+              <div className="space-y-2">
+                <Label>MCP-серверы</Label>
+                <div className="flex flex-col gap-1">
+                  {mcpServers.map((srv) => {
+                    const on = mcpSelected.includes(srv.id);
+                    return (
+                      <label
+                        key={srv.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-sm transition-colors hover:bg-secondary"
+                      >
+                        <Checkbox
+                          checked={on}
+                          onCheckedChange={() =>
+                            setMcpSelected((prev) =>
+                              on
+                                ? prev.filter((id) => id !== srv.id)
+                                : [...prev, srv.id],
+                            )
+                          }
+                        />
+                        <span className="min-w-0 flex-1 truncate">{srv.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

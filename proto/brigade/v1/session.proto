@@ -54,6 +54,11 @@ message Session {
   // summary — краткий пересказ (recap) сессии от агента, генерируется при архивации;
   // показывается на карточке архива.
   string summary = 14;
+  // mcp_server_ids — включённые в сессии MCP-серверы пользователя (см. McpService).
+  // Только для ACP-сессий; набор применяется при спавне и переконфигурации агента.
+  repeated string mcp_server_ids = 15;
+  // image — образ контейнера сессии (docker-режим). Пусто — базовый образ brigade.
+  string image = 16;
 }
 
 message CreateSessionRequest {
@@ -67,6 +72,11 @@ message CreateSessionRequest {
   string prompt = 4;
   // cwd — рабочая директория; пустое значение означает дефолт из конфига.
   string cwd = 5;
+  // mcp_server_ids — MCP-серверы пользователя, включаемые в сессии (только ACP).
+  repeated string mcp_server_ids = 6;
+  // image — образ контейнера сессии из списка пользователя (см. AuthService.GetAgentImages).
+  // Пусто — базовый образ brigade.
+  string image = 7;
 }
 
 message CreateSessionResponse {
@@ -117,6 +127,14 @@ message DeleteSessionRequest {
 
 message ReloadAgentRequest {
   string session_id = 1;
+}
+
+// SetSessionMcpServers задаёт набор включённых MCP-серверов сессии. Набор персистится и
+// применяется переинициализацией агента (тот же путь, что ReloadAgent), поэтому переписка
+// сохраняется, а инструменты меняются.
+message SetSessionMcpServersRequest {
+  string session_id = 1;
+  repeated string mcp_server_ids = 2;
 }
 
 // Archive переносит сессию в архив: агент генерирует recap (summary), brigade сохраняет
@@ -173,6 +191,9 @@ service SessionService {
   // подхватить обновлённые скиллы/плагины без пересоздания сессии. Только ACP; не во время
   // генерации.
   rpc ReloadAgent(ReloadAgentRequest) returns (Empty) {}
+  // SetSessionMcpServers меняет набор MCP-серверов ACP-сессии и применяет его
+  // переинициализацией агента. Не во время генерации.
+  rpc SetSessionMcpServers(SetSessionMcpServersRequest) returns (Empty) {}
   // Archive переносит сессию в архив (recap + снимок истории + остановка контейнера).
   // Чтение архива (список, история) — в отдельном ArchiveService.
   rpc Archive(ArchiveSessionRequest) returns (ArchiveSessionResponse) {}

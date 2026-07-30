@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package brigade.v1;
+
+import "brigade/v1/auth.proto";
+
+// McpService — персональные MCP-серверы пользователя и хранилище секретов (vault) для них.
+//
+// Сервер описывается транспортом (stdio|http|sse) и параметрами: команда с аргументами и
+// переменными окружения либо URL с заголовками. Значения переменных и заголовков — либо
+// литерал, либо ссылка "${secret.NAME}" на секрет из vault: сам конфиг тогда не содержит
+// секрета и его можно показывать целиком.
+//
+// Значение секрета наружу не отдаётся НИКОГДА: метода чтения нет, список возвращает только
+// имена. В БД значение шифруется (internal/secret), а в среду агента попадает по RPC к
+// демону сессии — в память процесса MCP-сервера, минуя диск и окружение контейнера.
+service McpService {
+  // ListServers — MCP-серверы пользователя (без значений секретов: в конфиге ссылки).
+  rpc ListServers(ListMcpServersRequest) returns (ListMcpServersResponse) {}
+  // CreateServer заводит новый сервер. Имя уникально в рамках пользователя.
+  rpc CreateServer(CreateMcpServerRequest) returns (McpServerResponse) {}
+  // UpdateServer перезаписывает конфиг сервера целиком (id неизменен).
+  rpc UpdateServer(UpdateMcpServerRequest) returns (McpServerResponse) {}
+  // DeleteServer удаляет сервер. Из наборов уже существующих сессий он исчезает при
+  // следующей переконфигурации агента.
+  rpc DeleteServer(DeleteMcpServerRequest) returns (Empty) {}
+
+  // ListSecrets — имена секретов пользователя и время последнего изменения. Значений нет.
+  rpc ListSecrets(ListSecretsRequest) returns (ListSecretsResponse) {}
+  // SetSecret задаёт или заменяет значение секрета по имени.
+  rpc SetSecret(SetSecretRequest) returns (Empty) {}
+  // DeleteSecret удаляет секрет. Ссылки на него в конфигах серверов остаются и станут
+  // неразрешимыми — сессия с таким сервером не создастся, пока ссылку не починить.
+  rpc DeleteSecret(DeleteSecretRequest) returns (Empty) {}
+}
+
+// McpTransport — способ, которым агент говорит с MCP-сервером.
+enum McpTransport {
+  MCP_TRANSPORT_UNSPECIFIED = 0;
+  // STDIO — сервер запускается процессом в среде агента (command + args + env).
+  MCP_TRANSPORT_STDIO = 1;
+  // HTTP — streamable HTTP по url с заголовками.
+  MCP_TRANSPORT_HTTP = 2;
+  // SSE — server-sent events по url с заголовками.
+  MCP_TRANSPORT_SSE = 3;
+}
+
+// McpKeyValue — пара «имя-значение» для переменной окружения или HTTP-заголовка.
+// value — литерал либо ссылка "${secret.NAME}".
+message McpKeyValue {
+  string name = 1;
+  string value = 2;
+}
+
+// McpServer — конфиг одного MCP-сервера пользователя. Заполнены поля своего транспорта:
+// stdio — command/args/env, http|sse — url/headers.
+message McpServer {
+  string id = 1;
+  // name — имя сервера; задаёт префикс имён инструментов у модели (mcp__<name>__<tool>).
+  string name = 2;
+  McpTransport transport = 3;
+  string command = 4;
+  repeated string args = 5;
+  repeated McpKeyValue env = 6;
+  string url = 7;
+  repeated McpKeyValue headers = 8;
+}
+
+// McpSecret — секрет vault без значения: только имя и время последнего изменения.
+message McpSecret {
+  string name = 1;
+  int64 updated_at = 2;
+}
+
+message ListMcpServersRequest {}
+
+message ListMcpServersResponse {
+  repeated McpServer servers = 1;
+}
+
+message CreateMcpServerRequest {
+  McpServer server = 1;
+}
+
+message UpdateMcpServerRequest {
+  McpServer server = 1;
+}
+
+message McpServerResponse {
+  McpServer server = 1;
+}
+
+message DeleteMcpServerRequest {
+  string id = 1;
+}
+
+message ListSecretsRequest {}
+
+message ListSecretsResponse {
+  repeated McpSecret secrets = 1;
+}
+
+message SetSecretRequest {
+  string name = 1;
+  string value = 2;
+}
+
+message DeleteSecretRequest {
+  string name = 1;
+}

@@ -62,6 +62,18 @@ const (
 	// AuthServiceSetNtfySettingsProcedure is the fully-qualified name of the AuthService's
 	// SetNtfySettings RPC.
 	AuthServiceSetNtfySettingsProcedure = "/brigade.v1.AuthService/SetNtfySettings"
+	// AuthServiceGetAgentRuntimeProcedure is the fully-qualified name of the AuthService's
+	// GetAgentRuntime RPC.
+	AuthServiceGetAgentRuntimeProcedure = "/brigade.v1.AuthService/GetAgentRuntime"
+	// AuthServiceSetAgentRuntimeProcedure is the fully-qualified name of the AuthService's
+	// SetAgentRuntime RPC.
+	AuthServiceSetAgentRuntimeProcedure = "/brigade.v1.AuthService/SetAgentRuntime"
+	// AuthServiceGetAgentImagesProcedure is the fully-qualified name of the AuthService's
+	// GetAgentImages RPC.
+	AuthServiceGetAgentImagesProcedure = "/brigade.v1.AuthService/GetAgentImages"
+	// AuthServiceSetAgentImagesProcedure is the fully-qualified name of the AuthService's
+	// SetAgentImages RPC.
+	AuthServiceSetAgentImagesProcedure = "/brigade.v1.AuthService/SetAgentImages"
 	// AuthServiceTestNtfyProcedure is the fully-qualified name of the AuthService's TestNtfy RPC.
 	AuthServiceTestNtfyProcedure = "/brigade.v1.AuthService/TestNtfy"
 	// AuthServiceGetSSHSettingsProcedure is the fully-qualified name of the AuthService's
@@ -97,6 +109,17 @@ type AuthServiceClient interface {
 	// SetNtfySettings задаёт server/topic/token/events персональных ntfy-уведомлений.
 	// Возвращает обновлённое состояние.
 	SetNtfySettings(context.Context, *connect.Request[v1.SetNtfySettingsRequest]) (*connect.Response[v1.NtfySettings], error)
+	// GetAgentRuntime возвращает режим исполнения сессий (local|docker), доступные
+	// docker-контексты и признак «нужен перезапуск».
+	GetAgentRuntime(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.AgentRuntimeSettings], error)
+	// SetAgentRuntime задаёт режим и docker-контекст (только десктопная инсталляция).
+	SetAgentRuntime(context.Context, *connect.Request[v1.SetAgentRuntimeRequest]) (*connect.Response[v1.AgentRuntimeSettings], error)
+	// GetAgentImages возвращает образы контейнеров агента пользователя, базовый образ и
+	// состояние квоты.
+	GetAgentImages(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.AgentImagesSettings], error)
+	// SetAgentImages перезаписывает список образов пользователя. Образ, который не удалось
+	// подтянуть, не пригоден для сессий или не влезает в квоту, отклоняет весь запрос.
+	SetAgentImages(context.Context, *connect.Request[v1.SetAgentImagesRequest]) (*connect.Response[v1.AgentImagesSettings], error)
 	// TestNtfy шлёт пробное уведомление по СОХРАНЁННЫМ настройкам пользователя: проверка
 	// топика/сервера/токена из UI. Ошибка доставки возвращается вызывающему — иначе
 	// неверные настройки обнаруживались бы только по молчанию в реальной сессии.
@@ -186,6 +209,30 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("SetNtfySettings")),
 			connect.WithClientOptions(opts...),
 		),
+		getAgentRuntime: connect.NewClient[v1.Empty, v1.AgentRuntimeSettings](
+			httpClient,
+			baseURL+AuthServiceGetAgentRuntimeProcedure,
+			connect.WithSchema(authServiceMethods.ByName("GetAgentRuntime")),
+			connect.WithClientOptions(opts...),
+		),
+		setAgentRuntime: connect.NewClient[v1.SetAgentRuntimeRequest, v1.AgentRuntimeSettings](
+			httpClient,
+			baseURL+AuthServiceSetAgentRuntimeProcedure,
+			connect.WithSchema(authServiceMethods.ByName("SetAgentRuntime")),
+			connect.WithClientOptions(opts...),
+		),
+		getAgentImages: connect.NewClient[v1.Empty, v1.AgentImagesSettings](
+			httpClient,
+			baseURL+AuthServiceGetAgentImagesProcedure,
+			connect.WithSchema(authServiceMethods.ByName("GetAgentImages")),
+			connect.WithClientOptions(opts...),
+		),
+		setAgentImages: connect.NewClient[v1.SetAgentImagesRequest, v1.AgentImagesSettings](
+			httpClient,
+			baseURL+AuthServiceSetAgentImagesProcedure,
+			connect.WithSchema(authServiceMethods.ByName("SetAgentImages")),
+			connect.WithClientOptions(opts...),
+		),
 		testNtfy: connect.NewClient[v1.Empty, v1.Empty](
 			httpClient,
 			baseURL+AuthServiceTestNtfyProcedure,
@@ -220,6 +267,10 @@ type authServiceClient struct {
 	setMemorySettings *connect.Client[v1.SetMemorySettingsRequest, v1.MemorySettings]
 	getNtfySettings   *connect.Client[v1.Empty, v1.NtfySettings]
 	setNtfySettings   *connect.Client[v1.SetNtfySettingsRequest, v1.NtfySettings]
+	getAgentRuntime   *connect.Client[v1.Empty, v1.AgentRuntimeSettings]
+	setAgentRuntime   *connect.Client[v1.SetAgentRuntimeRequest, v1.AgentRuntimeSettings]
+	getAgentImages    *connect.Client[v1.Empty, v1.AgentImagesSettings]
+	setAgentImages    *connect.Client[v1.SetAgentImagesRequest, v1.AgentImagesSettings]
 	testNtfy          *connect.Client[v1.Empty, v1.Empty]
 	getSSHSettings    *connect.Client[v1.Empty, v1.SSHSettings]
 	regenerateSSHKey  *connect.Client[v1.Empty, v1.SSHSettings]
@@ -280,6 +331,26 @@ func (c *authServiceClient) SetNtfySettings(ctx context.Context, req *connect.Re
 	return c.setNtfySettings.CallUnary(ctx, req)
 }
 
+// GetAgentRuntime calls brigade.v1.AuthService.GetAgentRuntime.
+func (c *authServiceClient) GetAgentRuntime(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.AgentRuntimeSettings], error) {
+	return c.getAgentRuntime.CallUnary(ctx, req)
+}
+
+// SetAgentRuntime calls brigade.v1.AuthService.SetAgentRuntime.
+func (c *authServiceClient) SetAgentRuntime(ctx context.Context, req *connect.Request[v1.SetAgentRuntimeRequest]) (*connect.Response[v1.AgentRuntimeSettings], error) {
+	return c.setAgentRuntime.CallUnary(ctx, req)
+}
+
+// GetAgentImages calls brigade.v1.AuthService.GetAgentImages.
+func (c *authServiceClient) GetAgentImages(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.AgentImagesSettings], error) {
+	return c.getAgentImages.CallUnary(ctx, req)
+}
+
+// SetAgentImages calls brigade.v1.AuthService.SetAgentImages.
+func (c *authServiceClient) SetAgentImages(ctx context.Context, req *connect.Request[v1.SetAgentImagesRequest]) (*connect.Response[v1.AgentImagesSettings], error) {
+	return c.setAgentImages.CallUnary(ctx, req)
+}
+
 // TestNtfy calls brigade.v1.AuthService.TestNtfy.
 func (c *authServiceClient) TestNtfy(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.Empty], error) {
 	return c.testNtfy.CallUnary(ctx, req)
@@ -320,6 +391,17 @@ type AuthServiceHandler interface {
 	// SetNtfySettings задаёт server/topic/token/events персональных ntfy-уведомлений.
 	// Возвращает обновлённое состояние.
 	SetNtfySettings(context.Context, *connect.Request[v1.SetNtfySettingsRequest]) (*connect.Response[v1.NtfySettings], error)
+	// GetAgentRuntime возвращает режим исполнения сессий (local|docker), доступные
+	// docker-контексты и признак «нужен перезапуск».
+	GetAgentRuntime(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.AgentRuntimeSettings], error)
+	// SetAgentRuntime задаёт режим и docker-контекст (только десктопная инсталляция).
+	SetAgentRuntime(context.Context, *connect.Request[v1.SetAgentRuntimeRequest]) (*connect.Response[v1.AgentRuntimeSettings], error)
+	// GetAgentImages возвращает образы контейнеров агента пользователя, базовый образ и
+	// состояние квоты.
+	GetAgentImages(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.AgentImagesSettings], error)
+	// SetAgentImages перезаписывает список образов пользователя. Образ, который не удалось
+	// подтянуть, не пригоден для сессий или не влезает в квоту, отклоняет весь запрос.
+	SetAgentImages(context.Context, *connect.Request[v1.SetAgentImagesRequest]) (*connect.Response[v1.AgentImagesSettings], error)
 	// TestNtfy шлёт пробное уведомление по СОХРАНЁННЫМ настройкам пользователя: проверка
 	// топика/сервера/токена из UI. Ошибка доставки возвращается вызывающему — иначе
 	// неверные настройки обнаруживались бы только по молчанию в реальной сессии.
@@ -405,6 +487,30 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("SetNtfySettings")),
 		connect.WithHandlerOptions(opts...),
 	)
+	authServiceGetAgentRuntimeHandler := connect.NewUnaryHandler(
+		AuthServiceGetAgentRuntimeProcedure,
+		svc.GetAgentRuntime,
+		connect.WithSchema(authServiceMethods.ByName("GetAgentRuntime")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceSetAgentRuntimeHandler := connect.NewUnaryHandler(
+		AuthServiceSetAgentRuntimeProcedure,
+		svc.SetAgentRuntime,
+		connect.WithSchema(authServiceMethods.ByName("SetAgentRuntime")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceGetAgentImagesHandler := connect.NewUnaryHandler(
+		AuthServiceGetAgentImagesProcedure,
+		svc.GetAgentImages,
+		connect.WithSchema(authServiceMethods.ByName("GetAgentImages")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceSetAgentImagesHandler := connect.NewUnaryHandler(
+		AuthServiceSetAgentImagesProcedure,
+		svc.SetAgentImages,
+		connect.WithSchema(authServiceMethods.ByName("SetAgentImages")),
+		connect.WithHandlerOptions(opts...),
+	)
 	authServiceTestNtfyHandler := connect.NewUnaryHandler(
 		AuthServiceTestNtfyProcedure,
 		svc.TestNtfy,
@@ -447,6 +553,14 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceGetNtfySettingsHandler.ServeHTTP(w, r)
 		case AuthServiceSetNtfySettingsProcedure:
 			authServiceSetNtfySettingsHandler.ServeHTTP(w, r)
+		case AuthServiceGetAgentRuntimeProcedure:
+			authServiceGetAgentRuntimeHandler.ServeHTTP(w, r)
+		case AuthServiceSetAgentRuntimeProcedure:
+			authServiceSetAgentRuntimeHandler.ServeHTTP(w, r)
+		case AuthServiceGetAgentImagesProcedure:
+			authServiceGetAgentImagesHandler.ServeHTTP(w, r)
+		case AuthServiceSetAgentImagesProcedure:
+			authServiceSetAgentImagesHandler.ServeHTTP(w, r)
 		case AuthServiceTestNtfyProcedure:
 			authServiceTestNtfyHandler.ServeHTTP(w, r)
 		case AuthServiceGetSSHSettingsProcedure:
@@ -504,6 +618,22 @@ func (UnimplementedAuthServiceHandler) GetNtfySettings(context.Context, *connect
 
 func (UnimplementedAuthServiceHandler) SetNtfySettings(context.Context, *connect.Request[v1.SetNtfySettingsRequest]) (*connect.Response[v1.NtfySettings], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.SetNtfySettings is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) GetAgentRuntime(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.AgentRuntimeSettings], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.GetAgentRuntime is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) SetAgentRuntime(context.Context, *connect.Request[v1.SetAgentRuntimeRequest]) (*connect.Response[v1.AgentRuntimeSettings], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.SetAgentRuntime is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) GetAgentImages(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.AgentImagesSettings], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.GetAgentImages is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) SetAgentImages(context.Context, *connect.Request[v1.SetAgentImagesRequest]) (*connect.Response[v1.AgentImagesSettings], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.SetAgentImages is not implemented"))
 }
 
 func (UnimplementedAuthServiceHandler) TestNtfy(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.Empty], error) {

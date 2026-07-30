@@ -191,6 +191,21 @@ export class Session extends Message<Session> {
    */
   summary = "";
 
+  /**
+   * mcp_server_ids — включённые в сессии MCP-серверы пользователя (см. McpService).
+   * Только для ACP-сессий; набор применяется при спавне и переконфигурации агента.
+   *
+   * @generated from field: repeated string mcp_server_ids = 15;
+   */
+  mcpServerIds: string[] = [];
+
+  /**
+   * image — образ контейнера сессии (docker-режим). Пусто — базовый образ brigade.
+   *
+   * @generated from field: string image = 16;
+   */
+  image = "";
+
   constructor(data?: PartialMessage<Session>) {
     super();
     proto3.util.initPartial(data, this);
@@ -213,6 +228,8 @@ export class Session extends Message<Session> {
     { no: 12, name: "parent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 13, name: "archived", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 14, name: "summary", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 15, name: "mcp_server_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 16, name: "image", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Session {
@@ -260,6 +277,21 @@ export class CreateSessionRequest extends Message<CreateSessionRequest> {
    */
   cwd = "";
 
+  /**
+   * mcp_server_ids — MCP-серверы пользователя, включаемые в сессии (только ACP).
+   *
+   * @generated from field: repeated string mcp_server_ids = 6;
+   */
+  mcpServerIds: string[] = [];
+
+  /**
+   * image — образ контейнера сессии из списка пользователя (см. AuthService.GetAgentImages).
+   * Пусто — базовый образ brigade.
+   *
+   * @generated from field: string image = 7;
+   */
+  image = "";
+
   constructor(data?: PartialMessage<CreateSessionRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -272,6 +304,8 @@ export class CreateSessionRequest extends Message<CreateSessionRequest> {
     { no: 3, name: "kind", kind: "enum", T: proto3.getEnumType(SessionKind) },
     { no: 4, name: "prompt", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 5, name: "cwd", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "mcp_server_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 7, name: "image", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CreateSessionRequest {
@@ -737,6 +771,53 @@ export class ReloadAgentRequest extends Message<ReloadAgentRequest> {
 
   static equals(a: ReloadAgentRequest | PlainMessage<ReloadAgentRequest> | undefined, b: ReloadAgentRequest | PlainMessage<ReloadAgentRequest> | undefined): boolean {
     return proto3.util.equals(ReloadAgentRequest, a, b);
+  }
+}
+
+/**
+ * SetSessionMcpServers задаёт набор включённых MCP-серверов сессии. Набор персистится и
+ * применяется переинициализацией агента (тот же путь, что ReloadAgent), поэтому переписка
+ * сохраняется, а инструменты меняются.
+ *
+ * @generated from message brigade.v1.SetSessionMcpServersRequest
+ */
+export class SetSessionMcpServersRequest extends Message<SetSessionMcpServersRequest> {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId = "";
+
+  /**
+   * @generated from field: repeated string mcp_server_ids = 2;
+   */
+  mcpServerIds: string[] = [];
+
+  constructor(data?: PartialMessage<SetSessionMcpServersRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.SetSessionMcpServersRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "mcp_server_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SetSessionMcpServersRequest {
+    return new SetSessionMcpServersRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SetSessionMcpServersRequest {
+    return new SetSessionMcpServersRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SetSessionMcpServersRequest {
+    return new SetSessionMcpServersRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SetSessionMcpServersRequest | PlainMessage<SetSessionMcpServersRequest> | undefined, b: SetSessionMcpServersRequest | PlainMessage<SetSessionMcpServersRequest> | undefined): boolean {
+    return proto3.util.equals(SetSessionMcpServersRequest, a, b);
   }
 }
 

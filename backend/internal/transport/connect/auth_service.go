@@ -10,7 +10,9 @@ import (
 	"connectrpc.com/connect"
 
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
+	"github.com/grigory51/brigade/backend/internal/agentimage"
 	"github.com/grigory51/brigade/backend/internal/auth"
+	"github.com/grigory51/brigade/backend/internal/runtimecfg"
 )
 
 // NtfyTester шлёт пробное уведомление пользователю. Интерфейс, а не *notify.Service, —
@@ -23,14 +25,98 @@ type NtfyTester interface {
 type AuthService struct {
 	svc     *auth.Service
 	notify  NtfyTester
+	images  *agentimage.Service
+	runtime *runtimecfg.Service
 	desktop bool
 }
 
 // NewAuthService собирает реализацию AuthService. notify может быть nil — тогда проверка
-// уведомлений недоступна, остальные методы работают. desktop — локальный
-// однопользовательский запуск (см. ServerInfo).
-func NewAuthService(svc *auth.Service, notify NtfyTester, desktop bool) *AuthService {
-	return &AuthService{svc: svc, notify: notify, desktop: desktop}
+// уведомлений недоступна, остальные методы работают. images — образы контейнера агента
+// (в local-режиме сервис отвечает «недоступно»); runtime — режим исполнения сессий.
+// desktop — локальный однопользовательский запуск (см. ServerInfo).
+func NewAuthService(svc *auth.Service, notify NtfyTester, images *agentimage.Service, runtime *runtimecfg.Service, desktop bool) *AuthService {
+	return &AuthService{svc: svc, notify: notify, images: images, runtime: runtime, desktop: desktop}
+}
+
+// GetAgentRuntime возвращает режим исполнения сессий и доступные docker-контексты.
+func (s *AuthService) GetAgentRuntime(_ context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.AgentRuntimeSettings], error) {
+	state, err := s.runtime.State()
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(runtimeToProto(state)), nil
+}
+
+// SetAgentRuntime задаёт режим и docker-контекст. Применяется перезапуском приложения —
+// спавнер создаётся один раз на старте.
+func (s *AuthService) SetAgentRuntime(_ context.Context, req *connect.Request[v1.SetAgentRuntimeRequest]) (*connect.Response[v1.AgentRuntimeSettings], error) {
+	state, err := s.runtime.Set(req.Msg.Mode, req.Msg.DockerContext)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+	return connect.NewResponse(runtimeToProto(state)), nil
+}
+
+func runtimeToProto(s runtimecfg.State) *v1.AgentRuntimeSettings {
+	out := &v1.AgentRuntimeSettings{
+		Mode:            s.Mode,
+		RunningMode:     s.RunningMode,
+		DockerContext:   s.DockerContext,
+		RunningContext:  s.RunningContext,
+		Editable:        s.Editable,
+		RestartRequired: s.RestartRequired(),
+		DockerError:     s.DockerError,
+	}
+	for _, c := range s.Contexts {
+		out.Contexts = append(out.Contexts, &v1.DockerContext{Name: c.Name, Host: c.Host, Current: c.Current})
+	}
+	return out
+}
+
+// GetAgentImages возвращает образы контейнера агента текущего пользователя, базовый образ
+// и состояние квоты.
+func (s *AuthService) GetAgentImages(ctx context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.AgentImagesSettings], error) {
+	u, ok := auth.UserFromContext(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
+	}
+	settings, err := s.images.List(ctx, u.ID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(imagesToProto(settings)), nil
+}
+
+// SetAgentImages перезаписывает список образов пользователя, проверяя каждый на
+// доступность, пригодность для сессий и вписываемость в квоту.
+func (s *AuthService) SetAgentImages(ctx context.Context, req *connect.Request[v1.SetAgentImagesRequest]) (*connect.Response[v1.AgentImagesSettings], error) {
+	u, ok := auth.UserFromContext(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
+	}
+	settings, err := s.images.Set(ctx, u.ID, req.Msg.Images)
+	if err != nil {
+		switch {
+		case errors.Is(err, agentimage.ErrUnavailable):
+			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		case errors.Is(err, agentimage.ErrQuotaExceeded):
+			return nil, connect.NewError(connect.CodeResourceExhausted, err)
+		}
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	return connect.NewResponse(imagesToProto(settings)), nil
+}
+
+func imagesToProto(s agentimage.Settings) *v1.AgentImagesSettings {
+	out := &v1.AgentImagesSettings{
+		DefaultImage: s.DefaultImage,
+		UsedBytes:    s.UsedBytes,
+		QuotaBytes:   s.QuotaBytes,
+	}
+	for _, img := range s.Images {
+		out.Images = append(out.Images, &v1.AgentImage{Image: img.Ref, SizeBytes: img.Bytes})
+	}
+	return out
 }
 
 // GetServerInfo сообщает клиенту режим работы сервера. Авторизация не требуется по сути

@@ -1,7 +1,11 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo, useRef } from "react";
 import { ExternalLink, Globe, GitPullRequest, Link, Link2 } from "lucide-react";
 import type { Preview } from "@/api/gen/brigade/v1/session_pb";
-import { FloatingWindow, WindowTitlebar } from "./FloatingWindow";
+import {
+  FloatingWindow,
+  WindowTitlebar,
+  useDismissOnOutside,
+} from "./FloatingWindow";
 import { jumpToMessage } from "./jumpToMessage";
 import type { LinkKind, SessionLink } from "./links";
 
@@ -38,26 +42,7 @@ export function LinksWindow({
 }) {
   const windowRef = useRef<HTMLDivElement>(null);
 
-  // Справочное окно закрывается по Esc и клику мимо — как всплывающая панель, а не как
-  // часть страницы. Чип-переключатель исключён: иначе клик по нему закрывал бы окно
-  // «мимо» и тут же открывал заново своим onClick.
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    const onPointerDown = (e: PointerEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (windowRef.current?.contains(target ?? null)) return;
-      if (target?.closest("[data-dock-chip]")) return;
-      onClose();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.removeEventListener("pointerdown", onPointerDown);
-    };
-  }, [onClose]);
+  useDismissOnOutside(windowRef, onClose);
 
   // Группы в порядке ленты: первое упоминание сверху, свежее — ниже.
   const groups = useMemo(() => {

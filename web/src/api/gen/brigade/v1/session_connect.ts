@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ArchiveSessionRequest, ArchiveSessionResponse, CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, ForkSessionRequest, ForkSessionResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, ReloadAgentRequest, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse, UploadFileRequest, UploadFileResponse } from "./session_pb.js";
+import { ArchiveSessionRequest, ArchiveSessionResponse, CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, ForkSessionRequest, ForkSessionResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, ReloadAgentRequest, SetSessionMcpServersRequest, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse, UploadFileRequest, UploadFileResponse } from "./session_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { Empty } from "./auth_pb.js";
 
@@ -88,6 +88,18 @@ export const SessionService = {
     reloadAgent: {
       name: "ReloadAgent",
       I: ReloadAgentRequest,
+      O: Empty,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * SetSessionMcpServers меняет набор MCP-серверов ACP-сессии и применяет его
+     * переинициализацией агента. Не во время генерации.
+     *
+     * @generated from rpc brigade.v1.SessionService.SetSessionMcpServers
+     */
+    setSessionMcpServers: {
+      name: "SetSessionMcpServers",
+      I: SetSessionMcpServersRequest,
       O: Empty,
       kind: MethodKind.Unary,
     },

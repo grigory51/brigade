@@ -117,9 +117,47 @@ Remote-плагины buf.build не используются (BSR-эндпои�
 | `acp` | ACP-клиент: спавнит subprocess adapter (`claude-agent-acp` поверх Claude Agent SDK), coder/acp-go-sdk, транслирует события ACP → AG-UI |
 | `agui` | модель событий AG-UI |
 | `session` | `Registry` — связующее звено: пишет сессию в store, спавнит агента, держит живой объект (CLI: `spawn.Handle`, ACP: `*acp.Client`) в памяти |
-| `agent` | реестр типов агентов |
+| `agent` | манифест типов агентов: команда запуска и состав runtime по видам сессии (единственный источник и для `ListAgentTypes`, и для спавна) |
+| `agentimage` | образы контейнера агента у пользователя: подтягивание, проверка пригодности, квота на суммарный вес |
 | `transport/{connect,agui,termws}` | транспортные хендлеры; `connect/mapping.go` маппит store-строки ↔ proto-enum |
 | `web` | `go:embed` фронтенда |
+
+### Среда агента: runtime приезжает в контейнер, а не берётся из образа
+
+Всё, что brigade нужно внутри контейнера сессии (демон `brigade acp-agent`, node, CLI
+агента, ACP-адаптер, MCP-сервер brigade), лежит в базовом образе под
+`/opt/brigade-runtime/<слой>/` и монтируется в контейнер **read-only volume'ами**
+(`spawn/runtime.go`, `brigade-rt-<слой>-<digest базы>`). Состав слоёв на сессию даёт
+манифест агента (`agent.Type.LayersFor`) — он же задаёт команду запуска и путь MCP-сервера.
+
+Отсюда два следствия:
+
+- сессия может работать на **произвольном образе пользователя** (`ubuntu`, `golang`,
+  `python` — требования: glibc ≥ 2.31, uid 1001, git); образ выбирается при создании сессии
+  (`CreateSessionRequest.image`, колонка `sessions.image`), список — в настройках
+  (`AuthService.Get/SetAgentImages`), суммарный вес ограничен `docker.image_quota_bytes`;
+- **бинарь демона гарантированно наш**: ему по RPC передаются приватный SSH-ключ, токен
+  Claude и секреты MCP, а подменить содержимое ro-volume образ не может (проверка
+  «наследован ли образ от базового» этого бы не дала — верхний слой волен перезаписать
+  файл). Env контейнера дополнительно гасит `LD_PRELOAD`/`LD_LIBRARY_PATH`.
+
+`~/.ssh` в контейнер не монтируется: ключ живёт в ssh-agent демона, а `~/.ssh/config` с
+`IdentityAgent` и `StrictHostKeyChecking accept-new` демон пишет сам при `SetSSHKey`.
+
+### Режим исполнения сессий (local | docker)
+
+Режим — свойство инстанса (`config.Mode`), спавнер создаётся по нему один раз на старте.
+В серверной инсталляции он задан конфигом и из UI только показывается. В десктопном
+приложении (`brigade desktop`) поверх конфига ложится `runtime.json` рядом с `config.yaml`
+(`internal/runtimecfg`): там режим и выбранный docker-контекст, правятся в «Настройки →
+Среда агента» и применяются перезапуском приложения (`AgentRuntimeSettings.restart_required`
+показывает расхождение с работающим режимом).
+
+Docker-контекст превращается в `DOCKER_HOST` до создания клиента: контексты живут файлами
+docker CLI (`~/.docker/contexts/meta/*/meta.json`), у docker-библиотеки своего механизма
+для них нет. Образ агента в desktop берётся опубликованный
+(`agent_image: ghcr.io/grigory51/brigade-agent:latest`) и подтягивается при старте в
+docker-режиме — собирать его локально не требуется.
 
 ### Persist / resume (ключевое)
 
@@ -178,6 +216,34 @@ Kotlin Multiplatform 2.0 + Compose Multiplatform. Модули: `shared` (общ
 `AuthService.SetClaudeToken`). Registry берёт его из store при создании/восстановлении
 ACP-сессии (`registry.userClaudeToken`) и пробрасывает агенту как env
 `CLAUDE_CODE_OAUTH_TOKEN`; ACP-сессия без токена не создаётся (`ErrClaudeTokenRequired`).
+
+## MCP-серверы пользователя и vault
+
+`McpService` (`proto/brigade/v1/mcp.proto`) — per-user MCP-серверы (stdio/http/sse) и
+именованные секреты. Секрет хранится зашифрованным (`internal/secret`), наружу не
+отдаётся ни одним методом; в конфиге сервера стоят ссылки `${secret.ИМЯ}` — в любом месте
+значения и в любом количестве (`Bearer ${secret.TOKEN}`), — которые разворачивает только
+сервер: `mcp.Build` в момент сборки набора для сессии (`registry.mcpServers`). Дальше
+набор уходит демону через `Configure`
+(`mcp_servers_json`) в память процесса: на диск среды агента и в env контейнера секрет не
+попадает.
+
+Набор включённых серверов — свойство сессии (`sessions.mcp_servers`, CSV): задаётся при
+создании (`CreateSessionRequest.mcp_server_ids`), меняется через
+`SessionService.SetSessionMcpServers`. Доставка зависит от вида сессии:
+
+- **ACP** — набор идёт по протоколу (`session/new mcpServers`), смена применяется на месте
+  через `registry.reinit` (тот же путь, что `ReloadAgent`: session/load, переписка
+  сохраняется).
+- **CLI** — `claude` в терминале читает `.mcp.json` рабочей директории, поэтому
+  `mcp.WriteProjectConfig` раскладывает файл при каждом запуске агента и включает серверы
+  в проектном `.claude/settings.json` (`enableAllProjectMcpServers`). Секреты в файл не
+  пишутся: там ссылки `${BRIGADE_SECRET_ИМЯ}`, значения уходят в env процесса `claude`
+  (`registry.agentEnv`). Смена набора подхватывается следующим запуском агента.
+
+Неразрешимая ссылка на секрет отвергается там, где ошибку видит пользователь (создание и
+смена набора); на путях restore/resume такой сервер молча пропускается с записью в лог,
+чтобы сессия поднялась.
 
 ## Локальный e2e-стенд
 

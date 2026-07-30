@@ -4,7 +4,7 @@
 // @ts-nocheck
 
 import type { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialMessage, PlainMessage } from "@bufbuild/protobuf";
-import { Message, proto3 } from "@bufbuild/protobuf";
+import { Message, proto3, protoInt64 } from "@bufbuild/protobuf";
 
 /**
  * Пустой ответ для методов без полезной нагрузки (например, Logout).
@@ -576,6 +576,340 @@ export class SSHSettings extends Message<SSHSettings> {
 
   static equals(a: SSHSettings | PlainMessage<SSHSettings> | undefined, b: SSHSettings | PlainMessage<SSHSettings> | undefined): boolean {
     return proto3.util.equals(SSHSettings, a, b);
+  }
+}
+
+/**
+ * DockerContext — контекст docker CLI на машине (docker context ls): имя и адрес демона.
+ *
+ * @generated from message brigade.v1.DockerContext
+ */
+export class DockerContext extends Message<DockerContext> {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name = "";
+
+  /**
+   * @generated from field: string host = 2;
+   */
+  host = "";
+
+  /**
+   * current — контекст, выбранный в самом docker CLI (`docker context use`).
+   *
+   * @generated from field: bool current = 3;
+   */
+  current = false;
+
+  constructor(data?: PartialMessage<DockerContext>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.DockerContext";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "host", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "current", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DockerContext {
+    return new DockerContext().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): DockerContext {
+    return new DockerContext().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): DockerContext {
+    return new DockerContext().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: DockerContext | PlainMessage<DockerContext> | undefined, b: DockerContext | PlainMessage<DockerContext> | undefined): boolean {
+    return proto3.util.equals(DockerContext, a, b);
+  }
+}
+
+/**
+ * AgentRuntimeSettings — режим исполнения сессий и подключение к докеру.
+ *
+ * В серверной инсталляции режим задан конфигом: editable=false, клиент только показывает
+ * его. В десктопном приложении режим правится из интерфейса и применяется перезапуском
+ * приложения — до него mode отличается от running_mode, и restart_required=true.
+ *
+ * @generated from message brigade.v1.AgentRuntimeSettings
+ */
+export class AgentRuntimeSettings extends Message<AgentRuntimeSettings> {
+  /**
+   * @generated from field: string mode = 1;
+   */
+  mode = "";
+
+  /**
+   * @generated from field: string running_mode = 2;
+   */
+  runningMode = "";
+
+  /**
+   * @generated from field: string docker_context = 3;
+   */
+  dockerContext = "";
+
+  /**
+   * @generated from field: string running_context = 4;
+   */
+  runningContext = "";
+
+  /**
+   * @generated from field: bool editable = 5;
+   */
+  editable = false;
+
+  /**
+   * @generated from field: bool restart_required = 6;
+   */
+  restartRequired = false;
+
+  /**
+   * @generated from field: repeated brigade.v1.DockerContext contexts = 7;
+   */
+  contexts: DockerContext[] = [];
+
+  /**
+   * docker_error — почему docker недоступен (пусто — доступен): демон не установлен, не
+   * запущен либо выбранный контекст не отвечает. Если инстанс поднимался в docker-режиме и
+   * не смог, running_mode будет local, а здесь — причина.
+   *
+   * @generated from field: string docker_error = 8;
+   */
+  dockerError = "";
+
+  constructor(data?: PartialMessage<AgentRuntimeSettings>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.AgentRuntimeSettings";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "mode", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "running_mode", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "docker_context", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "running_context", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "editable", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 6, name: "restart_required", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 7, name: "contexts", kind: "message", T: DockerContext, repeated: true },
+    { no: 8, name: "docker_error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): AgentRuntimeSettings {
+    return new AgentRuntimeSettings().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): AgentRuntimeSettings {
+    return new AgentRuntimeSettings().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): AgentRuntimeSettings {
+    return new AgentRuntimeSettings().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: AgentRuntimeSettings | PlainMessage<AgentRuntimeSettings> | undefined, b: AgentRuntimeSettings | PlainMessage<AgentRuntimeSettings> | undefined): boolean {
+    return proto3.util.equals(AgentRuntimeSettings, a, b);
+  }
+}
+
+/**
+ * SetAgentRuntimeRequest — новый режим и (для docker) контекст. Доступен только там, где
+ * настройки редактируемы.
+ *
+ * @generated from message brigade.v1.SetAgentRuntimeRequest
+ */
+export class SetAgentRuntimeRequest extends Message<SetAgentRuntimeRequest> {
+  /**
+   * @generated from field: string mode = 1;
+   */
+  mode = "";
+
+  /**
+   * @generated from field: string docker_context = 2;
+   */
+  dockerContext = "";
+
+  constructor(data?: PartialMessage<SetAgentRuntimeRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.SetAgentRuntimeRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "mode", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "docker_context", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SetAgentRuntimeRequest {
+    return new SetAgentRuntimeRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SetAgentRuntimeRequest {
+    return new SetAgentRuntimeRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SetAgentRuntimeRequest {
+    return new SetAgentRuntimeRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SetAgentRuntimeRequest | PlainMessage<SetAgentRuntimeRequest> | undefined, b: SetAgentRuntimeRequest | PlainMessage<SetAgentRuntimeRequest> | undefined): boolean {
+    return proto3.util.equals(SetAgentRuntimeRequest, a, b);
+  }
+}
+
+/**
+ * AgentImage — образ контейнера агента в списке пользователя. size_bytes — вес образа за
+ * вычетом слоёв, общих с другими его образами (реальный прирост занятого места).
+ *
+ * @generated from message brigade.v1.AgentImage
+ */
+export class AgentImage extends Message<AgentImage> {
+  /**
+   * @generated from field: string image = 1;
+   */
+  image = "";
+
+  /**
+   * @generated from field: int64 size_bytes = 2;
+   */
+  sizeBytes = protoInt64.zero;
+
+  constructor(data?: PartialMessage<AgentImage>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.AgentImage";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "image", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "size_bytes", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): AgentImage {
+    return new AgentImage().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): AgentImage {
+    return new AgentImage().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): AgentImage {
+    return new AgentImage().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: AgentImage | PlainMessage<AgentImage> | undefined, b: AgentImage | PlainMessage<AgentImage> | undefined): boolean {
+    return proto3.util.equals(AgentImage, a, b);
+  }
+}
+
+/**
+ * AgentImagesSettings — образы контейнеров агента, доступные пользователю при создании
+ * сессии, и состояние квоты. default_image — базовый образ brigade (подставляется, когда
+ * пользователь не выбрал свой).
+ *
+ * @generated from message brigade.v1.AgentImagesSettings
+ */
+export class AgentImagesSettings extends Message<AgentImagesSettings> {
+  /**
+   * @generated from field: repeated brigade.v1.AgentImage images = 1;
+   */
+  images: AgentImage[] = [];
+
+  /**
+   * @generated from field: string default_image = 2;
+   */
+  defaultImage = "";
+
+  /**
+   * @generated from field: int64 used_bytes = 3;
+   */
+  usedBytes = protoInt64.zero;
+
+  /**
+   * @generated from field: int64 quota_bytes = 4;
+   */
+  quotaBytes = protoInt64.zero;
+
+  constructor(data?: PartialMessage<AgentImagesSettings>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.AgentImagesSettings";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "images", kind: "message", T: AgentImage, repeated: true },
+    { no: 2, name: "default_image", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "used_bytes", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 4, name: "quota_bytes", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): AgentImagesSettings {
+    return new AgentImagesSettings().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): AgentImagesSettings {
+    return new AgentImagesSettings().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): AgentImagesSettings {
+    return new AgentImagesSettings().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: AgentImagesSettings | PlainMessage<AgentImagesSettings> | undefined, b: AgentImagesSettings | PlainMessage<AgentImagesSettings> | undefined): boolean {
+    return proto3.util.equals(AgentImagesSettings, a, b);
+  }
+}
+
+/**
+ * SetAgentImagesRequest — новый список образов (перезаписывается целиком). Каждый образ
+ * проверяется: подтягивается при отсутствии, проверяется на пригодность для сессий и на
+ * квоту.
+ *
+ * @generated from message brigade.v1.SetAgentImagesRequest
+ */
+export class SetAgentImagesRequest extends Message<SetAgentImagesRequest> {
+  /**
+   * @generated from field: repeated string images = 1;
+   */
+  images: string[] = [];
+
+  constructor(data?: PartialMessage<SetAgentImagesRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.SetAgentImagesRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "images", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SetAgentImagesRequest {
+    return new SetAgentImagesRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SetAgentImagesRequest {
+    return new SetAgentImagesRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SetAgentImagesRequest {
+    return new SetAgentImagesRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SetAgentImagesRequest | PlainMessage<SetAgentImagesRequest> | undefined, b: SetAgentImagesRequest | PlainMessage<SetAgentImagesRequest> | undefined): boolean {
+    return proto3.util.equals(SetAgentImagesRequest, a, b);
   }
 }
 

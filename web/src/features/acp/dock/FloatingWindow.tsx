@@ -1,3 +1,4 @@
+import { useEffect, type RefObject } from "react";
 import type {
   ComponentType,
   CSSProperties,
@@ -40,6 +41,32 @@ export function FloatingWindow({
       <div className="flex min-h-0 flex-1 flex-col">{children}</div>
     </div>
   );
+}
+
+// useDismissOnOutside закрывает справочное окно по Esc и клику мимо — оно ведёт себя как
+// всплывающая панель, а не как часть страницы. Чип-переключатель исключён: иначе клик по
+// нему закрывал бы окно «мимо» и тут же открывал заново своим onClick.
+export function useDismissOnOutside(
+  ref: RefObject<HTMLElement | null>,
+  onClose: () => void,
+) {
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (ref.current?.contains(target ?? null)) return;
+      if (target?.closest("[data-dock-chip]")) return;
+      onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [ref, onClose]);
 }
 
 // WindowTitlebar — стандартная шапка окна: терракотовая иконка, заголовок,

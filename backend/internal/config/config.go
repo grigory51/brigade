@@ -54,6 +54,18 @@ type Config struct {
 	// фича выключена (используется прежний named volume состояния по дереву сессий).
 	ClaudeHomeDir string `koanf:"claude_home_dir"`
 
+	// AgentImage — образ контейнера агента по умолчанию (docker-режим). Он же донор
+	// runtime-компонентов brigade для сессий на пользовательских образах. Пусто →
+	// spawn.DefaultImage (локально собранный brigade/claude-agent:latest); инсталляции,
+	// которые образ не собирают, указывают здесь опубликованный.
+	AgentImage string `koanf:"agent_image"`
+
+	// ImageQuotaBytes — потолок на суммарный вес образов агента, добавленных ОДНИМ
+	// пользователем (docker-режим). Образы тяжёлые и лежат на диске хоста, поэтому список
+	// без предела забил бы его. Не задано (0) → дефолт 1 ГиБ; отрицательное значение
+	// снимает ограничение.
+	ImageQuotaBytes int64 `koanf:"image_quota_bytes"`
+
 	Preview PreviewConfig `koanf:"preview"`
 	TLS     TLSConfig     `koanf:"tls"`
 	Memory  MemoryConfig  `koanf:"memory"`
@@ -173,6 +185,11 @@ func (c *Config) Validate() error {
 	// без лимита).
 	if c.MaxContainers == 0 {
 		c.MaxContainers = 16
+	}
+	// Квота образов: как и лимит контейнеров, 0 — дефолт, отрицательное — без ограничения
+	// (agentimage трактует <= 0 как «не проверять»).
+	if c.ImageQuotaBytes == 0 {
+		c.ImageQuotaBytes = 1 << 30
 	}
 	if c.SQLitePath == "" {
 		return fmt.Errorf("config: sqlite_path не задан")

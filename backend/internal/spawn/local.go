@@ -12,9 +12,19 @@ import (
 	"github.com/creack/pty"
 )
 
-// agentCommand — исполняемый файл агента. Claude Code предоставляет TTY-режим из
-// коробки, при resume принимает `--resume <agent_session_id>`.
-const agentCommand = "claude"
+// defaultAgentCommand — исполняемый файл агента, когда вид сессии его не задал.
+// Claude Code предоставляет TTY-режим из коробки, при resume принимает
+// `--resume <agent_session_id>`.
+const defaultAgentCommand = "claude"
+
+// agentCommand — команда агента из спецификации; пусто — дефолт. Имя приходит из манифеста
+// агента (internal/agent), чтобы второй агент не требовал правок спавнера.
+func agentCommand(cmd string) string {
+	if cmd == "" {
+		return defaultAgentCommand
+	}
+	return cmd
+}
 
 // LocalSpawner запускает агентов как процессы хост-машины внутри pty.
 type LocalSpawner struct{}
@@ -24,7 +34,7 @@ func NewLocalSpawner() *LocalSpawner { return &LocalSpawner{} }
 
 // Spawn запускает `claude` в новом pty.
 func (s *LocalSpawner) Spawn(ctx context.Context, spec Spec) (Handle, error) {
-	return startLocal(ctx, []string{}, spec.Cwd, spec.Env, spec.SessionID)
+	return startLocal(ctx, []string{}, spec.Cwd, spec.Env, spec.SessionID, spec.Command)
 }
 
 // Reattach в local-режиме восстанавливает сессию повторным запуском агента с
@@ -34,12 +44,12 @@ func (s *LocalSpawner) Reattach(ctx context.Context, p Persisted) (Handle, error
 	if p.AgentSessionID == "" {
 		return nil, errors.New("spawn: local reattach requires agent session id")
 	}
-	return startLocal(ctx, []string{"--resume", p.AgentSessionID}, p.Cwd, p.Env, p.SessionID)
+	return startLocal(ctx, []string{"--resume", p.AgentSessionID}, p.Cwd, p.Env, p.SessionID, p.Command)
 }
 
 // startLocal формирует команду агента, запускает её в pty и оборачивает в localHandle.
-func startLocal(ctx context.Context, args []string, cwd string, env []string, sessionID string) (Handle, error) {
-	cmd := exec.CommandContext(ctx, agentCommand, args...)
+func startLocal(ctx context.Context, args []string, cwd string, env []string, sessionID, command string) (Handle, error) {
+	cmd := exec.CommandContext(ctx, agentCommand(command), args...)
 	cmd.Dir = cwd
 	// Наследуем окружение хоста и добавляем переданные переменные (CLAUDE_CODE_OAUTH_TOKEN
 	// и т. п.) поверх него.
