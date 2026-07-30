@@ -24,7 +24,8 @@ mobile/local.properties
 # IDE / OS.
 .DS_Store
 .idea/
-.claude/
+.claude/*
+!.claude/skills
 
 # Архивы (дизайн-хендоффы, выгрузки) — не часть репозитория.
 *.zip
