@@ -1,6 +1,9 @@
 workspace/
 bin/
 
+# `go build ./cmd/brigade` без -o кладёт бинарник в текущий каталог.
+/brigade
+
 # Локальные конфиги и базы.
 config.yaml
 *.db
