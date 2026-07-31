@@ -18,6 +18,14 @@ import { toast } from "sonner";
 import { memoryClient } from "@/api/client";
 import type { Note, Topic } from "@/api/gen/brigade/v1/memory_pb";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Markdown } from "@/components/markdown";
@@ -251,14 +259,14 @@ function TopicHeader({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   async function del() {
-    setMenuOpen(false);
     if (!topic) return;
-    if (!window.confirm(`Удалить тему «${topic.name}» со всеми заметками?`)) return;
     setDeleting(true);
     try {
       await memoryClient.deleteTopic({ id: topic.id });
+      setDeleteOpen(false);
       onDeleted?.();
     } catch (err) {
       toast.error(
@@ -345,7 +353,10 @@ function TopicHeader({
                       <div className="my-1 h-px bg-border" />
                       <button
                         type="button"
-                        onClick={() => void del()}
+              onClick={() => {
+                setMenuOpen(false);
+                setDeleteOpen(true);
+              }}
                         className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-[#e08a6f] hover:bg-[rgba(201,100,66,0.14)]"
                       >
                         <Trash2 className="size-3.5" />
@@ -359,6 +370,14 @@ function TopicHeader({
           </div>
         </>
       )}
+      <DeleteConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title={`Удалить тему «${topic?.name ?? ""}»?`}
+        description="Все заметки внутри темы будут удалены. Действие необратимо."
+        busy={deleting}
+        onConfirm={() => void del()}
+      />
     </div>
   );
 }
@@ -581,6 +600,7 @@ function NoteRow({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   // busy — идёт move/delete (синхронный git-push занимает секунды): гасим строку и крутим
   // спиннер, чтобы действие не выглядело «зависшим».
   const [busy, setBusy] = useState(false);
@@ -605,16 +625,10 @@ function NoteRow({
   }
 
   async function remove() {
-    setMenuOpen(false);
-    if (
-      !window.confirm(
-        `Удалить заметку «${note.title || note.id}»? Действие необратимо.`,
-      )
-    )
-      return;
     setBusy(true);
     try {
       await memoryClient.deleteNote({ id: note.id });
+      setDeleteOpen(false);
       onDeleted(note.id);
     } catch (err) {
       toast.error(
@@ -774,7 +788,10 @@ function NoteRow({
             <div className="my-1 h-px bg-border" />
             <button
               type="button"
-              onClick={() => void remove()}
+              onClick={() => {
+                setMenuOpen(false);
+                setDeleteOpen(true);
+              }}
               className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-[#e08a6f] hover:bg-[rgba(201,100,66,0.14)]"
             >
               <Trash2 className="size-3.5" />
@@ -783,7 +800,61 @@ function NoteRow({
           </div>
         </>
       )}
+      <DeleteConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title={`Удалить заметку «${note.title || note.id}»?`}
+        description="Заметка будет удалена из памяти и git-репозитория. Действие необратимо."
+        busy={busy}
+        onConfirm={() => void remove()}
+      />
     </div>
+  );
+}
+
+function DeleteConfirmDialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  busy,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  description: string;
+  busy: boolean;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={() => onOpenChange(false)}
+          >
+            Отмена
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={busy}
+            onClick={onConfirm}
+          >
+            {busy && <Loader2 className="size-4 animate-spin" />}
+            Удалить
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

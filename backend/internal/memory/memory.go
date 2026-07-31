@@ -13,6 +13,7 @@ package memory
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"log"
@@ -146,6 +147,7 @@ var topicColors = []string{
 // Service — ядро памяти: пер-юзерные git-хранилища + чтение/запись заметок.
 type Service struct {
 	baseDir   string           // корень пер-юзерных рабочих копий: <baseDir>/<userID>/...
+	socketDir string           // короткий process-scoped каталог Unix-сокетов ssh-agent
 	settings  SettingsSource   // источник пер-юзерных настроек (remote)
 	agentKeys AgentKeyProvider // источник per-user SSH-ключа агента для git@-remote (может быть nil)
 	mu        sync.Mutex
@@ -160,8 +162,15 @@ type Service struct {
 // пер-юзерных настроек (store); agentKeys — источник per-user SSH-ключа агента для доступа к
 // git@-remote (nil — без ключа, только публичные/https-remote).
 func NewService(baseDir string, settings SettingsSource, agentKeys AgentKeyProvider) *Service {
+	socketDir, err := os.MkdirTemp("/tmp", fmt.Sprintf("brigade-memory-%d-", os.Getpid()))
+	if err != nil {
+		// Ошибка вернётся с контекстом при первой SSH-операции; конструктор исторически
+		// не возвращает error и менять весь граф зависимостей ради runtime-каталога не нужно.
+		socketDir = filepath.Join("/tmp", fmt.Sprintf("brigade-memory-%d", os.Getpid()))
+	}
 	return &Service{
 		baseDir:   baseDir,
+		socketDir: socketDir,
 		settings:  settings,
 		agentKeys: agentKeys,
 		agents:    make(map[string]*sshagent.Agent),
@@ -176,6 +185,7 @@ func (s *Service) Close() {
 		a.Close()
 		delete(s.agents, id)
 	}
+	_ = os.RemoveAll(s.socketDir)
 }
 
 // ensureAgentLocked поднимает (или переиспользует) ssh-agent пользователя с его ключом и
@@ -196,12 +206,23 @@ func (s *Service) ensureAgentLocked(userDir, userID, privatePEM string) (string,
 	if err := os.Remove(filepath.Join(userDir, "id")); err != nil && !errors.Is(err, os.ErrNotExist) {
 		log.Printf("memory: remove legacy key file: %v", err)
 	}
-	a, err := sshagent.Start(filepath.Join(userDir, "ssh-agent.sock"), privatePEM)
+	if err := os.MkdirAll(s.socketDir, 0o700); err != nil {
+		return "", fmt.Errorf("memory: mkdir ssh-agent runtime dir: %w", err)
+	}
+	// Unix socket path на macOS ограничен примерно сотней байт. Application Support + UUID
+	// этот предел превышает, поэтому сокет живёт в коротком runtime-каталоге. Hash нужен
+	// только для разведения пользователей и не является идентификатором в UI/данных.
+	a, err := sshagent.Start(s.agentSocketPath(userID), privatePEM)
 	if err != nil {
 		return "", err
 	}
 	s.agents[userID] = a
 	return a.Path(), nil
+}
+
+func (s *Service) agentSocketPath(userID string) string {
+	sum := sha256.Sum256([]byte(userID))
+	return filepath.Join(s.socketDir, fmt.Sprintf("%x.sock", sum[:8]))
 }
 
 // space — разрешённое пер-юзерное окружение для git-операций.
@@ -683,6 +704,13 @@ func (s *Service) DeleteNote(ctx context.Context, userID, id string) (string, er
 	}
 	f, err := s.findFileLocked(sp, id)
 	if err != nil {
+		// Удаление идемпотентно. В частности, это восстанавливает операцию после ошибки
+		// commit/push: файл уже мог исчезнуть из рабочей копии, а клиент — оставить строку
+		// на экране и повторить запрос. Стейджим всю рабочую копию, чтобы зафиксировать
+		// незакоммиченное удаление, и повторяем push уже созданного коммита.
+		if errors.Is(err, ErrNotFound) {
+			return s.commitPushLocked(ctx, sp, "memory: delete "+id, ".")
+		}
 		return "", err
 	}
 	if err := os.Remove(filepath.Join(sp.repoDir, f.Rel)); err != nil && !os.IsNotExist(err) {

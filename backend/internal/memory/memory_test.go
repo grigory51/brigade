@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -58,6 +59,52 @@ func TestSelfHeal(t *testing.T) {
 	}
 	if len(notes) != 2 {
 		t.Fatalf("после self-heal ждём 2 заметки, получили %d", len(notes))
+	}
+}
+
+// TestDeleteNote проверяет полный write-path удаления: файл исчезает из рабочей копии,
+// удаление фиксируется коммитом и доезжает до remote.
+func TestDeleteNote(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git не доступен")
+	}
+	base := t.TempDir()
+	bare := filepath.Join(t.TempDir(), "remote.git")
+	if out, err := exec.Command("git", "init", "--bare", "-b", "main", bare).CombinedOutput(); err != nil {
+		t.Fatalf("init bare: %v: %s", err, out)
+	}
+
+	svc := NewService(base, fakeSettings{remote: bare}, nil)
+	t.Cleanup(svc.Close)
+	ctx := context.Background()
+	const userID = "u1"
+	note, _, err := svc.Create(ctx, userID, Note{Title: "test", Body: "delete me"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	// Симулируем оборванный предыдущий delete: файл уже удалён, но staging/commit/push
+	// не выполнились. Повторный запрос должен завершить операцию, а не вернуть NotFound.
+	repoDir := filepath.Join(base, userID, "repo")
+	if err := os.Remove(filepath.Join(repoDir, notePath(note))); err != nil {
+		t.Fatalf("remove before retry: %v", err)
+	}
+	if _, err := svc.DeleteNote(ctx, userID, note.ID); err != nil {
+		t.Fatalf("retry delete: %v", err)
+	}
+	if _, err := svc.Get(ctx, userID, note.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("get after delete: %v, want ErrNotFound", err)
+	}
+
+	checkout := t.TempDir()
+	if out, err := exec.Command("git", "clone", bare, checkout).CombinedOutput(); err != nil {
+		t.Fatalf("clone remote: %v: %s", err, out)
+	}
+	files, err := scanNotes(checkout)
+	if err != nil {
+		t.Fatalf("scan remote: %v", err)
+	}
+	if len(files) != 0 {
+		t.Fatalf("remote still contains deleted note: %+v", files)
 	}
 }
 
