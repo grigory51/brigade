@@ -50,6 +50,9 @@ var (
 	LayerClaudeCLI = Layer{Name: "claude-cli", Bin: "bin"}
 	// LayerACPAdapter — ACP-адаптер поверх Claude Agent SDK (структурированный режим).
 	LayerACPAdapter = Layer{Name: "acp-adapter", Bin: "bin"}
+	// LayerCodex — Codex CLI и ACP-адаптер. codex-acp зависит от официального Codex CLI,
+	// поэтому один слой обслуживает оба режима без дублирования npm-пакетов.
+	LayerCodex = Layer{Name: "codex", Bin: "bin"}
 	// LayerBrigadeMCP — stdio MCP-сервер brigade с кастомными UI-инструментами
 	// (render_ui, show_choice). Нужен только ACP: в CLI-режиме их некому отрисовать.
 	LayerBrigadeMCP = Layer{Name: "brigade-mcp"}
@@ -85,9 +88,24 @@ var Claude = Type{
 	McpServerScript: LayerBrigadeMCP.Path() + "/brigade-tools.mjs",
 }
 
+// Codex — официальный Codex CLI через ACP-адаптер codex-acp либо интерактивный CLI.
+var Codex = Type{
+	ID:   "codex",
+	Name: "Codex",
+	Layers: map[store.SessionKind][]Layer{
+		store.SessionKindCLI: {LayerNode, LayerCodex},
+		store.SessionKindACP: {LayerNode, LayerCodex, LayerBrigadeMCP},
+	},
+	Command: map[store.SessionKind]string{
+		store.SessionKindCLI: "codex",
+		store.SessionKindACP: "codex-acp",
+	},
+	McpServerScript: LayerBrigadeMCP.Path() + "/brigade-tools.mjs",
+}
+
 // types — реестр доступных агентов. Пока один; форма манифеста рассчитана на то, что
 // второй добавляется записью здесь, без правок в spawn и реестре сессий.
-var types = []Type{Claude}
+var types = []Type{Claude, Codex}
 
 // List возвращает доступные типы агентов.
 func List() []Type { return types }

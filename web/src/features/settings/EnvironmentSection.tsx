@@ -33,11 +33,7 @@ import {
  * libc, пользователь с uid 1001 и git — это проверяется при добавлении.
  */
 
-export function EnvironmentSection({
-  onCountChange,
-}: {
-  onCountChange: (n: number) => void;
-}) {
+export function EnvironmentSection() {
   const [settings, setSettings] = useState<AgentImagesSettings | null>(null);
   const [runtime, setRuntime] = useState<AgentRuntimeSettings | null>(null);
   const [draft, setDraft] = useState("");
@@ -50,7 +46,6 @@ export function EnvironmentSection({
       .then((res) => {
         if (!alive) return;
         setSettings(res);
-        onCountChange(res.images.length);
       })
       .catch(() => alive && setSettings(null));
     authClient
@@ -60,7 +55,7 @@ export function EnvironmentSection({
     return () => {
       alive = false;
     };
-  }, [onCountChange]);
+  }, []);
 
   // Режим и контекст применяются при следующем запуске: спавнер создаётся один раз на
   // старте процесса.
@@ -86,7 +81,6 @@ export function EnvironmentSection({
       try {
         const res = await authClient.setAgentImages({ images });
         setSettings(res);
-        onCountChange(res.images.length);
         setDraft("");
       } catch (err) {
         toast.error(errorText(err, "Не удалось сохранить образы"));
@@ -94,7 +88,7 @@ export function EnvironmentSection({
         setBusy(false);
       }
     },
-    [onCountChange],
+    [],
   );
 
   if (settings === null || runtime === null) return <Loading />;

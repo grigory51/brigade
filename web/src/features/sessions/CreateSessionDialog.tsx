@@ -76,6 +76,8 @@ export function CreateSessionDialog({
   // (non-interactive), поэтому без токена не поднимется — ACP-опцию дизейблим. CLI
   // же можно авторизовать вручную в терминале (/login), поэтому доступен всегда.
   const [tokenSet, setTokenSet] = useState<boolean | null>(null);
+  const [codexAuth, setCodexAuth] = useState<{apiKey: boolean; chatgpt: boolean; defaultProfile: string} | null>(null);
+  const [authProfile, setAuthProfile] = useState("");
   // MCP-серверы пользователя и выбранный набор. Выбор помнится между запусками: набор
   // инструментов у человека обычно постоянный, отмечать его заново каждый раз незачем.
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
@@ -123,6 +125,9 @@ export function CreateSessionDialog({
       .catch(() => {
         if (!cancelled) setTokenSet(false);
       });
+    authClient.getCodexSettings({}).then((res) => {
+      if (!cancelled) setCodexAuth({apiKey: res.apiKeySet, chatgpt: res.chatgptConnected, defaultProfile: res.defaultProfile});
+    }).catch(() => { if (!cancelled) setCodexAuth({apiKey: false, chatgpt: false, defaultProfile: ""}); });
     return () => {
       cancelled = true;
     };
@@ -173,11 +178,22 @@ export function CreateSessionDialog({
 
   // Если токен не задан, а выбран ACP (например, статус догрузился после выбора) —
   // откатываем на CLI, чтобы нельзя было создать заведомо нерабочую ACP-сессию.
+  const selectedAgent = agents?.find((agent) => agent.id === agentId);
+  const codexProfiles = codexAuth ? [codexAuth.chatgpt && "chatgpt", codexAuth.apiKey && "api-key"].filter(Boolean) as string[] : [];
+  const authReady = agentId === "codex" ? codexProfiles.length > 0 : tokenSet !== false;
+  const canCreate = agentId === "codex" ? authReady : kind === SessionKind.CLI || authReady;
+
   useEffect(() => {
-    if (tokenSet === false && kind === SessionKind.ACP) {
+    if (!authReady && kind === SessionKind.ACP) {
       setKind(SessionKind.CLI);
     }
-  }, [tokenSet, kind]);
+  }, [authReady, kind]);
+
+  useEffect(() => {
+    if (agentId !== "codex") { setAuthProfile("claude-token"); return; }
+    const preferred = codexAuth?.defaultProfile;
+    setAuthProfile(preferred && codexProfiles.includes(preferred) ? preferred : (codexProfiles[0] ?? ""));
+  }, [agentId, codexAuth?.defaultProfile, codexAuth?.apiKey, codexAuth?.chatgpt]);
 
   async function onSubmit() {
     if (!agentId) return;
@@ -191,6 +207,7 @@ export function CreateSessionDialog({
         prompt: "",
         mcpServerIds: mcpSelected,
         image,
+        authProfile,
       });
       const session = res.session;
       if (!session) throw new Error("пустой ответ Create");
@@ -263,20 +280,23 @@ export function CreateSessionDialog({
                       статус токена грузится (tokenSet === null) не блокируем. */}
                   <SelectItem
                     value={String(SessionKind.ACP)}
-                    disabled={tokenSet === false}
+                    disabled={!authReady || (selectedAgent?.supportedKinds.length ? !selectedAgent.supportedKinds.includes("acp") : false)}
                   >
                     ACP (чат)
                   </SelectItem>
                 </SelectContent>
               </Select>
-              {tokenSet === false && (
+              {!authReady && (
                 <p className="text-xs text-muted-foreground">
-                  ACP недоступен без токена Claude — задайте его в{" "}
-                  <span className="font-medium">Настройки → Claude</span>. CLI
-                  можно авторизовать вручную в терминале.
+                  Агент не настроен — добавьте авторизацию в{" "}
+                  <span className="font-medium">Настройки → {agentId === "codex" ? "Codex" : "Claude"}</span>.
                 </p>
               )}
             </div>
+
+            {agentId === "codex" && codexProfiles.length > 1 && (
+              <div className="space-y-2"><Label>Авторизация</Label><Select value={authProfile} onValueChange={setAuthProfile}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="chatgpt">ChatGPT Plus</SelectItem><SelectItem value="api-key">OpenAI API key</SelectItem></SelectContent></Select></div>
+            )}
 
             {images !== null && images.images.length > 0 && (
               <div className="space-y-2">
@@ -351,7 +371,7 @@ export function CreateSessionDialog({
           </Button>
           <Button
             onClick={() => void onSubmit()}
-            disabled={busy || loading || noAgents || !agentId}
+            disabled={busy || loading || noAgents || !agentId || !canCreate}
           >
             {busy && <Loader2 className="size-4 animate-spin" />}
             Создать

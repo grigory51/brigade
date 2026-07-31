@@ -8,6 +8,7 @@ package auth
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -205,6 +206,56 @@ func (s *Service) SetClaudeToken(ctx context.Context, userID, token string) erro
 		userID, s.cipher.Encrypt(token), s.now().Unix())
 	if err != nil {
 		return fmt.Errorf("auth: set claude token: %w", err)
+	}
+	return nil
+}
+
+// CodexSettings возвращает только состояние профилей; секреты наружу не выдаются.
+func (s *Service) CodexSettings(ctx context.Context, userID string) (apiKeySet, chatGPTConnected bool, defaultProfile string, err error) {
+	var apiKey, authJSON string
+	err = s.db.QueryRowContext(ctx, `SELECT codex_api_key, codex_auth_json, codex_default_profile FROM user_settings WHERE user_id = ?`, userID).
+		Scan(&apiKey, &authJSON, &defaultProfile)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, false, "", nil
+	}
+	if err != nil {
+		return false, false, "", fmt.Errorf("auth: query codex settings: %w", err)
+	}
+	if defaultProfile == "" || (defaultProfile == "chatgpt" && authJSON == "") || (defaultProfile == "api-key" && apiKey == "") {
+		if authJSON != "" {
+			defaultProfile = "chatgpt"
+		} else if apiKey != "" {
+			defaultProfile = "api-key"
+		} else {
+			defaultProfile = ""
+		}
+	}
+	return apiKey != "", authJSON != "", defaultProfile, nil
+}
+
+func (s *Service) SetCodexAPIKey(ctx context.Context, userID, apiKey string) error {
+	return s.setCodexSetting(ctx, userID, "codex_api_key", s.cipher.Encrypt(apiKey))
+}
+
+func (s *Service) SetCodexAuthJSON(ctx context.Context, userID, authJSON string) error {
+	if authJSON != "" && !json.Valid([]byte(authJSON)) {
+		return errors.New("auth: codex auth.json is not valid JSON")
+	}
+	return s.setCodexSetting(ctx, userID, "codex_auth_json", s.cipher.Encrypt(authJSON))
+}
+
+func (s *Service) SetCodexDefaultProfile(ctx context.Context, userID, profile string) error {
+	if profile != "" && profile != "api-key" && profile != "chatgpt" {
+		return errors.New("auth: unknown codex profile")
+	}
+	return s.setCodexSetting(ctx, userID, "codex_default_profile", profile)
+}
+
+func (s *Service) setCodexSetting(ctx context.Context, userID, column, value string) error {
+	query := fmt.Sprintf(`INSERT INTO user_settings (user_id, %s, updated_at) VALUES (?, ?, ?)
+		ON CONFLICT(user_id) DO UPDATE SET %s = excluded.%s, updated_at = excluded.updated_at`, column, column, column)
+	if _, err := s.db.ExecContext(ctx, query, userID, value, s.now().Unix()); err != nil {
+		return fmt.Errorf("auth: set codex setting: %w", err)
 	}
 	return nil
 }

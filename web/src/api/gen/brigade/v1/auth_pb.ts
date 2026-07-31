@@ -340,6 +340,298 @@ export class SetClaudeTokenRequest extends Message<SetClaudeTokenRequest> {
 }
 
 /**
+ * @generated from message brigade.v1.CodexSettings
+ */
+export class CodexSettings extends Message<CodexSettings> {
+  /**
+   * @generated from field: bool api_key_set = 1;
+   */
+  apiKeySet = false;
+
+  /**
+   * @generated from field: bool chatgpt_connected = 2;
+   */
+  chatgptConnected = false;
+
+  /**
+   * @generated from field: string default_profile = 3;
+   */
+  defaultProfile = "";
+
+  constructor(data?: PartialMessage<CodexSettings>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.CodexSettings";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "api_key_set", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 2, name: "chatgpt_connected", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 3, name: "default_profile", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CodexSettings {
+    return new CodexSettings().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): CodexSettings {
+    return new CodexSettings().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): CodexSettings {
+    return new CodexSettings().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: CodexSettings | PlainMessage<CodexSettings> | undefined, b: CodexSettings | PlainMessage<CodexSettings> | undefined): boolean {
+    return proto3.util.equals(CodexSettings, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.SetCodexApiKeyRequest
+ */
+export class SetCodexApiKeyRequest extends Message<SetCodexApiKeyRequest> {
+  /**
+   * @generated from field: string api_key = 1;
+   */
+  apiKey = "";
+
+  constructor(data?: PartialMessage<SetCodexApiKeyRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.SetCodexApiKeyRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "api_key", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SetCodexApiKeyRequest {
+    return new SetCodexApiKeyRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SetCodexApiKeyRequest {
+    return new SetCodexApiKeyRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SetCodexApiKeyRequest {
+    return new SetCodexApiKeyRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SetCodexApiKeyRequest | PlainMessage<SetCodexApiKeyRequest> | undefined, b: SetCodexApiKeyRequest | PlainMessage<SetCodexApiKeyRequest> | undefined): boolean {
+    return proto3.util.equals(SetCodexApiKeyRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.SetCodexDefaultProfileRequest
+ */
+export class SetCodexDefaultProfileRequest extends Message<SetCodexDefaultProfileRequest> {
+  /**
+   * @generated from field: string profile = 1;
+   */
+  profile = "";
+
+  constructor(data?: PartialMessage<SetCodexDefaultProfileRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.SetCodexDefaultProfileRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "profile", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SetCodexDefaultProfileRequest {
+    return new SetCodexDefaultProfileRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SetCodexDefaultProfileRequest {
+    return new SetCodexDefaultProfileRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SetCodexDefaultProfileRequest {
+    return new SetCodexDefaultProfileRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SetCodexDefaultProfileRequest | PlainMessage<SetCodexDefaultProfileRequest> | undefined, b: SetCodexDefaultProfileRequest | PlainMessage<SetCodexDefaultProfileRequest> | undefined): boolean {
+    return proto3.util.equals(SetCodexDefaultProfileRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.SetCodexChatGPTAuthRequest
+ */
+export class SetCodexChatGPTAuthRequest extends Message<SetCodexChatGPTAuthRequest> {
+  /**
+   * Содержимое официального CODEX_HOME/auth.json. Принимается только сервером и
+   * сохраняется зашифрованным; обратно клиенту никогда не возвращается.
+   *
+   * @generated from field: string auth_json = 1;
+   */
+  authJson = "";
+
+  constructor(data?: PartialMessage<SetCodexChatGPTAuthRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.SetCodexChatGPTAuthRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "auth_json", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SetCodexChatGPTAuthRequest {
+    return new SetCodexChatGPTAuthRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SetCodexChatGPTAuthRequest {
+    return new SetCodexChatGPTAuthRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SetCodexChatGPTAuthRequest {
+    return new SetCodexChatGPTAuthRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SetCodexChatGPTAuthRequest | PlainMessage<SetCodexChatGPTAuthRequest> | undefined, b: SetCodexChatGPTAuthRequest | PlainMessage<SetCodexChatGPTAuthRequest> | undefined): boolean {
+    return proto3.util.equals(SetCodexChatGPTAuthRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.CodexLogin
+ */
+export class CodexLogin extends Message<CodexLogin> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  /**
+   * @generated from field: string status = 2;
+   */
+  status = "";
+
+  /**
+   * @generated from field: string output = 3;
+   */
+  output = "";
+
+  /**
+   * @generated from field: string error = 4;
+   */
+  error = "";
+
+  constructor(data?: PartialMessage<CodexLogin>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.CodexLogin";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "status", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "output", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CodexLogin {
+    return new CodexLogin().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): CodexLogin {
+    return new CodexLogin().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): CodexLogin {
+    return new CodexLogin().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: CodexLogin | PlainMessage<CodexLogin> | undefined, b: CodexLogin | PlainMessage<CodexLogin> | undefined): boolean {
+    return proto3.util.equals(CodexLogin, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.GetCodexLoginRequest
+ */
+export class GetCodexLoginRequest extends Message<GetCodexLoginRequest> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  constructor(data?: PartialMessage<GetCodexLoginRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.GetCodexLoginRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetCodexLoginRequest {
+    return new GetCodexLoginRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetCodexLoginRequest {
+    return new GetCodexLoginRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetCodexLoginRequest {
+    return new GetCodexLoginRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: GetCodexLoginRequest | PlainMessage<GetCodexLoginRequest> | undefined, b: GetCodexLoginRequest | PlainMessage<GetCodexLoginRequest> | undefined): boolean {
+    return proto3.util.equals(GetCodexLoginRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.CancelCodexLoginRequest
+ */
+export class CancelCodexLoginRequest extends Message<CancelCodexLoginRequest> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  constructor(data?: PartialMessage<CancelCodexLoginRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.CancelCodexLoginRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CancelCodexLoginRequest {
+    return new CancelCodexLoginRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): CancelCodexLoginRequest {
+    return new CancelCodexLoginRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): CancelCodexLoginRequest {
+    return new CancelCodexLoginRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: CancelCodexLoginRequest | PlainMessage<CancelCodexLoginRequest> | undefined, b: CancelCodexLoginRequest | PlainMessage<CancelCodexLoginRequest> | undefined): boolean {
+    return proto3.util.equals(CancelCodexLoginRequest, a, b);
+  }
+}
+
+/**
  * MemorySettings — состояние настроек личной памяти пользователя: remote (его собственный
  * git-репозиторий заметок). Доступ к git@-remote идёт по SSH-ключу агента (см. SSHSettings),
  * отдельный ключ памяти не задаётся.

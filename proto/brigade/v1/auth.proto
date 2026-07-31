@@ -45,6 +45,28 @@ message SetClaudeTokenRequest {
   string token = 1;
 }
 
+message CodexSettings {
+  bool api_key_set = 1;
+  bool chatgpt_connected = 2;
+  string default_profile = 3;
+}
+
+message SetCodexApiKeyRequest { string api_key = 1; }
+message SetCodexDefaultProfileRequest { string profile = 1; }
+message SetCodexChatGPTAuthRequest {
+  // Содержимое официального CODEX_HOME/auth.json. Принимается только сервером и
+  // сохраняется зашифрованным; обратно клиенту никогда не возвращается.
+  string auth_json = 1;
+}
+message CodexLogin {
+  string id = 1;
+  string status = 2;
+  string output = 3;
+  string error = 4;
+}
+message GetCodexLoginRequest { string id = 1; }
+message CancelCodexLoginRequest { string id = 1; }
+
 // MemorySettings — состояние настроек личной памяти пользователя: remote (его собственный
 // git-репозиторий заметок). Доступ к git@-remote идёт по SSH-ключу агента (см. SSHSettings),
 // отдельный ключ памяти не задаётся.
@@ -165,6 +187,14 @@ service AuthService {
   // SetClaudeToken задаёт (или очищает пустым значением) подписочный токен Claude
   // пользователя. Возвращает обновлённое состояние (token_set).
   rpc SetClaudeToken(SetClaudeTokenRequest) returns (ClaudeSettings) {}
+  rpc GetCodexSettings(Empty) returns (CodexSettings) {}
+  rpc SetCodexApiKey(SetCodexApiKeyRequest) returns (CodexSettings) {}
+  rpc SetCodexChatGPTAuth(SetCodexChatGPTAuthRequest) returns (CodexSettings) {}
+  rpc StartCodexLogin(Empty) returns (CodexLogin) {}
+  rpc GetCodexLogin(GetCodexLoginRequest) returns (CodexLogin) {}
+  rpc CancelCodexLogin(CancelCodexLoginRequest) returns (Empty) {}
+  rpc DisconnectCodexChatGPT(Empty) returns (CodexSettings) {}
+  rpc SetCodexDefaultProfile(SetCodexDefaultProfileRequest) returns (CodexSettings) {}
   // GetMemorySettings возвращает настройки личной памяти пользователя (git-remote).
   rpc GetMemorySettings(Empty) returns (MemorySettings) {}
   // SetMemorySettings задаёт git-remote личной памяти. Возвращает обновлённое состояние.

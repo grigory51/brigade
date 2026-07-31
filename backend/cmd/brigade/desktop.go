@@ -52,6 +52,8 @@ func runDesktop() {
 	// Режим исполнения сессий правится из настроек приложения — отдельным файлом, чтобы не
 	// переписывать пользовательский config.yaml (и не терять его комментарии).
 	desktopRuntimePath = filepath.Join(appDir, "runtime.json")
+	// Подхватывает и существующие config.yaml, созданные до появления agent_home_dir.
+	_ = os.Setenv("BRIGADE_AGENT_HOME_DIR", filepath.Join(appDir, "agent-home"))
 	enrichPATH()
 	prependBundledTools()
 
@@ -116,6 +118,7 @@ seed:
   username: "admin"
   password: "admin"
 work_dir: %q
+agent_home_dir: %q
 preview:
   enabled: true
   mode: "subdomain"
@@ -128,6 +131,7 @@ memory:
 		filepath.Join(appDir, "brigade.db"),
 		secret,
 		filepath.Join(appDir, "workspace"),
+		filepath.Join(appDir, "agent-home"),
 		filepath.Join(appDir, "memory"),
 	)
 	if err := os.WriteFile(cfgPath, []byte(yaml), 0o600); err != nil {

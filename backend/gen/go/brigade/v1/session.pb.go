@@ -207,7 +207,9 @@ type Session struct {
 	// Только для ACP-сессий; набор применяется при спавне и переконфигурации агента.
 	McpServerIds []string `protobuf:"bytes,15,rep,name=mcp_server_ids,json=mcpServerIds,proto3" json:"mcp_server_ids,omitempty"`
 	// image — образ контейнера сессии (docker-режим). Пусто — базовый образ brigade.
-	Image         string `protobuf:"bytes,16,opt,name=image,proto3" json:"image,omitempty"`
+	Image string `protobuf:"bytes,16,opt,name=image,proto3" json:"image,omitempty"`
+	// auth_profile — закреплённый за сессией профиль авторизации агента.
+	AuthProfile   string `protobuf:"bytes,17,opt,name=auth_profile,json=authProfile,proto3" json:"auth_profile,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -354,6 +356,13 @@ func (x *Session) GetImage() string {
 	return ""
 }
 
+func (x *Session) GetAuthProfile() string {
+	if x != nil {
+		return x.AuthProfile
+	}
+	return ""
+}
+
 type CreateSessionRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	AgentType string                 `protobuf:"bytes,1,opt,name=agent_type,json=agentType,proto3" json:"agent_type,omitempty"`
@@ -367,6 +376,7 @@ type CreateSessionRequest struct {
 	// image — образ контейнера сессии из списка пользователя (см. AuthService.GetAgentImages).
 	// Пусто — базовый образ brigade.
 	Image         string `protobuf:"bytes,7,opt,name=image,proto3" json:"image,omitempty"`
+	AuthProfile   string `protobuf:"bytes,8,opt,name=auth_profile,json=authProfile,proto3" json:"auth_profile,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -439,6 +449,13 @@ func (x *CreateSessionRequest) GetMcpServerIds() []string {
 func (x *CreateSessionRequest) GetImage() string {
 	if x != nil {
 		return x.Image
+	}
+	return ""
+}
+
+func (x *CreateSessionRequest) GetAuthProfile() string {
+	if x != nil {
+		return x.AuthProfile
 	}
 	return ""
 }
@@ -1480,7 +1497,7 @@ var File_brigade_v1_session_proto protoreflect.FileDescriptor
 const file_brigade_v1_session_proto_rawDesc = "" +
 	"\n" +
 	"\x18brigade/v1/session.proto\x12\n" +
-	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\x85\x04\n" +
+	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\xa8\x04\n" +
 	"\aSession\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12+\n" +
@@ -1500,7 +1517,8 @@ const file_brigade_v1_session_proto_rawDesc = "" +
 	"\barchived\x18\r \x01(\bR\barchived\x12\x18\n" +
 	"\asummary\x18\x0e \x01(\tR\asummary\x12$\n" +
 	"\x0emcp_server_ids\x18\x0f \x03(\tR\fmcpServerIds\x12\x14\n" +
-	"\x05image\x18\x10 \x01(\tR\x05image\"\xd4\x01\n" +
+	"\x05image\x18\x10 \x01(\tR\x05image\x12!\n" +
+	"\fauth_profile\x18\x11 \x01(\tR\vauthProfile\"\xf7\x01\n" +
 	"\x14CreateSessionRequest\x12\x1d\n" +
 	"\n" +
 	"agent_type\x18\x01 \x01(\tR\tagentType\x12+\n" +
@@ -1508,7 +1526,8 @@ const file_brigade_v1_session_proto_rawDesc = "" +
 	"\x06prompt\x18\x04 \x01(\tR\x06prompt\x12\x10\n" +
 	"\x03cwd\x18\x05 \x01(\tR\x03cwd\x12$\n" +
 	"\x0emcp_server_ids\x18\x06 \x03(\tR\fmcpServerIds\x12\x14\n" +
-	"\x05image\x18\a \x01(\tR\x05imageJ\x04\b\x02\x10\x03R\x04mode\"F\n" +
+	"\x05image\x18\a \x01(\tR\x05image\x12!\n" +
+	"\fauth_profile\x18\b \x01(\tR\vauthProfileJ\x04\b\x02\x10\x03R\x04mode\"F\n" +
 	"\x15CreateSessionResponse\x12-\n" +
 	"\asession\x18\x01 \x01(\v2\x13.brigade.v1.SessionR\asession\"\x15\n" +
 	"\x13ListSessionsRequest\"G\n" +

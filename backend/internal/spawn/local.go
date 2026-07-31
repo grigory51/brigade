@@ -44,7 +44,11 @@ func (s *LocalSpawner) Reattach(ctx context.Context, p Persisted) (Handle, error
 	if p.AgentSessionID == "" {
 		return nil, errors.New("spawn: local reattach requires agent session id")
 	}
-	return startLocal(ctx, []string{"--resume", p.AgentSessionID}, p.Cwd, p.Env, p.SessionID, p.Command)
+	args := []string{"--resume", p.AgentSessionID}
+	if p.Command == "codex" {
+		args = []string{"resume", "--last"}
+	}
+	return startLocal(ctx, args, p.Cwd, p.Env, p.SessionID, p.Command)
 }
 
 // startLocal формирует команду агента, запускает её в pty и оборачивает в localHandle.

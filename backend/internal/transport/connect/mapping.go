@@ -73,6 +73,7 @@ func sessionToProto(s store.Session) *v1.Session {
 		ParentId:       s.ParentID,
 		McpServerIds:   s.McpServers,
 		Image:          s.Image,
+		AuthProfile:    s.AuthProfile,
 	}
 }
 

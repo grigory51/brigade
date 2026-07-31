@@ -413,6 +413,356 @@ func (x *SetClaudeTokenRequest) GetToken() string {
 	return ""
 }
 
+type CodexSettings struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	ApiKeySet        bool                   `protobuf:"varint,1,opt,name=api_key_set,json=apiKeySet,proto3" json:"api_key_set,omitempty"`
+	ChatgptConnected bool                   `protobuf:"varint,2,opt,name=chatgpt_connected,json=chatgptConnected,proto3" json:"chatgpt_connected,omitempty"`
+	DefaultProfile   string                 `protobuf:"bytes,3,opt,name=default_profile,json=defaultProfile,proto3" json:"default_profile,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *CodexSettings) Reset() {
+	*x = CodexSettings{}
+	mi := &file_brigade_v1_auth_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CodexSettings) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CodexSettings) ProtoMessage() {}
+
+func (x *CodexSettings) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_auth_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CodexSettings.ProtoReflect.Descriptor instead.
+func (*CodexSettings) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *CodexSettings) GetApiKeySet() bool {
+	if x != nil {
+		return x.ApiKeySet
+	}
+	return false
+}
+
+func (x *CodexSettings) GetChatgptConnected() bool {
+	if x != nil {
+		return x.ChatgptConnected
+	}
+	return false
+}
+
+func (x *CodexSettings) GetDefaultProfile() string {
+	if x != nil {
+		return x.DefaultProfile
+	}
+	return ""
+}
+
+type SetCodexApiKeyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ApiKey        string                 `protobuf:"bytes,1,opt,name=api_key,json=apiKey,proto3" json:"api_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetCodexApiKeyRequest) Reset() {
+	*x = SetCodexApiKeyRequest{}
+	mi := &file_brigade_v1_auth_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetCodexApiKeyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetCodexApiKeyRequest) ProtoMessage() {}
+
+func (x *SetCodexApiKeyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_auth_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetCodexApiKeyRequest.ProtoReflect.Descriptor instead.
+func (*SetCodexApiKeyRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *SetCodexApiKeyRequest) GetApiKey() string {
+	if x != nil {
+		return x.ApiKey
+	}
+	return ""
+}
+
+type SetCodexDefaultProfileRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Profile       string                 `protobuf:"bytes,1,opt,name=profile,proto3" json:"profile,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetCodexDefaultProfileRequest) Reset() {
+	*x = SetCodexDefaultProfileRequest{}
+	mi := &file_brigade_v1_auth_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetCodexDefaultProfileRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetCodexDefaultProfileRequest) ProtoMessage() {}
+
+func (x *SetCodexDefaultProfileRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_auth_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetCodexDefaultProfileRequest.ProtoReflect.Descriptor instead.
+func (*SetCodexDefaultProfileRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *SetCodexDefaultProfileRequest) GetProfile() string {
+	if x != nil {
+		return x.Profile
+	}
+	return ""
+}
+
+type SetCodexChatGPTAuthRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Содержимое официального CODEX_HOME/auth.json. Принимается только сервером и
+	// сохраняется зашифрованным; обратно клиенту никогда не возвращается.
+	AuthJson      string `protobuf:"bytes,1,opt,name=auth_json,json=authJson,proto3" json:"auth_json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetCodexChatGPTAuthRequest) Reset() {
+	*x = SetCodexChatGPTAuthRequest{}
+	mi := &file_brigade_v1_auth_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetCodexChatGPTAuthRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetCodexChatGPTAuthRequest) ProtoMessage() {}
+
+func (x *SetCodexChatGPTAuthRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_auth_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetCodexChatGPTAuthRequest.ProtoReflect.Descriptor instead.
+func (*SetCodexChatGPTAuthRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *SetCodexChatGPTAuthRequest) GetAuthJson() string {
+	if x != nil {
+		return x.AuthJson
+	}
+	return ""
+}
+
+type CodexLogin struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Status        string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
+	Output        string                 `protobuf:"bytes,3,opt,name=output,proto3" json:"output,omitempty"`
+	Error         string                 `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CodexLogin) Reset() {
+	*x = CodexLogin{}
+	mi := &file_brigade_v1_auth_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CodexLogin) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CodexLogin) ProtoMessage() {}
+
+func (x *CodexLogin) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_auth_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CodexLogin.ProtoReflect.Descriptor instead.
+func (*CodexLogin) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *CodexLogin) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *CodexLogin) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *CodexLogin) GetOutput() string {
+	if x != nil {
+		return x.Output
+	}
+	return ""
+}
+
+func (x *CodexLogin) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type GetCodexLoginRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCodexLoginRequest) Reset() {
+	*x = GetCodexLoginRequest{}
+	mi := &file_brigade_v1_auth_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCodexLoginRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCodexLoginRequest) ProtoMessage() {}
+
+func (x *GetCodexLoginRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_auth_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCodexLoginRequest.ProtoReflect.Descriptor instead.
+func (*GetCodexLoginRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *GetCodexLoginRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type CancelCodexLoginRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelCodexLoginRequest) Reset() {
+	*x = CancelCodexLoginRequest{}
+	mi := &file_brigade_v1_auth_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelCodexLoginRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelCodexLoginRequest) ProtoMessage() {}
+
+func (x *CancelCodexLoginRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_auth_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelCodexLoginRequest.ProtoReflect.Descriptor instead.
+func (*CancelCodexLoginRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *CancelCodexLoginRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
 // MemorySettings — состояние настроек личной памяти пользователя: remote (его собственный
 // git-репозиторий заметок). Доступ к git@-remote идёт по SSH-ключу агента (см. SSHSettings),
 // отдельный ключ памяти не задаётся.
@@ -425,7 +775,7 @@ type MemorySettings struct {
 
 func (x *MemorySettings) Reset() {
 	*x = MemorySettings{}
-	mi := &file_brigade_v1_auth_proto_msgTypes[8]
+	mi := &file_brigade_v1_auth_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -437,7 +787,7 @@ func (x *MemorySettings) String() string {
 func (*MemorySettings) ProtoMessage() {}
 
 func (x *MemorySettings) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_auth_proto_msgTypes[8]
+	mi := &file_brigade_v1_auth_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -450,7 +800,7 @@ func (x *MemorySettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MemorySettings.ProtoReflect.Descriptor instead.
 func (*MemorySettings) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{8}
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *MemorySettings) GetRemote() string {
@@ -470,7 +820,7 @@ type SetMemorySettingsRequest struct {
 
 func (x *SetMemorySettingsRequest) Reset() {
 	*x = SetMemorySettingsRequest{}
-	mi := &file_brigade_v1_auth_proto_msgTypes[9]
+	mi := &file_brigade_v1_auth_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -482,7 +832,7 @@ func (x *SetMemorySettingsRequest) String() string {
 func (*SetMemorySettingsRequest) ProtoMessage() {}
 
 func (x *SetMemorySettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_auth_proto_msgTypes[9]
+	mi := &file_brigade_v1_auth_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -495,7 +845,7 @@ func (x *SetMemorySettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetMemorySettingsRequest.ProtoReflect.Descriptor instead.
 func (*SetMemorySettingsRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{9}
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *SetMemorySettingsRequest) GetRemote() string {
@@ -520,7 +870,7 @@ type NtfySettings struct {
 
 func (x *NtfySettings) Reset() {
 	*x = NtfySettings{}
-	mi := &file_brigade_v1_auth_proto_msgTypes[10]
+	mi := &file_brigade_v1_auth_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -532,7 +882,7 @@ func (x *NtfySettings) String() string {
 func (*NtfySettings) ProtoMessage() {}
 
 func (x *NtfySettings) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_auth_proto_msgTypes[10]
+	mi := &file_brigade_v1_auth_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -545,7 +895,7 @@ func (x *NtfySettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NtfySettings.ProtoReflect.Descriptor instead.
 func (*NtfySettings) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{10}
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *NtfySettings) GetServer() string {
@@ -591,7 +941,7 @@ type SetNtfySettingsRequest struct {
 
 func (x *SetNtfySettingsRequest) Reset() {
 	*x = SetNtfySettingsRequest{}
-	mi := &file_brigade_v1_auth_proto_msgTypes[11]
+	mi := &file_brigade_v1_auth_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -603,7 +953,7 @@ func (x *SetNtfySettingsRequest) String() string {
 func (*SetNtfySettingsRequest) ProtoMessage() {}
 
 func (x *SetNtfySettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_auth_proto_msgTypes[11]
+	mi := &file_brigade_v1_auth_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -616,7 +966,7 @@ func (x *SetNtfySettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetNtfySettingsRequest.ProtoReflect.Descriptor instead.
 func (*SetNtfySettingsRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{11}
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SetNtfySettingsRequest) GetServer() string {
@@ -660,7 +1010,7 @@ type SSHSettings struct {
 
 func (x *SSHSettings) Reset() {
 	*x = SSHSettings{}
-	mi := &file_brigade_v1_auth_proto_msgTypes[12]
+	mi := &file_brigade_v1_auth_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -672,7 +1022,7 @@ func (x *SSHSettings) String() string {
 func (*SSHSettings) ProtoMessage() {}
 
 func (x *SSHSettings) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_auth_proto_msgTypes[12]
+	mi := &file_brigade_v1_auth_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -685,7 +1035,7 @@ func (x *SSHSettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SSHSettings.ProtoReflect.Descriptor instead.
 func (*SSHSettings) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{12}
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SSHSettings) GetPublicKey() string {
@@ -708,7 +1058,7 @@ type DockerContext struct {
 
 func (x *DockerContext) Reset() {
 	*x = DockerContext{}
-	mi := &file_brigade_v1_auth_proto_msgTypes[13]
+	mi := &file_brigade_v1_auth_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -720,7 +1070,7 @@ func (x *DockerContext) String() string {
 func (*DockerContext) ProtoMessage() {}
 
 func (x *DockerContext) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_auth_proto_msgTypes[13]
+	mi := &file_brigade_v1_auth_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -733,7 +1083,7 @@ func (x *DockerContext) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DockerContext.ProtoReflect.Descriptor instead.
 func (*DockerContext) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{13}
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *DockerContext) GetName() string {
@@ -781,7 +1131,7 @@ type AgentRuntimeSettings struct {
 
 func (x *AgentRuntimeSettings) Reset() {
 	*x = AgentRuntimeSettings{}
-	mi := &file_brigade_v1_auth_proto_msgTypes[14]
+	mi := &file_brigade_v1_auth_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -793,7 +1143,7 @@ func (x *AgentRuntimeSettings) String() string {
 func (*AgentRuntimeSettings) ProtoMessage() {}
 
 func (x *AgentRuntimeSettings) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_auth_proto_msgTypes[14]
+	mi := &file_brigade_v1_auth_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -806,7 +1156,7 @@ func (x *AgentRuntimeSettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentRuntimeSettings.ProtoReflect.Descriptor instead.
 func (*AgentRuntimeSettings) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{14}
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *AgentRuntimeSettings) GetMode() string {
@@ -877,7 +1227,7 @@ type SetAgentRuntimeRequest struct {
 
 func (x *SetAgentRuntimeRequest) Reset() {
 	*x = SetAgentRuntimeRequest{}
-	mi := &file_brigade_v1_auth_proto_msgTypes[15]
+	mi := &file_brigade_v1_auth_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -889,7 +1239,7 @@ func (x *SetAgentRuntimeRequest) String() string {
 func (*SetAgentRuntimeRequest) ProtoMessage() {}
 
 func (x *SetAgentRuntimeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_auth_proto_msgTypes[15]
+	mi := &file_brigade_v1_auth_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -902,7 +1252,7 @@ func (x *SetAgentRuntimeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetAgentRuntimeRequest.ProtoReflect.Descriptor instead.
 func (*SetAgentRuntimeRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{15}
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SetAgentRuntimeRequest) GetMode() string {
@@ -931,7 +1281,7 @@ type AgentImage struct {
 
 func (x *AgentImage) Reset() {
 	*x = AgentImage{}
-	mi := &file_brigade_v1_auth_proto_msgTypes[16]
+	mi := &file_brigade_v1_auth_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -943,7 +1293,7 @@ func (x *AgentImage) String() string {
 func (*AgentImage) ProtoMessage() {}
 
 func (x *AgentImage) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_auth_proto_msgTypes[16]
+	mi := &file_brigade_v1_auth_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -956,7 +1306,7 @@ func (x *AgentImage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentImage.ProtoReflect.Descriptor instead.
 func (*AgentImage) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{16}
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *AgentImage) GetImage() string {
@@ -988,7 +1338,7 @@ type AgentImagesSettings struct {
 
 func (x *AgentImagesSettings) Reset() {
 	*x = AgentImagesSettings{}
-	mi := &file_brigade_v1_auth_proto_msgTypes[17]
+	mi := &file_brigade_v1_auth_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1000,7 +1350,7 @@ func (x *AgentImagesSettings) String() string {
 func (*AgentImagesSettings) ProtoMessage() {}
 
 func (x *AgentImagesSettings) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_auth_proto_msgTypes[17]
+	mi := &file_brigade_v1_auth_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1013,7 +1363,7 @@ func (x *AgentImagesSettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentImagesSettings.ProtoReflect.Descriptor instead.
 func (*AgentImagesSettings) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{17}
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *AgentImagesSettings) GetImages() []*AgentImage {
@@ -1056,7 +1406,7 @@ type SetAgentImagesRequest struct {
 
 func (x *SetAgentImagesRequest) Reset() {
 	*x = SetAgentImagesRequest{}
-	mi := &file_brigade_v1_auth_proto_msgTypes[18]
+	mi := &file_brigade_v1_auth_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1068,7 +1418,7 @@ func (x *SetAgentImagesRequest) String() string {
 func (*SetAgentImagesRequest) ProtoMessage() {}
 
 func (x *SetAgentImagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_auth_proto_msgTypes[18]
+	mi := &file_brigade_v1_auth_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1081,7 +1431,7 @@ func (x *SetAgentImagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetAgentImagesRequest.ProtoReflect.Descriptor instead.
 func (*SetAgentImagesRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{18}
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *SetAgentImagesRequest) GetImages() []string {
@@ -1103,7 +1453,7 @@ type ServerInfo struct {
 
 func (x *ServerInfo) Reset() {
 	*x = ServerInfo{}
-	mi := &file_brigade_v1_auth_proto_msgTypes[19]
+	mi := &file_brigade_v1_auth_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1115,7 +1465,7 @@ func (x *ServerInfo) String() string {
 func (*ServerInfo) ProtoMessage() {}
 
 func (x *ServerInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_auth_proto_msgTypes[19]
+	mi := &file_brigade_v1_auth_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1128,7 +1478,7 @@ func (x *ServerInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerInfo.ProtoReflect.Descriptor instead.
 func (*ServerInfo) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{19}
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ServerInfo) GetDesktop() bool {
@@ -1163,7 +1513,27 @@ const file_brigade_v1_auth_proto_rawDesc = "" +
 	"\x0eClaudeSettings\x12\x1b\n" +
 	"\ttoken_set\x18\x01 \x01(\bR\btokenSet\"-\n" +
 	"\x15SetClaudeTokenRequest\x12\x14\n" +
-	"\x05token\x18\x01 \x01(\tR\x05token\"(\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\"\x85\x01\n" +
+	"\rCodexSettings\x12\x1e\n" +
+	"\vapi_key_set\x18\x01 \x01(\bR\tapiKeySet\x12+\n" +
+	"\x11chatgpt_connected\x18\x02 \x01(\bR\x10chatgptConnected\x12'\n" +
+	"\x0fdefault_profile\x18\x03 \x01(\tR\x0edefaultProfile\"0\n" +
+	"\x15SetCodexApiKeyRequest\x12\x17\n" +
+	"\aapi_key\x18\x01 \x01(\tR\x06apiKey\"9\n" +
+	"\x1dSetCodexDefaultProfileRequest\x12\x18\n" +
+	"\aprofile\x18\x01 \x01(\tR\aprofile\"9\n" +
+	"\x1aSetCodexChatGPTAuthRequest\x12\x1b\n" +
+	"\tauth_json\x18\x01 \x01(\tR\bauthJson\"b\n" +
+	"\n" +
+	"CodexLogin\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\x12\x16\n" +
+	"\x06output\x18\x03 \x01(\tR\x06output\x12\x14\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\"&\n" +
+	"\x14GetCodexLoginRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\")\n" +
+	"\x17CancelCodexLoginRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"(\n" +
 	"\x0eMemorySettings\x12\x16\n" +
 	"\x06remote\x18\x01 \x01(\tR\x06remote\"2\n" +
 	"\x18SetMemorySettingsRequest\x12\x16\n" +
@@ -1213,7 +1583,7 @@ const file_brigade_v1_auth_proto_rawDesc = "" +
 	"\x06images\x18\x01 \x03(\tR\x06images\"&\n" +
 	"\n" +
 	"ServerInfo\x12\x18\n" +
-	"\adesktop\x18\x01 \x01(\bR\adesktop2\xf8\t\n" +
+	"\adesktop\x18\x01 \x01(\bR\adesktop2\xf1\x0e\n" +
 	"\vAuthService\x12>\n" +
 	"\x05Login\x12\x18.brigade.v1.LoginRequest\x1a\x19.brigade.v1.LoginResponse\"\x00\x12D\n" +
 	"\aRefresh\x12\x1a.brigade.v1.RefreshRequest\x1a\x1b.brigade.v1.RefreshResponse\"\x00\x12+\n" +
@@ -1221,7 +1591,15 @@ const file_brigade_v1_auth_proto_rawDesc = "" +
 	"\rGetServerInfo\x12\x11.brigade.v1.Empty\x1a\x16.brigade.v1.ServerInfo\"\x00\x120\n" +
 	"\x06Logout\x12\x11.brigade.v1.Empty\x1a\x11.brigade.v1.Empty\"\x00\x12D\n" +
 	"\x11GetClaudeSettings\x12\x11.brigade.v1.Empty\x1a\x1a.brigade.v1.ClaudeSettings\"\x00\x12Q\n" +
-	"\x0eSetClaudeToken\x12!.brigade.v1.SetClaudeTokenRequest\x1a\x1a.brigade.v1.ClaudeSettings\"\x00\x12D\n" +
+	"\x0eSetClaudeToken\x12!.brigade.v1.SetClaudeTokenRequest\x1a\x1a.brigade.v1.ClaudeSettings\"\x00\x12B\n" +
+	"\x10GetCodexSettings\x12\x11.brigade.v1.Empty\x1a\x19.brigade.v1.CodexSettings\"\x00\x12P\n" +
+	"\x0eSetCodexApiKey\x12!.brigade.v1.SetCodexApiKeyRequest\x1a\x19.brigade.v1.CodexSettings\"\x00\x12Z\n" +
+	"\x13SetCodexChatGPTAuth\x12&.brigade.v1.SetCodexChatGPTAuthRequest\x1a\x19.brigade.v1.CodexSettings\"\x00\x12>\n" +
+	"\x0fStartCodexLogin\x12\x11.brigade.v1.Empty\x1a\x16.brigade.v1.CodexLogin\"\x00\x12K\n" +
+	"\rGetCodexLogin\x12 .brigade.v1.GetCodexLoginRequest\x1a\x16.brigade.v1.CodexLogin\"\x00\x12L\n" +
+	"\x10CancelCodexLogin\x12#.brigade.v1.CancelCodexLoginRequest\x1a\x11.brigade.v1.Empty\"\x00\x12H\n" +
+	"\x16DisconnectCodexChatGPT\x12\x11.brigade.v1.Empty\x1a\x19.brigade.v1.CodexSettings\"\x00\x12`\n" +
+	"\x16SetCodexDefaultProfile\x12).brigade.v1.SetCodexDefaultProfileRequest\x1a\x19.brigade.v1.CodexSettings\"\x00\x12D\n" +
 	"\x11GetMemorySettings\x12\x11.brigade.v1.Empty\x1a\x1a.brigade.v1.MemorySettings\"\x00\x12W\n" +
 	"\x11SetMemorySettings\x12$.brigade.v1.SetMemorySettingsRequest\x1a\x1a.brigade.v1.MemorySettings\"\x00\x12@\n" +
 	"\x0fGetNtfySettings\x12\x11.brigade.v1.Empty\x1a\x18.brigade.v1.NtfySettings\"\x00\x12Q\n" +
@@ -1249,33 +1627,40 @@ func file_brigade_v1_auth_proto_rawDescGZIP() []byte {
 	return file_brigade_v1_auth_proto_rawDescData
 }
 
-var file_brigade_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_brigade_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_brigade_v1_auth_proto_goTypes = []any{
-	(*Empty)(nil),                    // 0: brigade.v1.Empty
-	(*User)(nil),                     // 1: brigade.v1.User
-	(*LoginRequest)(nil),             // 2: brigade.v1.LoginRequest
-	(*LoginResponse)(nil),            // 3: brigade.v1.LoginResponse
-	(*RefreshRequest)(nil),           // 4: brigade.v1.RefreshRequest
-	(*RefreshResponse)(nil),          // 5: brigade.v1.RefreshResponse
-	(*ClaudeSettings)(nil),           // 6: brigade.v1.ClaudeSettings
-	(*SetClaudeTokenRequest)(nil),    // 7: brigade.v1.SetClaudeTokenRequest
-	(*MemorySettings)(nil),           // 8: brigade.v1.MemorySettings
-	(*SetMemorySettingsRequest)(nil), // 9: brigade.v1.SetMemorySettingsRequest
-	(*NtfySettings)(nil),             // 10: brigade.v1.NtfySettings
-	(*SetNtfySettingsRequest)(nil),   // 11: brigade.v1.SetNtfySettingsRequest
-	(*SSHSettings)(nil),              // 12: brigade.v1.SSHSettings
-	(*DockerContext)(nil),            // 13: brigade.v1.DockerContext
-	(*AgentRuntimeSettings)(nil),     // 14: brigade.v1.AgentRuntimeSettings
-	(*SetAgentRuntimeRequest)(nil),   // 15: brigade.v1.SetAgentRuntimeRequest
-	(*AgentImage)(nil),               // 16: brigade.v1.AgentImage
-	(*AgentImagesSettings)(nil),      // 17: brigade.v1.AgentImagesSettings
-	(*SetAgentImagesRequest)(nil),    // 18: brigade.v1.SetAgentImagesRequest
-	(*ServerInfo)(nil),               // 19: brigade.v1.ServerInfo
+	(*Empty)(nil),                         // 0: brigade.v1.Empty
+	(*User)(nil),                          // 1: brigade.v1.User
+	(*LoginRequest)(nil),                  // 2: brigade.v1.LoginRequest
+	(*LoginResponse)(nil),                 // 3: brigade.v1.LoginResponse
+	(*RefreshRequest)(nil),                // 4: brigade.v1.RefreshRequest
+	(*RefreshResponse)(nil),               // 5: brigade.v1.RefreshResponse
+	(*ClaudeSettings)(nil),                // 6: brigade.v1.ClaudeSettings
+	(*SetClaudeTokenRequest)(nil),         // 7: brigade.v1.SetClaudeTokenRequest
+	(*CodexSettings)(nil),                 // 8: brigade.v1.CodexSettings
+	(*SetCodexApiKeyRequest)(nil),         // 9: brigade.v1.SetCodexApiKeyRequest
+	(*SetCodexDefaultProfileRequest)(nil), // 10: brigade.v1.SetCodexDefaultProfileRequest
+	(*SetCodexChatGPTAuthRequest)(nil),    // 11: brigade.v1.SetCodexChatGPTAuthRequest
+	(*CodexLogin)(nil),                    // 12: brigade.v1.CodexLogin
+	(*GetCodexLoginRequest)(nil),          // 13: brigade.v1.GetCodexLoginRequest
+	(*CancelCodexLoginRequest)(nil),       // 14: brigade.v1.CancelCodexLoginRequest
+	(*MemorySettings)(nil),                // 15: brigade.v1.MemorySettings
+	(*SetMemorySettingsRequest)(nil),      // 16: brigade.v1.SetMemorySettingsRequest
+	(*NtfySettings)(nil),                  // 17: brigade.v1.NtfySettings
+	(*SetNtfySettingsRequest)(nil),        // 18: brigade.v1.SetNtfySettingsRequest
+	(*SSHSettings)(nil),                   // 19: brigade.v1.SSHSettings
+	(*DockerContext)(nil),                 // 20: brigade.v1.DockerContext
+	(*AgentRuntimeSettings)(nil),          // 21: brigade.v1.AgentRuntimeSettings
+	(*SetAgentRuntimeRequest)(nil),        // 22: brigade.v1.SetAgentRuntimeRequest
+	(*AgentImage)(nil),                    // 23: brigade.v1.AgentImage
+	(*AgentImagesSettings)(nil),           // 24: brigade.v1.AgentImagesSettings
+	(*SetAgentImagesRequest)(nil),         // 25: brigade.v1.SetAgentImagesRequest
+	(*ServerInfo)(nil),                    // 26: brigade.v1.ServerInfo
 }
 var file_brigade_v1_auth_proto_depIdxs = []int32{
 	1,  // 0: brigade.v1.LoginResponse.user:type_name -> brigade.v1.User
-	13, // 1: brigade.v1.AgentRuntimeSettings.contexts:type_name -> brigade.v1.DockerContext
-	16, // 2: brigade.v1.AgentImagesSettings.images:type_name -> brigade.v1.AgentImage
+	20, // 1: brigade.v1.AgentRuntimeSettings.contexts:type_name -> brigade.v1.DockerContext
+	23, // 2: brigade.v1.AgentImagesSettings.images:type_name -> brigade.v1.AgentImage
 	2,  // 3: brigade.v1.AuthService.Login:input_type -> brigade.v1.LoginRequest
 	4,  // 4: brigade.v1.AuthService.Refresh:input_type -> brigade.v1.RefreshRequest
 	0,  // 5: brigade.v1.AuthService.Me:input_type -> brigade.v1.Empty
@@ -1283,37 +1668,53 @@ var file_brigade_v1_auth_proto_depIdxs = []int32{
 	0,  // 7: brigade.v1.AuthService.Logout:input_type -> brigade.v1.Empty
 	0,  // 8: brigade.v1.AuthService.GetClaudeSettings:input_type -> brigade.v1.Empty
 	7,  // 9: brigade.v1.AuthService.SetClaudeToken:input_type -> brigade.v1.SetClaudeTokenRequest
-	0,  // 10: brigade.v1.AuthService.GetMemorySettings:input_type -> brigade.v1.Empty
-	9,  // 11: brigade.v1.AuthService.SetMemorySettings:input_type -> brigade.v1.SetMemorySettingsRequest
-	0,  // 12: brigade.v1.AuthService.GetNtfySettings:input_type -> brigade.v1.Empty
-	11, // 13: brigade.v1.AuthService.SetNtfySettings:input_type -> brigade.v1.SetNtfySettingsRequest
-	0,  // 14: brigade.v1.AuthService.GetAgentRuntime:input_type -> brigade.v1.Empty
-	15, // 15: brigade.v1.AuthService.SetAgentRuntime:input_type -> brigade.v1.SetAgentRuntimeRequest
-	0,  // 16: brigade.v1.AuthService.GetAgentImages:input_type -> brigade.v1.Empty
-	18, // 17: brigade.v1.AuthService.SetAgentImages:input_type -> brigade.v1.SetAgentImagesRequest
-	0,  // 18: brigade.v1.AuthService.TestNtfy:input_type -> brigade.v1.Empty
-	0,  // 19: brigade.v1.AuthService.GetSSHSettings:input_type -> brigade.v1.Empty
-	0,  // 20: brigade.v1.AuthService.RegenerateSSHKey:input_type -> brigade.v1.Empty
-	3,  // 21: brigade.v1.AuthService.Login:output_type -> brigade.v1.LoginResponse
-	5,  // 22: brigade.v1.AuthService.Refresh:output_type -> brigade.v1.RefreshResponse
-	1,  // 23: brigade.v1.AuthService.Me:output_type -> brigade.v1.User
-	19, // 24: brigade.v1.AuthService.GetServerInfo:output_type -> brigade.v1.ServerInfo
-	0,  // 25: brigade.v1.AuthService.Logout:output_type -> brigade.v1.Empty
-	6,  // 26: brigade.v1.AuthService.GetClaudeSettings:output_type -> brigade.v1.ClaudeSettings
-	6,  // 27: brigade.v1.AuthService.SetClaudeToken:output_type -> brigade.v1.ClaudeSettings
-	8,  // 28: brigade.v1.AuthService.GetMemorySettings:output_type -> brigade.v1.MemorySettings
-	8,  // 29: brigade.v1.AuthService.SetMemorySettings:output_type -> brigade.v1.MemorySettings
-	10, // 30: brigade.v1.AuthService.GetNtfySettings:output_type -> brigade.v1.NtfySettings
-	10, // 31: brigade.v1.AuthService.SetNtfySettings:output_type -> brigade.v1.NtfySettings
-	14, // 32: brigade.v1.AuthService.GetAgentRuntime:output_type -> brigade.v1.AgentRuntimeSettings
-	14, // 33: brigade.v1.AuthService.SetAgentRuntime:output_type -> brigade.v1.AgentRuntimeSettings
-	17, // 34: brigade.v1.AuthService.GetAgentImages:output_type -> brigade.v1.AgentImagesSettings
-	17, // 35: brigade.v1.AuthService.SetAgentImages:output_type -> brigade.v1.AgentImagesSettings
-	0,  // 36: brigade.v1.AuthService.TestNtfy:output_type -> brigade.v1.Empty
-	12, // 37: brigade.v1.AuthService.GetSSHSettings:output_type -> brigade.v1.SSHSettings
-	12, // 38: brigade.v1.AuthService.RegenerateSSHKey:output_type -> brigade.v1.SSHSettings
-	21, // [21:39] is the sub-list for method output_type
-	3,  // [3:21] is the sub-list for method input_type
+	0,  // 10: brigade.v1.AuthService.GetCodexSettings:input_type -> brigade.v1.Empty
+	9,  // 11: brigade.v1.AuthService.SetCodexApiKey:input_type -> brigade.v1.SetCodexApiKeyRequest
+	11, // 12: brigade.v1.AuthService.SetCodexChatGPTAuth:input_type -> brigade.v1.SetCodexChatGPTAuthRequest
+	0,  // 13: brigade.v1.AuthService.StartCodexLogin:input_type -> brigade.v1.Empty
+	13, // 14: brigade.v1.AuthService.GetCodexLogin:input_type -> brigade.v1.GetCodexLoginRequest
+	14, // 15: brigade.v1.AuthService.CancelCodexLogin:input_type -> brigade.v1.CancelCodexLoginRequest
+	0,  // 16: brigade.v1.AuthService.DisconnectCodexChatGPT:input_type -> brigade.v1.Empty
+	10, // 17: brigade.v1.AuthService.SetCodexDefaultProfile:input_type -> brigade.v1.SetCodexDefaultProfileRequest
+	0,  // 18: brigade.v1.AuthService.GetMemorySettings:input_type -> brigade.v1.Empty
+	16, // 19: brigade.v1.AuthService.SetMemorySettings:input_type -> brigade.v1.SetMemorySettingsRequest
+	0,  // 20: brigade.v1.AuthService.GetNtfySettings:input_type -> brigade.v1.Empty
+	18, // 21: brigade.v1.AuthService.SetNtfySettings:input_type -> brigade.v1.SetNtfySettingsRequest
+	0,  // 22: brigade.v1.AuthService.GetAgentRuntime:input_type -> brigade.v1.Empty
+	22, // 23: brigade.v1.AuthService.SetAgentRuntime:input_type -> brigade.v1.SetAgentRuntimeRequest
+	0,  // 24: brigade.v1.AuthService.GetAgentImages:input_type -> brigade.v1.Empty
+	25, // 25: brigade.v1.AuthService.SetAgentImages:input_type -> brigade.v1.SetAgentImagesRequest
+	0,  // 26: brigade.v1.AuthService.TestNtfy:input_type -> brigade.v1.Empty
+	0,  // 27: brigade.v1.AuthService.GetSSHSettings:input_type -> brigade.v1.Empty
+	0,  // 28: brigade.v1.AuthService.RegenerateSSHKey:input_type -> brigade.v1.Empty
+	3,  // 29: brigade.v1.AuthService.Login:output_type -> brigade.v1.LoginResponse
+	5,  // 30: brigade.v1.AuthService.Refresh:output_type -> brigade.v1.RefreshResponse
+	1,  // 31: brigade.v1.AuthService.Me:output_type -> brigade.v1.User
+	26, // 32: brigade.v1.AuthService.GetServerInfo:output_type -> brigade.v1.ServerInfo
+	0,  // 33: brigade.v1.AuthService.Logout:output_type -> brigade.v1.Empty
+	6,  // 34: brigade.v1.AuthService.GetClaudeSettings:output_type -> brigade.v1.ClaudeSettings
+	6,  // 35: brigade.v1.AuthService.SetClaudeToken:output_type -> brigade.v1.ClaudeSettings
+	8,  // 36: brigade.v1.AuthService.GetCodexSettings:output_type -> brigade.v1.CodexSettings
+	8,  // 37: brigade.v1.AuthService.SetCodexApiKey:output_type -> brigade.v1.CodexSettings
+	8,  // 38: brigade.v1.AuthService.SetCodexChatGPTAuth:output_type -> brigade.v1.CodexSettings
+	12, // 39: brigade.v1.AuthService.StartCodexLogin:output_type -> brigade.v1.CodexLogin
+	12, // 40: brigade.v1.AuthService.GetCodexLogin:output_type -> brigade.v1.CodexLogin
+	0,  // 41: brigade.v1.AuthService.CancelCodexLogin:output_type -> brigade.v1.Empty
+	8,  // 42: brigade.v1.AuthService.DisconnectCodexChatGPT:output_type -> brigade.v1.CodexSettings
+	8,  // 43: brigade.v1.AuthService.SetCodexDefaultProfile:output_type -> brigade.v1.CodexSettings
+	15, // 44: brigade.v1.AuthService.GetMemorySettings:output_type -> brigade.v1.MemorySettings
+	15, // 45: brigade.v1.AuthService.SetMemorySettings:output_type -> brigade.v1.MemorySettings
+	17, // 46: brigade.v1.AuthService.GetNtfySettings:output_type -> brigade.v1.NtfySettings
+	17, // 47: brigade.v1.AuthService.SetNtfySettings:output_type -> brigade.v1.NtfySettings
+	21, // 48: brigade.v1.AuthService.GetAgentRuntime:output_type -> brigade.v1.AgentRuntimeSettings
+	21, // 49: brigade.v1.AuthService.SetAgentRuntime:output_type -> brigade.v1.AgentRuntimeSettings
+	24, // 50: brigade.v1.AuthService.GetAgentImages:output_type -> brigade.v1.AgentImagesSettings
+	24, // 51: brigade.v1.AuthService.SetAgentImages:output_type -> brigade.v1.AgentImagesSettings
+	0,  // 52: brigade.v1.AuthService.TestNtfy:output_type -> brigade.v1.Empty
+	19, // 53: brigade.v1.AuthService.GetSSHSettings:output_type -> brigade.v1.SSHSettings
+	19, // 54: brigade.v1.AuthService.RegenerateSSHKey:output_type -> brigade.v1.SSHSettings
+	29, // [29:55] is the sub-list for method output_type
+	3,  // [3:29] is the sub-list for method input_type
 	3,  // [3:3] is the sub-list for extension type_name
 	3,  // [3:3] is the sub-list for extension extendee
 	0,  // [0:3] is the sub-list for field type_name
@@ -1330,7 +1731,7 @@ func file_brigade_v1_auth_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_brigade_v1_auth_proto_rawDesc), len(file_brigade_v1_auth_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   20,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

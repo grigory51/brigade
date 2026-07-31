@@ -63,7 +63,7 @@ func TestMcpRoundTrip(t *testing.T) {
 	// Набор серверов сессии переживает запись и чтение.
 	sess := Session{ID: "s1", UserID: "u1", Mode: SessionModeLocal, Kind: SessionKindACP,
 		AgentType: "claude-code", Status: SessionStatusRunning, CreatedAt: time.Now(),
-		McpServers: []string{"srv-1", "srv-9"}, Image: "ghcr.io/me/agent:v1"}
+		McpServers: []string{"srv-1", "srv-9"}, Image: "ghcr.io/me/agent:v1", AuthProfile: "chatgpt"}
 	if err := st.CreateSession(ctx, sess); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
@@ -78,6 +78,9 @@ func TestMcpRoundTrip(t *testing.T) {
 	// рестарта brigade.
 	if read.Image != "ghcr.io/me/agent:v1" {
 		t.Fatalf("образ сессии: %q", read.Image)
+	}
+	if read.AuthProfile != "chatgpt" {
+		t.Fatalf("профиль авторизации: %q", read.AuthProfile)
 	}
 	if err := st.UpdateSessionMcp(ctx, "s1", nil); err != nil {
 		t.Fatalf("UpdateSessionMcp: %v", err)

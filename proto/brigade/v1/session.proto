@@ -59,6 +59,8 @@ message Session {
   repeated string mcp_server_ids = 15;
   // image — образ контейнера сессии (docker-режим). Пусто — базовый образ brigade.
   string image = 16;
+  // auth_profile — закреплённый за сессией профиль авторизации агента.
+  string auth_profile = 17;
 }
 
 message CreateSessionRequest {
@@ -77,6 +79,7 @@ message CreateSessionRequest {
   // image — образ контейнера сессии из списка пользователя (см. AuthService.GetAgentImages).
   // Пусто — базовый образ brigade.
   string image = 7;
+  string auth_profile = 8;
 }
 
 message CreateSessionResponse {

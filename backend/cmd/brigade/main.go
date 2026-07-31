@@ -19,6 +19,7 @@ import (
 	"github.com/grigory51/brigade/backend/internal/acpdaemon"
 	"github.com/grigory51/brigade/backend/internal/agentimage"
 	"github.com/grigory51/brigade/backend/internal/auth"
+	"github.com/grigory51/brigade/backend/internal/codexlogin"
 	"github.com/grigory51/brigade/backend/internal/config"
 	"github.com/grigory51/brigade/backend/internal/memory"
 	"github.com/grigory51/brigade/backend/internal/notify"
@@ -156,7 +157,7 @@ func runServer(configPath string) {
 
 	// Реестр живых сессий поверх store и спавнера. Режим фиксируется в каждой сессии;
 	// подписочный токен Claude берётся per-user из store при создании сессии.
-	registry := session.NewRegistry(st, spawner, store.SessionMode(cfg.Mode), cfg.WorkDir, cfg.ClaudeHomeDir, cfg.MaxContainers, previewSvc, notifySvc, authSvc, memorySvc)
+	registry := session.NewRegistry(st, spawner, store.SessionMode(cfg.Mode), cfg.WorkDir, cfg.AgentHomeDir, cfg.MaxContainers, previewSvc, notifySvc, authSvc, memorySvc)
 	defer registry.Close()
 
 	// Восстановление живых сессий после рестарта: упавшие помечаются failed и не
@@ -177,6 +178,7 @@ func runServer(configPath string) {
 	perms := aguitransport.NewPermissionStore()
 
 	authService := connectsvc.NewAuthService(authSvc, notifySvc, imagesSvc, runtimeSvc, desktopMode)
+	authService.SetCodexLogin(codexlogin.New(st, registry))
 	mux.Handle(brigadev1connect.NewAuthServiceHandler(authService, interceptors))
 	// Десктоп-режим: авто-логин сид-пользователя без экрана входа (локальный
 	// однопользовательский запуск). /desktop/auth ставит сессионные cookie и редиректит на SPA;

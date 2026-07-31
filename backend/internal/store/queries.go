@@ -47,9 +47,10 @@ func (s *Store) GetUserSettings(ctx context.Context, userID string) (UserSetting
 	var updatedAt int64
 	var images string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT claude_token, memory_remote, ntfy_server, ntfy_topic, ntfy_token, ntfy_events, agent_images, updated_at
+		`SELECT claude_token, codex_api_key, codex_auth_json, codex_default_profile,
+		 memory_remote, ntfy_server, ntfy_topic, ntfy_token, ntfy_events, agent_images, updated_at
 		 FROM user_settings WHERE user_id = ?`, userID).
-		Scan(&settings.ClaudeToken, &settings.MemoryRemote,
+		Scan(&settings.ClaudeToken, &settings.CodexAPIKey, &settings.CodexAuthJSON, &settings.CodexDefaultProfile, &settings.MemoryRemote,
 			&settings.NtfyServer, &settings.NtfyTopic, &settings.NtfyToken, &settings.NtfyEvents, &images, &updatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return settings, nil
@@ -64,6 +65,8 @@ func (s *Store) GetUserSettings(ctx context.Context, userID string) (UserSetting
 	}
 	// Секретные колонки хранятся зашифрованными — отдаём наружу расшифрованными.
 	settings.ClaudeToken = s.cipher.Decrypt(settings.ClaudeToken)
+	settings.CodexAPIKey = s.cipher.Decrypt(settings.CodexAPIKey)
+	settings.CodexAuthJSON = s.cipher.Decrypt(settings.CodexAuthJSON)
 	settings.MemoryRemote = s.cipher.Decrypt(settings.MemoryRemote)
 	settings.NtfyToken = s.cipher.Decrypt(settings.NtfyToken)
 	// updated_at сканируется, но не хранится в модели (никто не читает).
@@ -77,11 +80,11 @@ func (s *Store) GetUserSettings(ctx context.Context, userID string) (UserSetting
 func (s *Store) CreateSession(ctx context.Context, sess Session) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO sessions
-		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name, parent_id, mcp_servers, image)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name, parent_id, mcp_servers, image, auth_profile)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		sess.ID, sess.UserID, string(sess.Mode), string(sess.Kind), sess.AgentType,
 		sess.AgentSessionID, sess.ContainerLabel, string(sess.Status), sess.Cwd, toUnix(sess.CreatedAt), sess.Name, sess.ParentID,
-		strings.Join(sess.McpServers, ","), sess.Image,
+		strings.Join(sess.McpServers, ","), sess.Image, sess.AuthProfile,
 	)
 	if err != nil {
 		return fmt.Errorf("store: create session: %w", err)
@@ -148,7 +151,7 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 }
 
 const sessionSelect = `SELECT id, user_id, mode, kind, agent_type, agent_session_id,
-	container_label, status, cwd, created_at, name, parent_id, mcp_servers, image FROM sessions`
+	container_label, status, cwd, created_at, name, parent_id, mcp_servers, image, auth_profile FROM sessions`
 
 func (s *Store) querySessions(ctx context.Context, query string, args ...any) ([]Session, error) {
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -190,7 +193,7 @@ func scanSessionRow(r rowScanner) (Session, error) {
 	var mode, kind, status, mcp string
 	var createdAt int64
 	err := r.Scan(&sess.ID, &sess.UserID, &mode, &kind, &sess.AgentType,
-		&sess.AgentSessionID, &sess.ContainerLabel, &status, &sess.Cwd, &createdAt, &sess.Name, &sess.ParentID, &mcp, &sess.Image)
+		&sess.AgentSessionID, &sess.ContainerLabel, &status, &sess.Cwd, &createdAt, &sess.Name, &sess.ParentID, &mcp, &sess.Image, &sess.AuthProfile)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Session{}, err
@@ -220,6 +223,18 @@ func (s *Store) SetAgentImages(ctx context.Context, userID string, images []stri
 		userID, string(raw), toUnix(time.Now()))
 	if err != nil {
 		return fmt.Errorf("store: set agent images: %w", err)
+	}
+	return nil
+}
+
+// SetCodexAuthJSON сохраняет обновлённый официальный auth.json после завершения Codex.
+// Метод нужен runtime-слою: refresh-токены могут ротироваться самим Codex во время сессии.
+func (s *Store) SetCodexAuthJSON(ctx context.Context, userID, authJSON string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO user_settings (user_id, codex_auth_json, updated_at) VALUES (?, ?, ?)
+		ON CONFLICT(user_id) DO UPDATE SET codex_auth_json = excluded.codex_auth_json, updated_at = excluded.updated_at`,
+		userID, s.cipher.Encrypt(authJSON), toUnix(time.Now()))
+	if err != nil {
+		return fmt.Errorf("store: set codex auth: %w", err)
 	}
 	return nil
 }

@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -33,8 +34,9 @@ import (
 	"github.com/grigory51/brigade/backend/internal/acp"
 	"github.com/grigory51/brigade/backend/internal/acp/acpremote"
 	"github.com/grigory51/brigade/backend/internal/agent"
-	"github.com/grigory51/brigade/backend/internal/cliremote"
 	"github.com/grigory51/brigade/backend/internal/agui"
+	"github.com/grigory51/brigade/backend/internal/cliremote"
+	"github.com/grigory51/brigade/backend/internal/codexlogin"
 	"github.com/grigory51/brigade/backend/internal/mcp"
 	"github.com/grigory51/brigade/backend/internal/memory"
 	"github.com/grigory51/brigade/backend/internal/notify"
@@ -68,6 +70,62 @@ type live struct {
 	// client.Close() (acpremote) лишь отцепляет поток, а контейнер должен пережить рестарт
 	// brigade и уйти только по явной остановке. nil — нет доп. действий.
 	teardown func(context.Context) error
+}
+
+// Run реализует codexlogin.Runner. В Docker официальный login выполняется внутри
+// доверенного per-user демона с Codex runtime; credential читается backend'ом из
+// bind-mounted agent home и не проходит через терминальный RPC.
+func (r *Registry) Run(ctx context.Context, userID string, output io.Writer) ([]byte, error) {
+	if r.mode != store.SessionModeDocker {
+		return codexlogin.LocalRunner{}.Run(ctx, userID, output)
+	}
+	ds, ok := r.spawner.(*spawn.DockerSpawner)
+	if !ok {
+		return nil, errors.New("session: docker mode without DockerSpawner")
+	}
+	sess := store.Session{ID: "codex-login", UserID: userID, Mode: r.mode, Kind: store.SessionKindCLI, AgentType: agent.Codex.ID, Cwd: spawn.AgentHome}
+	home := r.homeHost(sess)
+	if home == "" {
+		return nil, errors.New("session: Codex device login requires agent_home_dir")
+	}
+	hostCodexHome := filepath.Join(home, ".codex-login")
+	if err := os.MkdirAll(hostCodexHome, 0o700); err != nil {
+		return nil, err
+	}
+	_ = os.Chown(hostCodexHome, spawn.AgentUID, spawn.AgentGID)
+	defer os.RemoveAll(hostCodexHome)
+
+	unlock := r.lockUser(userID)
+	addr, err := ds.EnsureUserDaemon(ctx, r.agentSpec(ctx, sess), r.previews.DaemonPublicKey())
+	if err != nil {
+		unlock()
+		return nil, err
+	}
+	handle := cliremote.New(addr, "codex-login-"+uuid.NewString(), r.daemonTokenFn(userID))
+	if err := handle.Start([]string{"codex", "login", "--device-auth"}, spawn.AgentHome, []string{"CODEX_HOME=" + spawn.AgentHome + "/.codex-login"}, 0, 0); err != nil {
+		unlock()
+		return nil, err
+	}
+	unlock()
+	defer r.releaseUserContainerIfIdle(userID)
+
+	copyDone := make(chan struct{})
+	go func() { _, _ = io.Copy(output, handle); close(copyDone) }()
+	terminated := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = handle.Terminate(context.Background())
+		case <-terminated:
+		}
+	}()
+	err = handle.Wait()
+	close(terminated)
+	<-copyDone
+	if err != nil {
+		return nil, err
+	}
+	return os.ReadFile(filepath.Join(hostCodexHome, "auth.json"))
 }
 
 // acpSession — живой ACP-объект сессии: локальный *acp.Client (adapter в процессе brigade,
@@ -338,6 +396,13 @@ func (r *Registry) userClaudeToken(ctx context.Context, userID string) string {
 	return settings.ClaudeToken
 }
 
+func (r *Registry) agentToken(ctx context.Context, sess store.Session) string {
+	if agent.Get(sess.AgentType).ID != agent.Claude.ID {
+		return ""
+	}
+	return r.userClaudeToken(ctx, sess.UserID)
+}
+
 // ErrTeardownInProgress возвращается Stop/Delete, если teardown этой сессии уже
 // выполняется другим запросом.
 var ErrTeardownInProgress = errors.New("session: teardown already in progress")
@@ -417,10 +482,35 @@ func (r *Registry) endTeardown(sessionID string) {
 // и сохраняет resume-поля. Режим спавна берётся у инстанса (r.mode), не выбирается
 // пользователем. agentType — тип агента; cwd пустой означает дефолт workDir; prompt
 // передаётся ACP-агенту первым ходом (для CLI игнорируется — ввод идёт по WS).
-func (r *Registry) Create(ctx context.Context, userID string, kind store.SessionKind, agentType, cwd, prompt string, mcpServerIDs []string, image string) (store.Session, error) {
+func (r *Registry) Create(ctx context.Context, userID string, kind store.SessionKind, agentType, authProfile, cwd, prompt string, mcpServerIDs []string, image string) (store.Session, error) {
+	at := agent.Get(agentType)
+	if at.ID == agent.Codex.ID {
+		settings, err := r.store.GetUserSettings(ctx, userID)
+		if err != nil {
+			return store.Session{}, err
+		}
+		if authProfile == "" {
+			authProfile = settings.CodexDefaultProfile
+		}
+		if authProfile == "" {
+			if settings.CodexAuthJSON != "" {
+				authProfile = "chatgpt"
+			} else if settings.CodexAPIKey != "" {
+				authProfile = "api-key"
+			}
+		}
+		if (authProfile == "chatgpt" && settings.CodexAuthJSON == "") || (authProfile == "api-key" && settings.CodexAPIKey == "") {
+			return store.Session{}, errors.New("session: выбранный профиль Codex не настроен")
+		}
+		if authProfile == "chatgpt" && r.mode == store.SessionModeDocker && r.claudeHomeDir == "" {
+			return store.Session{}, errors.New("session: ChatGPT-профиль Codex в Docker требует настроенный agent home")
+		}
+	} else {
+		authProfile = "claude-token"
+	}
 	// ACP стартует агента сразу (non-interactive) — без токена не авторизуется.
 	// CLI можно создать без токена: пользователь авторизуется в терминале.
-	if kind == store.SessionKindACP && r.userClaudeToken(ctx, userID) == "" {
+	if at.ID == agent.Claude.ID && kind == store.SessionKindACP && r.userClaudeToken(ctx, userID) == "" {
 		return store.Session{}, ErrClaudeTokenRequired
 	}
 	// Набор MCP проверяем до записи сессии: сломанную ссылку на секрет пользователь должен
@@ -457,17 +547,18 @@ func (r *Registry) Create(ctx context.Context, userID string, kind store.Session
 	}
 
 	sess := store.Session{
-		ID:         id,
-		UserID:     userID,
-		Mode:       r.mode,
-		Kind:       kind,
-		AgentType:  agentType,
-		Status:     store.SessionStatusRunning,
-		Cwd:        cwd,
-		CreatedAt:  time.Now(),
-		Name:       autoName(prompt),
-		McpServers: mcpServerIDs,
-		Image:      image,
+		ID:          id,
+		UserID:      userID,
+		Mode:        r.mode,
+		Kind:        kind,
+		AgentType:   agentType,
+		Status:      store.SessionStatusRunning,
+		Cwd:         cwd,
+		CreatedAt:   time.Now(),
+		Name:        autoName(prompt),
+		McpServers:  mcpServerIDs,
+		Image:       image,
+		AuthProfile: authProfile,
 	}
 	if err := r.store.CreateSession(ctx, sess); err != nil {
 		log.Printf("session: create %s failed (store): %v", sess.ID, err)
@@ -533,7 +624,7 @@ func (r *Registry) Create(ctx context.Context, userID string, kind store.Session
 // spawnFor спавнит агента под сессию и возвращает живой объект вместе с resume-полями
 // (agent_session_id, container_label). prompt отправляется ACP-агенту первым ходом.
 func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt string) (*live, string, string, error) {
-	token := r.userClaudeToken(ctx, sess.UserID)
+	token := r.agentToken(ctx, sess)
 	switch sess.Kind {
 	case store.SessionKindCLI:
 		// В CLI-режиме `claude` запускается интерактивно и аутентифицируется через
@@ -561,7 +652,11 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 		// переподключение не находило мёртвый Handle.
 		go r.watchExit(sess.ID, handle)
 		lv := &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, handle: handle}
-		return lv, handle.AgentSessionID(), handle.ContainerLabel(), nil
+		agentSessionID := handle.AgentSessionID()
+		if agent.Get(sess.AgentType).ID == agent.Codex.ID {
+			agentSessionID = sess.ID
+		}
+		return lv, agentSessionID, handle.ContainerLabel(), nil
 
 	case store.SessionKindACP:
 		if sess.Mode == store.SessionModeDocker {
@@ -632,7 +727,7 @@ func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token
 	r.loadAgentSSHKey(ctx, sess.UserID, rc.SetSSHKey)
 	sid, err := rc.Configure(ctx, acpremote.ConfigureOptions{
 		OAuthToken:        token,
-		ExtraEnv:          r.previewEnv(sess), // preview-токен/URL — только адаптеру, не в env контейнера
+		ExtraEnv:          r.agentEnv(ctx, sess, token), // auth и preview — только процессу адаптера
 		AdapterCommand:    agent.Get(sess.AgentType).CommandFor(store.SessionKindACP),
 		Cwd:               sess.Cwd,
 		ResumeSessionID:   resumeSessionID,
@@ -671,6 +766,12 @@ func (r *Registry) spawnCLIDaemon(ctx context.Context, sess store.Session, token
 	if resumeSessionID != "" {
 		cmd = []string{bin, "--resume", resumeSessionID}
 	}
+	if agent.Get(sess.AgentType).ID == agent.Codex.ID {
+		cmd = []string{bin}
+		if resumeSessionID != "" {
+			cmd = []string{bin, "resume", "--last"}
+		}
+	}
 	// aud подписи = userID (per-user демон обслуживает все CLI-сессии пользователя); id
 	// терминала = sess.ID (сессия). OAuth-токен и preview-env — в env процесса, не контейнера.
 	hc := cliremote.New(addr, sess.ID, r.daemonTokenFn(sess.UserID))
@@ -688,12 +789,28 @@ func (r *Registry) spawnCLIDaemon(ctx context.Context, sess store.Session, token
 // добавление второго агента не требовало правок здесь и в спавнере.
 func (r *Registry) agentSpec(ctx context.Context, sess store.Session) spawn.Spec {
 	at := agent.Get(sess.AgentType)
+	layers := at.LayersFor(sess.Kind)
+	// CLI-демон общий для всех агентов пользователя, поэтому при первом создании получает
+	// объединение CLI-runtime. Иначе контейнер, впервые созданный для Claude, не смог бы
+	// позже запустить Codex (и наоборот).
+	if sess.Kind == store.SessionKindCLI {
+		seen := map[string]bool{}
+		layers = nil
+		for _, candidate := range agent.List() {
+			for _, layer := range candidate.LayersFor(store.SessionKindCLI) {
+				if !seen[layer.Name] {
+					seen[layer.Name] = true
+					layers = append(layers, layer)
+				}
+			}
+		}
+	}
 	return spawn.Spec{
 		SessionID: sess.ID,
 		UserID:    sess.UserID,
 		Cwd:       sess.Cwd,
 		Image:     sess.Image,
-		Layers:    at.LayersFor(sess.Kind),
+		Layers:    layers,
 		Command:   at.CommandFor(sess.Kind),
 		HomeHost:  r.homeHost(sess),
 		Hostname:  r.userHostname(ctx, sess.UserID),
@@ -703,7 +820,7 @@ func (r *Registry) agentSpec(ctx context.Context, sess store.Session) spawn.Spec
 // acpPluginDirs — плагин-директории агента (per-session плагин brigade со скиллами), если
 // preview включён. Путь — внутри контейнера (cwd агента).
 func (r *Registry) acpPluginDirs(sess store.Session) []string {
-	if !r.previews.Config().Enabled {
+	if !r.previews.Config().Enabled || agent.Get(sess.AgentType).ID != agent.Claude.ID {
 		return nil
 	}
 	return []string{sess.Cwd + "/" + preview.PluginDirRel}
@@ -716,11 +833,12 @@ func (r *Registry) acpPluginDirs(sess store.Session) []string {
 // доставляет сам поверх.
 func (r *Registry) acpLocalOptions(ctx context.Context, sess store.Session, token string) acp.Options {
 	return acp.Options{
-		Cwd:        sess.Cwd,
-		OAuthToken: token,
-		ExtraEnv:   r.previewEnv(sess),
-		McpServers: r.mcpServers(ctx, sess),
-		PluginDirs: r.acpPluginDirs(sess),
+		Cwd:            sess.Cwd,
+		OAuthToken:     token,
+		AdapterCommand: agent.Get(sess.AgentType).CommandFor(store.SessionKindACP),
+		ExtraEnv:       r.agentEnv(ctx, sess, token),
+		McpServers:     r.mcpServers(ctx, sess),
+		PluginDirs:     r.acpPluginDirs(sess),
 	}
 }
 
@@ -823,6 +941,33 @@ func (r *Registry) agentEnv(ctx context.Context, sess store.Session, token strin
 	if token != "" {
 		env = append(env, "CLAUDE_CODE_OAUTH_TOKEN="+token)
 	}
+	if agent.Get(sess.AgentType).ID == agent.Codex.ID {
+		settings, err := r.store.GetUserSettings(ctx, sess.UserID)
+		if err != nil {
+			log.Printf("session %s: codex auth: %v", sess.ID, err)
+		} else {
+			hostHome := filepath.Join(r.hostCwd(sess), ".brigade", "codex-home")
+			codexHome := hostHome
+			if sess.Mode == store.SessionModeDocker {
+				codexHome = filepath.Join(sess.Cwd, ".brigade", "codex-home")
+			}
+			env = append(env, "CODEX_HOME="+codexHome)
+			if sess.AuthProfile == "api-key" {
+				env = append(env, "CODEX_API_KEY="+settings.CodexAPIKey, "OPENAI_API_KEY="+settings.CodexAPIKey)
+			} else if err := os.MkdirAll(hostHome, 0o700); err == nil {
+				authPath := filepath.Join(hostHome, "auth.json")
+				if current, err := os.ReadFile(authPath); err == nil && json.Valid(current) {
+					// Codex ротирует refresh-токены сам. После аварийного рестарта файл может
+					// быть новее БД — импортируем его до запуска и не затираем старой копией.
+					if err := r.store.SetCodexAuthJSON(ctx, sess.UserID, string(current)); err != nil {
+						log.Printf("session %s: persist recovered codex auth: %v", sess.ID, err)
+					}
+				} else if err := os.WriteFile(authPath, []byte(settings.CodexAuthJSON), 0o600); err != nil {
+					log.Printf("session %s: write codex auth: %v", sess.ID, err)
+				}
+			}
+		}
+	}
 	env = append(env, r.previewEnv(sess)...)
 	return append(env, r.installMcpProject(ctx, sess)...)
 }
@@ -843,7 +988,12 @@ func (r *Registry) installMcpProject(ctx context.Context, sess store.Session) []
 		log.Printf("session %s: mcp: %v", sess.ID, err)
 		return nil
 	}
-	env, err := mcp.WriteProjectConfig(cwd, selected, secrets)
+	var env []string
+	if agent.Get(sess.AgentType).ID == agent.Codex.ID {
+		env, err = mcp.WriteCodexConfig(filepath.Join(cwd, ".brigade", "codex-home"), selected, secrets)
+	} else {
+		env, err = mcp.WriteProjectConfig(cwd, selected, secrets)
+	}
 	if err != nil {
 		log.Printf("session %s: mcp: %v", sess.ID, err)
 		return nil
@@ -918,7 +1068,13 @@ func (r *Registry) installSkill(sess store.Session) {
 	// marketplaceID уникален на сессию: Claude Code кеширует локальный marketplace глобально
 	// по ID и пинит его на каталог первой сессии — при константном ID новые сессии грузили бы
 	// старые скиллы. "brigade-<sessionID>" даёт каждой сессии свежую регистрацию из её каталога.
-	if err := preview.InstallSkill(dir, "brigade-"+sess.ID); err != nil {
+	var err error
+	if agent.Get(sess.AgentType).ID == agent.Codex.ID {
+		err = preview.InstallCodexSkills(dir)
+	} else {
+		err = preview.InstallSkill(dir, "brigade-"+sess.ID)
+	}
+	if err != nil {
 		log.Printf("session: install preview skill %s: %v", sess.ID, err)
 	}
 }
@@ -1055,7 +1211,7 @@ func (r *Registry) Handle(ctx context.Context, sessionID, userID string) (spawn.
 		log.Printf("session: ensure cli %s: get session: %v", sessionID, err)
 		return nil, false
 	}
-	newLv, _, _, err := r.spawnCLIDaemon(ctx, sess, r.userClaudeToken(ctx, sess.UserID), sess.AgentSessionID)
+	newLv, _, _, err := r.spawnCLIDaemon(ctx, sess, r.agentToken(ctx, sess), sess.AgentSessionID)
 	if err != nil {
 		log.Printf("session: ensure cli %s: respawn: %v", sessionID, err)
 		return nil, false
@@ -1217,7 +1373,7 @@ func (r *Registry) acpAlive(ctx context.Context, lv *live, sessionID string) boo
 // остановленный и поднимает свежий) + session/load; local: новый subprocess-адаптер + session/load.
 // Диалог сохраняется — агент реплеит thread по agent_session_id.
 func (r *Registry) reviveACP(ctx context.Context, sess store.Session) (*live, error) {
-	token := r.userClaudeToken(ctx, sess.UserID)
+	token := r.agentToken(ctx, sess)
 	if sess.Mode == store.SessionModeDocker {
 		lv, sid, _, err := r.spawnACPDaemon(ctx, sess, token, "", sess.AgentSessionID, "")
 		if err != nil {
@@ -1317,7 +1473,7 @@ func (r *Registry) reinit(ctx context.Context, lv *live, sess store.Session) err
 	sessionID := sess.ID
 	// Обновляем файлы скиллов до реинициализации, чтобы свежая загрузка их прочитала.
 	r.installSkill(sess)
-	token := r.userClaudeToken(ctx, sess.UserID)
+	token := r.agentToken(ctx, sess)
 
 	if sess.Mode == store.SessionModeDocker {
 		rc, ok := lv.client.(*acpremote.Client)
@@ -1328,7 +1484,8 @@ func (r *Registry) reinit(ctx context.Context, lv *live, sess store.Session) err
 		// актуальными плагинами; контейнер/демон не пересоздаются.
 		if _, err := rc.Configure(ctx, acpremote.ConfigureOptions{
 			OAuthToken:      token,
-			ExtraEnv:        r.previewEnv(sess),
+			ExtraEnv:        r.agentEnv(ctx, sess, token),
+			AdapterCommand:  agent.Get(sess.AgentType).CommandFor(store.SessionKindACP),
 			Cwd:             sess.Cwd,
 			ResumeSessionID: sess.AgentSessionID,
 			McpServers:      r.mcpServers(ctx, sess),
@@ -1414,8 +1571,9 @@ func (r *Registry) Fork(ctx context.Context, sessionID, userID string) (store.Se
 		ParentID:  src.ID,
 		// Ветка продолжает ту же работу — набор инструментов и образ наследуются от
 		// родителя.
-		McpServers: src.McpServers,
-		Image:      src.Image,
+		McpServers:  src.McpServers,
+		Image:       src.Image,
+		AuthProfile: src.AuthProfile,
 	}
 	if err := r.store.CreateSession(ctx, sess); err != nil {
 		return store.Session{}, err
@@ -1424,7 +1582,7 @@ func (r *Registry) Fork(ctx context.Context, sessionID, userID string) (store.Se
 	r.provisionAgentSSH(ctx, sess)
 
 	// Как и в Create: жизнь агента равна жизни сессии, спавн отвязывается от ctx запроса.
-	token := r.userClaudeToken(ctx, sess.UserID)
+	token := r.agentToken(ctx, sess)
 	var lv *live
 	var sid string
 	if sess.Mode == store.SessionModeDocker {
@@ -1493,7 +1651,8 @@ func (r *Registry) Rename(ctx context.Context, sessionID, userID, name string) (
 // Stop останавливает живую сессию: закрывает Handle/Client и помечает её stopped.
 // Идемпотентен по живому объекту: если сессия уже не в памяти, обновляет лишь статус.
 func (r *Registry) Stop(ctx context.Context, sessionID, userID string) error {
-	if _, err := r.Get(ctx, sessionID, userID); err != nil {
+	sess, err := r.Get(ctx, sessionID, userID)
+	if err != nil {
 		return err
 	}
 
@@ -1509,6 +1668,7 @@ func (r *Registry) Stop(ctx context.Context, sessionID, userID string) error {
 		cancel()
 	}
 	r.previews.Drop(sessionID)
+	r.removeCodexAuth(sess)
 	// Последняя docker-CLI сессия пользователя закрыта → общий контейнер не нужен.
 	r.releaseUserContainerIfIdle(userID)
 	log.Printf("session: stopped %s by user=%s", sessionID, userID)
@@ -1517,7 +1677,8 @@ func (r *Registry) Stop(ctx context.Context, sessionID, userID string) error {
 
 // Delete останавливает сессию (если жива) и удаляет её запись из store.
 func (r *Registry) Delete(ctx context.Context, sessionID, userID string) error {
-	if _, err := r.Get(ctx, sessionID, userID); err != nil {
+	sess, err := r.Get(ctx, sessionID, userID)
+	if err != nil {
 		return err
 	}
 
@@ -1533,10 +1694,26 @@ func (r *Registry) Delete(ctx context.Context, sessionID, userID string) error {
 		cancel()
 	}
 	r.previews.Drop(sessionID)
+	r.removeCodexAuth(sess)
 	// Последняя docker-CLI сессия пользователя закрыта → общий контейнер не нужен.
 	r.releaseUserContainerIfIdle(userID)
 	log.Printf("session: deleted %s by user=%s", sessionID, userID)
 	return r.store.DeleteSession(ctx, sessionID)
+}
+
+func (r *Registry) removeCodexAuth(sess store.Session) {
+	if agent.Get(sess.AgentType).ID != agent.Codex.ID || sess.AuthProfile != "chatgpt" {
+		return
+	}
+	path := filepath.Join(r.hostCwd(sess), ".brigade", "codex-home", "auth.json")
+	if data, err := os.ReadFile(path); err == nil && json.Valid(data) {
+		if err := r.store.SetCodexAuthJSON(context.Background(), sess.UserID, string(data)); err != nil {
+			log.Printf("session %s: persist codex auth: %v", sess.ID, err)
+		}
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		log.Printf("session %s: remove codex auth: %v", sess.ID, err)
+	}
 }
 
 // UploadFile кладёт файл в рабочую директорию агента (uploads/<имя>) ЧЕРЕЗ ФАСАД сессии
@@ -1640,6 +1817,7 @@ func (r *Registry) Archive(ctx context.Context, sessionID, userID string) (memor
 			cancel()
 		}
 		r.previews.Drop(sessionID)
+		r.removeCodexAuth(sess)
 		r.releaseUserContainerIfIdle(userID)
 	}
 	// Сессия целиком переехала в память — в БД ей больше не место.
@@ -1710,6 +1888,7 @@ func (r *Registry) RestoreAll(ctx context.Context) error {
 			log.Printf("session: восстановление %s (%s/%s) не удалось: %v",
 				sess.ID, sess.Mode, sess.Kind, err)
 			_ = r.store.UpdateSessionStatus(ctx, sess.ID, store.SessionStatusFailed)
+			r.removeCodexAuth(sess)
 		}
 	}
 	// Свип общих per-user контейнеров: если все docker-CLI сессии пользователя не
@@ -1749,7 +1928,7 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 			// реплеит переписку. Лок держим до регистрации live (как в Create): свип контейнеров
 			// в конце RestoreAll под тем же локом не снесёт контейнер в окне «готов, но не записан».
 			unlock := r.lockUser(sess.UserID)
-			lv, _, _, err := r.spawnCLIDaemon(ctx, sess, r.userClaudeToken(ctx, sess.UserID), sess.AgentSessionID)
+			lv, _, _, err := r.spawnCLIDaemon(ctx, sess, r.agentToken(ctx, sess), sess.AgentSessionID)
 			if err != nil {
 				unlock()
 				return fmt.Errorf("restore cli: %w", err)
@@ -1760,11 +1939,22 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 			unlock()
 			return nil
 		}
+		if agent.Get(sess.AgentType).ID == agent.Codex.ID && sess.AgentSessionID != "" {
+			handle, err := r.spawner.Reattach(ctx, spawn.Persisted{SessionID: sess.ID, AgentSessionID: sess.AgentSessionID, Cwd: sess.Cwd, Env: r.agentEnv(ctx, sess, ""), Command: agent.Codex.CommandFor(store.SessionKindCLI)})
+			if err != nil {
+				return fmt.Errorf("restore codex cli: %w", err)
+			}
+			go r.watchExit(sess.ID, handle)
+			r.mu.Lock()
+			r.live[sess.ID] = &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, handle: handle}
+			r.mu.Unlock()
+			return nil
+		}
 		// local: процесс агента умер с рестартом brigade — сессия объективно мертва.
 		return r.store.UpdateSessionStatus(ctx, sess.ID, store.SessionStatusStopped)
 
 	case store.SessionKindACP:
-		token := r.userClaudeToken(ctx, sess.UserID)
+		token := r.agentToken(ctx, sess)
 		if sess.Mode == store.SessionModeDocker {
 			// docker: демон и адаптер живут в контейнере и ПЕРЕЖИВАЮТ рестарт brigade.
 			// Восстановление = reconnect к живому демону (turn не прерывался). Если контейнер
@@ -1823,6 +2013,7 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 // меняется: при следующем старте RestoreAll попытается их восстановить. Вызывается при
 // graceful-остановке сервиса.
 func (r *Registry) Close() {
+	sessions, _ := r.store.ListSessionsByStatus(context.Background(), store.SessionStatusRunning)
 	r.mu.Lock()
 	snapshot := r.live
 	r.live = make(map[string]*live)
@@ -1830,6 +2021,9 @@ func (r *Registry) Close() {
 
 	for _, lv := range snapshot {
 		_ = lv.close()
+	}
+	for _, sess := range sessions {
+		r.removeCodexAuth(sess)
 	}
 }
 

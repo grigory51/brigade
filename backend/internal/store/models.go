@@ -44,9 +44,12 @@ type User struct {
 // SSH-ключу агента, см. auth.EnsureAgentSSHKey). Секреты в БД шифруются, наружу (в API)
 // значения не отдаются. GetUserSettings возвращает их уже расшифрованными.
 type UserSettings struct {
-	UserID       string
-	ClaudeToken  string
-	MemoryRemote string
+	UserID              string
+	ClaudeToken         string
+	CodexAPIKey         string
+	CodexAuthJSON       string
+	CodexDefaultProfile string
+	MemoryRemote        string
 	// NtfyServer/NtfyTopic — адрес сервера ntfy и топик push-уведомлений (не секреты).
 	// NtfyToken — токен публикации в топик (секрет, шифруется). NtfyEvents — CSV включённых
 	// событий (напр. "turn_end,error").
@@ -82,6 +85,8 @@ type Session struct {
 	McpServers []string
 	// Image — образ контейнера сессии (docker-режим). Пусто — базовый образ brigade.
 	Image string
+	// AuthProfile фиксирует способ авторизации агента на весь срок жизни сессии.
+	AuthProfile string
 }
 
 // McpTransport — способ связи агента с MCP-сервером.

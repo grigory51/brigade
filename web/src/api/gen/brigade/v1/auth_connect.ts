@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AgentImagesSettings, AgentRuntimeSettings, ClaudeSettings, Empty, LoginRequest, LoginResponse, MemorySettings, NtfySettings, RefreshRequest, RefreshResponse, ServerInfo, SetAgentImagesRequest, SetAgentRuntimeRequest, SetClaudeTokenRequest, SetMemorySettingsRequest, SetNtfySettingsRequest, SSHSettings, User } from "./auth_pb.js";
+import { AgentImagesSettings, AgentRuntimeSettings, CancelCodexLoginRequest, ClaudeSettings, CodexLogin, CodexSettings, Empty, GetCodexLoginRequest, LoginRequest, LoginResponse, MemorySettings, NtfySettings, RefreshRequest, RefreshResponse, ServerInfo, SetAgentImagesRequest, SetAgentRuntimeRequest, SetClaudeTokenRequest, SetCodexApiKeyRequest, SetCodexChatGPTAuthRequest, SetCodexDefaultProfileRequest, SetMemorySettingsRequest, SetNtfySettingsRequest, SSHSettings, User } from "./auth_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -85,6 +85,78 @@ export const AuthService = {
       name: "SetClaudeToken",
       I: SetClaudeTokenRequest,
       O: ClaudeSettings,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.AuthService.GetCodexSettings
+     */
+    getCodexSettings: {
+      name: "GetCodexSettings",
+      I: Empty,
+      O: CodexSettings,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.AuthService.SetCodexApiKey
+     */
+    setCodexApiKey: {
+      name: "SetCodexApiKey",
+      I: SetCodexApiKeyRequest,
+      O: CodexSettings,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.AuthService.SetCodexChatGPTAuth
+     */
+    setCodexChatGPTAuth: {
+      name: "SetCodexChatGPTAuth",
+      I: SetCodexChatGPTAuthRequest,
+      O: CodexSettings,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.AuthService.StartCodexLogin
+     */
+    startCodexLogin: {
+      name: "StartCodexLogin",
+      I: Empty,
+      O: CodexLogin,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.AuthService.GetCodexLogin
+     */
+    getCodexLogin: {
+      name: "GetCodexLogin",
+      I: GetCodexLoginRequest,
+      O: CodexLogin,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.AuthService.CancelCodexLogin
+     */
+    cancelCodexLogin: {
+      name: "CancelCodexLogin",
+      I: CancelCodexLoginRequest,
+      O: Empty,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.AuthService.DisconnectCodexChatGPT
+     */
+    disconnectCodexChatGPT: {
+      name: "DisconnectCodexChatGPT",
+      I: Empty,
+      O: CodexSettings,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.AuthService.SetCodexDefaultProfile
+     */
+    setCodexDefaultProfile: {
+      name: "SetCodexDefaultProfile",
+      I: SetCodexDefaultProfileRequest,
+      O: CodexSettings,
       kind: MethodKind.Unary,
     },
     /**

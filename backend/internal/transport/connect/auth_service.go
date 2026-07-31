@@ -12,6 +12,7 @@ import (
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
 	"github.com/grigory51/brigade/backend/internal/agentimage"
 	"github.com/grigory51/brigade/backend/internal/auth"
+	"github.com/grigory51/brigade/backend/internal/codexlogin"
 	"github.com/grigory51/brigade/backend/internal/runtimecfg"
 )
 
@@ -23,12 +24,15 @@ type NtfyTester interface {
 
 // AuthService реализует brigade.v1.AuthService поверх auth.Service.
 type AuthService struct {
-	svc     *auth.Service
-	notify  NtfyTester
-	images  *agentimage.Service
-	runtime *runtimecfg.Service
-	desktop bool
+	svc        *auth.Service
+	notify     NtfyTester
+	images     *agentimage.Service
+	runtime    *runtimecfg.Service
+	desktop    bool
+	codexLogin *codexlogin.Service
 }
+
+func (s *AuthService) SetCodexLogin(service *codexlogin.Service) { s.codexLogin = service }
 
 // NewAuthService собирает реализацию AuthService. notify может быть nil — тогда проверка
 // уведомлений недоступна, остальные методы работают. images — образы контейнера агента
@@ -223,6 +227,110 @@ func (s *AuthService) SetClaudeToken(ctx context.Context, req *connect.Request[v
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&v1.ClaudeSettings{TokenSet: strings.TrimSpace(req.Msg.Token) != ""}), nil
+}
+
+func (s *AuthService) GetCodexSettings(ctx context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.CodexSettings], error) {
+	u, ok := auth.UserFromContext(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
+	}
+	return s.codexSettings(ctx, u.ID)
+}
+
+func (s *AuthService) SetCodexApiKey(ctx context.Context, req *connect.Request[v1.SetCodexApiKeyRequest]) (*connect.Response[v1.CodexSettings], error) {
+	u, ok := auth.UserFromContext(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
+	}
+	if err := s.svc.SetCodexAPIKey(ctx, u.ID, strings.TrimSpace(req.Msg.ApiKey)); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return s.codexSettings(ctx, u.ID)
+}
+
+func (s *AuthService) SetCodexChatGPTAuth(ctx context.Context, req *connect.Request[v1.SetCodexChatGPTAuthRequest]) (*connect.Response[v1.CodexSettings], error) {
+	u, ok := auth.UserFromContext(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
+	}
+	if err := s.svc.SetCodexAuthJSON(ctx, u.ID, strings.TrimSpace(req.Msg.AuthJson)); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	return s.codexSettings(ctx, u.ID)
+}
+
+func (s *AuthService) StartCodexLogin(ctx context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.CodexLogin], error) {
+	u, ok := auth.UserFromContext(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
+	}
+	if s.codexLogin == nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("device login недоступен в этой среде; импортируйте auth.json"))
+	}
+	return connect.NewResponse(codexLoginToProto(s.codexLogin.Start(u.ID))), nil
+}
+
+func (s *AuthService) GetCodexLogin(ctx context.Context, req *connect.Request[v1.GetCodexLoginRequest]) (*connect.Response[v1.CodexLogin], error) {
+	u, ok := auth.UserFromContext(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
+	}
+	if s.codexLogin == nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("device login недоступен в этой среде"))
+	}
+	login, err := s.codexLogin.Get(u.ID, req.Msg.Id)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	return connect.NewResponse(codexLoginToProto(login)), nil
+}
+
+func (s *AuthService) CancelCodexLogin(ctx context.Context, req *connect.Request[v1.CancelCodexLoginRequest]) (*connect.Response[v1.Empty], error) {
+	u, ok := auth.UserFromContext(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
+	}
+	if s.codexLogin == nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("device login недоступен в этой среде"))
+	}
+	if err := s.codexLogin.Cancel(u.ID, req.Msg.Id); err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	return connect.NewResponse(&v1.Empty{}), nil
+}
+
+func codexLoginToProto(login codexlogin.Login) *v1.CodexLogin {
+	return &v1.CodexLogin{Id: login.ID, Status: login.Status, Output: login.Output, Error: login.Error}
+}
+
+func (s *AuthService) DisconnectCodexChatGPT(ctx context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.CodexSettings], error) {
+	u, ok := auth.UserFromContext(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
+	}
+	if err := s.svc.SetCodexAuthJSON(ctx, u.ID, ""); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return s.codexSettings(ctx, u.ID)
+}
+
+func (s *AuthService) SetCodexDefaultProfile(ctx context.Context, req *connect.Request[v1.SetCodexDefaultProfileRequest]) (*connect.Response[v1.CodexSettings], error) {
+	u, ok := auth.UserFromContext(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
+	}
+	if err := s.svc.SetCodexDefaultProfile(ctx, u.ID, req.Msg.Profile); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	return s.codexSettings(ctx, u.ID)
+}
+
+func (s *AuthService) codexSettings(ctx context.Context, userID string) (*connect.Response[v1.CodexSettings], error) {
+	apiKeySet, connected, profile, err := s.svc.CodexSettings(ctx, userID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&v1.CodexSettings{ApiKeySet: apiKeySet, ChatgptConnected: connected, DefaultProfile: profile}), nil
 }
 
 // GetMemorySettings возвращает git-remote личной памяти текущего пользователя.

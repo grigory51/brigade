@@ -53,6 +53,9 @@ type Config struct {
 	// авторизация Claude (`/login`) была общей между его CLI- и ACP-сессиями. Пусто —
 	// фича выключена (используется прежний named volume состояния по дереву сессий).
 	ClaudeHomeDir string `koanf:"claude_home_dir"`
+	// AgentHomeDir — agent-agnostic имя того же каталога. claude_home_dir остаётся
+	// совместимым alias для существующих инсталляций.
+	AgentHomeDir string `koanf:"agent_home_dir"`
 
 	// AgentImage — образ контейнера агента по умолчанию (docker-режим). Он же донор
 	// runtime-компонентов brigade для сессий на пользовательских образах. Пусто →
@@ -208,12 +211,15 @@ func (c *Config) Validate() error {
 
 	// claude_home_dir (если задан) — абсолютный путь: это источник для bind-mount на
 	// хост-демон docker, относительный путь некорректен.
-	if c.ClaudeHomeDir != "" {
-		abs, err := filepath.Abs(c.ClaudeHomeDir)
+	if c.AgentHomeDir == "" {
+		c.AgentHomeDir = c.ClaudeHomeDir
+	}
+	if c.AgentHomeDir != "" {
+		abs, err := filepath.Abs(c.AgentHomeDir)
 		if err != nil {
-			return fmt.Errorf("config: resolve claude_home_dir %q: %w", c.ClaudeHomeDir, err)
+			return fmt.Errorf("config: resolve agent_home_dir %q: %w", c.AgentHomeDir, err)
 		}
-		c.ClaudeHomeDir = abs
+		c.AgentHomeDir = abs
 	}
 
 	if c.JWT.Secret == "" {

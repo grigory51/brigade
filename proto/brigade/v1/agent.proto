@@ -9,6 +9,9 @@ message AgentType {
   // id — стабильный идентификатор, например claude-code.
   string id = 1;
   string name = 2;
+  repeated string supported_kinds = 3;
+  repeated string auth_profiles = 4;
+  string settings_section = 5;
 }
 
 message ListAgentTypesRequest {}

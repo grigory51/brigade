@@ -206,6 +206,13 @@ export class Session extends Message<Session> {
    */
   image = "";
 
+  /**
+   * auth_profile — закреплённый за сессией профиль авторизации агента.
+   *
+   * @generated from field: string auth_profile = 17;
+   */
+  authProfile = "";
+
   constructor(data?: PartialMessage<Session>) {
     super();
     proto3.util.initPartial(data, this);
@@ -230,6 +237,7 @@ export class Session extends Message<Session> {
     { no: 14, name: "summary", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 15, name: "mcp_server_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 16, name: "image", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 17, name: "auth_profile", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Session {
@@ -292,6 +300,11 @@ export class CreateSessionRequest extends Message<CreateSessionRequest> {
    */
   image = "";
 
+  /**
+   * @generated from field: string auth_profile = 8;
+   */
+  authProfile = "";
+
   constructor(data?: PartialMessage<CreateSessionRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -306,6 +319,7 @@ export class CreateSessionRequest extends Message<CreateSessionRequest> {
     { no: 5, name: "cwd", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 6, name: "mcp_server_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 7, name: "image", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 8, name: "auth_profile", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CreateSessionRequest {

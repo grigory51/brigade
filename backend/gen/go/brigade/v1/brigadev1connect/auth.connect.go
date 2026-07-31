@@ -50,6 +50,30 @@ const (
 	// AuthServiceSetClaudeTokenProcedure is the fully-qualified name of the AuthService's
 	// SetClaudeToken RPC.
 	AuthServiceSetClaudeTokenProcedure = "/brigade.v1.AuthService/SetClaudeToken"
+	// AuthServiceGetCodexSettingsProcedure is the fully-qualified name of the AuthService's
+	// GetCodexSettings RPC.
+	AuthServiceGetCodexSettingsProcedure = "/brigade.v1.AuthService/GetCodexSettings"
+	// AuthServiceSetCodexApiKeyProcedure is the fully-qualified name of the AuthService's
+	// SetCodexApiKey RPC.
+	AuthServiceSetCodexApiKeyProcedure = "/brigade.v1.AuthService/SetCodexApiKey"
+	// AuthServiceSetCodexChatGPTAuthProcedure is the fully-qualified name of the AuthService's
+	// SetCodexChatGPTAuth RPC.
+	AuthServiceSetCodexChatGPTAuthProcedure = "/brigade.v1.AuthService/SetCodexChatGPTAuth"
+	// AuthServiceStartCodexLoginProcedure is the fully-qualified name of the AuthService's
+	// StartCodexLogin RPC.
+	AuthServiceStartCodexLoginProcedure = "/brigade.v1.AuthService/StartCodexLogin"
+	// AuthServiceGetCodexLoginProcedure is the fully-qualified name of the AuthService's GetCodexLogin
+	// RPC.
+	AuthServiceGetCodexLoginProcedure = "/brigade.v1.AuthService/GetCodexLogin"
+	// AuthServiceCancelCodexLoginProcedure is the fully-qualified name of the AuthService's
+	// CancelCodexLogin RPC.
+	AuthServiceCancelCodexLoginProcedure = "/brigade.v1.AuthService/CancelCodexLogin"
+	// AuthServiceDisconnectCodexChatGPTProcedure is the fully-qualified name of the AuthService's
+	// DisconnectCodexChatGPT RPC.
+	AuthServiceDisconnectCodexChatGPTProcedure = "/brigade.v1.AuthService/DisconnectCodexChatGPT"
+	// AuthServiceSetCodexDefaultProfileProcedure is the fully-qualified name of the AuthService's
+	// SetCodexDefaultProfile RPC.
+	AuthServiceSetCodexDefaultProfileProcedure = "/brigade.v1.AuthService/SetCodexDefaultProfile"
 	// AuthServiceGetMemorySettingsProcedure is the fully-qualified name of the AuthService's
 	// GetMemorySettings RPC.
 	AuthServiceGetMemorySettingsProcedure = "/brigade.v1.AuthService/GetMemorySettings"
@@ -99,6 +123,14 @@ type AuthServiceClient interface {
 	// SetClaudeToken задаёт (или очищает пустым значением) подписочный токен Claude
 	// пользователя. Возвращает обновлённое состояние (token_set).
 	SetClaudeToken(context.Context, *connect.Request[v1.SetClaudeTokenRequest]) (*connect.Response[v1.ClaudeSettings], error)
+	GetCodexSettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.CodexSettings], error)
+	SetCodexApiKey(context.Context, *connect.Request[v1.SetCodexApiKeyRequest]) (*connect.Response[v1.CodexSettings], error)
+	SetCodexChatGPTAuth(context.Context, *connect.Request[v1.SetCodexChatGPTAuthRequest]) (*connect.Response[v1.CodexSettings], error)
+	StartCodexLogin(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.CodexLogin], error)
+	GetCodexLogin(context.Context, *connect.Request[v1.GetCodexLoginRequest]) (*connect.Response[v1.CodexLogin], error)
+	CancelCodexLogin(context.Context, *connect.Request[v1.CancelCodexLoginRequest]) (*connect.Response[v1.Empty], error)
+	DisconnectCodexChatGPT(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.CodexSettings], error)
+	SetCodexDefaultProfile(context.Context, *connect.Request[v1.SetCodexDefaultProfileRequest]) (*connect.Response[v1.CodexSettings], error)
 	// GetMemorySettings возвращает настройки личной памяти пользователя (git-remote).
 	GetMemorySettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.MemorySettings], error)
 	// SetMemorySettings задаёт git-remote личной памяти. Возвращает обновлённое состояние.
@@ -185,6 +217,54 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("SetClaudeToken")),
 			connect.WithClientOptions(opts...),
 		),
+		getCodexSettings: connect.NewClient[v1.Empty, v1.CodexSettings](
+			httpClient,
+			baseURL+AuthServiceGetCodexSettingsProcedure,
+			connect.WithSchema(authServiceMethods.ByName("GetCodexSettings")),
+			connect.WithClientOptions(opts...),
+		),
+		setCodexApiKey: connect.NewClient[v1.SetCodexApiKeyRequest, v1.CodexSettings](
+			httpClient,
+			baseURL+AuthServiceSetCodexApiKeyProcedure,
+			connect.WithSchema(authServiceMethods.ByName("SetCodexApiKey")),
+			connect.WithClientOptions(opts...),
+		),
+		setCodexChatGPTAuth: connect.NewClient[v1.SetCodexChatGPTAuthRequest, v1.CodexSettings](
+			httpClient,
+			baseURL+AuthServiceSetCodexChatGPTAuthProcedure,
+			connect.WithSchema(authServiceMethods.ByName("SetCodexChatGPTAuth")),
+			connect.WithClientOptions(opts...),
+		),
+		startCodexLogin: connect.NewClient[v1.Empty, v1.CodexLogin](
+			httpClient,
+			baseURL+AuthServiceStartCodexLoginProcedure,
+			connect.WithSchema(authServiceMethods.ByName("StartCodexLogin")),
+			connect.WithClientOptions(opts...),
+		),
+		getCodexLogin: connect.NewClient[v1.GetCodexLoginRequest, v1.CodexLogin](
+			httpClient,
+			baseURL+AuthServiceGetCodexLoginProcedure,
+			connect.WithSchema(authServiceMethods.ByName("GetCodexLogin")),
+			connect.WithClientOptions(opts...),
+		),
+		cancelCodexLogin: connect.NewClient[v1.CancelCodexLoginRequest, v1.Empty](
+			httpClient,
+			baseURL+AuthServiceCancelCodexLoginProcedure,
+			connect.WithSchema(authServiceMethods.ByName("CancelCodexLogin")),
+			connect.WithClientOptions(opts...),
+		),
+		disconnectCodexChatGPT: connect.NewClient[v1.Empty, v1.CodexSettings](
+			httpClient,
+			baseURL+AuthServiceDisconnectCodexChatGPTProcedure,
+			connect.WithSchema(authServiceMethods.ByName("DisconnectCodexChatGPT")),
+			connect.WithClientOptions(opts...),
+		),
+		setCodexDefaultProfile: connect.NewClient[v1.SetCodexDefaultProfileRequest, v1.CodexSettings](
+			httpClient,
+			baseURL+AuthServiceSetCodexDefaultProfileProcedure,
+			connect.WithSchema(authServiceMethods.ByName("SetCodexDefaultProfile")),
+			connect.WithClientOptions(opts...),
+		),
 		getMemorySettings: connect.NewClient[v1.Empty, v1.MemorySettings](
 			httpClient,
 			baseURL+AuthServiceGetMemorySettingsProcedure,
@@ -256,24 +336,32 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 
 // authServiceClient implements AuthServiceClient.
 type authServiceClient struct {
-	login             *connect.Client[v1.LoginRequest, v1.LoginResponse]
-	refresh           *connect.Client[v1.RefreshRequest, v1.RefreshResponse]
-	me                *connect.Client[v1.Empty, v1.User]
-	getServerInfo     *connect.Client[v1.Empty, v1.ServerInfo]
-	logout            *connect.Client[v1.Empty, v1.Empty]
-	getClaudeSettings *connect.Client[v1.Empty, v1.ClaudeSettings]
-	setClaudeToken    *connect.Client[v1.SetClaudeTokenRequest, v1.ClaudeSettings]
-	getMemorySettings *connect.Client[v1.Empty, v1.MemorySettings]
-	setMemorySettings *connect.Client[v1.SetMemorySettingsRequest, v1.MemorySettings]
-	getNtfySettings   *connect.Client[v1.Empty, v1.NtfySettings]
-	setNtfySettings   *connect.Client[v1.SetNtfySettingsRequest, v1.NtfySettings]
-	getAgentRuntime   *connect.Client[v1.Empty, v1.AgentRuntimeSettings]
-	setAgentRuntime   *connect.Client[v1.SetAgentRuntimeRequest, v1.AgentRuntimeSettings]
-	getAgentImages    *connect.Client[v1.Empty, v1.AgentImagesSettings]
-	setAgentImages    *connect.Client[v1.SetAgentImagesRequest, v1.AgentImagesSettings]
-	testNtfy          *connect.Client[v1.Empty, v1.Empty]
-	getSSHSettings    *connect.Client[v1.Empty, v1.SSHSettings]
-	regenerateSSHKey  *connect.Client[v1.Empty, v1.SSHSettings]
+	login                  *connect.Client[v1.LoginRequest, v1.LoginResponse]
+	refresh                *connect.Client[v1.RefreshRequest, v1.RefreshResponse]
+	me                     *connect.Client[v1.Empty, v1.User]
+	getServerInfo          *connect.Client[v1.Empty, v1.ServerInfo]
+	logout                 *connect.Client[v1.Empty, v1.Empty]
+	getClaudeSettings      *connect.Client[v1.Empty, v1.ClaudeSettings]
+	setClaudeToken         *connect.Client[v1.SetClaudeTokenRequest, v1.ClaudeSettings]
+	getCodexSettings       *connect.Client[v1.Empty, v1.CodexSettings]
+	setCodexApiKey         *connect.Client[v1.SetCodexApiKeyRequest, v1.CodexSettings]
+	setCodexChatGPTAuth    *connect.Client[v1.SetCodexChatGPTAuthRequest, v1.CodexSettings]
+	startCodexLogin        *connect.Client[v1.Empty, v1.CodexLogin]
+	getCodexLogin          *connect.Client[v1.GetCodexLoginRequest, v1.CodexLogin]
+	cancelCodexLogin       *connect.Client[v1.CancelCodexLoginRequest, v1.Empty]
+	disconnectCodexChatGPT *connect.Client[v1.Empty, v1.CodexSettings]
+	setCodexDefaultProfile *connect.Client[v1.SetCodexDefaultProfileRequest, v1.CodexSettings]
+	getMemorySettings      *connect.Client[v1.Empty, v1.MemorySettings]
+	setMemorySettings      *connect.Client[v1.SetMemorySettingsRequest, v1.MemorySettings]
+	getNtfySettings        *connect.Client[v1.Empty, v1.NtfySettings]
+	setNtfySettings        *connect.Client[v1.SetNtfySettingsRequest, v1.NtfySettings]
+	getAgentRuntime        *connect.Client[v1.Empty, v1.AgentRuntimeSettings]
+	setAgentRuntime        *connect.Client[v1.SetAgentRuntimeRequest, v1.AgentRuntimeSettings]
+	getAgentImages         *connect.Client[v1.Empty, v1.AgentImagesSettings]
+	setAgentImages         *connect.Client[v1.SetAgentImagesRequest, v1.AgentImagesSettings]
+	testNtfy               *connect.Client[v1.Empty, v1.Empty]
+	getSSHSettings         *connect.Client[v1.Empty, v1.SSHSettings]
+	regenerateSSHKey       *connect.Client[v1.Empty, v1.SSHSettings]
 }
 
 // Login calls brigade.v1.AuthService.Login.
@@ -309,6 +397,46 @@ func (c *authServiceClient) GetClaudeSettings(ctx context.Context, req *connect.
 // SetClaudeToken calls brigade.v1.AuthService.SetClaudeToken.
 func (c *authServiceClient) SetClaudeToken(ctx context.Context, req *connect.Request[v1.SetClaudeTokenRequest]) (*connect.Response[v1.ClaudeSettings], error) {
 	return c.setClaudeToken.CallUnary(ctx, req)
+}
+
+// GetCodexSettings calls brigade.v1.AuthService.GetCodexSettings.
+func (c *authServiceClient) GetCodexSettings(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.CodexSettings], error) {
+	return c.getCodexSettings.CallUnary(ctx, req)
+}
+
+// SetCodexApiKey calls brigade.v1.AuthService.SetCodexApiKey.
+func (c *authServiceClient) SetCodexApiKey(ctx context.Context, req *connect.Request[v1.SetCodexApiKeyRequest]) (*connect.Response[v1.CodexSettings], error) {
+	return c.setCodexApiKey.CallUnary(ctx, req)
+}
+
+// SetCodexChatGPTAuth calls brigade.v1.AuthService.SetCodexChatGPTAuth.
+func (c *authServiceClient) SetCodexChatGPTAuth(ctx context.Context, req *connect.Request[v1.SetCodexChatGPTAuthRequest]) (*connect.Response[v1.CodexSettings], error) {
+	return c.setCodexChatGPTAuth.CallUnary(ctx, req)
+}
+
+// StartCodexLogin calls brigade.v1.AuthService.StartCodexLogin.
+func (c *authServiceClient) StartCodexLogin(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.CodexLogin], error) {
+	return c.startCodexLogin.CallUnary(ctx, req)
+}
+
+// GetCodexLogin calls brigade.v1.AuthService.GetCodexLogin.
+func (c *authServiceClient) GetCodexLogin(ctx context.Context, req *connect.Request[v1.GetCodexLoginRequest]) (*connect.Response[v1.CodexLogin], error) {
+	return c.getCodexLogin.CallUnary(ctx, req)
+}
+
+// CancelCodexLogin calls brigade.v1.AuthService.CancelCodexLogin.
+func (c *authServiceClient) CancelCodexLogin(ctx context.Context, req *connect.Request[v1.CancelCodexLoginRequest]) (*connect.Response[v1.Empty], error) {
+	return c.cancelCodexLogin.CallUnary(ctx, req)
+}
+
+// DisconnectCodexChatGPT calls brigade.v1.AuthService.DisconnectCodexChatGPT.
+func (c *authServiceClient) DisconnectCodexChatGPT(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.CodexSettings], error) {
+	return c.disconnectCodexChatGPT.CallUnary(ctx, req)
+}
+
+// SetCodexDefaultProfile calls brigade.v1.AuthService.SetCodexDefaultProfile.
+func (c *authServiceClient) SetCodexDefaultProfile(ctx context.Context, req *connect.Request[v1.SetCodexDefaultProfileRequest]) (*connect.Response[v1.CodexSettings], error) {
+	return c.setCodexDefaultProfile.CallUnary(ctx, req)
 }
 
 // GetMemorySettings calls brigade.v1.AuthService.GetMemorySettings.
@@ -381,6 +509,14 @@ type AuthServiceHandler interface {
 	// SetClaudeToken задаёт (или очищает пустым значением) подписочный токен Claude
 	// пользователя. Возвращает обновлённое состояние (token_set).
 	SetClaudeToken(context.Context, *connect.Request[v1.SetClaudeTokenRequest]) (*connect.Response[v1.ClaudeSettings], error)
+	GetCodexSettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.CodexSettings], error)
+	SetCodexApiKey(context.Context, *connect.Request[v1.SetCodexApiKeyRequest]) (*connect.Response[v1.CodexSettings], error)
+	SetCodexChatGPTAuth(context.Context, *connect.Request[v1.SetCodexChatGPTAuthRequest]) (*connect.Response[v1.CodexSettings], error)
+	StartCodexLogin(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.CodexLogin], error)
+	GetCodexLogin(context.Context, *connect.Request[v1.GetCodexLoginRequest]) (*connect.Response[v1.CodexLogin], error)
+	CancelCodexLogin(context.Context, *connect.Request[v1.CancelCodexLoginRequest]) (*connect.Response[v1.Empty], error)
+	DisconnectCodexChatGPT(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.CodexSettings], error)
+	SetCodexDefaultProfile(context.Context, *connect.Request[v1.SetCodexDefaultProfileRequest]) (*connect.Response[v1.CodexSettings], error)
 	// GetMemorySettings возвращает настройки личной памяти пользователя (git-remote).
 	GetMemorySettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.MemorySettings], error)
 	// SetMemorySettings задаёт git-remote личной памяти. Возвращает обновлённое состояние.
@@ -461,6 +597,54 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		AuthServiceSetClaudeTokenProcedure,
 		svc.SetClaudeToken,
 		connect.WithSchema(authServiceMethods.ByName("SetClaudeToken")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceGetCodexSettingsHandler := connect.NewUnaryHandler(
+		AuthServiceGetCodexSettingsProcedure,
+		svc.GetCodexSettings,
+		connect.WithSchema(authServiceMethods.ByName("GetCodexSettings")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceSetCodexApiKeyHandler := connect.NewUnaryHandler(
+		AuthServiceSetCodexApiKeyProcedure,
+		svc.SetCodexApiKey,
+		connect.WithSchema(authServiceMethods.ByName("SetCodexApiKey")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceSetCodexChatGPTAuthHandler := connect.NewUnaryHandler(
+		AuthServiceSetCodexChatGPTAuthProcedure,
+		svc.SetCodexChatGPTAuth,
+		connect.WithSchema(authServiceMethods.ByName("SetCodexChatGPTAuth")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceStartCodexLoginHandler := connect.NewUnaryHandler(
+		AuthServiceStartCodexLoginProcedure,
+		svc.StartCodexLogin,
+		connect.WithSchema(authServiceMethods.ByName("StartCodexLogin")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceGetCodexLoginHandler := connect.NewUnaryHandler(
+		AuthServiceGetCodexLoginProcedure,
+		svc.GetCodexLogin,
+		connect.WithSchema(authServiceMethods.ByName("GetCodexLogin")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceCancelCodexLoginHandler := connect.NewUnaryHandler(
+		AuthServiceCancelCodexLoginProcedure,
+		svc.CancelCodexLogin,
+		connect.WithSchema(authServiceMethods.ByName("CancelCodexLogin")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceDisconnectCodexChatGPTHandler := connect.NewUnaryHandler(
+		AuthServiceDisconnectCodexChatGPTProcedure,
+		svc.DisconnectCodexChatGPT,
+		connect.WithSchema(authServiceMethods.ByName("DisconnectCodexChatGPT")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceSetCodexDefaultProfileHandler := connect.NewUnaryHandler(
+		AuthServiceSetCodexDefaultProfileProcedure,
+		svc.SetCodexDefaultProfile,
+		connect.WithSchema(authServiceMethods.ByName("SetCodexDefaultProfile")),
 		connect.WithHandlerOptions(opts...),
 	)
 	authServiceGetMemorySettingsHandler := connect.NewUnaryHandler(
@@ -545,6 +729,22 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceGetClaudeSettingsHandler.ServeHTTP(w, r)
 		case AuthServiceSetClaudeTokenProcedure:
 			authServiceSetClaudeTokenHandler.ServeHTTP(w, r)
+		case AuthServiceGetCodexSettingsProcedure:
+			authServiceGetCodexSettingsHandler.ServeHTTP(w, r)
+		case AuthServiceSetCodexApiKeyProcedure:
+			authServiceSetCodexApiKeyHandler.ServeHTTP(w, r)
+		case AuthServiceSetCodexChatGPTAuthProcedure:
+			authServiceSetCodexChatGPTAuthHandler.ServeHTTP(w, r)
+		case AuthServiceStartCodexLoginProcedure:
+			authServiceStartCodexLoginHandler.ServeHTTP(w, r)
+		case AuthServiceGetCodexLoginProcedure:
+			authServiceGetCodexLoginHandler.ServeHTTP(w, r)
+		case AuthServiceCancelCodexLoginProcedure:
+			authServiceCancelCodexLoginHandler.ServeHTTP(w, r)
+		case AuthServiceDisconnectCodexChatGPTProcedure:
+			authServiceDisconnectCodexChatGPTHandler.ServeHTTP(w, r)
+		case AuthServiceSetCodexDefaultProfileProcedure:
+			authServiceSetCodexDefaultProfileHandler.ServeHTTP(w, r)
 		case AuthServiceGetMemorySettingsProcedure:
 			authServiceGetMemorySettingsHandler.ServeHTTP(w, r)
 		case AuthServiceSetMemorySettingsProcedure:
@@ -602,6 +802,38 @@ func (UnimplementedAuthServiceHandler) GetClaudeSettings(context.Context, *conne
 
 func (UnimplementedAuthServiceHandler) SetClaudeToken(context.Context, *connect.Request[v1.SetClaudeTokenRequest]) (*connect.Response[v1.ClaudeSettings], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.SetClaudeToken is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) GetCodexSettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.CodexSettings], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.GetCodexSettings is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) SetCodexApiKey(context.Context, *connect.Request[v1.SetCodexApiKeyRequest]) (*connect.Response[v1.CodexSettings], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.SetCodexApiKey is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) SetCodexChatGPTAuth(context.Context, *connect.Request[v1.SetCodexChatGPTAuthRequest]) (*connect.Response[v1.CodexSettings], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.SetCodexChatGPTAuth is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) StartCodexLogin(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.CodexLogin], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.StartCodexLogin is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) GetCodexLogin(context.Context, *connect.Request[v1.GetCodexLoginRequest]) (*connect.Response[v1.CodexLogin], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.GetCodexLogin is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) CancelCodexLogin(context.Context, *connect.Request[v1.CancelCodexLoginRequest]) (*connect.Response[v1.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.CancelCodexLogin is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) DisconnectCodexChatGPT(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.CodexSettings], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.DisconnectCodexChatGPT is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) SetCodexDefaultProfile(context.Context, *connect.Request[v1.SetCodexDefaultProfileRequest]) (*connect.Response[v1.CodexSettings], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.SetCodexDefaultProfile is not implemented"))
 }
 
 func (UnimplementedAuthServiceHandler) GetMemorySettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.MemorySettings], error) {

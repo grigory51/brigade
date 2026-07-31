@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/grigory51/brigade/backend/internal/agent"
 	"github.com/grigory51/brigade/backend/internal/store"
 )
 
@@ -85,6 +86,9 @@ func (r *Registry) Workflows(ctx context.Context, sessionID, userID string) ([]W
 	sess, err := r.store.GetSession(ctx, sessionID)
 	if err != nil || sess.UserID != userID || sess.Kind != store.SessionKindACP {
 		return nil, false
+	}
+	if agent.Get(sess.AgentType).ID != agent.Claude.ID {
+		return []WorkflowInfo{}, true
 	}
 
 	base := r.claudeProjectDir(sess)

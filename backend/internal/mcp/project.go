@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/grigory51/brigade/backend/internal/store"
 )
@@ -87,6 +90,110 @@ func WriteProjectConfig(cwd string, servers []store.McpServer, secrets map[strin
 		env = append(env, name+"="+value)
 	}
 	return env, nil
+}
+
+// WriteCodexConfig пишет проектный config.toml в отдельный CODEX_HOME сессии. Секреты
+// остаются в переменных окружения: TOML содержит только имена env-переменных.
+func WriteCodexConfig(codexHome string, servers []store.McpServer, secrets map[string]string) ([]string, error) {
+	path := filepath.Join(codexHome, "config.toml")
+	if len(servers) == 0 {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+		return nil, nil
+	}
+	used := map[string]string{}
+	var b strings.Builder
+	for _, srv := range servers {
+		name := strings.ReplaceAll(srv.Name, `"`, `\"`)
+		fmt.Fprintf(&b, "[mcp_servers.\"%s\"]\n", name)
+		switch srv.Transport {
+		case store.McpTransportStdio:
+			fmt.Fprintf(&b, "command = %s\n", strconv.Quote(srv.Command))
+			b.WriteString("args = [")
+			for i, arg := range srv.Args {
+				if i > 0 {
+					b.WriteString(", ")
+				}
+				b.WriteString(strconv.Quote(arg))
+			}
+			b.WriteString("]\n")
+			env, err := placeholders(srv, srv.Env, secrets, used)
+			if err != nil {
+				return nil, err
+			}
+			if len(env) > 0 {
+				b.WriteString("env = {")
+				writeTOMLMap(&b, env)
+				b.WriteString("}\n")
+			}
+		case store.McpTransportHTTP, store.McpTransportSSE:
+			fmt.Fprintf(&b, "url = %s\n", strconv.Quote(srv.URL))
+			literalHeaders := map[string]string{}
+			envHeaders := map[string]string{}
+			for _, header := range srv.Headers {
+				if !secretRef.MatchString(header.Value) {
+					literalHeaders[header.Name] = header.Value
+					continue
+				}
+				var missing string
+				value := secretRef.ReplaceAllStringFunc(header.Value, func(ref string) string {
+					name := secretRef.FindStringSubmatch(ref)[1]
+					secret, ok := secrets[name]
+					if !ok {
+						missing = name
+						return ref
+					}
+					return secret
+				})
+				if missing != "" {
+					return nil, fmt.Errorf("mcp %q: %s ссылается на секрет %q, которого нет в хранилище", srv.Name, header.Name, missing)
+				}
+				envName := fmt.Sprintf("BRIGADE_MCP_HEADER_%d", len(used)+1)
+				used[envName] = value
+				envHeaders[header.Name] = envName
+			}
+			if len(literalHeaders) > 0 {
+				b.WriteString("http_headers = {")
+				writeTOMLMap(&b, literalHeaders)
+				b.WriteString("}\n")
+			}
+			if len(envHeaders) > 0 {
+				b.WriteString("env_http_headers = {")
+				writeTOMLMap(&b, envHeaders)
+				b.WriteString("}\n")
+			}
+		default:
+			return nil, fmt.Errorf("mcp %q: неизвестный транспорт %q", srv.Name, srv.Transport)
+		}
+		b.WriteByte('\n')
+	}
+	if err := os.MkdirAll(codexHome, 0o700); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
+		return nil, err
+	}
+	env := make([]string, 0, len(used))
+	for name, value := range used {
+		env = append(env, name+"="+value)
+	}
+	sort.Strings(env)
+	return env, nil
+}
+
+func writeTOMLMap(b *strings.Builder, values map[string]string) {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for i, key := range keys {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		fmt.Fprintf(b, "%s = %s", strconv.Quote(key), strconv.Quote(values[key]))
+	}
 }
 
 // placeholders переводит пары в map для .mcp.json, заменяя ссылки на секреты ссылками на

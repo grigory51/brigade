@@ -27,10 +27,13 @@ const (
 type AgentType struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// id — стабильный идентификатор, например claude-code.
-	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name          string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Id              string   `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name            string   `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	SupportedKinds  []string `protobuf:"bytes,3,rep,name=supported_kinds,json=supportedKinds,proto3" json:"supported_kinds,omitempty"`
+	AuthProfiles    []string `protobuf:"bytes,4,rep,name=auth_profiles,json=authProfiles,proto3" json:"auth_profiles,omitempty"`
+	SettingsSection string   `protobuf:"bytes,5,opt,name=settings_section,json=settingsSection,proto3" json:"settings_section,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *AgentType) Reset() {
@@ -73,6 +76,27 @@ func (x *AgentType) GetId() string {
 func (x *AgentType) GetName() string {
 	if x != nil {
 		return x.Name
+	}
+	return ""
+}
+
+func (x *AgentType) GetSupportedKinds() []string {
+	if x != nil {
+		return x.SupportedKinds
+	}
+	return nil
+}
+
+func (x *AgentType) GetAuthProfiles() []string {
+	if x != nil {
+		return x.AuthProfiles
+	}
+	return nil
+}
+
+func (x *AgentType) GetSettingsSection() string {
+	if x != nil {
+		return x.SettingsSection
 	}
 	return ""
 }
@@ -162,10 +186,13 @@ var File_brigade_v1_agent_proto protoreflect.FileDescriptor
 const file_brigade_v1_agent_proto_rawDesc = "" +
 	"\n" +
 	"\x16brigade/v1/agent.proto\x12\n" +
-	"brigade.v1\"/\n" +
+	"brigade.v1\"\xa8\x01\n" +
 	"\tAgentType\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"\x17\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12'\n" +
+	"\x0fsupported_kinds\x18\x03 \x03(\tR\x0esupportedKinds\x12#\n" +
+	"\rauth_profiles\x18\x04 \x03(\tR\fauthProfiles\x12)\n" +
+	"\x10settings_section\x18\x05 \x01(\tR\x0fsettingsSection\"\x17\n" +
 	"\x15ListAgentTypesRequest\"P\n" +
 	"\x16ListAgentTypesResponse\x126\n" +
 	"\vagent_types\x18\x01 \x03(\v2\x15.brigade.v1.AgentTypeR\n" +

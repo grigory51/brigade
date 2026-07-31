@@ -51,6 +51,9 @@ func TestGetFallback(t *testing.T) {
 	if got := Get(Claude.ID); got.ID != Claude.ID {
 		t.Fatalf("агент по идентификатору не найден: %q", got.ID)
 	}
+	if got := Get(Codex.ID); got.CommandFor(store.SessionKindACP) != "codex-acp" {
+		t.Fatalf("Codex ACP не зарегистрирован: %+v", got)
+	}
 }
 
 func TestLayerPaths(t *testing.T) {

@@ -28,6 +28,12 @@ if [ -z "$ADAPTER_VERSION" ]; then
 fi
 ADAPTER_SPEC="@agentclientprotocol/claude-agent-acp@${ADAPTER_VERSION}"
 CLAUDE_SPEC="@anthropic-ai/claude-code@latest"
+CODEX_VERSION="$(sed -n 's/^ARG CODEX_ACP_VERSION=//p' "$AGENT_DOCKERFILE")"
+if [ -z "$CODEX_VERSION" ]; then
+  echo "make-app: не нашёл ARG CODEX_ACP_VERSION в $AGENT_DOCKERFILE" >&2
+  exit 1
+fi
+CODEX_SPEC="@agentclientprotocol/codex-acp@${CODEX_VERSION}"
 
 if [ ! -f "$BIN" ]; then
   echo "make-app: бинарь не найден: $BIN" >&2
@@ -123,11 +129,11 @@ npm_cached() {
 # бинарники, нативных ABI-аддонов нет), поэтому сборка любым npm, а рантайм — встроенным node.
 # Specs передаём прямо в npm install — он сам впишет их в package.json (потому и создаём
 # манифест только при первой сборке: дальше в нём уже стоят разрешённые версии).
-echo "make-app: ставлю агент-пакеты ($ADAPTER_SPEC, $CLAUDE_SPEC)…"
+echo "make-app: ставлю агент-пакеты ($ADAPTER_SPEC, $CLAUDE_SPEC, $CODEX_SPEC)…"
 mkdir -p "$CACHE/agent"
 [ -f "$CACHE/agent/package.json" ] \
   || echo '{ "name": "brigade-agent-bundle", "private": true }' > "$CACHE/agent/package.json"
-npm_cached agent "$RES/agent" "$CLAUDE_SPEC" "$ADAPTER_SPEC"
+npm_cached agent "$RES/agent" "$CLAUDE_SPEC" "$ADAPTER_SPEC" "$CODEX_SPEC"
 
 # MCP-сервер brigade (render_ui/show_choice) — в docker он в /opt/brigade-mcp; в бандле кладём в
 # Resources/brigade-mcp с зависимостями (@modelcontextprotocol/sdk), чтобы local-режим тоже
@@ -139,4 +145,4 @@ cp "$REPO/docker/claude-agent/mcp/brigade-tools.mjs" \
    "$REPO/docker/claude-agent/mcp/package.json" "$CACHE/brigade-mcp/"
 npm_cached brigade-mcp "$RES/brigade-mcp"
 
-echo "make-app: собрано $OUT (self-contained: node + claude-agent-acp + claude-code + mcp)"
+echo "make-app: собрано $OUT (self-contained: node + Claude + Codex + mcp)"

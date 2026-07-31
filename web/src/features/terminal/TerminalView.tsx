@@ -240,3 +240,69 @@ export function TerminalView({
     </div>
   );
 }
+
+/** Read-only xterm для потокового вывода служебных команд без WebSocket/pty. */
+export function TerminalOutput({ content }: { content: string }) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const termRef = useRef<Terminal | null>(null);
+  const previousRef = useRef("");
+
+  useEffect(() => {
+    if (!hostRef.current) return;
+    const term = new Terminal({
+      fontFamily:
+        '"SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace',
+      fontSize: 12,
+      lineHeight: 1.25,
+      theme: TERMINAL_THEME,
+      cursorBlink: false,
+      cursorInactiveStyle: "none",
+      disableStdin: true,
+      scrollback: 1000,
+      convertEol: true,
+    });
+    const fit = new FitAddon();
+    term.loadAddon(fit);
+    term.open(hostRef.current);
+    fit.fit();
+    termRef.current = term;
+
+    let raf = 0;
+    const observer = new ResizeObserver(() => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        try {
+          fit.fit();
+        } catch {
+          // Контейнер уже размонтирован.
+        }
+      });
+    });
+    observer.observe(hostRef.current);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      observer.disconnect();
+      term.dispose();
+      termRef.current = null;
+      previousRef.current = "";
+    };
+  }, []);
+
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term || content === previousRef.current) return;
+    if (content.startsWith(previousRef.current)) {
+      term.write(content.slice(previousRef.current.length));
+    } else {
+      term.reset();
+      term.write(content);
+    }
+    previousRef.current = content;
+  }, [content]);
+
+  return (
+    <div className="h-48 overflow-hidden rounded-lg border border-[#3a3936] bg-[#1c1b1a] shadow-inner">
+      <div ref={hostRef} className="h-full overflow-hidden p-2" />
+    </div>
+  );
+}

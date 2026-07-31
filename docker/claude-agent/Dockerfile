@@ -70,12 +70,14 @@ RUN mkdir -p /opt/brigade-runtime/node/bin /opt/brigade-runtime/node/lib \
 # отсюда для агент-рантайма в Brigade.app, чтобы .app и контейнер не разъезжались.
 # Формат строки (`ARG ACP_ADAPTER_VERSION=<spec>`) менять только вместе со скриптом.
 ARG ACP_ADAPTER_VERSION=^0.62.0
+ARG CODEX_ACP_VERSION=^1.1.7
 
 # claude-cli и acp-adapter — отдельными слоями: CLI-сессии адаптер не нужен, ACP-сессии не
 # нужен интерактивный claude. --prefix кладёт пакет со своими bin/ и lib/ в каталог слоя;
 # шебанг у них `#!/usr/bin/env node`, поэтому node берётся из PATH (слой node).
 RUN npm install -g --prefix /opt/brigade-runtime/claude-cli @anthropic-ai/claude-code \
     && npm install -g --prefix /opt/brigade-runtime/acp-adapter "@agentclientprotocol/claude-agent-acp@${ACP_ADAPTER_VERSION}" \
+    && npm install -g --prefix /opt/brigade-runtime/codex "@agentclientprotocol/codex-acp@${CODEX_ACP_VERSION}" \
     && npm cache clean --force
 
 # brigade MCP-сервер кастомных UI-инструментов (render_ui, show_choice). Сток-адаптер
@@ -97,7 +99,7 @@ COPY --from=brigade-build /out/brigade /opt/brigade-runtime/daemon/bin/brigade
 # Сессии на этом образе получают те же компоненты слоями (как и на любом другом), но
 # PATH прописан и здесь: так образ остаётся самодостаточным для ручного запуска и отладки
 # (`docker run -it brigade/claude-agent claude`).
-ENV PATH=/opt/brigade-runtime/daemon/bin:/opt/brigade-runtime/claude-cli/bin:/opt/brigade-runtime/acp-adapter/bin:$PATH
+ENV PATH=/opt/brigade-runtime/daemon/bin:/opt/brigade-runtime/claude-cli/bin:/opt/brigade-runtime/acp-adapter/bin:/opt/brigade-runtime/codex/bin:$PATH
 
 # Непривилегированный пользователь: агент исполняет произвольные команды.
 # uid ФИКСИРОВАН (1001): brigade создаёт персональный home на хосте и chown'ит его на

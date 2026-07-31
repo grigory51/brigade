@@ -29,7 +29,7 @@ const (
 	pluginMarketplaceRel = ".claude/plugins/brigade/.claude-plugin/marketplace.json"
 	pluginSkillRel       = ".claude/plugins/brigade/skills/preview/SKILL.md"
 	pluginNoteRel        = ".claude/plugins/brigade/skills/note/SKILL.md"
-	settingsRel = ".claude/settings.json"
+	settingsRel          = ".claude/settings.json"
 	// Имя плагина; enabledPlugins-ключ = pluginName@marketplaceID. Сам marketplaceID —
 	// НЕ константа, а уникальный на сессию (см. InstallSkill): Claude Code кеширует локальный
 	// marketplace глобально по (ID, версия) и пинит source-path на каталог ПЕРВОЙ сессии,
@@ -43,6 +43,20 @@ const (
 	// /memory конфликтует со встроенной командой Claude Code). Удаляется, чтобы не дублировался.
 	legacyMemorySkillRel = ".claude/plugins/brigade/skills/memory"
 )
+
+// InstallCodexSkills устанавливает те же инструкции в нативный каталог Codex.
+// В отличие от Claude, Codex не требует plugin/marketplace-манифеста.
+func InstallCodexSkills(cwd string) error {
+	for path, data := range map[string][]byte{
+		".agents/skills/preview/SKILL.md": skillMD,
+		".agents/skills/note/SKILL.md":    noteSkillMD,
+	} {
+		if err := writeFile(filepath.Join(cwd, filepath.FromSlash(path)), data); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // InstallSkill раскладывает per-session плагин brigade со скиллами preview и note в рабочую
 // директорию сессии и включает его в проектном .claude/settings.json (enabledPlugins).
