@@ -102,7 +102,7 @@ func (r *Registry) Run(ctx context.Context, userID string, output io.Writer) ([]
 		return nil, err
 	}
 	handle := cliremote.New(addr, "codex-login-"+uuid.NewString(), r.daemonTokenFn(userID))
-	if err := handle.Start([]string{"codex", "login", "--device-auth"}, spawn.AgentHome, []string{"CODEX_HOME=" + spawn.AgentHome + "/.codex-login"}, 0, 0); err != nil {
+	if err := handle.StartEphemeral([]string{"codex", "login", "--device-auth"}, spawn.AgentHome, []string{"CODEX_HOME=" + spawn.AgentHome + "/.codex-login"}, 0, 0); err != nil {
 		unlock()
 		return nil, err
 	}
@@ -119,7 +119,14 @@ func (r *Registry) Run(ctx context.Context, userID string, output io.Writer) ([]
 		case <-terminated:
 		}
 	}()
-	err = handle.Wait()
+	waitDone := make(chan error, 1)
+	go func() { waitDone <- handle.Wait() }()
+	select {
+	case err = <-waitDone:
+	case <-ctx.Done():
+		_ = handle.Terminate(context.Background())
+		err = ctx.Err()
+	}
 	close(terminated)
 	<-copyDone
 	if err != nil {

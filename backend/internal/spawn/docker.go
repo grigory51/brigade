@@ -9,6 +9,7 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -230,24 +231,36 @@ func (s *DockerSpawner) Reattach(context.Context, Persisted) (Handle, error) {
 // bind home стабильны per-user — авторизация Claude переживает и сессии, и
 // пересоздание контейнера настолько, насколько её fingerprint опирается на них.
 func (s *DockerSpawner) ensureUserContainer(ctx context.Context, userID, image, homeHost, hostname, pubKey string, layers []agent.Layer) (string, error) {
-	if id, state, err := s.findUserContainer(ctx, userID); err != nil {
-		return "", err
-	} else if id != "" {
-		if err := s.ensureRunning(ctx, id, state); err != nil {
-			return "", err
-		}
-		return id, nil
-	}
-
 	if image == "" {
 		image = s.baseImage
 	}
-	// Компоненты brigade приезжают read-only volume'ами, а не берутся из образа (см.
-	// runtime.go): контейнер может быть построен на образе пользователя.
+	// Runtime-mount'ы считаются до reuse: долгоживущий per-user контейнер мог быть создан
+	// прошлой версией brigade без нового агента или со старым runtime-volume.
 	runtimeMounts, runtimePath, err := s.runtimeMounts(ctx, layers)
 	if err != nil {
 		return "", err
 	}
+	if id, state, err := s.findUserContainer(ctx, userID); err != nil {
+		return "", err
+	} else if id != "" {
+		info, err := s.cli.ContainerInspect(ctx, id)
+		if err != nil {
+			return "", fmt.Errorf("spawn: user container inspect: %w", err)
+		}
+		if runtimeMountsCurrent(info.Mounts, runtimeMounts) {
+			if err := s.ensureRunning(ctx, id, state); err != nil {
+				return "", err
+			}
+			return id, nil
+		}
+		log.Printf("spawn: user container %s has stale runtime mounts, recreating", id)
+		if err := s.cli.ContainerRemove(ctx, id, container.RemoveOptions{Force: true}); err != nil {
+			return "", fmt.Errorf("spawn: remove stale user container: %w", err)
+		}
+	}
+
+	// Компоненты brigade приезжают read-only volume'ами, а не берутся из образа (см.
+	// runtime.go): контейнер может быть построен на образе пользователя.
 	initProcess := true
 	daemonNatPort := nat.Port(fmt.Sprintf("%d/tcp", daemonPort))
 	cfg := &container.Config{
@@ -300,6 +313,22 @@ func (s *DockerSpawner) ensureUserContainer(ctx context.Context, userID, image, 
 		return "", fmt.Errorf("spawn: user container start: %w", err)
 	}
 	return created.ID, nil
+}
+
+func runtimeMountsCurrent(current []container.MountPoint, expected []mount.Mount) bool {
+	for _, want := range expected {
+		found := false
+		for _, got := range current {
+			if got.Type == want.Type && got.Name == want.Source && got.Destination == want.Target {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
 // EnsureUserDaemon поднимает per-user контейнер с агентом-демоном (или переиспользует живой) и

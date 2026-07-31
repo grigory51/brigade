@@ -8,10 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -68,7 +70,9 @@ func (s *Service) Start(userID string) Login {
 			current.cancel()
 		}
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	// Device code живёт 15 минут. После этого ждать процесс бессмысленно, а вечный
+	// pending скрывает сетевые и runtime-сбои на удалённой инсталляции.
+	ctx, cancel := context.WithTimeout(context.Background(), 16*time.Minute)
 	a := &attempt{login: Login{ID: uuid.NewString(), Status: "pending"}, userID: userID, cancel: cancel}
 	s.attempts[a.login.ID] = a
 	s.mu.Unlock()
@@ -100,15 +104,22 @@ func (s *Service) Cancel(userID, id string) error {
 }
 
 func (s *Service) run(ctx context.Context, userID string, a *attempt) {
+	log.Printf("codex login %s: started", a.login.ID)
 	data, err := s.runner.Run(ctx, userID, &lockedWriter{service: s, attempt: a})
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			err = errors.New("Codex device login timed out; check outbound access to auth.openai.com from the agent container")
+		}
+		log.Printf("codex login %s: failed: %v", a.login.ID, err)
 		s.finish(a, "failed", err)
 		return
 	}
 	if err := s.store.SetCodexAuthJSON(context.Background(), userID, string(data)); err != nil {
+		log.Printf("codex login %s: persist failed: %v", a.login.ID, err)
 		s.finish(a, "failed", err)
 		return
 	}
+	log.Printf("codex login %s: completed", a.login.ID)
 	s.finish(a, "completed", nil)
 }
 

@@ -59,6 +59,17 @@ func (c *Client) SetSSHKey(ctx context.Context, privatePEM string) error {
 // brigade демон переотдаёт scrollback (восстановление экрана через Read) и продолжает живой
 // процесс; при мёртвом контейнере (respawn) cmd поднимает claude заново (--resume).
 func (c *Client) Start(cmd []string, cwd string, env []string, cols, rows uint16) error {
+	return c.start(cmd, cwd, env, cols, rows, true)
+}
+
+// StartEphemeral запускает служебную команду, которую нужно завершить вместе со стримом.
+// Device login не является CLI-сессией и не должен оставаться orphan-процессом после
+// отмены или рестарта brigade.
+func (c *Client) StartEphemeral(cmd []string, cwd string, env []string, cols, rows uint16) error {
+	return c.start(cmd, cwd, env, cols, rows, false)
+}
+
+func (c *Client) start(cmd []string, cwd string, env []string, cols, rows uint16, durable bool) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	stream, err := c.RPC.OpenTerminal(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonOpenTerminalRequest{
 		Id:      c.termID,
@@ -67,7 +78,7 @@ func (c *Client) Start(cmd []string, cwd string, env []string, cols, rows uint16
 		Env:     env,
 		Cols:    uint32(cols),
 		Rows:    uint32(rows),
-		Durable: true,
+		Durable: durable,
 	}))
 	if err != nil {
 		cancel()

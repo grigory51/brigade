@@ -263,7 +263,28 @@ func (s *DockerSpawner) runAsRoot(ctx context.Context, ref string, mounts []moun
 // при необходимости подтягивается: его могли удалить мимо brigade (`docker system prune`),
 // и в этом случае сессия должна дождаться загрузки, а не упасть.
 func (s *DockerSpawner) baseImageDigest(ctx context.Context) (string, error) {
-	if _, err := s.EnsureImage(ctx, s.baseImage); err != nil {
+	s.baseImageMu.Lock()
+	defer s.baseImageMu.Unlock()
+	if s.baseImageDigestCache != "" {
+		return s.baseImageDigestCache, nil
+	}
+	if strings.HasSuffix(s.baseImage, ":latest") {
+		// `latest` обновляется между релизами, но ImageInspect видит только локальную копию.
+		// Pull один раз на процесс гарантирует, что runtime-volume и контейнеры сверяются с
+		// опубликованным агентом, не добавляя registry round-trip к каждой сессии.
+		rc, err := s.cli.ImagePull(ctx, s.baseImage, image.PullOptions{})
+		if err != nil {
+			return "", fmt.Errorf("spawn: pull базового образа %s: %w", s.baseImage, err)
+		}
+		_, copyErr := io.Copy(io.Discard, rc)
+		closeErr := rc.Close()
+		if copyErr != nil {
+			return "", fmt.Errorf("spawn: pull базового образа %s: %w", s.baseImage, copyErr)
+		}
+		if closeErr != nil {
+			return "", fmt.Errorf("spawn: pull базового образа %s: %w", s.baseImage, closeErr)
+		}
+	} else if _, err := s.EnsureImage(ctx, s.baseImage); err != nil {
 		return "", fmt.Errorf("spawn: базовый образ %s недоступен: %w", s.baseImage, err)
 	}
 	insp, err := s.cli.ImageInspect(ctx, s.baseImage)
@@ -274,7 +295,8 @@ func (s *DockerSpawner) baseImageDigest(ctx context.Context) (string, error) {
 	if len(id) > 12 {
 		id = id[:12]
 	}
-	return id, nil
+	s.baseImageDigestCache = id
+	return s.baseImageDigestCache, nil
 }
 
 func runtimeVolumeName(layer, digest string) string {
@@ -299,8 +321,10 @@ var agentUser = fmt.Sprintf("%d:%d", AgentUID, AgentGID)
 // памяти процесса: после рестарта brigade наполнение повторится (идемпотентно и занимает
 // секунды), зато не нужен маркер готовности внутри volume.
 type runtimeState struct {
-	runtimeMu    sync.Mutex
-	runtimeReady map[string]bool
+	runtimeMu            sync.Mutex
+	runtimeReady         map[string]bool
+	baseImageMu          sync.Mutex
+	baseImageDigestCache string
 }
 
 // containerOutput читает логи завершившегося контейнера одной строкой. Best-effort: вывод
