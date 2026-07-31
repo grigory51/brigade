@@ -268,7 +268,7 @@ func (s *DockerSpawner) baseImageDigest(ctx context.Context) (string, error) {
 	if s.baseImageDigestCache != "" {
 		return s.baseImageDigestCache, nil
 	}
-	if strings.HasSuffix(s.baseImage, ":latest") {
+	if s.baseImage != DefaultImage && strings.HasSuffix(s.baseImage, ":latest") {
 		// `latest` обновляется между релизами, но ImageInspect видит только локальную копию.
 		// Pull один раз на процесс гарантирует, что runtime-volume и контейнеры сверяются с
 		// опубликованным агентом, не добавляя registry round-trip к каждой сессии.
