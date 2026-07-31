@@ -106,19 +106,34 @@ export function AcpThread({
 // содержимому результата (структурный diff) и человекочитаемому имени инструмента от
 // ACP-адаптера («Terminal», «Read File»); всё прочее — generic-блок с раскрывающимися
 // аргументами и результатом.
-// bareToolName снимает MCP-префикс `mcp__<server>__` с имени инструмента. Кастомные тулы
-// brigade доставляются модели MCP-сервером (см. backend acp.BrigadeMCPServer), поэтому до
-// клиента доходит имя вида `mcp__brigade__render_ui`; матчим по «голому» имени, а не по
-// полному (устойчиво к имени сервера) и не по человекочитаемому title (адаптер отдаёт сырое
-// имя). Не-MCP тулы (Terminal, Read File) остаются как есть.
+// bareToolName снимает MCP-префикс с имени инструмента. Claude использует
+// `mcp__<server>__<tool>`, Codex ACP — `mcp.<server>.<tool>`.
 function bareToolName(name: string): string {
-  return name.replace(/^mcp__.*?__/, "");
+  return name.replace(/^mcp__.*?__/, "").replace(/^mcp\.[^.]+\./, "");
+}
+
+// Codex ACP передаёт rawInput MCP-вызова транспортным конвертом
+// {server, tool, arguments}; Claude отдаёт непосредственно arguments. Карточкам нужен
+// единый внутренний формат — только аргументы конкретного инструмента.
+function bareToolArgs<T>(args: T): T {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return args;
+  const input = args as Record<string, unknown>;
+  if (
+    input.server === "brigade" &&
+    typeof input.arguments === "object" &&
+    input.arguments !== null &&
+    !Array.isArray(input.arguments)
+  ) {
+    return input.arguments as T;
+  }
+  return args;
 }
 
 const ToolFallback: ToolCallMessagePartComponent = (props) => {
   const a2ui = useContext(A2uiContext);
   const sessionId = useContext(AcpSessionContext);
   const toolName = bareToolName(props.toolName);
+  const toolProps = { ...props, args: bareToolArgs(props.args) };
 
   // save_note — нативная карточка добавления заметки (навык /note). Сохраняет НАПРЯМУЮ через
   // brigade API, без агента. Ждём завершения tool-call'а, чтобы взять полный черновик из args
@@ -133,7 +148,7 @@ const ToolFallback: ToolCallMessagePartComponent = (props) => {
     }
     return (
       <SaveNoteCard
-        args={(props.args ?? {}) as Parameters<typeof SaveNoteCard>[0]["args"]}
+        args={toolProps.args as Parameters<typeof SaveNoteCard>[0]["args"]}
         sessionId={sessionId}
       />
     );
@@ -143,7 +158,7 @@ const ToolFallback: ToolCallMessagePartComponent = (props) => {
   // (со скелетоном при стриминге и error boundary на невалидные пропсы). Обрабатывается
   // до generic-lookup, поэтому его поверхность идёт только через RenderUiCard.
   if (toolName === RENDER_UI_TOOL_NAME) {
-    return <RenderUiCard {...props} />;
+    return <RenderUiCard {...toolProps} />;
   }
 
   // A2UI-поверхность карточки (бэкенд синтезирует её из ACP-событий, surfaceId =
@@ -155,7 +170,7 @@ const ToolFallback: ToolCallMessagePartComponent = (props) => {
   }
 
   if (FRONTEND_TOOL_NAMES.has(toolName)) {
-    return <SnippetCard {...props} />;
+    return <SnippetCard {...toolProps} />;
   }
 
   const done = props.status.type === "complete" || props.result !== undefined;

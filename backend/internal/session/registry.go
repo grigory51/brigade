@@ -1052,12 +1052,20 @@ func (r *Registry) dockerAPIHost() string {
 // нужно положить в хостовый workspace персонального home (<home>/workspace); в local
 // это и есть sess.Cwd. Ошибка не роняет создание сессии — скилл вспомогателен.
 func (r *Registry) installSkill(sess store.Session) {
-	if !r.previews.Config().Enabled {
-		return
-	}
 	dir := r.hostCwd(sess)
 	if dir == "" {
 		return // фича home выключена — скилл класть некуда (эфемерный контейнер)
+	}
+	// В Codex MCP-tools deferred и не входят в постоянный контекст. Этот короткий skill
+	// сообщает о generative UI и направляет модель к встроенному render_ui. Он нужен во
+	// всех ACP-сессиях независимо от preview.
+	if sess.Kind == store.SessionKindACP && agent.Get(sess.AgentType).ID == agent.Codex.ID {
+		if err := preview.InstallCodexUISkill(dir); err != nil {
+			log.Printf("session: install UI skill %s: %v", sess.ID, err)
+		}
+	}
+	if !r.previews.Config().Enabled {
+		return
 	}
 	if sess.Mode == store.SessionModeDocker {
 		// Убираем стейл-копию прежней схемы: раньше скилл ставился в ОБЩИЙ workspace

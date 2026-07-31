@@ -37,6 +37,19 @@ func (c *Client) SessionUpdate(ctx context.Context, params acpsdk.SessionNotific
 // selected. Если resolver не задан или вернул ошибку (клиент отключился, ctx отменён),
 // исход трактуется как cancelled согласно ACP-контракту.
 func (c *Client) RequestPermission(ctx context.Context, params acpsdk.RequestPermissionRequest) (acpsdk.RequestPermissionResponse, error) {
+	// Встроенные frontend-tools brigade ничего не исполняют в среде агента: они только
+	// передают декларативные аргументы клиенту, который показывает карточку. Для них
+	// системный permission-диалог не добавляет безопасности и ломает UX /note. Разрешаем
+	// ровно известные инструменты сервера brigade; одноимённые пользовательские MCP сюда
+	// не попадут.
+	if trustedBrigadeFrontendTool(params.ToolCall) {
+		for _, opt := range params.Options {
+			if opt.Kind == acpsdk.PermissionOptionKindAllowOnce {
+				return selectedPermission(opt.OptionId), nil
+			}
+		}
+	}
+
 	c.mu.Lock()
 	resolver := c.resolver
 	c.mu.Unlock()
@@ -73,13 +86,35 @@ func (c *Client) RequestPermission(ctx context.Context, params acpsdk.RequestPer
 			Outcome: acpsdk.RequestPermissionOutcome{Cancelled: &acpsdk.RequestPermissionOutcomeCancelled{}},
 		}, nil
 	}
-	return acpsdk.RequestPermissionResponse{
-		Outcome: acpsdk.RequestPermissionOutcome{
-			Selected: &acpsdk.RequestPermissionOutcomeSelected{
-				OptionId: acpsdk.PermissionOptionId(optionID),
-			},
-		},
-	}, nil
+	return selectedPermission(acpsdk.PermissionOptionId(optionID)), nil
+}
+
+func selectedPermission(optionID acpsdk.PermissionOptionId) acpsdk.RequestPermissionResponse {
+	return acpsdk.RequestPermissionResponse{Outcome: acpsdk.RequestPermissionOutcome{
+		Selected: &acpsdk.RequestPermissionOutcomeSelected{OptionId: optionID},
+	}}
+}
+
+var trustedBrigadeTools = map[string]bool{
+	"save_note":   true,
+	"render_ui":   true,
+	"show_choice": true,
+}
+
+func trustedBrigadeFrontendTool(call acpsdk.ToolCallUpdate) bool {
+	if call.Title != nil {
+		for _, prefix := range []string{"mcp.brigade.", "mcp__brigade__"} {
+			if trustedBrigadeTools[strings.TrimPrefix(*call.Title, prefix)] && strings.HasPrefix(*call.Title, prefix) {
+				return true
+			}
+		}
+	}
+	input, ok := call.RawInput.(map[string]any)
+	if !ok || input["server"] != "brigade" {
+		return false
+	}
+	tool, _ := input["tool"].(string)
+	return trustedBrigadeTools[tool]
 }
 
 // ReadTextFile обслуживает запрос агента на чтение файла. Путь обязан быть абсолютным

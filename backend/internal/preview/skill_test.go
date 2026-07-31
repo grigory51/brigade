@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -66,5 +67,19 @@ func TestInstallSkillValidPluginFormat(t *testing.T) {
 	}
 	if s["foreign"] != true {
 		t.Error("чужой ключ settings затёрт")
+	}
+}
+
+func TestInstallCodexUISkill(t *testing.T) {
+	cwd := t.TempDir()
+	if err := InstallCodexUISkill(cwd); err != nil {
+		t.Fatalf("InstallCodexUISkill: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(cwd, ".agents/skills/brigade-ui/SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "render_ui") || !strings.Contains(string(data), "A2UI") {
+		t.Fatalf("UI skill не описывает Brigade A2UI: %s", data)
 	}
 }

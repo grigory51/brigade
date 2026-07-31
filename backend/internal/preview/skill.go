@@ -15,6 +15,9 @@ var skillMD []byte
 //go:embed skill/note/SKILL.md
 var noteSkillMD []byte
 
+//go:embed skill/ui/SKILL.md
+var uiSkillMD []byte
+
 //go:embed skill/plugin.json
 var pluginJSON []byte
 
@@ -56,6 +59,13 @@ func InstallCodexSkills(cwd string) error {
 		}
 	}
 	return nil
+}
+
+// InstallCodexUISkill устанавливает постоянную подсказку о frontend-tools Brigade.
+// Codex откладывает MCP-tools из основного контекста до tool-search, поэтому без скилла
+// модель может решить, что A2UI недоступен, хотя сервер brigade успешно подключён.
+func InstallCodexUISkill(cwd string) error {
+	return writeFile(filepath.Join(cwd, ".agents/skills/brigade-ui/SKILL.md"), uiSkillMD)
 }
 
 // InstallSkill раскладывает per-session плагин brigade со скиллами preview и note в рабочую
