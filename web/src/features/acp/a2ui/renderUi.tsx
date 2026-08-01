@@ -33,19 +33,45 @@ export function parseRenderUiArgs(
     return null;
   }
   if (!parsed || typeof parsed !== "object") return null;
-  const components = (parsed as { components?: unknown }).components;
+  const envelope = parsed as Record<string, unknown>;
+  const input =
+    envelope.server === "brigade" &&
+    envelope.arguments &&
+    typeof envelope.arguments === "object" &&
+    !Array.isArray(envelope.arguments)
+      ? (envelope.arguments as Record<string, unknown>)
+      : envelope;
+  const components = input.components;
   if (!Array.isArray(components)) return null;
   const hasRoot = components.some(
     (c) => c && typeof c === "object" && (c as { id?: unknown }).id === "root",
   );
   if (!hasRoot) return null;
-  const dataModel = (parsed as { dataModel?: unknown }).dataModel;
+  const rawDataModel = input.dataModel;
+  const dataModel =
+    rawDataModel && typeof rawDataModel === "object"
+      ? { ...(rawDataModel as Record<string, unknown>) }
+      : undefined;
+  const normalized = components.map((component) => {
+    if (!component || typeof component !== "object") return component;
+    const next = { ...(component as Record<string, unknown>) };
+    if (next.align === undefined && next.alignItems !== undefined) {
+      next.align = next.alignItems;
+      delete next.alignItems;
+    }
+    const binding = next.component === "ChoicePicker" ? next.value : undefined;
+    if (dataModel && binding && typeof binding === "object") {
+      const path = (binding as { path?: unknown }).path;
+      if (typeof path === "string" && /^\/[^/]+$/.test(path)) {
+        const key = path.slice(1);
+        if (typeof dataModel[key] === "string") dataModel[key] = [dataModel[key]];
+      }
+    }
+    return next;
+  });
   return {
-    components: components as Array<Record<string, unknown>>,
-    dataModel:
-      dataModel && typeof dataModel === "object"
-        ? (dataModel as Record<string, unknown>)
-        : undefined,
+    components: normalized as Array<Record<string, unknown>>,
+    dataModel,
   };
 }
 
