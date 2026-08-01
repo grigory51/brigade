@@ -979,7 +979,27 @@ func (r *Registry) agentEnv(ctx context.Context, sess store.Session, token strin
 		}
 	}
 	env = append(env, r.previewEnv(sess)...)
-	return append(env, r.installMcpProject(ctx, sess)...)
+	env = append(env, r.installMcpProject(ctx, sess)...)
+	r.chownCodexHome(sess)
+	return env
+}
+
+// chownCodexHome передаёт агенту созданные backend'ом CODEX_HOME и файлы внутри.
+// В docker-инсталляции backend обычно root, а Codex работает как uid 1001.
+func (r *Registry) chownCodexHome(sess store.Session) {
+	if sess.Mode != store.SessionModeDocker || agent.Get(sess.AgentType).ID != agent.Codex.ID {
+		return
+	}
+	cwd := r.hostCwd(sess)
+	if cwd == "" {
+		return
+	}
+	base := filepath.Join(cwd, ".brigade")
+	for _, path := range []string{base, filepath.Join(base, "codex-home"), filepath.Join(base, "codex-home", "auth.json"), filepath.Join(base, "codex-home", "config.toml")} {
+		if err := os.Lchown(path, spawn.AgentUID, spawn.AgentGID); err != nil && !errors.Is(err, os.ErrNotExist) {
+			log.Printf("session %s: chown codex home %s: %v", sess.ID, path, err)
+		}
+	}
 }
 
 // installMcpProject раскладывает .mcp.json рядом с CLI-агентом и возвращает переменные
