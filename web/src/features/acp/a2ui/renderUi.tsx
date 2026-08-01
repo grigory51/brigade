@@ -136,9 +136,11 @@ export const RenderUiCard: ToolCallMessagePartComponent = (props) => {
     return (
       // Error boundary: невалидные пропсы компонента могут бросить в GenericBinder при
       // рендере — ловим, чтобы не уронить всю ленту (key=surfaceId стабилен на карточку).
-      <RenderUiBoundary key={surfaceId}>
-        <A2uiSurface surface={surface} />
-      </RenderUiBoundary>
+      <div className="brigade-a2ui">
+        <RenderUiBoundary key={surfaceId}>
+          <A2uiSurface surface={surface} />
+        </RenderUiBoundary>
+      </div>
     );
   }
 

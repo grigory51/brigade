@@ -202,6 +202,57 @@
     box-shadow: 0 0 0 2px var(--primary);
     background: color-mix(in oklab, var(--primary) 10%, transparent);
   }
+
+  /* render_ui — это ответ пользователю, а не отладочный tool-call. В сообщении с UI
+     прячем служебный reasoning и оставляем поверхность последним элементом. */
+  [data-slot="aui_assistant-message-content"]:has(.brigade-a2ui) {
+    display: flex;
+    flex-direction: column;
+  }
+  [data-slot="aui_assistant-message-content"]:has(.brigade-a2ui)
+    [data-slot="reasoning-root"],
+  [data-slot="aui_chain-of-thought"]:has(.brigade-a2ui)
+    > :not(:has(.brigade-a2ui)) {
+    display: none;
+  }
+  [data-slot="aui_chain-of-thought"]:has(.brigade-a2ui) {
+    order: 999;
+  }
+
+  .brigade-a2ui {
+    --a2ui-color-surface: var(--card);
+    --a2ui-color-on-surface: var(--foreground);
+    --a2ui-color-border: var(--border);
+    --a2ui-card-background: var(--card);
+    --a2ui-card-border: 1px solid var(--border);
+    --a2ui-card-border-radius: 16px;
+    --a2ui-card-box-shadow: 0 18px 50px rgb(0 0 0 / 22%);
+    --a2ui-card-margin: 12px 0 0;
+    font-family: var(--font-sans);
+  }
+  .brigade-a2ui input,
+  .brigade-a2ui textarea,
+  .brigade-a2ui select {
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--input);
+    color: var(--foreground);
+    padding: 8px 10px;
+    outline: none;
+  }
+  .brigade-a2ui input:focus,
+  .brigade-a2ui textarea:focus,
+  .brigade-a2ui select:focus {
+    border-color: var(--ring);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 22%, transparent);
+  }
+  .brigade-a2ui button {
+    border-radius: 9px;
+    background: var(--primary);
+    color: var(--primary-foreground);
+    padding: 9px 14px;
+    font-weight: 600;
+  }
 }
 
 /* Анимации плавающей обвязки страницы сессии (чипы, окна, шкала навигации). */
