@@ -34,6 +34,7 @@ if [ -z "$CODEX_VERSION" ]; then
   exit 1
 fi
 CODEX_SPEC="@agentclientprotocol/codex-acp@${CODEX_VERSION}"
+CODEX_CLI_SPEC="@openai/codex@latest"
 
 if [ ! -f "$BIN" ]; then
   echo "make-app: бинарь не найден: $BIN" >&2
@@ -129,11 +130,11 @@ npm_cached() {
 # бинарники, нативных ABI-аддонов нет), поэтому сборка любым npm, а рантайм — встроенным node.
 # Specs передаём прямо в npm install — он сам впишет их в package.json (потому и создаём
 # манифест только при первой сборке: дальше в нём уже стоят разрешённые версии).
-echo "make-app: ставлю агент-пакеты ($ADAPTER_SPEC, $CLAUDE_SPEC, $CODEX_SPEC)…"
+echo "make-app: ставлю агент-пакеты ($ADAPTER_SPEC, $CLAUDE_SPEC, $CODEX_SPEC, $CODEX_CLI_SPEC)…"
 mkdir -p "$CACHE/agent"
 [ -f "$CACHE/agent/package.json" ] \
   || echo '{ "name": "brigade-agent-bundle", "private": true }' > "$CACHE/agent/package.json"
-npm_cached agent "$RES/agent" "$CLAUDE_SPEC" "$ADAPTER_SPEC" "$CODEX_SPEC"
+npm_cached agent "$RES/agent" "$CLAUDE_SPEC" "$ADAPTER_SPEC" "$CODEX_SPEC" "$CODEX_CLI_SPEC"
 
 # MCP-сервер brigade (render_ui/show_choice) — в docker он в /opt/brigade-mcp; в бандле кладём в
 # Resources/brigade-mcp с зависимостями (@modelcontextprotocol/sdk), чтобы local-режим тоже

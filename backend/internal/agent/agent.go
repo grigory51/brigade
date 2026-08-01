@@ -50,8 +50,7 @@ var (
 	LayerClaudeCLI = Layer{Name: "claude-cli", Bin: "bin"}
 	// LayerACPAdapter — ACP-адаптер поверх Claude Agent SDK (структурированный режим).
 	LayerACPAdapter = Layer{Name: "acp-adapter", Bin: "bin"}
-	// LayerCodex — Codex CLI и ACP-адаптер. codex-acp зависит от официального Codex CLI,
-	// поэтому один слой обслуживает оба режима без дублирования npm-пакетов.
+	// LayerCodex — официальный Codex CLI и его ACP-адаптер в одном runtime-слое.
 	LayerCodex = Layer{Name: "codex", Bin: "bin"}
 	// LayerBrigadeMCP — stdio MCP-сервер brigade с кастомными UI-инструментами
 	// (render_ui, show_choice). Нужен только ACP: в CLI-режиме их некому отрисовать.

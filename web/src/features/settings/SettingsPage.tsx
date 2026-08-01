@@ -486,6 +486,23 @@ function CodexSection({
       defaultProfile: next.defaultProfile,
     });
 
+  const startLogin = async () => {
+    setSaving(true);
+    setLoginOutput("Запускаем Codex device login…\r\n");
+    try {
+      const login = await authClient.startCodexLogin({});
+      setLoginId(login.id);
+      if (login.output) setLoginOutput(login.output);
+      toast.success("Device login запущен");
+    } catch (err) {
+      const message = errorText(err, "Не удалось запустить Codex login");
+      setLoginOutput(message);
+      toast.error(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   useEffect(() => {
     if (!loginId) return;
     const timer = window.setInterval(() => {
@@ -504,7 +521,11 @@ function CodexSection({
             toast.error(login.error || "Codex login завершился с ошибкой");
           }
         })
-        .catch(() => window.clearInterval(timer));
+        .catch((err) => {
+          window.clearInterval(timer);
+          setLoginId("");
+          toast.error(errorText(err, "Не удалось получить состояние Codex login"));
+        });
     }, 700);
     return () => window.clearInterval(timer);
   }, [loginId]);
@@ -562,16 +583,9 @@ function CodexSection({
         <div className="flex gap-2">
           <Button
             disabled={saving || Boolean(loginId)}
-            onClick={() =>
-              void run(async () => {
-                const login = await authClient.startCodexLogin({});
-                setLoginId(login.id);
-                setLoginOutput(login.output);
-                return state;
-              }, "Device login запущен")
-            }
+            onClick={() => void startLogin()}
           >
-            {loginId && <Loader2 className="size-4 animate-spin" />}
+            {(saving || loginId) && <Loader2 className="size-4 animate-spin" />}
             Подключить ChatGPT
           </Button>
           {loginId && (

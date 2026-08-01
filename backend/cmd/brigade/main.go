@@ -178,7 +178,14 @@ func runServer(configPath string) {
 	perms := aguitransport.NewPermissionStore()
 
 	authService := connectsvc.NewAuthService(authSvc, notifySvc, imagesSvc, runtimeSvc, desktopMode)
-	authService.SetCodexLogin(codexlogin.New(st, registry))
+	var codexLoginRunner codexlogin.Runner = registry
+	if desktopMode {
+		// Desktop наследует host DNS/VPN; Docker VM может обходить split-tunnel.
+		// Встроенный Codex CLI пишет credential во временный CODEX_HOME, после чего
+		// тот сразу шифруется в store — среда будущей сессии здесь не важна.
+		codexLoginRunner = codexlogin.LocalRunner{}
+	}
+	authService.SetCodexLogin(codexlogin.New(st, codexLoginRunner))
 	mux.Handle(brigadev1connect.NewAuthServiceHandler(authService, interceptors))
 	// Десктоп-режим: авто-логин сид-пользователя без экрана входа (локальный
 	// однопользовательский запуск). /desktop/auth ставит сессионные cookie и редиректит на SPA;

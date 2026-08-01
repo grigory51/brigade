@@ -77,7 +77,7 @@ ARG CODEX_ACP_VERSION=^1.1.7
 # шебанг у них `#!/usr/bin/env node`, поэтому node берётся из PATH (слой node).
 RUN npm install -g --prefix /opt/brigade-runtime/claude-cli @anthropic-ai/claude-code \
     && npm install -g --prefix /opt/brigade-runtime/acp-adapter "@agentclientprotocol/claude-agent-acp@${ACP_ADAPTER_VERSION}" \
-    && npm install -g --prefix /opt/brigade-runtime/codex "@agentclientprotocol/codex-acp@${CODEX_ACP_VERSION}" \
+    && npm install -g --prefix /opt/brigade-runtime/codex "@agentclientprotocol/codex-acp@${CODEX_ACP_VERSION}" @openai/codex \
     && npm cache clean --force
 
 # brigade MCP-сервер кастомных UI-инструментов (render_ui, show_choice). Сток-адаптер
