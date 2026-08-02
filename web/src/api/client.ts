@@ -12,6 +12,7 @@ import { AcpService } from "./gen/brigade/v1/acp_connect";
 import { ArchiveService } from "./gen/brigade/v1/archive_connect";
 import { MemoryService } from "./gen/brigade/v1/memory_connect";
 import { McpService } from "./gen/brigade/v1/mcp_connect";
+import { NotificationService } from "./gen/brigade/v1/notification_connect";
 
 // refreshOnUnauthenticated — Connect-интерсептор тихого обновления access-токена.
 // Короткий access-токен (минуты) живёт в httpOnly-cookie; при его истечении вызов
@@ -79,6 +80,7 @@ export const archiveClient = createPromiseClient(ArchiveService, transport);
 export const memoryClient = createPromiseClient(MemoryService, transport);
 // mcpClient — персональные MCP-серверы и хранилище секретов для них.
 export const mcpClient = createPromiseClient(McpService, transport);
+export const notificationClient = createPromiseClient(NotificationService, transport);
 
 // refreshSession принудительно обновляет токены через Refresh (refresh-токен берётся из
 // httpOnly-cookie). Используется неконнектовыми путями (AG-UI/SSE поверх обычного fetch),

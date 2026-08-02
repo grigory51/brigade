@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package brigade.v1;
+
+import "brigade/v1/auth.proto";
+
+message NtfyNotificationConfig {
+  string server = 1;
+  string topic = 2;
+  bool token_set = 3;
+}
+
+message NotificationBackend {
+  string id = 1;
+  string kind = 2;
+  string name = 3;
+  repeated string events = 4;
+  NtfyNotificationConfig ntfy = 5;
+}
+
+message ListNotificationBackendsResponse {
+  repeated NotificationBackend backends = 1;
+}
+
+message SaveNotificationBackendRequest {
+  NotificationBackend backend = 1;
+  // Секрет выбранной реализации. Пустой сохраняет прежнее значение.
+  string secret = 2;
+}
+
+message NotificationBackendRequest {
+  string id = 1;
+}
+
+service NotificationService {
+  rpc ListNotificationBackends(Empty) returns (ListNotificationBackendsResponse) {}
+  rpc SaveNotificationBackend(SaveNotificationBackendRequest) returns (NotificationBackend) {}
+  rpc DeleteNotificationBackend(NotificationBackendRequest) returns (Empty) {}
+  rpc TestNotificationBackend(NotificationBackendRequest) returns (Empty) {}
+}

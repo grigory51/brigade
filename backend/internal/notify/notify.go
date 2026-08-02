@@ -8,6 +8,7 @@ package notify
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -30,21 +31,25 @@ const (
 // defaultServer — публичный ntfy, если пользователь не указал свой сервер.
 const defaultServer = "https://ntfy.sh"
 
-// SettingsSource отдаёт пер-юзерные настройки (ntfy-поля уже расшифрованы). Совпадает с
-// store.Store.GetUserSettings — интерфейс введён для изоляции и тестируемости.
-type SettingsSource interface {
-	GetUserSettings(ctx context.Context, userID string) (store.UserSettings, error)
+// BackendSource отдаёт все подключения уведомлений пользователя.
+type BackendSource interface {
+	ListNotificationBackends(ctx context.Context, userID string) ([]store.NotificationBackend, error)
 }
 
 // Service публикует уведомления в персональный ntfy пользователя.
 type Service struct {
-	settings SettingsSource
+	backends BackendSource
 	http     *http.Client
+	senders  map[string]func(context.Context, store.NotificationBackend, string, string) error
 }
 
 // New собирает сервис уведомлений поверх источника настроек.
-func New(settings SettingsSource) *Service {
-	return &Service{settings: settings, http: &http.Client{Timeout: 10 * time.Second}}
+func New(backends BackendSource) *Service {
+	s := &Service{backends: backends, http: &http.Client{Timeout: 10 * time.Second}}
+	s.senders = map[string]func(context.Context, store.NotificationBackend, string, string) error{
+		"ntfy": s.sendNtfy,
+	}
+	return s
 }
 
 // TurnEnded уведомляет пользователя о завершении turn'а сессии, если у него настроен ntfy и
@@ -64,18 +69,20 @@ func (s *Service) TurnEnded(ctx context.Context, userID, sessionLabel, stopReaso
 		return
 	}
 
-	set, err := s.settings.GetUserSettings(ctx, userID)
+	backends, err := s.backends.ListNotificationBackends(ctx, userID)
 	if err != nil {
-		log.Printf("notify: get settings %s: %v", userID, err)
-		return
-	}
-	if set.NtfyTopic == "" || !eventEnabled(set.NtfyEvents, event) {
+		log.Printf("notify: list backends %s: %v", userID, err)
 		return
 	}
 
 	title, message := render(sessionLabel, event, stopReason, turnErr)
-	if err := s.post(ctx, set, title, message); err != nil {
-		log.Printf("notify: post %s: %v", userID, err)
+	for _, backend := range backends {
+		if !eventEnabled(backend.Events, event) {
+			continue
+		}
+		if err := s.send(ctx, backend, title, message); err != nil {
+			log.Printf("notify: %s %s: %v", backend.Kind, backend.ID, err)
+		}
 	}
 }
 
@@ -83,18 +90,20 @@ func (s *Service) TurnEnded(ctx context.Context, userID, sessionLabel, stopReaso
 // топика/сервера/токена прямо из UI. В отличие от событийных уведомлений, список включённых
 // событий не смотрит (отправку запросил сам пользователь) и ошибку НЕ проглатывает: смысл
 // проверки в том, чтобы неверные настройки были видны сразу, а не по молчанию в сессии.
-func (s *Service) Test(ctx context.Context, userID string) error {
+func (s *Service) Test(ctx context.Context, userID, id string) error {
 	if s == nil {
 		return errors.New("notify: сервис уведомлений недоступен")
 	}
-	set, err := s.settings.GetUserSettings(ctx, userID)
+	backends, err := s.backends.ListNotificationBackends(ctx, userID)
 	if err != nil {
-		return fmt.Errorf("notify: get settings: %w", err)
+		return fmt.Errorf("notify: list backends: %w", err)
 	}
-	if strings.TrimSpace(set.NtfyTopic) == "" {
-		return errors.New("notify: топик не задан — уведомления отправлять некуда")
+	for _, backend := range backends {
+		if backend.ID == id {
+			return s.send(ctx, backend, "brigade", "Тестовое уведомление — настройки работают.")
+		}
 	}
-	return s.post(ctx, set, "brigade", "Тестовое уведомление — настройки работают.")
+	return errors.New("notify: подключение не найдено")
 }
 
 // render строит заголовок и тело уведомления по событию.
@@ -121,12 +130,32 @@ func render(sessionLabel, event, stopReason string, turnErr error) (title, messa
 
 // post отправляет уведомление в ntfy: тело — текст сообщения, заголовок — в HTTP-header
 // Title (ntfy-протокол). Токен (если задан) — Bearer-авторизация для защищённого топика.
-func (s *Service) post(ctx context.Context, set store.UserSettings, title, message string) error {
-	server := strings.TrimRight(strings.TrimSpace(set.NtfyServer), "/")
+type ntfyConfig struct {
+	Server string `json:"server"`
+	Topic  string `json:"topic"`
+}
+
+func (s *Service) send(ctx context.Context, backend store.NotificationBackend, title, message string) error {
+	send := s.senders[backend.Kind]
+	if send == nil {
+		return fmt.Errorf("неизвестный backend %q", backend.Kind)
+	}
+	return send(ctx, backend, title, message)
+}
+
+func (s *Service) sendNtfy(ctx context.Context, backend store.NotificationBackend, title, message string) error {
+	var cfg ntfyConfig
+	if err := json.Unmarshal([]byte(backend.Config), &cfg); err != nil {
+		return fmt.Errorf("ntfy config: %w", err)
+	}
+	if strings.TrimSpace(cfg.Topic) == "" {
+		return errors.New("топик не задан — уведомления отправлять некуда")
+	}
+	server := strings.TrimRight(strings.TrimSpace(cfg.Server), "/")
 	if server == "" {
 		server = defaultServer
 	}
-	url := server + "/" + set.NtfyTopic
+	url := server + "/" + cfg.Topic
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader([]byte(message)))
 	if err != nil {
@@ -135,8 +164,8 @@ func (s *Service) post(ctx context.Context, set store.UserSettings, title, messa
 	// Title содержит кириллицу; ntfy принимает её в RFC 2047 не всегда, но UTF-8 в заголовке
 	// проходит через большинство серверов. При проблемах пользователь увидит тело без title.
 	req.Header.Set("Title", title)
-	if set.NtfyToken != "" {
-		req.Header.Set("Authorization", "Bearer "+set.NtfyToken)
+	if backend.Secret != "" {
+		req.Header.Set("Authorization", "Bearer "+backend.Secret)
 	}
 
 	resp, err := s.http.Do(req)

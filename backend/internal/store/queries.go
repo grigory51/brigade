@@ -48,10 +48,10 @@ func (s *Store) GetUserSettings(ctx context.Context, userID string) (UserSetting
 	var images string
 	err := s.db.QueryRowContext(ctx,
 		`SELECT claude_token, codex_api_key, codex_auth_json, codex_default_profile,
-		 memory_remote, ntfy_server, ntfy_topic, ntfy_token, ntfy_events, agent_images, updated_at
+		 memory_remote, agent_images, updated_at
 		 FROM user_settings WHERE user_id = ?`, userID).
 		Scan(&settings.ClaudeToken, &settings.CodexAPIKey, &settings.CodexAuthJSON, &settings.CodexDefaultProfile, &settings.MemoryRemote,
-			&settings.NtfyServer, &settings.NtfyTopic, &settings.NtfyToken, &settings.NtfyEvents, &images, &updatedAt)
+			&images, &updatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return settings, nil
 	}
@@ -68,10 +68,61 @@ func (s *Store) GetUserSettings(ctx context.Context, userID string) (UserSetting
 	settings.CodexAPIKey = s.cipher.Decrypt(settings.CodexAPIKey)
 	settings.CodexAuthJSON = s.cipher.Decrypt(settings.CodexAuthJSON)
 	settings.MemoryRemote = s.cipher.Decrypt(settings.MemoryRemote)
-	settings.NtfyToken = s.cipher.Decrypt(settings.NtfyToken)
 	// updated_at сканируется, но не хранится в модели (никто не читает).
 	_ = updatedAt
 	return settings, nil
+}
+
+// ListNotificationBackends возвращает все подключения уведомлений пользователя.
+func (s *Store) ListNotificationBackends(ctx context.Context, userID string) ([]NotificationBackend, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, user_id, kind, name, config, secret, events
+		 FROM notification_backends WHERE user_id = ? ORDER BY created_at`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("store: list notification backends: %w", err)
+	}
+	defer rows.Close()
+	var out []NotificationBackend
+	for rows.Next() {
+		var b NotificationBackend
+		if err := rows.Scan(&b.ID, &b.UserID, &b.Kind, &b.Name, &b.Config, &b.Secret, &b.Events); err != nil {
+			return nil, fmt.Errorf("store: scan notification backend: %w", err)
+		}
+		b.Secret = s.cipher.Decrypt(b.Secret)
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+// SaveNotificationBackend создаёт или обновляет подключение. Пустой secret сохраняет
+// прежний; для нового подключения это означает «без секрета».
+func (s *Store) SaveNotificationBackend(ctx context.Context, b NotificationBackend) error {
+	now := toUnix(time.Now())
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO notification_backends
+		   (id, user_id, kind, name, config, secret, events, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET
+		   name = excluded.name,
+		   config = excluded.config,
+		   secret = CASE WHEN excluded.secret = '' THEN notification_backends.secret ELSE excluded.secret END,
+		   events = excluded.events,
+		   updated_at = excluded.updated_at
+		 WHERE notification_backends.user_id = excluded.user_id`,
+		b.ID, b.UserID, b.Kind, b.Name, b.Config, s.cipher.Encrypt(b.Secret), b.Events, now, now)
+	if err != nil {
+		return fmt.Errorf("store: save notification backend: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) DeleteNotificationBackend(ctx context.Context, userID, id string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM notification_backends WHERE id = ? AND user_id = ?`, id, userID)
+	if err != nil {
+		return fmt.Errorf("store: delete notification backend: %w", err)
+	}
+	return nil
 }
 
 // --- sessions ---

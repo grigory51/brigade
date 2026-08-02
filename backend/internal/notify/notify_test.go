@@ -13,11 +13,17 @@ import (
 	"github.com/grigory51/brigade/backend/internal/store"
 )
 
-// fakeSettings — источник настроек для теста: отдаёт заранее заданный UserSettings.
-type fakeSettings struct{ s store.UserSettings }
+type fakeSettings struct{ backends []store.NotificationBackend }
 
-func (f fakeSettings) GetUserSettings(context.Context, string) (store.UserSettings, error) {
-	return f.s, nil
+func (f fakeSettings) ListNotificationBackends(context.Context, string) ([]store.NotificationBackend, error) {
+	return f.backends, nil
+}
+
+func ntfyBackend(server, topic, token, events string) store.NotificationBackend {
+	return store.NotificationBackend{
+		ID: "n1", Kind: "ntfy", Secret: token, Events: events,
+		Config: `{"server":"` + server + `","topic":"` + topic + `"}`,
+	}
 }
 
 // capture поднимает httptest-сервер, ловящий один POST ntfy, и возвращает адрес + доступ к
@@ -42,8 +48,8 @@ func capture(t *testing.T) (addr string, path *string, body *string, auth *strin
 // токеном и телом.
 func TestTurnEndedPostsWhenEnabled(t *testing.T) {
 	addr, path, body, auth, done := capture(t)
-	svc := New(fakeSettings{store.UserSettings{
-		NtfyServer: addr, NtfyTopic: "mytopic", NtfyToken: "tok", NtfyEvents: "turn_end,error",
+	svc := New(fakeSettings{[]store.NotificationBackend{
+		ntfyBackend(addr, "mytopic", "tok", "turn_end,error"),
 	}})
 
 	svc.TurnEnded(context.Background(), "u1", "Моя сессия", "end_turn", nil)
@@ -60,14 +66,32 @@ func TestTurnEndedPostsWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestTurnEndedPostsToEveryBackend(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		calls++
+	}))
+	t.Cleanup(srv.Close)
+	svc := New(fakeSettings{[]store.NotificationBackend{
+		ntfyBackend(srv.URL, "one", "", "turn_end"),
+		ntfyBackend(srv.URL, "two", "", "turn_end"),
+	}})
+
+	svc.TurnEnded(context.Background(), "u1", "s", "end_turn", nil)
+
+	if calls != 2 {
+		t.Fatalf("calls = %d, want 2", calls)
+	}
+}
+
 // TestTurnEndedSkipsDisabledEvent: событие error не включено → POST не уходит (сервер не
 // дёрнут). Проверяем через отдельный флаг вызова.
 func TestTurnEndedSkipsDisabledEvent(t *testing.T) {
 	var called bool
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true }))
 	t.Cleanup(srv.Close)
-	svc := New(fakeSettings{store.UserSettings{
-		NtfyServer: srv.URL, NtfyTopic: "t", NtfyEvents: "turn_end", // error выключен
+	svc := New(fakeSettings{[]store.NotificationBackend{
+		ntfyBackend(srv.URL, "t", "", "turn_end"), // error выключен
 	}})
 
 	svc.TurnEnded(context.Background(), "u1", "s", "", errors.New("boom"))
@@ -82,7 +106,9 @@ func TestTurnEndedSkipsCancelled(t *testing.T) {
 	var called bool
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true }))
 	t.Cleanup(srv.Close)
-	svc := New(fakeSettings{store.UserSettings{NtfyServer: srv.URL, NtfyTopic: "t", NtfyEvents: "turn_end"}})
+	svc := New(fakeSettings{[]store.NotificationBackend{
+		ntfyBackend(srv.URL, "t", "", "turn_end"),
+	}})
 
 	svc.TurnEnded(context.Background(), "u1", "s", "cancelled", nil)
 
@@ -96,7 +122,9 @@ func TestTurnEndedNoTopic(t *testing.T) {
 	var called bool
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true }))
 	t.Cleanup(srv.Close)
-	svc := New(fakeSettings{store.UserSettings{NtfyServer: srv.URL, NtfyEvents: "turn_end"}})
+	svc := New(fakeSettings{[]store.NotificationBackend{
+		ntfyBackend(srv.URL, "", "", "turn_end"),
+	}})
 
 	svc.TurnEnded(context.Background(), "u1", "s", "end_turn", nil)
 

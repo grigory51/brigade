@@ -40,7 +40,7 @@ export function SectionHeader({
   children,
 }: {
   title: string;
-  badge: ReactNode;
+  badge?: ReactNode;
   children?: ReactNode;
 }) {
   return (

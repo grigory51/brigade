@@ -79,26 +79,6 @@ message SetMemorySettingsRequest {
   string remote = 1;
 }
 
-// NtfySettings — состояние настроек персональных push-уведомлений через ntfy. server и
-// topic показываются в UI; значение токена наружу НЕ отдаётся — только флаг token_set.
-// events — включённые пользователем события (напр. "turn_end", "error").
-message NtfySettings {
-  string server = 1;
-  string topic = 2;
-  bool token_set = 3;
-  repeated string events = 4;
-}
-
-// SetNtfySettingsRequest — установка настроек ntfy. server/topic/events перезаписываются
-// всегда (пустой topic отключает уведомления). token: пустой СОХРАНЯЕТ прежний (правка
-// server/topic не стирает токен); задать новый — прислать непустой.
-message SetNtfySettingsRequest {
-  string server = 1;
-  string topic = 2;
-  string token = 3;
-  repeated string events = 4;
-}
-
 // SSHSettings — публичная часть per-user SSH-ключа агента. Приватный ключ генерируется и
 // хранится на сервере (зашифрован) и подкладывается в контейнер сессии; наружу отдаётся
 // только публичный ключ — его пользователь добавляет в GitHub (SSH keys / deploy key),
@@ -199,12 +179,6 @@ service AuthService {
   rpc GetMemorySettings(Empty) returns (MemorySettings) {}
   // SetMemorySettings задаёт git-remote личной памяти. Возвращает обновлённое состояние.
   rpc SetMemorySettings(SetMemorySettingsRequest) returns (MemorySettings) {}
-  // GetNtfySettings возвращает настройки push-уведомлений пользователя (server/topic/events
-  // + флаг token_set; значение токена не раскрывается).
-  rpc GetNtfySettings(Empty) returns (NtfySettings) {}
-  // SetNtfySettings задаёт server/topic/token/events персональных ntfy-уведомлений.
-  // Возвращает обновлённое состояние.
-  rpc SetNtfySettings(SetNtfySettingsRequest) returns (NtfySettings) {}
   // GetAgentRuntime возвращает режим исполнения сессий (local|docker), доступные
   // docker-контексты и признак «нужен перезапуск».
   rpc GetAgentRuntime(Empty) returns (AgentRuntimeSettings) {}
@@ -216,10 +190,6 @@ service AuthService {
   // SetAgentImages перезаписывает список образов пользователя. Образ, который не удалось
   // подтянуть, не пригоден для сессий или не влезает в квоту, отклоняет весь запрос.
   rpc SetAgentImages(SetAgentImagesRequest) returns (AgentImagesSettings) {}
-  // TestNtfy шлёт пробное уведомление по СОХРАНЁННЫМ настройкам пользователя: проверка
-  // топика/сервера/токена из UI. Ошибка доставки возвращается вызывающему — иначе
-  // неверные настройки обнаруживались бы только по молчанию в реальной сессии.
-  rpc TestNtfy(Empty) returns (Empty) {}
   // GetSSHSettings возвращает публичный SSH-ключ агента пользователя, генерируя пару при
   // первом обращении (приватный ключ наружу не отдаётся).
   rpc GetSSHSettings(Empty) returns (SSHSettings) {}

@@ -80,12 +80,6 @@ const (
 	// AuthServiceSetMemorySettingsProcedure is the fully-qualified name of the AuthService's
 	// SetMemorySettings RPC.
 	AuthServiceSetMemorySettingsProcedure = "/brigade.v1.AuthService/SetMemorySettings"
-	// AuthServiceGetNtfySettingsProcedure is the fully-qualified name of the AuthService's
-	// GetNtfySettings RPC.
-	AuthServiceGetNtfySettingsProcedure = "/brigade.v1.AuthService/GetNtfySettings"
-	// AuthServiceSetNtfySettingsProcedure is the fully-qualified name of the AuthService's
-	// SetNtfySettings RPC.
-	AuthServiceSetNtfySettingsProcedure = "/brigade.v1.AuthService/SetNtfySettings"
 	// AuthServiceGetAgentRuntimeProcedure is the fully-qualified name of the AuthService's
 	// GetAgentRuntime RPC.
 	AuthServiceGetAgentRuntimeProcedure = "/brigade.v1.AuthService/GetAgentRuntime"
@@ -98,8 +92,6 @@ const (
 	// AuthServiceSetAgentImagesProcedure is the fully-qualified name of the AuthService's
 	// SetAgentImages RPC.
 	AuthServiceSetAgentImagesProcedure = "/brigade.v1.AuthService/SetAgentImages"
-	// AuthServiceTestNtfyProcedure is the fully-qualified name of the AuthService's TestNtfy RPC.
-	AuthServiceTestNtfyProcedure = "/brigade.v1.AuthService/TestNtfy"
 	// AuthServiceGetSSHSettingsProcedure is the fully-qualified name of the AuthService's
 	// GetSSHSettings RPC.
 	AuthServiceGetSSHSettingsProcedure = "/brigade.v1.AuthService/GetSSHSettings"
@@ -135,12 +127,6 @@ type AuthServiceClient interface {
 	GetMemorySettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.MemorySettings], error)
 	// SetMemorySettings задаёт git-remote личной памяти. Возвращает обновлённое состояние.
 	SetMemorySettings(context.Context, *connect.Request[v1.SetMemorySettingsRequest]) (*connect.Response[v1.MemorySettings], error)
-	// GetNtfySettings возвращает настройки push-уведомлений пользователя (server/topic/events
-	// + флаг token_set; значение токена не раскрывается).
-	GetNtfySettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.NtfySettings], error)
-	// SetNtfySettings задаёт server/topic/token/events персональных ntfy-уведомлений.
-	// Возвращает обновлённое состояние.
-	SetNtfySettings(context.Context, *connect.Request[v1.SetNtfySettingsRequest]) (*connect.Response[v1.NtfySettings], error)
 	// GetAgentRuntime возвращает режим исполнения сессий (local|docker), доступные
 	// docker-контексты и признак «нужен перезапуск».
 	GetAgentRuntime(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.AgentRuntimeSettings], error)
@@ -152,10 +138,6 @@ type AuthServiceClient interface {
 	// SetAgentImages перезаписывает список образов пользователя. Образ, который не удалось
 	// подтянуть, не пригоден для сессий или не влезает в квоту, отклоняет весь запрос.
 	SetAgentImages(context.Context, *connect.Request[v1.SetAgentImagesRequest]) (*connect.Response[v1.AgentImagesSettings], error)
-	// TestNtfy шлёт пробное уведомление по СОХРАНЁННЫМ настройкам пользователя: проверка
-	// топика/сервера/токена из UI. Ошибка доставки возвращается вызывающему — иначе
-	// неверные настройки обнаруживались бы только по молчанию в реальной сессии.
-	TestNtfy(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.Empty], error)
 	// GetSSHSettings возвращает публичный SSH-ключ агента пользователя, генерируя пару при
 	// первом обращении (приватный ключ наружу не отдаётся).
 	GetSSHSettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error)
@@ -277,18 +259,6 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("SetMemorySettings")),
 			connect.WithClientOptions(opts...),
 		),
-		getNtfySettings: connect.NewClient[v1.Empty, v1.NtfySettings](
-			httpClient,
-			baseURL+AuthServiceGetNtfySettingsProcedure,
-			connect.WithSchema(authServiceMethods.ByName("GetNtfySettings")),
-			connect.WithClientOptions(opts...),
-		),
-		setNtfySettings: connect.NewClient[v1.SetNtfySettingsRequest, v1.NtfySettings](
-			httpClient,
-			baseURL+AuthServiceSetNtfySettingsProcedure,
-			connect.WithSchema(authServiceMethods.ByName("SetNtfySettings")),
-			connect.WithClientOptions(opts...),
-		),
 		getAgentRuntime: connect.NewClient[v1.Empty, v1.AgentRuntimeSettings](
 			httpClient,
 			baseURL+AuthServiceGetAgentRuntimeProcedure,
@@ -311,12 +281,6 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+AuthServiceSetAgentImagesProcedure,
 			connect.WithSchema(authServiceMethods.ByName("SetAgentImages")),
-			connect.WithClientOptions(opts...),
-		),
-		testNtfy: connect.NewClient[v1.Empty, v1.Empty](
-			httpClient,
-			baseURL+AuthServiceTestNtfyProcedure,
-			connect.WithSchema(authServiceMethods.ByName("TestNtfy")),
 			connect.WithClientOptions(opts...),
 		),
 		getSSHSettings: connect.NewClient[v1.Empty, v1.SSHSettings](
@@ -353,13 +317,10 @@ type authServiceClient struct {
 	setCodexDefaultProfile *connect.Client[v1.SetCodexDefaultProfileRequest, v1.CodexSettings]
 	getMemorySettings      *connect.Client[v1.Empty, v1.MemorySettings]
 	setMemorySettings      *connect.Client[v1.SetMemorySettingsRequest, v1.MemorySettings]
-	getNtfySettings        *connect.Client[v1.Empty, v1.NtfySettings]
-	setNtfySettings        *connect.Client[v1.SetNtfySettingsRequest, v1.NtfySettings]
 	getAgentRuntime        *connect.Client[v1.Empty, v1.AgentRuntimeSettings]
 	setAgentRuntime        *connect.Client[v1.SetAgentRuntimeRequest, v1.AgentRuntimeSettings]
 	getAgentImages         *connect.Client[v1.Empty, v1.AgentImagesSettings]
 	setAgentImages         *connect.Client[v1.SetAgentImagesRequest, v1.AgentImagesSettings]
-	testNtfy               *connect.Client[v1.Empty, v1.Empty]
 	getSSHSettings         *connect.Client[v1.Empty, v1.SSHSettings]
 	regenerateSSHKey       *connect.Client[v1.Empty, v1.SSHSettings]
 }
@@ -449,16 +410,6 @@ func (c *authServiceClient) SetMemorySettings(ctx context.Context, req *connect.
 	return c.setMemorySettings.CallUnary(ctx, req)
 }
 
-// GetNtfySettings calls brigade.v1.AuthService.GetNtfySettings.
-func (c *authServiceClient) GetNtfySettings(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.NtfySettings], error) {
-	return c.getNtfySettings.CallUnary(ctx, req)
-}
-
-// SetNtfySettings calls brigade.v1.AuthService.SetNtfySettings.
-func (c *authServiceClient) SetNtfySettings(ctx context.Context, req *connect.Request[v1.SetNtfySettingsRequest]) (*connect.Response[v1.NtfySettings], error) {
-	return c.setNtfySettings.CallUnary(ctx, req)
-}
-
 // GetAgentRuntime calls brigade.v1.AuthService.GetAgentRuntime.
 func (c *authServiceClient) GetAgentRuntime(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.AgentRuntimeSettings], error) {
 	return c.getAgentRuntime.CallUnary(ctx, req)
@@ -477,11 +428,6 @@ func (c *authServiceClient) GetAgentImages(ctx context.Context, req *connect.Req
 // SetAgentImages calls brigade.v1.AuthService.SetAgentImages.
 func (c *authServiceClient) SetAgentImages(ctx context.Context, req *connect.Request[v1.SetAgentImagesRequest]) (*connect.Response[v1.AgentImagesSettings], error) {
 	return c.setAgentImages.CallUnary(ctx, req)
-}
-
-// TestNtfy calls brigade.v1.AuthService.TestNtfy.
-func (c *authServiceClient) TestNtfy(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.Empty], error) {
-	return c.testNtfy.CallUnary(ctx, req)
 }
 
 // GetSSHSettings calls brigade.v1.AuthService.GetSSHSettings.
@@ -521,12 +467,6 @@ type AuthServiceHandler interface {
 	GetMemorySettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.MemorySettings], error)
 	// SetMemorySettings задаёт git-remote личной памяти. Возвращает обновлённое состояние.
 	SetMemorySettings(context.Context, *connect.Request[v1.SetMemorySettingsRequest]) (*connect.Response[v1.MemorySettings], error)
-	// GetNtfySettings возвращает настройки push-уведомлений пользователя (server/topic/events
-	// + флаг token_set; значение токена не раскрывается).
-	GetNtfySettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.NtfySettings], error)
-	// SetNtfySettings задаёт server/topic/token/events персональных ntfy-уведомлений.
-	// Возвращает обновлённое состояние.
-	SetNtfySettings(context.Context, *connect.Request[v1.SetNtfySettingsRequest]) (*connect.Response[v1.NtfySettings], error)
 	// GetAgentRuntime возвращает режим исполнения сессий (local|docker), доступные
 	// docker-контексты и признак «нужен перезапуск».
 	GetAgentRuntime(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.AgentRuntimeSettings], error)
@@ -538,10 +478,6 @@ type AuthServiceHandler interface {
 	// SetAgentImages перезаписывает список образов пользователя. Образ, который не удалось
 	// подтянуть, не пригоден для сессий или не влезает в квоту, отклоняет весь запрос.
 	SetAgentImages(context.Context, *connect.Request[v1.SetAgentImagesRequest]) (*connect.Response[v1.AgentImagesSettings], error)
-	// TestNtfy шлёт пробное уведомление по СОХРАНЁННЫМ настройкам пользователя: проверка
-	// топика/сервера/токена из UI. Ошибка доставки возвращается вызывающему — иначе
-	// неверные настройки обнаруживались бы только по молчанию в реальной сессии.
-	TestNtfy(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.Empty], error)
 	// GetSSHSettings возвращает публичный SSH-ключ агента пользователя, генерируя пару при
 	// первом обращении (приватный ключ наружу не отдаётся).
 	GetSSHSettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error)
@@ -659,18 +595,6 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("SetMemorySettings")),
 		connect.WithHandlerOptions(opts...),
 	)
-	authServiceGetNtfySettingsHandler := connect.NewUnaryHandler(
-		AuthServiceGetNtfySettingsProcedure,
-		svc.GetNtfySettings,
-		connect.WithSchema(authServiceMethods.ByName("GetNtfySettings")),
-		connect.WithHandlerOptions(opts...),
-	)
-	authServiceSetNtfySettingsHandler := connect.NewUnaryHandler(
-		AuthServiceSetNtfySettingsProcedure,
-		svc.SetNtfySettings,
-		connect.WithSchema(authServiceMethods.ByName("SetNtfySettings")),
-		connect.WithHandlerOptions(opts...),
-	)
 	authServiceGetAgentRuntimeHandler := connect.NewUnaryHandler(
 		AuthServiceGetAgentRuntimeProcedure,
 		svc.GetAgentRuntime,
@@ -693,12 +617,6 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		AuthServiceSetAgentImagesProcedure,
 		svc.SetAgentImages,
 		connect.WithSchema(authServiceMethods.ByName("SetAgentImages")),
-		connect.WithHandlerOptions(opts...),
-	)
-	authServiceTestNtfyHandler := connect.NewUnaryHandler(
-		AuthServiceTestNtfyProcedure,
-		svc.TestNtfy,
-		connect.WithSchema(authServiceMethods.ByName("TestNtfy")),
 		connect.WithHandlerOptions(opts...),
 	)
 	authServiceGetSSHSettingsHandler := connect.NewUnaryHandler(
@@ -749,10 +667,6 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceGetMemorySettingsHandler.ServeHTTP(w, r)
 		case AuthServiceSetMemorySettingsProcedure:
 			authServiceSetMemorySettingsHandler.ServeHTTP(w, r)
-		case AuthServiceGetNtfySettingsProcedure:
-			authServiceGetNtfySettingsHandler.ServeHTTP(w, r)
-		case AuthServiceSetNtfySettingsProcedure:
-			authServiceSetNtfySettingsHandler.ServeHTTP(w, r)
 		case AuthServiceGetAgentRuntimeProcedure:
 			authServiceGetAgentRuntimeHandler.ServeHTTP(w, r)
 		case AuthServiceSetAgentRuntimeProcedure:
@@ -761,8 +675,6 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceGetAgentImagesHandler.ServeHTTP(w, r)
 		case AuthServiceSetAgentImagesProcedure:
 			authServiceSetAgentImagesHandler.ServeHTTP(w, r)
-		case AuthServiceTestNtfyProcedure:
-			authServiceTestNtfyHandler.ServeHTTP(w, r)
 		case AuthServiceGetSSHSettingsProcedure:
 			authServiceGetSSHSettingsHandler.ServeHTTP(w, r)
 		case AuthServiceRegenerateSSHKeyProcedure:
@@ -844,14 +756,6 @@ func (UnimplementedAuthServiceHandler) SetMemorySettings(context.Context, *conne
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.SetMemorySettings is not implemented"))
 }
 
-func (UnimplementedAuthServiceHandler) GetNtfySettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.NtfySettings], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.GetNtfySettings is not implemented"))
-}
-
-func (UnimplementedAuthServiceHandler) SetNtfySettings(context.Context, *connect.Request[v1.SetNtfySettingsRequest]) (*connect.Response[v1.NtfySettings], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.SetNtfySettings is not implemented"))
-}
-
 func (UnimplementedAuthServiceHandler) GetAgentRuntime(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.AgentRuntimeSettings], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.GetAgentRuntime is not implemented"))
 }
@@ -866,10 +770,6 @@ func (UnimplementedAuthServiceHandler) GetAgentImages(context.Context, *connect.
 
 func (UnimplementedAuthServiceHandler) SetAgentImages(context.Context, *connect.Request[v1.SetAgentImagesRequest]) (*connect.Response[v1.AgentImagesSettings], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.SetAgentImages is not implemented"))
-}
-
-func (UnimplementedAuthServiceHandler) TestNtfy(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.Empty], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.TestNtfy is not implemented"))
 }
 
 func (UnimplementedAuthServiceHandler) GetSSHSettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error) {

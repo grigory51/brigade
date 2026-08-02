@@ -16,16 +16,9 @@ import (
 	"github.com/grigory51/brigade/backend/internal/runtimecfg"
 )
 
-// NtfyTester шлёт пробное уведомление пользователю. Интерфейс, а не *notify.Service, —
-// транспорту хватает одной операции, а auth-сервис о доставке уведомлений не знает.
-type NtfyTester interface {
-	Test(ctx context.Context, userID string) error
-}
-
 // AuthService реализует brigade.v1.AuthService поверх auth.Service.
 type AuthService struct {
 	svc        *auth.Service
-	notify     NtfyTester
 	images     *agentimage.Service
 	runtime    *runtimecfg.Service
 	desktop    bool
@@ -38,8 +31,8 @@ func (s *AuthService) SetCodexLogin(service *codexlogin.Service) { s.codexLogin 
 // уведомлений недоступна, остальные методы работают. images — образы контейнера агента
 // (в local-режиме сервис отвечает «недоступно»); runtime — режим исполнения сессий.
 // desktop — локальный однопользовательский запуск (см. ServerInfo).
-func NewAuthService(svc *auth.Service, notify NtfyTester, images *agentimage.Service, runtime *runtimecfg.Service, desktop bool) *AuthService {
-	return &AuthService{svc: svc, notify: notify, images: images, runtime: runtime, desktop: desktop}
+func NewAuthService(svc *auth.Service, images *agentimage.Service, runtime *runtimecfg.Service, desktop bool) *AuthService {
+	return &AuthService{svc: svc, images: images, runtime: runtime, desktop: desktop}
 }
 
 // GetAgentRuntime возвращает режим исполнения сессий и доступные docker-контексты.
@@ -359,62 +352,6 @@ func (s *AuthService) SetMemorySettings(ctx context.Context, req *connect.Reques
 	return connect.NewResponse(&v1.MemorySettings{Remote: remote}), nil
 }
 
-// GetNtfySettings возвращает настройки push-уведомлений текущего пользователя (server/topic/
-// events + флаг token_set; значение токена не раскрывается).
-func (s *AuthService) GetNtfySettings(ctx context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.NtfySettings], error) {
-	u, ok := auth.UserFromContext(ctx)
-	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
-	}
-	server, topic, events, tokenSet, err := s.svc.NtfySettings(ctx, u.ID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	return connect.NewResponse(&v1.NtfySettings{
-		Server: server, Topic: topic, TokenSet: tokenSet, Events: splitEvents(events),
-	}), nil
-}
-
-// SetNtfySettings задаёт server/topic/token/events push-уведомлений текущего пользователя.
-// Пустой token сохраняет прежний. Возвращает актуальное состояние (перечитывает его, чтобы
-// token_set корректно отражал сохранение прежнего токена).
-func (s *AuthService) SetNtfySettings(ctx context.Context, req *connect.Request[v1.SetNtfySettingsRequest]) (*connect.Response[v1.NtfySettings], error) {
-	u, ok := auth.UserFromContext(ctx)
-	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
-	}
-	events := joinEvents(req.Msg.Events)
-	if err := s.svc.SetNtfySettings(ctx, u.ID,
-		strings.TrimSpace(req.Msg.Server), strings.TrimSpace(req.Msg.Topic),
-		strings.TrimSpace(req.Msg.Token), events); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	server, topic, ev, tokenSet, err := s.svc.NtfySettings(ctx, u.ID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	return connect.NewResponse(&v1.NtfySettings{
-		Server: server, Topic: topic, TokenSet: tokenSet, Events: splitEvents(ev),
-	}), nil
-}
-
-// TestNtfy шлёт пробное уведомление по сохранённым настройкам пользователя. Ошибку доставки
-// возвращаем как InvalidArgument: в подавляющем большинстве случаев это неверный топик,
-// сервер или токен — то есть данные пользователя, а не сбой brigade.
-func (s *AuthService) TestNtfy(ctx context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.Empty], error) {
-	u, ok := auth.UserFromContext(ctx)
-	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
-	}
-	if s.notify == nil {
-		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("уведомления не сконфигурированы"))
-	}
-	if err := s.notify.Test(ctx, u.ID); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	return connect.NewResponse(&v1.Empty{}), nil
-}
-
 // GetSSHSettings возвращает публичный SSH-ключ агента текущего пользователя (генерируя пару
 // при первом обращении; приватный ключ не раскрывается).
 func (s *AuthService) GetSSHSettings(ctx context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error) {
@@ -440,31 +377,6 @@ func (s *AuthService) RegenerateSSHKey(ctx context.Context, _ *connect.Request[v
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&v1.SSHSettings{PublicKey: pub}), nil
-}
-
-// splitEvents/joinEvents конвертируют CSV-хранение событий ntfy ↔ список proto. Пустые
-// элементы отбрасываются (пустой CSV → nil).
-func splitEvents(csv string) []string {
-	if strings.TrimSpace(csv) == "" {
-		return nil
-	}
-	var out []string
-	for _, e := range strings.Split(csv, ",") {
-		if e = strings.TrimSpace(e); e != "" {
-			out = append(out, e)
-		}
-	}
-	return out
-}
-
-func joinEvents(events []string) string {
-	var clean []string
-	for _, e := range events {
-		if e = strings.TrimSpace(e); e != "" {
-			clean = append(clean, e)
-		}
-	}
-	return strings.Join(clean, ",")
 }
 
 // userToProto переводит доменного пользователя auth в proto-сообщение.

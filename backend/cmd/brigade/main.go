@@ -177,7 +177,7 @@ func runServer(configPath string) {
 	// AcpService.ResolvePermission (доставляет решение) — создаётся здесь.
 	perms := aguitransport.NewPermissionStore()
 
-	authService := connectsvc.NewAuthService(authSvc, notifySvc, imagesSvc, runtimeSvc, desktopMode)
+	authService := connectsvc.NewAuthService(authSvc, imagesSvc, runtimeSvc, desktopMode)
 	var codexLoginRunner codexlogin.Runner = registry
 	if desktopMode {
 		// Desktop наследует host DNS/VPN; Docker VM может обходить split-tunnel.
@@ -187,6 +187,7 @@ func runServer(configPath string) {
 	}
 	authService.SetCodexLogin(codexlogin.New(st, codexLoginRunner))
 	mux.Handle(brigadev1connect.NewAuthServiceHandler(authService, interceptors))
+	mux.Handle(brigadev1connect.NewNotificationServiceHandler(connectsvc.NewNotificationService(st, notifySvc), interceptors))
 	// Десктоп-режим: авто-логин сид-пользователя без экрана входа (локальный
 	// однопользовательский запуск). /desktop/auth ставит сессионные cookie и редиректит на SPA;
 	// webview стартует именно с него (см. runDesktop). В серверном режиме ручка не подключается.

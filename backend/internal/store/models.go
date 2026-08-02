@@ -50,16 +50,21 @@ type UserSettings struct {
 	CodexAuthJSON       string
 	CodexDefaultProfile string
 	MemoryRemote        string
-	// NtfyServer/NtfyTopic — адрес сервера ntfy и топик push-уведомлений (не секреты).
-	// NtfyToken — токен публикации в топик (секрет, шифруется). NtfyEvents — CSV включённых
-	// событий (напр. "turn_end,error").
-	NtfyServer string
-	NtfyTopic  string
-	NtfyToken  string
-	NtfyEvents string
 	// AgentImages — образы контейнеров агента, доступные пользователю при создании сессии.
 	// В БД лежат JSON-массивом.
 	AgentImages []string
+}
+
+// NotificationBackend — именованное подключение транспорта уведомлений пользователя.
+// Config содержит несекретную конфигурацию реализации, Secret — расшифрованный секрет.
+type NotificationBackend struct {
+	ID     string
+	UserID string
+	Kind   string
+	Name   string
+	Config string
+	Secret string
+	Events string
 }
 
 // Session — сессия агента. Поля agent_session_id и container_label несут

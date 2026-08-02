@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AgentImagesSettings, AgentRuntimeSettings, CancelCodexLoginRequest, ClaudeSettings, CodexLogin, CodexSettings, Empty, GetCodexLoginRequest, LoginRequest, LoginResponse, MemorySettings, NtfySettings, RefreshRequest, RefreshResponse, ServerInfo, SetAgentImagesRequest, SetAgentRuntimeRequest, SetClaudeTokenRequest, SetCodexApiKeyRequest, SetCodexChatGPTAuthRequest, SetCodexDefaultProfileRequest, SetMemorySettingsRequest, SetNtfySettingsRequest, SSHSettings, User } from "./auth_pb.js";
+import { AgentImagesSettings, AgentRuntimeSettings, CancelCodexLoginRequest, ClaudeSettings, CodexLogin, CodexSettings, Empty, GetCodexLoginRequest, LoginRequest, LoginResponse, MemorySettings, RefreshRequest, RefreshResponse, ServerInfo, SetAgentImagesRequest, SetAgentRuntimeRequest, SetClaudeTokenRequest, SetCodexApiKeyRequest, SetCodexChatGPTAuthRequest, SetCodexDefaultProfileRequest, SetMemorySettingsRequest, SSHSettings, User } from "./auth_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -182,30 +182,6 @@ export const AuthService = {
       kind: MethodKind.Unary,
     },
     /**
-     * GetNtfySettings возвращает настройки push-уведомлений пользователя (server/topic/events
-     * + флаг token_set; значение токена не раскрывается).
-     *
-     * @generated from rpc brigade.v1.AuthService.GetNtfySettings
-     */
-    getNtfySettings: {
-      name: "GetNtfySettings",
-      I: Empty,
-      O: NtfySettings,
-      kind: MethodKind.Unary,
-    },
-    /**
-     * SetNtfySettings задаёт server/topic/token/events персональных ntfy-уведомлений.
-     * Возвращает обновлённое состояние.
-     *
-     * @generated from rpc brigade.v1.AuthService.SetNtfySettings
-     */
-    setNtfySettings: {
-      name: "SetNtfySettings",
-      I: SetNtfySettingsRequest,
-      O: NtfySettings,
-      kind: MethodKind.Unary,
-    },
-    /**
      * GetAgentRuntime возвращает режим исполнения сессий (local|docker), доступные
      * docker-контексты и признак «нужен перезапуск».
      *
@@ -250,19 +226,6 @@ export const AuthService = {
       name: "SetAgentImages",
       I: SetAgentImagesRequest,
       O: AgentImagesSettings,
-      kind: MethodKind.Unary,
-    },
-    /**
-     * TestNtfy шлёт пробное уведомление по СОХРАНЁННЫМ настройкам пользователя: проверка
-     * топика/сервера/токена из UI. Ошибка доставки возвращается вызывающему — иначе
-     * неверные настройки обнаруживались бы только по молчанию в реальной сессии.
-     *
-     * @generated from rpc brigade.v1.AuthService.TestNtfy
-     */
-    testNtfy: {
-      name: "TestNtfy",
-      I: Empty,
-      O: Empty,
       kind: MethodKind.Unary,
     },
     /**

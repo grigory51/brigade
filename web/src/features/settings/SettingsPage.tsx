@@ -5,7 +5,7 @@ import {
   type ComponentType,
   type ReactNode,
 } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   Bell,
   Bot,
@@ -20,12 +20,15 @@ import {
   KeyRound,
   Loader2,
   NotebookText,
+  Plus,
   Plug,
   RefreshCw,
   Send,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { authClient, mcpClient } from "@/api/client";
+import { authClient, mcpClient, notificationClient } from "@/api/client";
+import type { NotificationBackend } from "@/api/gen/brigade/v1/notification_pb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -65,22 +68,27 @@ import {
  * в поле всегда пустой драфт, а состояние показывается флагом «задан».
  */
 
-type SectionId = "claude" | "codex" | "mcp" | "env" | "memory" | "ssh" | "ntfy";
+type SectionId = "claude" | "codex" | "mcp" | "env" | "memory" | "ssh" | "notifications";
 
-const SECTIONS: SectionId[] = ["claude", "codex", "mcp", "env", "memory", "ssh", "ntfy"];
+const SECTIONS: SectionId[] = ["claude", "codex", "mcp", "env", "memory", "ssh", "notifications"];
 
 const AGENTS_OPEN_KEY = "brigade.settings.agentsOpen";
 
 export function SettingsPage() {
   const { section } = useParams<{ section: string }>();
   const navigate = useNavigate();
-  const active = (SECTIONS as string[]).includes(section ?? "")
-    ? (section as SectionId)
-    : "claude";
+  const active =
+    section === "ntfy"
+      ? "notifications"
+      : (SECTIONS as string[]).includes(section ?? "")
+        ? (section as SectionId)
+        : "claude";
 
   const [agentsOpen, setAgentsOpen] = useState(
     () => localStorage.getItem(AGENTS_OPEN_KEY) !== "0",
   );
+  const [notificationsOpen, setNotificationsOpen] = useState(true);
+  const [selectedNotification, setSelectedNotification] = useState("");
   useEffect(() => {
     localStorage.setItem(AGENTS_OPEN_KEY, agentsOpen ? "1" : "0");
   }, [agentsOpen]);
@@ -92,7 +100,7 @@ export function SettingsPage() {
   const [codex, setCodex] = useState<{apiKeySet: boolean; chatgptConnected: boolean; defaultProfile: string} | null>(null);
   const [remote, setRemote] = useState<string | null>(null);
   const [publicKey, setPublicKey] = useState<string | null>(null);
-  const [ntfy, setNtfy] = useState<NtfyState | null>(null);
+  const [notifications, setNotifications] = useState<NotificationBackend[] | null>(null);
   // Счётчик серверов держится здесь ради точки в навигации; сам раздел грузит свои
   // данные и сообщает изменения наверх.
   const [mcpCount, setMcpCount] = useState(0);
@@ -114,23 +122,10 @@ export function SettingsPage() {
       .getSSHSettings({})
       .then((r) => alive && setPublicKey(r.publicKey))
       .catch(() => alive && setPublicKey(""));
-    void authClient
-      .getNtfySettings({})
-      .then(
-        (r) =>
-          alive &&
-          setNtfy({
-            server: r.server,
-            topic: r.topic,
-            tokenSet: r.tokenSet,
-            events: r.events,
-          }),
-      )
-      .catch(
-        () =>
-          alive &&
-          setNtfy({ server: "", topic: "", tokenSet: false, events: [] }),
-      );
+    void notificationClient
+      .listNotificationBackends({})
+      .then((r) => alive && setNotifications(r.backends))
+      .catch(() => alive && setNotifications([]));
     void mcpClient
       .listServers({})
       .then((r) => alive && setMcpCount(r.servers.length))
@@ -232,10 +227,50 @@ export function SettingsPage() {
           <NavRow
             icon={Bell}
             label="Уведомления"
-            active={active === "ntfy"}
-            onClick={() => go("ntfy")}
-            trailing={<StatusDot on={ntfyEnabled(ntfy)} />}
+            onClick={() => setNotificationsOpen((v) => !v)}
+            trailing={
+              <ChevronDown
+                className={cn(
+                  "size-3.5 text-muted-foreground/70 transition-transform duration-[180ms]",
+                  !notificationsOpen && "-rotate-90",
+                )}
+              />
+            }
           />
+          {notificationsOpen && (
+            <div className="ml-[19px] border-l pl-[11px]">
+              {notifications?.map((backend) => (
+                <button
+                  key={backend.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedNotification(backend.id);
+                    go("notifications");
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-[7px] px-[9px] py-[7px] text-[12.5px] transition-colors",
+                    active === "notifications" && selectedNotification === backend.id
+                      ? "bg-card text-foreground"
+                      : "text-[#e7e5df] hover:bg-card hover:text-foreground",
+                  )}
+                >
+                  <span className="min-w-0 flex-1 truncate text-left">{backend.name}</span>
+                  <span className="font-mono text-[10px] text-muted-foreground">{backend.kind}</span>
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedNotification("new");
+                  go("notifications");
+                }}
+                className="flex w-full items-center gap-2 rounded-[7px] px-[9px] py-[7px] text-[12.5px] text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+              >
+                <Plus className="size-3.5" />
+                Добавить
+              </button>
+            </div>
+          )}
         </nav>
 
         <div className="min-h-0 flex-1 overflow-y-auto scroll-smooth">
@@ -258,32 +293,24 @@ export function SettingsPage() {
               <MemorySection
                 remote={remote}
                 onChange={setRemote}
-                onGoSsh={() => go("ssh")}
               />
             )}
             {active === "ssh" && (
               <SshSection publicKey={publicKey} onChange={setPublicKey} />
             )}
-            {active === "ntfy" && (
-              <NtfySection state={ntfy} onChange={setNtfy} />
+            {active === "notifications" && (
+              <NotificationsSection
+                backends={notifications}
+                selectedId={selectedNotification}
+                onSelect={setSelectedNotification}
+                onChange={setNotifications}
+              />
             )}
           </div>
         </div>
       </div>
     </div>
   );
-}
-
-type NtfyState = {
-  server: string;
-  topic: string;
-  tokenSet: boolean;
-  events: string[];
-};
-
-// Уведомления считаются включёнными, только когда есть куда слать И что слать.
-function ntfyEnabled(state: NtfyState | null): boolean {
-  return Boolean(state?.topic.trim() && state.events.length > 0);
 }
 
 // ─── Общие элементы разделов ──────────────────────────────────────────────────
@@ -738,11 +765,9 @@ function CodexSection({
 function MemorySection({
   remote,
   onChange,
-  onGoSsh,
 }: {
   remote: string | null;
   onChange: (v: string) => void;
-  onGoSsh: () => void;
 }) {
   const [saving, setSaving] = useState(false);
 
@@ -772,7 +797,12 @@ function MemorySection({
       >
         <Description>
           Приватный git-репозиторий заметок: агент читает его в начале сессии и
-          дописывает в конце. Репозиторий один на пользователя и общий для всех агентов.
+          дописывает в конце. Репозиторий один на пользователя и общий для всех агентов. Для
+          git@-remote используется{" "}
+          <Link className="text-foreground underline underline-offset-2" to="/settings/ssh">
+            SSH-ключ агента
+          </Link>{" "}
+          — отдельный ключ не нужен.
         </Description>
       </SectionHeader>
 
@@ -805,15 +835,6 @@ function MemorySection({
           </span>
         </p>
       </div>
-
-      <DangerZone
-        title="Доступ к репозиторию"
-        hint="Для git@-remote используется SSH-ключ агента — отдельный ключ не нужен"
-      >
-        <Button variant="outline" onClick={onGoSsh}>
-          К ключу
-        </Button>
-      </DangerZone>
     </>
   );
 }
@@ -958,98 +979,168 @@ const NTFY_EVENTS: { key: string; label: string; hint: string }[] = [
   },
 ];
 
-function NtfySection({
-  state,
+type NotificationDraft = {
+  id: string;
+  kind: string;
+  name: string;
+  server: string;
+  topic: string;
+  tokenSet: boolean;
+  events: string[];
+};
+
+const emptyNotification = (): NotificationDraft => ({
+  id: "",
+  kind: "ntfy",
+  name: "ntfy",
+  server: "",
+  topic: "",
+  tokenSet: false,
+  events: ["turn_end", "error"],
+});
+
+function NotificationsSection({
+  backends,
+  selectedId,
+  onSelect,
   onChange,
 }: {
-  state: NtfyState | null;
-  onChange: (v: NtfyState) => void;
+  backends: NotificationBackend[] | null;
+  selectedId: string;
+  onSelect: (id: string) => void;
+  onChange: (backends: NotificationBackend[]) => void;
 }) {
-  const [tokenDraft, setTokenDraft] = useState("");
+  const [draft, setDraft] = useState<NotificationDraft>(emptyNotification);
+  const [token, setToken] = useState("");
   const [saving, setSaving] = useState(false);
-  const [tested, setTested] = useState(false);
   const [testing, setTesting] = useState(false);
 
   useEffect(() => {
-    if (!tested) return;
-    const timer = setTimeout(() => setTested(false), 2200);
-    return () => clearTimeout(timer);
-  }, [tested]);
+    if (!backends) return;
+    const selected =
+      selectedId === "new"
+        ? undefined
+        : backends.find((backend) => backend.id === selectedId) ?? backends[0];
+    if (!selected) {
+      setDraft(emptyNotification());
+      return;
+    }
+    if (!selectedId) onSelect(selected.id);
+    setDraft({
+      id: selected.id,
+      kind: selected.kind,
+      name: selected.name,
+      server: selected.ntfy?.server ?? "",
+      topic: selected.ntfy?.topic ?? "",
+      tokenSet: selected.ntfy?.tokenSet ?? false,
+      events: selected.events,
+    });
+    setToken("");
+  }, [backends, selectedId, onSelect]);
 
-  const save = useCallback(async () => {
-    if (!state) return;
+  if (!backends) return <Loading />;
+
+  const patch = (next: Partial<NotificationDraft>) =>
+    setDraft((current) => ({ ...current, ...next }));
+  const toggle = (event: string) =>
+    patch({
+      events: draft.events.includes(event)
+        ? draft.events.filter((item) => item !== event)
+        : [...draft.events, event],
+    });
+
+  const save = async () => {
     setSaving(true);
     try {
-      const res = await authClient.setNtfySettings({
-        server: state.server.trim(),
-        topic: state.topic.trim(),
-        token: tokenDraft,
-        events: state.events,
+      const saved = await notificationClient.saveNotificationBackend({
+        backend: {
+          id: draft.id,
+          kind: draft.kind,
+          name: draft.name.trim(),
+          events: draft.events,
+          ntfy: { server: draft.server.trim(), topic: draft.topic.trim() },
+        },
+        secret: token,
       });
-      onChange({
-        server: res.server,
-        topic: res.topic,
-        tokenSet: res.tokenSet,
-        events: res.events,
-      });
-      setTokenDraft("");
-      toast.success("Настройки уведомлений сохранены");
+      onChange([...backends.filter((item) => item.id !== saved.id), saved]);
+      onSelect(saved.id);
+      setToken("");
+      toast.success("Подключение сохранено");
     } catch (err) {
-      toast.error(errorText(err, "Не удалось сохранить настройки уведомлений"));
+      toast.error(errorText(err, "Не удалось сохранить подключение"));
     } finally {
       setSaving(false);
     }
-  }, [state, tokenDraft, onChange]);
+  };
 
-  // Тест шлётся по СОХРАНЁННЫМ настройкам — сервер других не знает. Поэтому ошибку
-  // показываем как есть: чаще всего это неверный топик или токен.
-  const test = useCallback(async () => {
+  const remove = async () => {
+    if (!draft.id) return;
+    try {
+      await notificationClient.deleteNotificationBackend({ id: draft.id });
+      const next = backends.filter((item) => item.id !== draft.id);
+      onChange(next);
+      onSelect(next[0]?.id ?? "new");
+      toast.success("Подключение удалено");
+    } catch (err) {
+      toast.error(errorText(err, "Не удалось удалить подключение"));
+    }
+  };
+
+  const test = async () => {
     setTesting(true);
     try {
-      await authClient.testNtfy({});
-      setTested(true);
+      await notificationClient.testNotificationBackend({ id: draft.id });
+      toast.success("Тестовое уведомление отправлено");
     } catch (err) {
       toast.error(errorText(err, "Не удалось отправить уведомление"));
     } finally {
       setTesting(false);
     }
-  }, []);
-
-  if (!state) return <Loading />;
-
-  const patch = (next: Partial<NtfyState>) => onChange({ ...state, ...next });
-  const toggle = (key: string) =>
-    patch({
-      events: state.events.includes(key)
-        ? state.events.filter((e) => e !== key)
-        : [...state.events, key],
-    });
+  };
 
   return (
     <>
       <SectionHeader
-        title="Уведомления"
-        badge={
-          <Badge on={ntfyEnabled(state)}>
-            {ntfyEnabled(state) ? "включены" : "выключены"}
-          </Badge>
-        }
+        title={draft.id ? draft.name : "Новое подключение"}
       >
         <Description>
-          Персональный push через <ExternalLink href="https://ntfy.sh">ntfy</ExternalLink>
-          . Подпишитесь на свой топик в приложении ntfy — и получайте уведомления о
-          выбранных событиях сессий.
+          Подключите один или несколько способов доставки. Каждое подключение получает
+          выбранные события независимо от остальных.
         </Description>
       </SectionHeader>
+
+      {!draft.id && (
+        <div className="flex flex-col gap-2">
+          <FieldLabel>Backend</FieldLabel>
+          <Select value={draft.kind} onValueChange={(kind) => patch({ kind })}>
+            <SelectTrigger className="h-[41px] w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ntfy">ntfy</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-2">
+        <FieldLabel>Название</FieldLabel>
+        <Input
+          value={draft.name}
+          onChange={(event) => patch({ name: event.target.value })}
+          placeholder="Рабочий телефон"
+          className="h-[41px] bg-[#1c1b1a]"
+        />
+      </div>
 
       <div className="flex flex-col gap-2">
         <FieldLabel>Топик</FieldLabel>
         <Input
+          value={draft.topic}
+          onChange={(event) => patch({ topic: event.target.value })}
           placeholder="brigade-alerts-a8f3"
           autoComplete="off"
-          value={state.topic}
-          onChange={(e) => patch({ topic: e.target.value })}
-          className="h-[41px] bg-[#1c1b1a] font-mono text-[12.5px] focus-visible:border-[#5a4034]"
+          className="h-[41px] bg-[#1c1b1a] font-mono text-[12.5px]"
         />
         <p className="text-[11.5px] leading-[1.55] text-[#6c695f]">
           Кто знает топик — читает ваши уведомления. Придумайте неочевидный.
@@ -1060,11 +1151,11 @@ function NtfySection({
         <div className="flex flex-col gap-2">
           <FieldLabel>Сервер</FieldLabel>
           <Input
+            value={draft.server}
+            onChange={(event) => patch({ server: event.target.value })}
             placeholder="https://ntfy.sh"
             autoComplete="off"
-            value={state.server}
-            onChange={(e) => patch({ server: e.target.value })}
-            className="h-[41px] bg-[#1c1b1a] font-mono text-[12.5px] focus-visible:border-[#5a4034]"
+            className="h-[41px] bg-[#1c1b1a] font-mono text-[12.5px]"
           />
           <p className="text-[11.5px] leading-[1.55] text-[#6c695f]">
             Пусто — публичный ntfy.sh
@@ -1072,15 +1163,15 @@ function NtfySection({
         </div>
         <div className="flex flex-col gap-2">
           <FieldLabel>
-            {state.tokenSet ? "Новый токен доступа" : "Токен доступа · необязательно"}
+            {draft.tokenSet ? "Новый токен доступа" : "Токен доступа · необязательно"}
           </FieldLabel>
           <Input
             type="password"
-            placeholder={state.tokenSet ? "Пусто — не менять" : "tk_…"}
+            value={token}
+            onChange={(event) => setToken(event.target.value)}
+            placeholder={draft.tokenSet ? "Пусто — не менять" : "tk_…"}
             autoComplete="off"
-            value={tokenDraft}
-            onChange={(e) => setTokenDraft(e.target.value)}
-            className="h-[41px] bg-[#1c1b1a] font-mono text-[12.5px] focus-visible:border-[#5a4034]"
+            className="h-[41px] bg-[#1c1b1a] font-mono text-[12.5px]"
           />
           <SecretNote>Шифруется на сервере, обратно не отдаётся</SecretNote>
         </div>
@@ -1089,18 +1180,18 @@ function NtfySection({
       <div className="flex flex-col gap-2">
         <FieldLabel>События</FieldLabel>
         <div className="divide-y overflow-hidden rounded-[11px] border bg-[#1c1b1a]">
-          {NTFY_EVENTS.map((ev) => (
+          {NTFY_EVENTS.map((event) => (
             <button
-              key={ev.key}
+              key={event.key}
               type="button"
-              onClick={() => toggle(ev.key)}
+              onClick={() => toggle(event.key)}
               className="flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-[#232221]"
             >
               <span className="min-w-0 flex-1">
-                <span className="block text-[13px]">{ev.label}</span>
-                <span className="block text-[11.5px] text-[#6c695f]">{ev.hint}</span>
+                <span className="block text-[13px]">{event.label}</span>
+                <span className="block text-[11.5px] text-[#6c695f]">{event.hint}</span>
               </span>
-              <Toggle on={state.events.includes(ev.key)} />
+              <Toggle on={draft.events.includes(event.key)} />
             </button>
           ))}
         </div>
@@ -1108,32 +1199,28 @@ function NtfySection({
 
       <div className="flex items-center gap-2">
         <Button
-          className="h-[38px]"
-          disabled={saving || !state.topic.trim()}
+          disabled={saving || !draft.name.trim() || !draft.topic.trim()}
           onClick={() => void save()}
         >
           {saving && <Loader2 className="size-4 animate-spin" />}
           Сохранить
         </Button>
-        <Button
-          variant="outline"
-          className="h-[38px] gap-1.5"
-          disabled={testing || !state.topic.trim()}
-          onClick={() => void test()}
-        >
-          {testing ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <Send className="size-3.5" />
-          )}
-          Тестовый push
-        </Button>
-        {tested && <span className="text-xs text-[#8dbf82]">Отправлено</span>}
+        {draft.id && (
+          <>
+            <Button variant="outline" disabled={testing} onClick={() => void test()}>
+              {testing ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+              Тест
+            </Button>
+            <Button variant="ghost" className="ml-auto text-destructive" onClick={() => void remove()}>
+              <Trash2 className="size-4" />
+              Удалить
+            </Button>
+          </>
+        )}
       </div>
     </>
   );
 }
-
 // Toggle — переключатель события. Своя разметка, а не чекбокс: строка целиком служит
 // кнопкой, а переключателю нужен только вид состояния.
 function Toggle({ on }: { on: boolean }) {
