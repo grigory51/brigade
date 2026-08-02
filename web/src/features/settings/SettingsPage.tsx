@@ -28,6 +28,13 @@ import { toast } from "sonner";
 import { authClient, mcpClient } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { TerminalOutput } from "@/features/terminal/TerminalView";
 import { EnvironmentSection } from "./EnvironmentSection";
@@ -475,6 +482,7 @@ function CodexSection({
 }) {
   const [apiKey, setApiKey] = useState("");
   const [authJSON, setAuthJSON] = useState("");
+  const [authMethod, setAuthMethod] = useState("");
   const [saving, setSaving] = useState(false);
   const [loginId, setLoginId] = useState("");
   const [loginOutput, setLoginOutput] = useState("");
@@ -547,6 +555,11 @@ function CodexSection({
     state.chatgptConnected && "chatgpt",
     state.apiKeySet && "api-key",
   ].filter(Boolean) as string[];
+  const selectedMethod =
+    authMethod ||
+    (profiles.includes(state.defaultProfile)
+      ? state.defaultProfile
+      : profiles[0] || "chatgpt");
   return (
     <>
       <div className="flex items-center gap-1.5 text-[11.5px] text-[#7a776f]">
@@ -575,6 +588,30 @@ function CodexSection({
         </Description>
 
         <div className="flex flex-col gap-2">
+          <FieldLabel>Способ авторизации</FieldLabel>
+          <Select
+            value={selectedMethod}
+            onValueChange={(profile) => {
+              setAuthMethod(profile);
+              if (profiles.includes(profile)) {
+                void run(
+                  () => authClient.setCodexDefaultProfile({ profile }),
+                  "Способ авторизации изменён",
+                );
+              }
+            }}
+          >
+            <SelectTrigger className="h-[41px] w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="chatgpt">ChatGPT Plus</SelectItem>
+              <SelectItem value="api-key">OpenAI API Key</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {selectedMethod === "chatgpt" && <div className="flex flex-col gap-2">
         <FieldLabel>ChatGPT Plus</FieldLabel>
         <Description>
           Device login откроет официальный поток Codex: перейдите по адресу из инструкции
@@ -648,9 +685,9 @@ function CodexSection({
             Файл принимается по защищённому соединению и сохраняется в vault; API никогда
             не возвращает его содержимое
           </SecretNote>
-        </div>
+        </div>}
 
-        <div className="flex flex-col gap-2">
+        {selectedMethod === "api-key" && <div className="flex flex-col gap-2">
           <FieldLabel>OpenAI API key</FieldLabel>
           <div className="flex gap-2">
             <Input
@@ -690,35 +727,7 @@ function CodexSection({
               </Button>
             )}
           </div>
-        </div>
-
-        {profiles.length > 1 && (
-          <div className="flex flex-col gap-2">
-            <FieldLabel>По умолчанию для новых сессий</FieldLabel>
-            <div className="inline-flex w-fit rounded-lg bg-[#1c1b1a] p-1">
-              {profiles.map((profile) => (
-                <button
-                  key={profile}
-                  type="button"
-                  onClick={() =>
-                    void run(
-                      () => authClient.setCodexDefaultProfile({ profile }),
-                      "Профиль по умолчанию изменён",
-                    )
-                  }
-                  className={cn(
-                    "rounded-md px-3 py-1.5 text-sm transition-colors",
-                    state.defaultProfile === profile
-                      ? "bg-card text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {profile === "chatgpt" ? "ChatGPT Plus" : "API key"}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        </div>}
       </div>
     </>
   );
