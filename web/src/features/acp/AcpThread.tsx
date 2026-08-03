@@ -355,8 +355,8 @@ function Disclosure({
 // prettyArgs приводит сырой текст аргументов tool-call к читаемому виду. Аргументы
 // стримятся строкой: валидный JSON форматируем с отступами, пустой объект считаем
 // отсутствием аргументов, недостроенную строку показываем как есть.
-function prettyArgs(argsText: string): string | null {
-  const raw = argsText.trim();
+function prettyArgs(argsText?: string): string | null {
+  const raw = argsText?.trim() ?? "";
   if (!raw || raw === "{}" || raw === "[]" || raw === "null") return null;
   try {
     const parsed = JSON.parse(raw) as unknown;
