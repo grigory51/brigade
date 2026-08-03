@@ -142,7 +142,10 @@ func (c *Client) translateUpdate(u acpsdk.SessionUpdate) []agui.Event {
 			if hasDiffContent(tu) {
 				st.result, st.isDiff = content, true
 				st.diffs = diffData(tu)
-			} else if materialized, found, err := MaterializeGeneratedImages(c.opts.Cwd, id, content); found {
+			} else if materialized, found, err := MaterializeGeneratedImages(c.opts.Cwd, id, rawJSON(map[string]any{
+				"output":  tu.RawOutput,
+				"content": tu.Content,
+			})); found {
 				if err != nil {
 					log.Printf("acp: materialize generated image %s: %v", id, err)
 				} else {

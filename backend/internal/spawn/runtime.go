@@ -202,7 +202,8 @@ func (s *DockerSpawner) runtimeMounts(ctx context.Context, layers []agent.Layer)
 
 // ensureRuntimeVolume создаёт volume слоя и наполняет его из базового образа. Имя включает
 // digest базового образа, поэтому обновление brigade даёт новые volume'ы, а не смешивает
-// компоненты разных версий. Уже наполненные в этом процессе volume'ы пропускаются.
+// компоненты разных версий. Volume immutable: если он уже существует, его могли
+// смонтировать живые контейнеры, поэтому повторно копировать поверх бинарей нельзя.
 func (s *DockerSpawner) ensureRuntimeVolume(ctx context.Context, name, layer string) error {
 	s.runtimeMu.Lock()
 	defer s.runtimeMu.Unlock()
@@ -211,6 +212,12 @@ func (s *DockerSpawner) ensureRuntimeVolume(ctx context.Context, name, layer str
 	}
 	if s.runtimeReady[name] {
 		return nil
+	}
+	if _, err := s.cli.VolumeInspect(ctx, name); err == nil {
+		s.runtimeReady[name] = true
+		return nil
+	} else if !client.IsErrNotFound(err) {
+		return fmt.Errorf("spawn: inspect runtime volume %s: %w", name, err)
 	}
 	if _, err := s.cli.VolumeCreate(ctx, volume.CreateOptions{Name: name}); err != nil {
 		return fmt.Errorf("spawn: runtime volume %s: %w", name, err)
@@ -222,11 +229,13 @@ func (s *DockerSpawner) ensureRuntimeVolume(ctx context.Context, name, layer str
 		[]mount.Mount{{Type: mount.TypeVolume, Source: name, Target: "/out"}},
 		[]string{"sh", "-c", fmt.Sprintf("test -d %s && cp -a %s/. /out/", src, src)})
 	if err != nil {
-		// Обычная причина — образ агента собран версией brigade без runtime-слоёв: их
-		// раскладывает docker/agent/Dockerfile, и после обновления brigade образ
-		// нужно пересобрать.
-		return fmt.Errorf("spawn: в образе %s нет runtime-слоя %q (%s: %w) — пересоберите образ агента: docker build -t %s -f docker/agent/Dockerfile .",
-			s.baseImage, layer, strings.TrimSpace(out), err, s.baseImage)
+		_ = s.cli.VolumeRemove(context.WithoutCancel(ctx), name, true)
+		if strings.TrimSpace(out) == "" {
+			return fmt.Errorf("spawn: в образе %s нет runtime-слоя %q — пересоберите образ агента: docker build -t %s -f docker/agent/Dockerfile .",
+				s.baseImage, layer, s.baseImage)
+		}
+		return fmt.Errorf("spawn: наполнить runtime-слой %q из образа %s: %s: %w",
+			layer, s.baseImage, strings.TrimSpace(out), err)
 	}
 	s.runtimeReady[name] = true
 	return nil

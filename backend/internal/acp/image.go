@@ -35,10 +35,29 @@ type generatedImageResult struct {
 func GeneratedImages(result string) []GeneratedImage {
 	const prefix = "data:image/"
 	var images []GeneratedImage
+	seen := map[[32]byte]bool{}
+	appendImage := func(mimeType, encoded string) {
+		if mimeType != "image/png" && mimeType != "image/jpeg" && mimeType != "image/webp" {
+			return
+		}
+		if encoded == "" || base64.StdEncoding.DecodedLen(len(encoded)) > maxGeneratedImageBytes {
+			return
+		}
+		data, err := base64.StdEncoding.DecodeString(encoded)
+		if err != nil {
+			return
+		}
+		hash := sha256.Sum256(data)
+		if seen[hash] {
+			return
+		}
+		seen[hash] = true
+		images = append(images, GeneratedImage{MIMEType: mimeType, Data: data})
+	}
 	for offset := 0; ; {
 		start := strings.Index(result[offset:], prefix)
 		if start < 0 {
-			return images
+			break
 		}
 		start += offset
 		separator := strings.Index(result[start:], ";base64,")
@@ -48,23 +67,43 @@ func GeneratedImages(result string) []GeneratedImage {
 		}
 		separator += start
 		mimeType := result[start+len("data:") : separator]
-		if mimeType != "image/png" && mimeType != "image/jpeg" && mimeType != "image/webp" {
-			offset = separator + len(";base64,")
-			continue
-		}
 		dataStart := separator + len(";base64,")
 		dataEnd := dataStart
 		for dataEnd < len(result) && isBase64(result[dataEnd]) {
 			dataEnd++
 		}
-		encoded := result[dataStart:dataEnd]
-		if encoded != "" && base64.StdEncoding.DecodedLen(len(encoded)) <= maxGeneratedImageBytes {
-			if data, err := base64.StdEncoding.DecodeString(encoded); err == nil {
-				images = append(images, GeneratedImage{MIMEType: mimeType, Data: data})
-			}
-		}
+		appendImage(mimeType, result[dataStart:dataEnd])
 		offset = dataEnd
 	}
+
+	var decoded any
+	if json.Unmarshal([]byte(result), &decoded) == nil {
+		var walk func(any)
+		walk = func(value any) {
+			switch value := value.(type) {
+			case []any:
+				for _, item := range value {
+					walk(item)
+				}
+			case map[string]any:
+				mimeType, _ := value["mimeType"].(string)
+				if mimeType == "" {
+					mimeType, _ = value["mime_type"].(string)
+				}
+				if mimeType == "" {
+					mimeType, _ = value["media_type"].(string)
+				}
+				if data, ok := value["data"].(string); ok && !strings.HasPrefix(data, "data:") {
+					appendImage(mimeType, data)
+				}
+				for _, item := range value {
+					walk(item)
+				}
+			}
+		}
+		walk(decoded)
+	}
+	return images
 }
 
 // MaterializeGeneratedImages заменяет встроенные data URL небольшими ссылками на файлы
