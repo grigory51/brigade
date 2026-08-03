@@ -9,6 +9,7 @@ jobs:
     runs-on: [self-hosted, brigade]
     container: ubuntu:24.04
     steps:
+      - run: apt-get update && apt-get install -y --no-install-recommends ca-certificates build-essential
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
@@ -25,6 +26,7 @@ jobs:
     runs-on: [self-hosted, brigade]
     container: ubuntu:24.04
     steps:
+      - run: apt-get update && apt-get install -y --no-install-recommends ca-certificates
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -43,6 +45,7 @@ jobs:
     container: ubuntu:24.04
     needs: [backend, web]
     steps:
+      - run: apt-get update && apt-get install -y --no-install-recommends ca-certificates make
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
