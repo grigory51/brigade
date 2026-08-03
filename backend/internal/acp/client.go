@@ -26,11 +26,6 @@ const gracefulCloseTimeout = 4 * time.Second
 // Это agent-side ACP поверх Claude Agent SDK: brigade говорит с ним на стандартном ACP.
 const adapterBinary = "claude-agent-acp"
 
-// historyCap — максимальное число AG-UI событий, удерживаемых в ленте сессии для
-// воспроизведения новому подключению. При превышении самые старые события
-// отбрасываются; этого хвоста достаточно, чтобы рефреш восстановил недавний чат.
-const historyCap = 2000
-
 // EventSink принимает транслированные AG-UI-события для отправки клиенту. Реализуется
 // транспортом (agui): пишет событие в SSE-поток. Возврат ошибки означает, что канал
 // к клиенту мёртв; ACP-клиент в этом случае прекращает попытки доставки.
@@ -132,6 +127,9 @@ type Client struct {
 	// sink/resolver — текущая привязка к WS-сеансу. nil вне сеанса (см. emit/resolve).
 	sink     EventSink
 	resolver PermissionResolver
+	// turnResolver задаёт политику разрешений конкретного автоматического turn'а, не
+	// перехватывая sink/resolver открытого web-чата. Доступ только под mu.
+	turnResolver PermissionResolver
 	// history — лента ранее отправленных AG-UI событий сессии. В SSE-поток при Bind
 	// НЕ реплеится (это ломало агрегатор клиента) — служит источником для Messages(),
 	// по которому AcpService.GetHistory восстанавливает ленту массивом сообщений.
@@ -623,13 +621,12 @@ func (c *Client) emit(evt agui.Event) {
 	_ = sink(evt)
 }
 
-// appendHistoryLocked добавляет событие в ленту с соблюдением historyCap. Вызывается под
-// c.mu.
+// appendHistoryLocked добавляет событие в ленту. Обрезать сырые события нельзя: один
+// длинный ответ содержит тысячи CONTENT-чанков, и удаление его START делает всю
+// проекцию Messages пустой. В docker-режиме те же события уже полностью хранятся в
+// eventlog, поэтому отдельный лимит здесь не сокращал фактическое потребление памяти.
 func (c *Client) appendHistoryLocked(evt agui.Event) {
 	c.history = append(c.history, evt)
-	if len(c.history) > historyCap {
-		c.history = c.history[len(c.history)-historyCap:]
-	}
 }
 
 // recordUserMessage кладёт реплику пользователя в ленту истории как самодостаточную
@@ -680,14 +677,32 @@ func (c *Client) WriteFile(_ context.Context, rel string, content []byte) error 
 // дёргает OnTurnEnd (push-уведомление реестра). Служебные turn'ы (Summarize) идут мимо неё,
 // напрямую через prompt(), чтобы recap-архивации не слал уведомление.
 func (c *Client) Prompt(ctx context.Context, text string, onTurnStart func()) (stopReason string, err error) {
-	stopReason, err = c.prompt(ctx, text, onTurnStart)
+	stopReason, err = c.prompt(ctx, text, onTurnStart, nil)
 	if c.OnTurnEnd != nil {
 		c.OnTurnEnd(stopReason, err)
 	}
 	return stopReason, err
 }
 
-func (c *Client) prompt(ctx context.Context, text string, onTurnStart func()) (stopReason string, err error) {
+// PromptAutoApprove запускает turn внешнего персонального интерфейса. Разрешается только
+// одноразовый вариант allow_once; постоянные и запрещающие варианты не выбираются.
+func (c *Client) PromptAutoApprove(ctx context.Context, text string, onTurnStart func()) (stopReason string, err error) {
+	resolver := func(_ context.Context, req agui.PermissionRequest) (string, error) {
+		for _, option := range req.Options {
+			if option.Kind == string(acpsdk.PermissionOptionKindAllowOnce) {
+				return option.OptionID, nil
+			}
+		}
+		return "", fmt.Errorf("acp: permission %s has no allow_once option", req.ID)
+	}
+	stopReason, err = c.prompt(ctx, text, onTurnStart, resolver)
+	if c.OnTurnEnd != nil {
+		c.OnTurnEnd(stopReason, err)
+	}
+	return stopReason, err
+}
+
+func (c *Client) prompt(ctx context.Context, text string, onTurnStart func(), resolver PermissionResolver) (stopReason string, err error) {
 	// Сериализуем turn'ы: пока идёт один Prompt, следующий ждёт. Иначе потоковые события
 	// двух turn'ов смешались бы в общем sink (см. promptMu).
 	c.promptMu.Lock()
@@ -695,6 +710,7 @@ func (c *Client) prompt(ctx context.Context, text string, onTurnStart func()) (s
 
 	c.mu.Lock()
 	c.promptActive = true
+	c.turnResolver = resolver
 	// Новый turn — сбрасываем якорь группировки tool call'ов: его задаст первое
 	// ассистентское сообщение этого turn'а (см. translate.go, turnMsgID).
 	c.turnMsgID = ""
@@ -717,6 +733,7 @@ func (c *Client) prompt(ctx context.Context, text string, onTurnStart func()) (s
 	defer func() {
 		c.mu.Lock()
 		c.promptActive = false
+		c.turnResolver = nil
 		c.mu.Unlock()
 	}()
 
@@ -774,7 +791,7 @@ func (c *Client) Summarize(ctx context.Context, prompt string) (string, error) {
 	unbind := c.Bind(sink, nil)
 	defer unbind()
 	// Через внутренний prompt(), а не Prompt: recap-архивации не должен слать push-уведомление.
-	if _, err := c.prompt(ctx, prompt, nil); err != nil {
+	if _, err := c.prompt(ctx, prompt, nil, nil); err != nil {
 		return "", err
 	}
 	mu.Lock()

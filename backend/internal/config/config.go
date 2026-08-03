@@ -5,6 +5,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,9 +70,17 @@ type Config struct {
 	// снимает ограничение.
 	ImageQuotaBytes int64 `koanf:"image_quota_bytes"`
 
-	Preview PreviewConfig `koanf:"preview"`
-	TLS     TLSConfig     `koanf:"tls"`
-	Memory  MemoryConfig  `koanf:"memory"`
+	Preview  PreviewConfig  `koanf:"preview"`
+	TLS      TLSConfig      `koanf:"tls"`
+	Memory   MemoryConfig   `koanf:"memory"`
+	Telegram TelegramConfig `koanf:"telegram"`
+}
+
+// TelegramConfig задаёт способ получения updates для всех пользовательских ботов
+// инстанса. В desktop mode принудительно используется poll.
+type TelegramConfig struct {
+	Mode       string `koanf:"mode"`
+	WebhookURL string `koanf:"webhook_url"`
 }
 
 // MemoryConfig — личная память пользователя (git-репо заметок). Источник истины — файлы.
@@ -273,6 +282,19 @@ func (c *Config) Validate() error {
 		if c.TLS.CertFile == "" || c.TLS.KeyFile == "" {
 			return fmt.Errorf("config: tls.cert_file and tls.key_file are required when tls.addr is set")
 		}
+	}
+
+	switch c.Telegram.Mode {
+	case "", "poll":
+		c.Telegram.Mode = "poll"
+	case "webhook":
+		u, err := url.Parse(c.Telegram.WebhookURL)
+		if err != nil || u.Scheme != "https" || u.Host == "" || u.RawQuery != "" || u.Fragment != "" {
+			return fmt.Errorf("config: telegram.webhook_url must be an absolute https URL")
+		}
+		c.Telegram.WebhookURL = strings.TrimRight(c.Telegram.WebhookURL, "/")
+	default:
+		return fmt.Errorf("config: invalid telegram.mode %q (expected poll or webhook)", c.Telegram.Mode)
 	}
 
 	// Личная память: база пер-юзерных рабочих копий. Нормализуем к абсолютному пути (её

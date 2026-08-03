@@ -56,6 +56,13 @@ image_quota_bytes: 1073741824
 # (Настройки → Claude).
 agent_home_dir: ""
 
+# Telegram-боты принадлежат пользователям; здесь задаётся только транспорт updates для
+# всего инстанса. Desktop всегда использует poll. Для webhook укажите публичный HTTPS URL
+# до Telegram-handler без идентификатора бота.
+telegram:
+  mode: poll
+  webhook_url: "https://brigade.example.com/api/telegram"
+
 # Публикация dev-серверов сессий через встроенный L7-прокси: запрос на
 # {sessionId}-{port}.{domain} проксируется к порту сессии (local — 127.0.0.1,
 # docker — IP контейнера).

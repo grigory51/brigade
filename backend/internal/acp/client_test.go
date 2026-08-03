@@ -64,21 +64,18 @@ func TestEmitLastWins(t *testing.T) {
 	}
 }
 
-// TestEmitHistoryCap проверяет соблюдение historyCap: при переполнении отбрасывается
-// голова, хвост сохраняется.
-func TestEmitHistoryCap(t *testing.T) {
+// TestLongMessageSurvivesHistory проверяет регрессию, при которой лимит сырых событий
+// удалял TEXT_MESSAGE_START длинного ответа и GetHistory возвращал пустую переписку.
+func TestLongMessageSurvivesHistory(t *testing.T) {
 	c := &Client{}
-	total := historyCap + 10
-	for i := 0; i < total; i++ {
-		c.emit(agui.Event{Type: agui.EventTextMessageContent, MessageID: "m", Delta: string(rune('a' + i%26))})
+	c.emit(agui.Event{Type: agui.EventTextMessageStart, MessageID: "m", Role: "assistant"})
+	for i := 0; i < 2500; i++ {
+		c.emit(agui.Event{Type: agui.EventTextMessageContent, MessageID: "m", Delta: "a"})
 	}
-	if len(c.history) != historyCap {
-		t.Fatalf("len(history) = %d, want %d (кап)", len(c.history), historyCap)
-	}
-	// Первым в срезе должно остаться событие с индексом total-historyCap: голова отброшена.
-	wantFirst := string(rune('a' + (total-historyCap)%26))
-	if c.history[0].Delta != wantFirst {
-		t.Errorf("history[0].Delta = %q, want %q (голова отброшена)", c.history[0].Delta, wantFirst)
+	c.emit(agui.Event{Type: agui.EventTextMessageEnd, MessageID: "m"})
+	messages := c.Messages()
+	if len(messages) != 1 || len(messages[0].Content) != 2500 {
+		t.Fatalf("Messages() = %+v, want one complete long message", messages)
 	}
 }
 

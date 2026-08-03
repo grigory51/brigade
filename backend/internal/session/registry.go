@@ -145,6 +145,7 @@ func (r *Registry) Run(ctx context.Context, userID string, output io.Writer) ([]
 type acpSession interface {
 	Bind(sink acp.EventSink, resolver acp.PermissionResolver) (unbind func())
 	Prompt(ctx context.Context, text string, onTurnStart func()) (stopReason string, err error)
+	PromptAutoApprove(ctx context.Context, text string, onTurnStart func()) (stopReason string, err error)
 	Cancel(ctx context.Context) error
 	FinishStreams()
 	Messages() []acp.Message
@@ -1385,6 +1386,34 @@ func (r *Registry) EnsureACPClient(ctx context.Context, sessionID, userID string
 		_ = old.client.Close() // старый поток мёртв — отцепляем без ожидания
 	}
 	return newLv.client, true
+}
+
+// PromptAutoApprove отправляет prompt в ACP-сессию из доверенного персонального канала
+// и возвращает только текст ответа ассистента. История остаётся общей с web-чатом.
+func (r *Registry) PromptAutoApprove(ctx context.Context, sessionID, userID, text string) (string, error) {
+	client, ok := r.EnsureACPClient(ctx, sessionID, userID)
+	if !ok {
+		return "", store.ErrNotFound
+	}
+	if _, err := client.PromptAutoApprove(ctx, text, nil); err != nil {
+		return "", err
+	}
+	messages := client.Messages()
+	start := len(messages)
+	for start > 0 {
+		start--
+		if messages[start].Role == "user" {
+			start++
+			break
+		}
+	}
+	var parts []string
+	for _, message := range messages[start:] {
+		if message.Role == "assistant" && strings.TrimSpace(message.Content) != "" {
+			parts = append(parts, strings.TrimSpace(message.Content))
+		}
+	}
+	return strings.Join(parts, "\n\n"), nil
 }
 
 // acpAlive проверяет живость среды ACP-сессии: docker — существует ли запущенный контейнер

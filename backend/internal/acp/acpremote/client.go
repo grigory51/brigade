@@ -185,12 +185,21 @@ func (c *Client) streamLoop(ctx context.Context, gen uint64, from int64) {
 // Prompt гонит turn через демон. onTurnStart (привязка sink нового прогона) вызывается под
 // turn-барьером до RPC, как в acp.Client.Prompt.
 func (c *Client) Prompt(ctx context.Context, text string, onTurnStart func()) (string, error) {
+	return c.prompt(ctx, text, onTurnStart, false)
+}
+
+// PromptAutoApprove запускает turn с одноразовыми разрешениями внутри durable-демона.
+func (c *Client) PromptAutoApprove(ctx context.Context, text string, onTurnStart func()) (string, error) {
+	return c.prompt(ctx, text, onTurnStart, true)
+}
+
+func (c *Client) prompt(ctx context.Context, text string, onTurnStart func(), autoAllowOnce bool) (string, error) {
 	c.promptMu.Lock()
 	defer c.promptMu.Unlock()
 	if onTurnStart != nil {
 		onTurnStart()
 	}
-	resp, err := c.RPC.Prompt(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonPromptRequest{Text: text}))
+	resp, err := c.RPC.Prompt(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonPromptRequest{Text: text, AutoAllowOnce: autoAllowOnce}))
 	stopReason := ""
 	if resp != nil {
 		stopReason = resp.Msg.StopReason

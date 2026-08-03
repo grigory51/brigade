@@ -67,6 +67,52 @@ type NotificationBackend struct {
 	Events string
 }
 
+// TelegramBot — персональный бот пользователя и шаблон ACP-сессий, создаваемых из
+// Telegram. Token расшифровывается только внутри backend и никогда не возвращается в API.
+type TelegramBot struct {
+	ID                    string
+	UserID                string
+	Token                 string
+	TelegramID            int64
+	Username              string
+	Name                  string
+	OwnerTelegramID       int64
+	OwnerTelegramUsername string
+	AgentType             string
+	AuthProfile           string
+	Image                 string
+	McpServers            []string
+	BindTokenHash         string
+	BindTokenExpiresAt    time.Time
+	UpdateOffset          int64
+	SupportsGuestQueries  bool
+	HasTopicsEnabled      bool
+	CreatedAt             time.Time
+}
+
+// TelegramUpdate — durable inbox: Telegram подтверждается после записи сюда, а не после
+// долгого ACP-turn. Состояние ready означает, что ответ агента уже сохранён и его можно
+// безопасно повторно доставить после рестарта.
+type TelegramUpdate struct {
+	BotID     string
+	UpdateID  int64
+	Payload   string
+	State     string
+	Response  string
+	Error     string
+	CreatedAt time.Time
+}
+
+// TelegramConversation связывает Telegram-топик с одной Brigade-сессией. Scope разделяет
+// обычные и guest-чаты: Telegram предупреждает, что их chat_id могут совпадать.
+type TelegramConversation struct {
+	BotID     string
+	Scope     string
+	ChatID    int64
+	ThreadID  int64
+	SessionID string
+}
+
 // Session — сессия агента. Поля agent_session_id и container_label несут
 // данные для восстановления (resume) после рестарта бэкенда.
 type Session struct {

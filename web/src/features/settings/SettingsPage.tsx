@@ -27,8 +27,9 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { authClient, mcpClient, notificationClient } from "@/api/client";
+import { authClient, mcpClient, notificationClient, telegramClient } from "@/api/client";
 import type { NotificationBackend } from "@/api/gen/brigade/v1/notification_pb";
+import type { TelegramBot } from "@/api/gen/brigade/v1/telegram_pb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -42,6 +43,7 @@ import { cn } from "@/lib/utils";
 import { TerminalOutput } from "@/features/terminal/TerminalView";
 import { EnvironmentSection } from "./EnvironmentSection";
 import { McpSection } from "./McpSection";
+import { TelegramSection } from "./TelegramSection";
 import {
   Badge,
   Code,
@@ -52,6 +54,7 @@ import {
   Loading,
   SecretNote,
   SectionHeader,
+  Toggle,
   errorText,
 } from "./ui";
 
@@ -68,9 +71,9 @@ import {
  * в поле всегда пустой драфт, а состояние показывается флагом «задан».
  */
 
-type SectionId = "claude" | "codex" | "mcp" | "env" | "memory" | "ssh" | "notifications";
+type SectionId = "claude" | "codex" | "mcp" | "env" | "memory" | "ssh" | "notifications" | "telegram";
 
-const SECTIONS: SectionId[] = ["claude", "codex", "mcp", "env", "memory", "ssh", "notifications"];
+const SECTIONS: SectionId[] = ["claude", "codex", "mcp", "env", "memory", "ssh", "notifications", "telegram"];
 
 const AGENTS_OPEN_KEY = "brigade.settings.agentsOpen";
 
@@ -89,6 +92,8 @@ export function SettingsPage() {
   );
   const [notificationsOpen, setNotificationsOpen] = useState(true);
   const [selectedNotification, setSelectedNotification] = useState("");
+  const [integrationsOpen, setIntegrationsOpen] = useState(true);
+  const [selectedTelegram, setSelectedTelegram] = useState("");
   useEffect(() => {
     localStorage.setItem(AGENTS_OPEN_KEY, agentsOpen ? "1" : "0");
   }, [agentsOpen]);
@@ -101,6 +106,8 @@ export function SettingsPage() {
   const [remote, setRemote] = useState<string | null>(null);
   const [publicKey, setPublicKey] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationBackend[] | null>(null);
+  const [telegramBots, setTelegramBots] = useState<TelegramBot[] | null>(null);
+  const [telegramMode, setTelegramMode] = useState("poll");
   // Счётчик серверов держится здесь ради точки в навигации; сам раздел грузит свои
   // данные и сообщает изменения наверх.
   const [mcpCount, setMcpCount] = useState(0);
@@ -130,6 +137,14 @@ export function SettingsPage() {
       .listServers({})
       .then((r) => alive && setMcpCount(r.servers.length))
       .catch(() => alive && setMcpCount(0));
+    void telegramClient
+      .listBots({})
+      .then((r) => {
+        if (!alive) return;
+        setTelegramBots(r.bots);
+        setTelegramMode(r.mode);
+      })
+      .catch(() => alive && setTelegramBots([]));
     return () => {
       alive = false;
     };
@@ -225,6 +240,54 @@ export function SettingsPage() {
             trailing={<StatusDot on={Boolean(publicKey)} />}
           />
           <NavRow
+            icon={Send}
+            label="Интеграции"
+            onClick={() => setIntegrationsOpen((value) => !value)}
+            trailing={
+              <ChevronDown
+                className={cn(
+                  "size-3.5 text-muted-foreground/70 transition-transform duration-[180ms]",
+                  !integrationsOpen && "-rotate-90",
+                )}
+              />
+            }
+          />
+          {integrationsOpen && (
+            <div className="ml-[19px] border-l pl-[11px]">
+              {telegramBots?.map((bot) => (
+                <button
+                  key={bot.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedTelegram(bot.id);
+                    go("telegram");
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-[7px] px-[9px] py-[7px] text-[12.5px] transition-colors",
+                    active === "telegram" && selectedTelegram === bot.id
+                      ? "bg-card text-foreground"
+                      : "text-[#e7e5df] hover:bg-card hover:text-foreground",
+                  )}
+                >
+                  <img src="https://cdn.simpleicons.org/telegram" alt="" className="size-3.5" />
+                  <span className="min-w-0 flex-1 truncate text-left">@{bot.username}</span>
+                  <StatusDot on={bot.ownerConnected} />
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedTelegram("new");
+                  go("telegram");
+                }}
+                className="flex w-full items-center gap-2 rounded-[7px] px-[9px] py-[7px] text-[12.5px] text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+              >
+                <Plus className="size-3.5" />
+                Добавить Telegram-бота
+              </button>
+            </div>
+          )}
+          <NavRow
             icon={Bell}
             label="Уведомления"
             onClick={() => setNotificationsOpen((v) => !v)}
@@ -304,6 +367,15 @@ export function SettingsPage() {
                 selectedId={selectedNotification}
                 onSelect={setSelectedNotification}
                 onChange={setNotifications}
+              />
+            )}
+            {active === "telegram" && (
+              <TelegramSection
+                bots={telegramBots}
+                mode={telegramMode}
+                selectedId={selectedTelegram}
+                onSelect={setSelectedTelegram}
+                onChange={setTelegramBots}
               />
             )}
           </div>
@@ -1219,24 +1291,5 @@ function NotificationsSection({
         )}
       </div>
     </>
-  );
-}
-// Toggle — переключатель события. Своя разметка, а не чекбокс: строка целиком служит
-// кнопкой, а переключателю нужен только вид состояния.
-function Toggle({ on }: { on: boolean }) {
-  return (
-    <span
-      className={cn(
-        "flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors duration-200",
-        on ? "bg-primary" : "bg-secondary",
-      )}
-    >
-      <span
-        className={cn(
-          "size-4 rounded-full bg-white transition-transform duration-200 ease-[cubic-bezier(.25,1,.4,1)]",
-          on && "translate-x-4",
-        )}
-      />
-    </span>
   );
 }

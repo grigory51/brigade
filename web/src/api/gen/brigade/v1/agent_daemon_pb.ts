@@ -538,6 +538,13 @@ export class DaemonPromptRequest extends Message<DaemonPromptRequest> {
    */
   text = "";
 
+  /**
+   * auto_allow_once — выбрать одноразовое разрешение без интерактивного клиента.
+   *
+   * @generated from field: bool auto_allow_once = 2;
+   */
+  autoAllowOnce = false;
+
   constructor(data?: PartialMessage<DaemonPromptRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -547,6 +554,7 @@ export class DaemonPromptRequest extends Message<DaemonPromptRequest> {
   static readonly typeName = "brigade.v1.DaemonPromptRequest";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "text", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "auto_allow_once", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaemonPromptRequest {

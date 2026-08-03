@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package brigade.v1;
+
+import "brigade/v1/auth.proto";
+
+// TelegramBot — пользовательский бот и шаблон создаваемых им ACP-сессий.
+message TelegramBot {
+  string id = 1;
+  string username = 2;
+  string name = 3;
+  bool token_set = 4;
+  bool owner_connected = 5;
+  string owner_username = 6;
+  string agent_type = 7;
+  string auth_profile = 8;
+  string image = 9;
+  repeated string mcp_server_ids = 10;
+  bool supports_guest_queries = 11;
+  bool has_topics_enabled = 12;
+}
+
+message ListTelegramBotsResponse {
+  repeated TelegramBot bots = 1;
+  // poll|webhook — задано конфигурацией инстанса; Desktop всегда poll.
+  string mode = 2;
+}
+
+message SaveTelegramBotRequest {
+  TelegramBot bot = 1;
+  // Новый BotFather token. Пустой сохраняет прежний токен существующего бота.
+  string token = 2;
+}
+
+message TelegramBotRequest {
+  string id = 1;
+}
+
+message TelegramBindingLink {
+  string url = 1;
+  int64 expires_at = 2;
+}
+
+service TelegramService {
+  rpc ListBots(Empty) returns (ListTelegramBotsResponse) {}
+  rpc SaveBot(SaveTelegramBotRequest) returns (TelegramBot) {}
+  rpc DeleteBot(TelegramBotRequest) returns (Empty) {}
+  rpc CreateBindingLink(TelegramBotRequest) returns (TelegramBindingLink) {}
+}

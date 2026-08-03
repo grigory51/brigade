@@ -124,6 +124,25 @@ export function Loading() {
   );
 }
 
+// Toggle — визуальное состояние строки-кнопки; отдельного вложенного checkbox нет.
+export function Toggle({ on }: { on: boolean }) {
+  return (
+    <span
+      className={cn(
+        "flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors duration-200",
+        on ? "bg-primary" : "bg-secondary",
+      )}
+    >
+      <span
+        className={cn(
+          "size-4 rounded-full bg-white transition-transform duration-200 ease-[cubic-bezier(.25,1,.4,1)]",
+          on && "translate-x-4",
+        )}
+      />
+    </span>
+  );
+}
+
 // errorText вытаскивает человекочитаемое сообщение из ошибки Connect.
 export function errorText(err: unknown, fallback: string): string {
   return err instanceof ConnectError ? err.rawMessage : fallback;

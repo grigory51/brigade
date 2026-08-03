@@ -29,6 +29,7 @@ import (
 	"github.com/grigory51/brigade/backend/internal/session"
 	"github.com/grigory51/brigade/backend/internal/spawn"
 	"github.com/grigory51/brigade/backend/internal/store"
+	telegramsvc "github.com/grigory51/brigade/backend/internal/telegram"
 	aguitransport "github.com/grigory51/brigade/backend/internal/transport/agui"
 	connectsvc "github.com/grigory51/brigade/backend/internal/transport/connect"
 	"github.com/grigory51/brigade/backend/internal/transport/termws"
@@ -166,6 +167,16 @@ func runServer(configPath string) {
 		log.Fatalf("brigade: restore sessions: %v", err)
 	}
 
+	telegramMode := cfg.Telegram.Mode
+	if desktopMode {
+		telegramMode = "poll"
+	}
+	telegramSvc := telegramsvc.New(st, registry, imagesSvc, telegramMode, cfg.Telegram.WebhookURL, []byte(cfg.JWT.Secret))
+	defer telegramSvc.Close()
+	if err := telegramSvc.Start(ctx); err != nil {
+		log.Fatalf("brigade: telegram: %v", err)
+	}
+
 	mux := http.NewServeMux()
 
 	// ConnectRPC — основной API-слой brigade (типизированные unary-вызовы). Interceptor
@@ -188,6 +199,7 @@ func runServer(configPath string) {
 	authService.SetCodexLogin(codexlogin.New(st, codexLoginRunner))
 	mux.Handle(brigadev1connect.NewAuthServiceHandler(authService, interceptors))
 	mux.Handle(brigadev1connect.NewNotificationServiceHandler(connectsvc.NewNotificationService(st, notifySvc), interceptors))
+	mux.Handle(brigadev1connect.NewTelegramServiceHandler(connectsvc.NewTelegramService(telegramSvc), interceptors))
 	// Десктоп-режим: авто-логин сид-пользователя без экрана входа (локальный
 	// однопользовательский запуск). /desktop/auth ставит сессионные cookie и редиректит на SPA;
 	// webview стартует именно с него (см. runDesktop). В серверном режиме ручка не подключается.
@@ -221,6 +233,9 @@ func runServer(configPath string) {
 	// Единственная сырая HTTP-ручка ACP — Connect не выражает этот потоковый протокол;
 	// управляющие ручки живут в AcpService выше. Аутентификация — Bearer/cookie на запрос.
 	aguitransport.Mux(mux, jwtVerifier{jwt: authSvc.JWT()}, prov, perms)
+	// Telegram webhook авторизуется отдельным secret header, который Telegram присылает
+	// при setWebhook; пользовательского JWT у внешнего Bot API нет.
+	mux.Handle("/api/telegram/", telegramSvc.Handler())
 
 	// Встроенный SPA-фронтенд обслуживает все прочие пути.
 	webHandler, err := web.Handler()

@@ -632,8 +632,10 @@ func (x *DaemonEvent) GetAguiJson() []byte {
 }
 
 type DaemonPromptRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Text          string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Text  string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	// auto_allow_once — выбрать одноразовое разрешение без интерактивного клиента.
+	AutoAllowOnce bool `protobuf:"varint,2,opt,name=auto_allow_once,json=autoAllowOnce,proto3" json:"auto_allow_once,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -673,6 +675,13 @@ func (x *DaemonPromptRequest) GetText() string {
 		return x.Text
 	}
 	return ""
+}
+
+func (x *DaemonPromptRequest) GetAutoAllowOnce() bool {
+	if x != nil {
+		return x.AutoAllowOnce
+	}
+	return false
 }
 
 type DaemonPromptResponse struct {
@@ -1057,9 +1066,10 @@ const file_brigade_v1_agent_daemon_proto_rawDesc = "" +
 	"\bfrom_seq\x18\x01 \x01(\x03R\afromSeq\"<\n" +
 	"\vDaemonEvent\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x03R\x03seq\x12\x1b\n" +
-	"\tagui_json\x18\x02 \x01(\fR\baguiJson\")\n" +
+	"\tagui_json\x18\x02 \x01(\fR\baguiJson\"Q\n" +
 	"\x13DaemonPromptRequest\x12\x12\n" +
-	"\x04text\x18\x01 \x01(\tR\x04text\"7\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text\x12&\n" +
+	"\x0fauto_allow_once\x18\x02 \x01(\bR\rautoAllowOnce\"7\n" +
 	"\x14DaemonPromptResponse\x12\x1f\n" +
 	"\vstop_reason\x18\x01 \x01(\tR\n" +
 	"stopReason\"H\n" +

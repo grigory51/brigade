@@ -51,7 +51,10 @@ func (c *Client) RequestPermission(ctx context.Context, params acpsdk.RequestPer
 	}
 
 	c.mu.Lock()
-	resolver := c.resolver
+	resolver := c.turnResolver
+	if resolver == nil {
+		resolver = c.resolver
+	}
 	c.mu.Unlock()
 
 	// Вне WS-сеанса (resolver не привязан) разрешить интерактивное действие некому —

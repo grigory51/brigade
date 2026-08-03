@@ -125,6 +125,199 @@ func (s *Store) DeleteNotificationBackend(ctx context.Context, userID, id string
 	return nil
 }
 
+// --- telegram ---
+
+const telegramBotSelect = `SELECT id, user_id, token, telegram_id, username, name,
+	owner_telegram_id, owner_telegram_username, agent_type, auth_profile, image, mcp_servers,
+	bind_token_hash, bind_token_expires_at, update_offset, supports_guest_queries,
+	has_topics_enabled, created_at FROM telegram_bots`
+
+func (s *Store) ListTelegramBots(ctx context.Context, userID string) ([]TelegramBot, error) {
+	rows, err := s.db.QueryContext(ctx, telegramBotSelect+` WHERE user_id = ? ORDER BY created_at`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("store: list telegram bots: %w", err)
+	}
+	defer rows.Close()
+	var out []TelegramBot
+	for rows.Next() {
+		bot, err := s.scanTelegramBot(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, bot)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) ListAllTelegramBots(ctx context.Context) ([]TelegramBot, error) {
+	rows, err := s.db.QueryContext(ctx, telegramBotSelect+` ORDER BY created_at`)
+	if err != nil {
+		return nil, fmt.Errorf("store: list all telegram bots: %w", err)
+	}
+	defer rows.Close()
+	var out []TelegramBot
+	for rows.Next() {
+		bot, err := s.scanTelegramBot(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, bot)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) scanTelegramBot(row rowScanner) (TelegramBot, error) {
+	var bot TelegramBot
+	var token, mcp string
+	var bindExpires, createdAt int64
+	if err := row.Scan(&bot.ID, &bot.UserID, &token, &bot.TelegramID, &bot.Username, &bot.Name,
+		&bot.OwnerTelegramID, &bot.OwnerTelegramUsername, &bot.AgentType, &bot.AuthProfile,
+		&bot.Image, &mcp, &bot.BindTokenHash, &bindExpires, &bot.UpdateOffset,
+		&bot.SupportsGuestQueries, &bot.HasTopicsEnabled, &createdAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return TelegramBot{}, ErrNotFound
+		}
+		return TelegramBot{}, fmt.Errorf("store: scan telegram bot: %w", err)
+	}
+	bot.Token = s.cipher.Decrypt(token)
+	bot.BindTokenExpiresAt = fromUnix(bindExpires)
+	bot.CreatedAt = fromUnix(createdAt)
+	if mcp != "" {
+		bot.McpServers = strings.Split(mcp, ",")
+	}
+	return bot, nil
+}
+
+func (s *Store) GetTelegramBot(ctx context.Context, id string) (TelegramBot, error) {
+	return s.scanTelegramBot(s.db.QueryRowContext(ctx, telegramBotSelect+` WHERE id = ?`, id))
+}
+
+func (s *Store) SaveTelegramBot(ctx context.Context, bot TelegramBot) error {
+	now := toUnix(time.Now())
+	_, err := s.db.ExecContext(ctx, `INSERT INTO telegram_bots
+		(id, user_id, token, telegram_id, username, name, owner_telegram_id,
+		 owner_telegram_username, agent_type, auth_profile, image, mcp_servers,
+		 bind_token_hash, bind_token_expires_at, update_offset, supports_guest_queries,
+		 has_topics_enabled, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET token=excluded.token, telegram_id=excluded.telegram_id,
+		 username=excluded.username, name=excluded.name, agent_type=excluded.agent_type,
+		 auth_profile=excluded.auth_profile, image=excluded.image, mcp_servers=excluded.mcp_servers,
+		 supports_guest_queries=excluded.supports_guest_queries,
+		 has_topics_enabled=excluded.has_topics_enabled, updated_at=excluded.updated_at
+		WHERE telegram_bots.user_id=excluded.user_id`,
+		bot.ID, bot.UserID, s.cipher.Encrypt(bot.Token), bot.TelegramID, bot.Username, bot.Name,
+		bot.OwnerTelegramID, bot.OwnerTelegramUsername, bot.AgentType, bot.AuthProfile,
+		bot.Image, strings.Join(bot.McpServers, ","), bot.BindTokenHash,
+		toUnix(bot.BindTokenExpiresAt), bot.UpdateOffset, bot.SupportsGuestQueries,
+		bot.HasTopicsEnabled, now, now)
+	if err != nil {
+		return fmt.Errorf("store: save telegram bot: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) DeleteTelegramBot(ctx context.Context, userID, id string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: delete telegram bot: %w", err)
+	}
+	defer tx.Rollback()
+	for _, table := range []string{"telegram_updates", "telegram_conversations"} {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE bot_id = ?`, id); err != nil {
+			return fmt.Errorf("store: delete telegram bot: %w", err)
+		}
+	}
+	res, err := tx.ExecContext(ctx, `DELETE FROM telegram_bots WHERE id = ? AND user_id = ?`, id, userID)
+	if err != nil {
+		return fmt.Errorf("store: delete telegram bot: %w", err)
+	}
+	if err := affectedOne(res, "delete telegram bot"); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) SetTelegramBinding(ctx context.Context, id, hash string, expires time.Time) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE telegram_bots SET bind_token_hash=?, bind_token_expires_at=?, updated_at=? WHERE id=?`, hash, toUnix(expires), toUnix(time.Now()), id)
+	if err != nil {
+		return fmt.Errorf("store: set telegram binding: %w", err)
+	}
+	return affectedOne(res, "set telegram binding")
+}
+
+func (s *Store) BindTelegramOwner(ctx context.Context, id string, telegramID int64, username string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE telegram_bots SET owner_telegram_id=?, owner_telegram_username=?, bind_token_hash='', bind_token_expires_at=0, updated_at=? WHERE id=?`, telegramID, username, toUnix(time.Now()), id)
+	if err != nil {
+		return fmt.Errorf("store: bind telegram owner: %w", err)
+	}
+	return affectedOne(res, "bind telegram owner")
+}
+
+func (s *Store) SetTelegramUpdateOffset(ctx context.Context, id string, offset int64) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE telegram_bots SET update_offset=? WHERE id=? AND update_offset < ?`, offset, id, offset)
+	return err
+}
+
+func (s *Store) InsertTelegramUpdate(ctx context.Context, botID string, updateID int64, payload string) (bool, error) {
+	now := toUnix(time.Now())
+	res, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO telegram_updates (bot_id, update_id, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`, botID, updateID, payload, now, now)
+	if err != nil {
+		return false, fmt.Errorf("store: insert telegram update: %w", err)
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+func (s *Store) ListTelegramUpdates(ctx context.Context, botID, state string) ([]TelegramUpdate, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT bot_id, update_id, payload, state, response, error, created_at FROM telegram_updates WHERE bot_id=? AND state=? ORDER BY update_id`, botID, state)
+	if err != nil {
+		return nil, fmt.Errorf("store: list telegram updates: %w", err)
+	}
+	defer rows.Close()
+	var out []TelegramUpdate
+	for rows.Next() {
+		var update TelegramUpdate
+		var created int64
+		if err := rows.Scan(&update.BotID, &update.UpdateID, &update.Payload, &update.State, &update.Response, &update.Error, &created); err != nil {
+			return nil, fmt.Errorf("store: scan telegram update: %w", err)
+		}
+		update.CreatedAt = fromUnix(created)
+		out = append(out, update)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) SetTelegramUpdateState(ctx context.Context, botID string, updateID int64, state, response, errorText string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE telegram_updates SET state=?, response=?, error=?, updated_at=? WHERE bot_id=? AND update_id=?`, state, response, errorText, toUnix(time.Now()), botID, updateID)
+	return err
+}
+
+func (s *Store) DeleteTelegramUpdate(ctx context.Context, botID string, updateID int64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM telegram_updates WHERE bot_id=? AND update_id=?`, botID, updateID)
+	return err
+}
+
+func (s *Store) TelegramConversation(ctx context.Context, botID, scope string, chatID, threadID int64) (TelegramConversation, error) {
+	var conversation TelegramConversation
+	err := s.db.QueryRowContext(ctx, `SELECT bot_id, scope, chat_id, thread_id, session_id FROM telegram_conversations WHERE bot_id=? AND scope=? AND chat_id=? AND thread_id=?`, botID, scope, chatID, threadID).
+		Scan(&conversation.BotID, &conversation.Scope, &conversation.ChatID, &conversation.ThreadID, &conversation.SessionID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return TelegramConversation{}, ErrNotFound
+	}
+	return conversation, err
+}
+
+func (s *Store) SetTelegramConversation(ctx context.Context, conversation TelegramConversation) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO telegram_conversations (bot_id, scope, chat_id, thread_id, session_id) VALUES (?, ?, ?, ?, ?) ON CONFLICT(bot_id, scope, chat_id, thread_id) DO UPDATE SET session_id=excluded.session_id`, conversation.BotID, conversation.Scope, conversation.ChatID, conversation.ThreadID, conversation.SessionID)
+	return err
+}
+
+func (s *Store) DeleteTelegramConversation(ctx context.Context, botID, scope string, chatID, threadID int64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM telegram_conversations WHERE bot_id=? AND scope=? AND chat_id=? AND thread_id=?`, botID, scope, chatID, threadID)
+	return err
+}
+
 // --- sessions ---
 
 // CreateSession вставляет новую сессию.

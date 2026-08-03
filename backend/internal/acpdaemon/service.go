@@ -76,7 +76,12 @@ func (s *service) Prompt(ctx context.Context, req *connect.Request[v1.DaemonProm
 	if err != nil {
 		return nil, err
 	}
-	stop, err := c.Prompt(context.WithoutCancel(ctx), req.Msg.Text, nil)
+	var stop string
+	if req.Msg.AutoAllowOnce {
+		stop, err = c.PromptAutoApprove(context.WithoutCancel(ctx), req.Msg.Text, nil)
+	} else {
+		stop, err = c.Prompt(context.WithoutCancel(ctx), req.Msg.Text, nil)
+	}
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

@@ -142,6 +142,8 @@ message DaemonEvent {
 
 message DaemonPromptRequest {
   string text = 1;
+  // auto_allow_once — выбрать одноразовое разрешение без интерактивного клиента.
+  bool auto_allow_once = 2;
 }
 
 message DaemonPromptResponse {
