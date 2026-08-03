@@ -16,13 +16,16 @@ jobs:
   backend:
     if: github.ref == 'refs/heads/main'
     runs-on: [self-hosted, brigade]
-    container: golang:1.26-bookworm
+    env:
+      GOMODCACHE: /go/pkg/mod
+      GOCACHE: /go-build-cache
+    container:
+      image: golang:1.26-bookworm
+      volumes:
+        - brigade-go-mod:/go/pkg/mod
+        - brigade-go-build:/go-build-cache
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.26"
-          cache-dependency-path: backend/go.sum
       - name: vet
         run: go vet ./...
         working-directory: backend
@@ -144,7 +147,7 @@ jobs:
     container: ubuntu:24.04
     steps:
       - name: install tools
-        run: apt-get update && apt-get install -y --no-install-recommends gh make ca-certificates
+        run: apt-get update && apt-get install -y --no-install-recommends git gh make ca-certificates
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
