@@ -412,14 +412,15 @@ func (s *Service) deliverReady(bot store.TelegramBot) bool {
 }
 
 type inbound struct {
-	updateID int64
-	message  *telegramMessage
-	from     *telegramUser
-	guest    bool
-	scope    string
-	chatID   int64
-	threadID int64
-	text     string
+	updateID             int64
+	message              *telegramMessage
+	from                 *telegramUser
+	guest                bool
+	guestInlineMessageID string
+	scope                string
+	chatID               int64
+	threadID             int64
+	text                 string
 }
 
 func inboundFrom(update telegramUpdate) inbound {
@@ -438,7 +439,7 @@ func inboundFrom(update telegramUpdate) inbound {
 	if guest && message.GuestBotCallerUser != nil {
 		from = message.GuestBotCallerUser
 	}
-	return inbound{updateID: update.UpdateID, message: message, from: from, guest: guest, scope: scope, chatID: message.Chat.ID, threadID: message.MessageThreadID, text: strings.TrimSpace(message.Text)}
+	return inbound{updateID: update.UpdateID, message: message, from: from, guest: guest, guestInlineMessageID: update.GuestInlineMessageID, scope: scope, chatID: message.Chat.ID, threadID: message.MessageThreadID, text: strings.TrimSpace(message.Text)}
 }
 
 func (s *Service) processQueued(bot store.TelegramBot, queued []store.TelegramUpdate) {
@@ -465,7 +466,21 @@ func (s *Service) processQueued(bot store.TelegramBot, queued []store.TelegramUp
 		return
 	}
 	in.text = stripAddress(bot, in.text)
-	if !in.guest {
+	if in.guest && in.guestInlineMessageID == "" {
+		inlineMessageID, err := s.api.answerGuest(s.ctx, bot.Token, in.message.GuestQueryID, "👀 Услышал, думаю…")
+		if err != nil {
+			log.Printf("telegram: acknowledge guest @%s update=%d: %v", bot.Username, in.updateID, err)
+		} else {
+			update.GuestInlineMessageID = inlineMessageID
+			payload, marshalErr := json.Marshal(update)
+			if marshalErr != nil || s.store.SetTelegramUpdatePayload(s.ctx, bot.ID, in.updateID, string(payload)) != nil {
+				_ = s.api.editGuest(s.ctx, bot.Token, inlineMessageID, "Не удалось сохранить запрос в Brigade. Повторите сообщение.")
+				_ = s.store.DeleteTelegramUpdate(s.ctx, bot.ID, in.updateID)
+				return
+			}
+			in.guestInlineMessageID = inlineMessageID
+		}
+	} else if !in.guest {
 		_ = s.api.setReaction(s.ctx, bot.Token, in.chatID, in.message.MessageID, "👀")
 	}
 	if in.text == "/new" {
@@ -625,7 +640,11 @@ func (s *Service) finishWithReply(bot store.TelegramBot, updates []inbound, answ
 
 func (s *Service) reply(ctx context.Context, bot store.TelegramBot, in inbound, text string) error {
 	if in.guest {
-		return s.api.answerGuest(ctx, bot.Token, in.message.GuestQueryID, text)
+		if in.guestInlineMessageID != "" {
+			return s.api.editGuest(ctx, bot.Token, in.guestInlineMessageID, text)
+		}
+		_, err := s.api.answerGuest(ctx, bot.Token, in.message.GuestQueryID, text)
+		return err
 	}
 	return s.api.sendMessage(ctx, bot.Token, in.chatID, in.threadID, text)
 }

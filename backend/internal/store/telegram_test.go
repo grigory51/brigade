@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -31,11 +32,14 @@ func TestTelegramStore(t *testing.T) {
 	if err != nil || inserted {
 		t.Fatalf("duplicate update: inserted=%v err=%v", inserted, err)
 	}
+	if err := st.SetTelegramUpdatePayload(ctx, bot.ID, 7, `{"update_id":7,"brigade_guest_inline_message_id":"inline"}`); err != nil {
+		t.Fatalf("SetTelegramUpdatePayload: %v", err)
+	}
 	if err := st.SetTelegramUpdateState(ctx, bot.ID, 7, "ready", "answer", ""); err != nil {
 		t.Fatalf("SetTelegramUpdateState: %v", err)
 	}
 	updates, err := st.ListTelegramUpdates(ctx, bot.ID, "ready")
-	if err != nil || len(updates) != 1 || updates[0].Response != "answer" {
+	if err != nil || len(updates) != 1 || updates[0].Response != "answer" || !strings.Contains(updates[0].Payload, `"brigade_guest_inline_message_id":"inline"`) {
 		t.Fatalf("ListTelegramUpdates: %+v, %v", updates, err)
 	}
 	if err := st.DeleteTelegramUpdate(ctx, bot.ID, 7); err != nil {

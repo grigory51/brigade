@@ -51,9 +51,10 @@ type telegramMessage struct {
 }
 
 type telegramUpdate struct {
-	UpdateID     int64            `json:"update_id"`
-	Message      *telegramMessage `json:"message"`
-	GuestMessage *telegramMessage `json:"guest_message"`
+	UpdateID             int64            `json:"update_id"`
+	Message              *telegramMessage `json:"message"`
+	GuestMessage         *telegramMessage `json:"guest_message"`
+	GuestInlineMessageID string           `json:"brigade_guest_inline_message_id,omitempty"`
 }
 
 func (a *botAPI) call(ctx context.Context, token, method string, in, out any) error {
@@ -177,7 +178,7 @@ func (a *botAPI) setReaction(ctx context.Context, token string, chatID, messageI
 	}, nil)
 }
 
-func (a *botAPI) answerGuest(ctx context.Context, token, queryID, text string) error {
+func (a *botAPI) answerGuest(ctx context.Context, token, queryID, text string) (string, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		text = "Агент не вернул текстовый ответ."
@@ -194,8 +195,14 @@ func (a *botAPI) answerGuest(ctx context.Context, token, queryID, text string) e
 			},
 		},
 	}
-	if err := a.call(ctx, token, "answerGuestQuery", rich, nil); err == nil {
-		return nil
+	var sent struct {
+		InlineMessageID string `json:"inline_message_id"`
+	}
+	if err := a.call(ctx, token, "answerGuestQuery", rich, &sent); err == nil {
+		if sent.InlineMessageID == "" {
+			return "", errors.New("telegram: answerGuestQuery returned no inline message id")
+		}
+		return sent.InlineMessageID, nil
 	}
 	plainText := text
 	if len([]rune(plainText)) > 4096 {
@@ -208,7 +215,36 @@ func (a *botAPI) answerGuest(ctx context.Context, token, queryID, text string) e
 			"input_message_content": map[string]any{"message_text": plainText},
 		},
 	}
-	return a.call(ctx, token, "answerGuestQuery", plain, nil)
+	if err := a.call(ctx, token, "answerGuestQuery", plain, &sent); err != nil {
+		return "", err
+	}
+	if sent.InlineMessageID == "" {
+		return "", errors.New("telegram: answerGuestQuery returned no inline message id")
+	}
+	return sent.InlineMessageID, nil
+}
+
+func (a *botAPI) editGuest(ctx context.Context, token, inlineMessageID, text string) error {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		text = "Агент не вернул текстовый ответ."
+	}
+	if len([]rune(text)) > 32768 {
+		text = string([]rune(text)[:32752]) + "\n\n…"
+	}
+	if err := a.call(ctx, token, "editMessageText", map[string]any{
+		"inline_message_id": inlineMessageID,
+		"rich_message":      map[string]any{"markdown": text},
+	}, nil); err == nil {
+		return nil
+	}
+	if len([]rune(text)) > 4096 {
+		text = string([]rune(text)[:4080]) + "\n\n…"
+	}
+	return a.call(ctx, token, "editMessageText", map[string]any{
+		"inline_message_id": inlineMessageID,
+		"text":              text,
+	}, nil)
 }
 
 func splitMessage(text string, limit int) []string {

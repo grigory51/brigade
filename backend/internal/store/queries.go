@@ -293,6 +293,11 @@ func (s *Store) SetTelegramUpdateState(ctx context.Context, botID string, update
 	return err
 }
 
+func (s *Store) SetTelegramUpdatePayload(ctx context.Context, botID string, updateID int64, payload string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE telegram_updates SET payload=?, updated_at=? WHERE bot_id=? AND update_id=?`, payload, toUnix(time.Now()), botID, updateID)
+	return err
+}
+
 func (s *Store) DeleteTelegramUpdate(ctx context.Context, botID string, updateID int64) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM telegram_updates WHERE bot_id=? AND update_id=?`, botID, updateID)
 	return err

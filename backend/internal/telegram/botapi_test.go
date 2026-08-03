@@ -57,13 +57,17 @@ func TestRepliesUseRichMarkdown(t *testing.T) {
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Header:     make(http.Header),
-			Body:       io.NopCloser(strings.NewReader(`{"ok":true,"result":{}}`)),
+			Body:       io.NopCloser(strings.NewReader(`{"ok":true,"result":{"inline_message_id":"guest-inline"}}`)),
 		}, nil
 	})
 	if err := api.sendMessage(context.Background(), "token", 42, 7, "**жирный**"); err != nil {
 		t.Fatal(err)
 	}
-	if err := api.answerGuest(context.Background(), "token", "query", "# Заголовок"); err != nil {
+	inlineMessageID, err := api.answerGuest(context.Background(), "token", "query", "# Заголовок")
+	if err != nil || inlineMessageID != "guest-inline" {
+		t.Fatal(err)
+	}
+	if err := api.editGuest(context.Background(), "token", inlineMessageID, "**Готово**"); err != nil {
 		t.Fatal(err)
 	}
 	if err := api.setReaction(context.Background(), "token", 42, 9, "👀"); err != nil {
@@ -72,14 +76,17 @@ func TestRepliesUseRichMarkdown(t *testing.T) {
 	if err := api.setReaction(context.Background(), "token", 42, 9, ""); err != nil {
 		t.Fatal(err)
 	}
-	if len(requests) != 4 ||
+	if len(requests) != 5 ||
 		!strings.Contains(requests[0], "/sendRichMessage ") ||
 		!strings.Contains(requests[0], `"message_thread_id":7`) ||
 		!strings.Contains(requests[0], `"markdown":"**жирный**"`) ||
 		!strings.Contains(requests[1], "/answerGuestQuery ") ||
 		!strings.Contains(requests[1], `"rich_message":{"markdown":"# Заголовок"}`) ||
-		!strings.Contains(requests[2], `"message_id":9,"reaction":[{"emoji":"👀","type":"emoji"}]`) ||
-		!strings.Contains(requests[3], `"message_id":9,"reaction":[]`) {
+		!strings.Contains(requests[2], "/editMessageText ") ||
+		!strings.Contains(requests[2], `"inline_message_id":"guest-inline"`) ||
+		!strings.Contains(requests[2], `"rich_message":{"markdown":"**Готово**"}`) ||
+		!strings.Contains(requests[3], `"message_id":9,"reaction":[{"emoji":"👀","type":"emoji"}]`) ||
+		!strings.Contains(requests[4], `"message_id":9,"reaction":[]`) {
 		t.Fatalf("unexpected rich requests: %#v", requests)
 	}
 }
