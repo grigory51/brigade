@@ -3,11 +3,11 @@ name: ci
 on:
   push:
     branches: [main]
-  pull_request:
 
 jobs:
   backend:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, brigade]
+    container: ubuntu:24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -22,7 +22,8 @@ jobs:
         working-directory: backend
 
   web:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, brigade]
+    container: ubuntu:24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,7 +39,8 @@ jobs:
 
   # Полная сборка бинаря (web → go:embed → go build) — то, что делает `make build`.
   binary:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, brigade]
+    container: ubuntu:24.04
     needs: [backend, web]
     steps:
       - uses: actions/checkout@v4
