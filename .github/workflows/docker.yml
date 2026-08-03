@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   push:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, brigade]
     strategy:
       matrix:
         include:
@@ -58,7 +58,7 @@ jobs:
   # авто из коммитов/PR с прошлого тега; прикладываем собранный единый бинарь.
   release:
     needs: push
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, brigade]
     steps:
       - uses: actions/checkout@v4
         with:
