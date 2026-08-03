@@ -350,7 +350,7 @@ export function TelegramSection({
           </div>
           <div className="flex justify-between gap-3">
             <span className="text-muted-foreground">Топики в личном чате</span>
-            <span>{selected.hasTopicsEnabled ? "включены" : "включите Threaded Mode"}</span>
+            <span>{selected.hasTopicsEnabled ? "доступны" : "не включены"}</span>
           </div>
           <div className="flex justify-between gap-3">
             <span className="text-muted-foreground">Guest Mode</span>
@@ -358,7 +358,7 @@ export function TelegramSection({
           </div>
           {(!selected.hasTopicsEnabled || !selected.supportsGuestQueries) && (
             <p className="border-t pt-2 text-[#6c695f]">
-              Возможности включаются в <ExternalLink href="https://t.me/BotFather">@BotFather</ExternalLink>, затем сохраните бота ещё раз для обновления статуса.
+              Guest Mode и Threaded Mode включаются в <ExternalLink href="https://t.me/BotFather">@BotFather</ExternalLink>, затем сохраните бота ещё раз для обновления статуса.
             </p>
           )}
         </div>

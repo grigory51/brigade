@@ -1,7 +1,9 @@
 package telegram
 
 import (
+	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -43,5 +45,41 @@ func TestGuestCallerAndMessageSplit(t *testing.T) {
 	defer service.Close()
 	if service.webhookSecret("bot", "old-token") == service.webhookSecret("bot", "new-token") {
 		t.Fatal("webhook secret must rotate with BotFather token")
+	}
+}
+
+func TestRepliesUseRichMarkdown(t *testing.T) {
+	api := newBotAPI()
+	var requests []string
+	api.http.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		body, _ := io.ReadAll(request.Body)
+		requests = append(requests, request.URL.Path+" "+string(body))
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"ok":true,"result":{}}`)),
+		}, nil
+	})
+	if err := api.sendMessage(context.Background(), "token", 42, 7, "**жирный**"); err != nil {
+		t.Fatal(err)
+	}
+	if err := api.answerGuest(context.Background(), "token", "query", "# Заголовок"); err != nil {
+		t.Fatal(err)
+	}
+	if err := api.setReaction(context.Background(), "token", 42, 9, "👀"); err != nil {
+		t.Fatal(err)
+	}
+	if err := api.setReaction(context.Background(), "token", 42, 9, ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(requests) != 4 ||
+		!strings.Contains(requests[0], "/sendRichMessage ") ||
+		!strings.Contains(requests[0], `"message_thread_id":7`) ||
+		!strings.Contains(requests[0], `"markdown":"**жирный**"`) ||
+		!strings.Contains(requests[1], "/answerGuestQuery ") ||
+		!strings.Contains(requests[1], `"rich_message":{"markdown":"# Заголовок"}`) ||
+		!strings.Contains(requests[2], `"message_id":9,"reaction":[{"emoji":"👀","type":"emoji"}]`) ||
+		!strings.Contains(requests[3], `"message_id":9,"reaction":[]`) {
+		t.Fatalf("unexpected rich requests: %#v", requests)
 	}
 }

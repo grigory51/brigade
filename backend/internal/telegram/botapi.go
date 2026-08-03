@@ -130,6 +130,22 @@ func (a *botAPI) deleteWebhook(ctx context.Context, token string) error {
 }
 
 func (a *botAPI) sendMessage(ctx context.Context, token string, chatID, threadID int64, text string) error {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		text = "Агент не вернул текстовый ответ."
+	}
+	if len([]rune(text)) <= 32768 {
+		in := map[string]any{
+			"chat_id":      chatID,
+			"rich_message": map[string]any{"markdown": text},
+		}
+		if threadID != 0 {
+			in["message_thread_id"] = threadID
+		}
+		if err := a.call(ctx, token, "sendRichMessage", in, nil); err == nil {
+			return nil
+		}
+	}
 	chunks := splitMessage(text, 4096)
 	for _, chunk := range chunks {
 		in := map[string]any{"chat_id": chatID, "text": chunk}
@@ -151,21 +167,48 @@ func (a *botAPI) sendTyping(ctx context.Context, token string, chatID, threadID 
 	return a.call(ctx, token, "sendChatAction", in, nil)
 }
 
+func (a *botAPI) setReaction(ctx context.Context, token string, chatID, messageID int64, emoji string) error {
+	reaction := []any{}
+	if emoji != "" {
+		reaction = append(reaction, map[string]any{"type": "emoji", "emoji": emoji})
+	}
+	return a.call(ctx, token, "setMessageReaction", map[string]any{
+		"chat_id": chatID, "message_id": messageID, "reaction": reaction,
+	}, nil)
+}
+
 func (a *botAPI) answerGuest(ctx context.Context, token, queryID, text string) error {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		text = "Агент не вернул текстовый ответ."
 	}
-	if len([]rune(text)) > 4096 {
-		text = string([]rune(text)[:4080]) + "\n\n…"
+	if len([]rune(text)) > 32768 {
+		text = string([]rune(text)[:32752]) + "\n\n…"
 	}
-	return a.call(ctx, token, "answerGuestQuery", map[string]any{
+	rich := map[string]any{
 		"guest_query_id": queryID,
 		"result": map[string]any{
 			"type": "article", "id": "brigade", "title": "Brigade",
-			"input_message_content": map[string]any{"message_text": text},
+			"input_message_content": map[string]any{
+				"rich_message": map[string]any{"markdown": text},
+			},
 		},
-	}, nil)
+	}
+	if err := a.call(ctx, token, "answerGuestQuery", rich, nil); err == nil {
+		return nil
+	}
+	plainText := text
+	if len([]rune(plainText)) > 4096 {
+		plainText = string([]rune(plainText)[:4080]) + "\n\n…"
+	}
+	plain := map[string]any{
+		"guest_query_id": queryID,
+		"result": map[string]any{
+			"type": "article", "id": "brigade", "title": "Brigade",
+			"input_message_content": map[string]any{"message_text": plainText},
+		},
+	}
+	return a.call(ctx, token, "answerGuestQuery", plain, nil)
 }
 
 func splitMessage(text string, limit int) []string {

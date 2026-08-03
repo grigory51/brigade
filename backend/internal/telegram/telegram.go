@@ -401,6 +401,11 @@ func (s *Service) deliverReady(bot store.TelegramBot) bool {
 			log.Printf("telegram: deliver @%s update=%d: %v", bot.Username, stored.UpdateID, err)
 			return false
 		}
+		if !in.guest {
+			if err := s.api.setReaction(s.ctx, bot.Token, in.chatID, in.message.MessageID, ""); err != nil {
+				log.Printf("telegram: clear reaction @%s update=%d: %v", bot.Username, stored.UpdateID, err)
+			}
+		}
 		_ = s.store.DeleteTelegramUpdate(s.ctx, bot.ID, stored.UpdateID)
 	}
 	return true
@@ -460,9 +465,8 @@ func (s *Service) processQueued(bot store.TelegramBot, queued []store.TelegramUp
 		return
 	}
 	in.text = stripAddress(bot, in.text)
-	if in.message.Chat.Type == "private" && in.threadID == 0 {
-		s.finishWithReply(bot, []inbound{in}, "Создайте отдельный топик: каждый топик Telegram соответствует одной сессии Brigade.", nil)
-		return
+	if !in.guest {
+		_ = s.api.setReaction(s.ctx, bot.Token, in.chatID, in.message.MessageID, "👀")
 	}
 	if in.text == "/new" {
 		s.newSession(bot, in)
@@ -519,7 +523,7 @@ func (s *Service) bindOwner(bot store.TelegramBot, in inbound) {
 		s.finishWithReply(bot, []inbound{in}, "Не удалось привязать Telegram к Brigade.", err)
 		return
 	}
-	s.finishWithReply(bot, []inbound{in}, "Telegram подключён к Brigade. Создайте топик и напишите задачу.", nil)
+	s.finishWithReply(bot, []inbound{in}, "Telegram подключён к Brigade. Напишите задачу в личном чате; топики можно использовать для отдельных сессий.", nil)
 }
 
 func addressedTo(bot store.TelegramBot, message *telegramMessage) bool {
@@ -557,7 +561,10 @@ func (s *Service) session(bot store.TelegramBot, in inbound) (string, error) {
 	}
 	name := "Telegram · " + in.message.Chat.Title
 	if in.message.Chat.Type == "private" {
-		name = fmt.Sprintf("Telegram · @%s · %d", bot.Username, in.threadID)
+		name = "Telegram · @" + bot.Username
+		if in.threadID != 0 {
+			name += fmt.Sprintf(" · %d", in.threadID)
+		}
 	} else if in.threadID != 0 {
 		name += fmt.Sprintf(" · %d", in.threadID)
 	}
