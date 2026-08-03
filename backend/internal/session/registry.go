@@ -1472,8 +1472,8 @@ func (r *Registry) reviveACP(ctx context.Context, sess store.Session) (*live, er
 // (напр. после апгрейда brigade, переименовавшего скилл). Плагины ACP статичны на время сессии
 // (грузятся один раз при session/new|load), горячей перезагрузки в SDK/ACP нет — поэтому
 // переподнимаем адаптер через session/load того же agent_session_id: диалог сохраняется (агент
-// реплеит thread), а скиллы читаются заново. local — свежий subprocess; docker — повторный
-// Configure живого демона (контейнер не пересоздаётся). Во время генерации отказываем.
+// реплеит thread), а скиллы читаются заново. local — свежий subprocess; docker — новый
+// контейнер с актуальными runtime-слоями. Во время генерации отказываем.
 func (r *Registry) ReloadAgent(ctx context.Context, sessionID, userID string) error {
 	lv, sess, err := r.reloadable(ctx, sessionID, userID)
 	if err != nil {
@@ -1542,31 +1542,40 @@ func (r *Registry) reinit(ctx context.Context, lv *live, sess store.Session) err
 	sessionID := sess.ID
 	// Обновляем файлы скиллов до реинициализации, чтобы свежая загрузка их прочитала.
 	r.installSkill(sess)
-	token := r.agentToken(ctx, sess)
 
 	if sess.Mode == store.SessionModeDocker {
-		rc, ok := lv.client.(*acpremote.Client)
-		if !ok {
-			return fmt.Errorf("session: reload: неожиданный тип ACP-клиента")
+		unlock := r.lockSession(sessionID)
+		defer unlock()
+		r.mu.Lock()
+		current := r.live[sessionID]
+		r.mu.Unlock()
+		if current != lv {
+			return store.ErrNotFound
 		}
-		// Демон жив — повторный Configure переинициализирует адаптер (session/load) с
-		// актуальными плагинами; контейнер/демон не пересоздаются.
-		if _, err := rc.Configure(ctx, acpremote.ConfigureOptions{
-			OAuthToken:      token,
-			ExtraEnv:        r.agentEnv(ctx, sess, token),
-			AdapterCommand:  agent.Get(sess.AgentType).CommandFor(store.SessionKindACP),
-			Cwd:             sess.Cwd,
-			ResumeSessionID: sess.AgentSessionID,
-			McpServers:      r.mcpServers(ctx, sess),
-			PluginDirs:      r.acpPluginDirs(sess),
-		}); err != nil {
+
+		// Runtime-слои смонтированы read-only при создании контейнера. Повторный Configure
+		// живого демона не мог обновить ни их, ни MCP: Configure намеренно является no-op
+		// при reconnect. Пересоздаём только контейнер; workspace, agent home и журнал
+		// остаются в bind-mount, а session/load восстанавливает тот же диалог.
+		_ = lv.terminate(ctx)
+		newLv, err := r.reviveACP(ctx, sess)
+		if err != nil {
 			return fmt.Errorf("session: reload acp daemon: %w", err)
 		}
+		r.mu.Lock()
+		if r.live[sessionID] != lv {
+			r.mu.Unlock()
+			_ = newLv.terminate(context.WithoutCancel(ctx))
+			return store.ErrNotFound
+		}
+		r.live[sessionID] = newLv
+		r.mu.Unlock()
 		return nil
 	}
 
 	// local: переподнимаем subprocess-адаптер с resume — session/load читает свежие плагины из
 	// проектного settings.json (--setting-sources project). Новый клиент заменяет старый.
+	token := r.agentToken(ctx, sess)
 	opts := r.acpLocalOptions(ctx, sess, token)
 	opts.ResumeSessionID = sess.AgentSessionID
 	client, err := acp.New(ctx, opts)
