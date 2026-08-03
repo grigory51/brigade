@@ -948,7 +948,7 @@ func (r *Registry) acpDaemonTeardown(sessionID string) func(context.Context) err
 // preview, переменные публикации dev-серверов (см. previewEnv). token — per-user из
 // store; для CLI-режима агент дополнительно опирается на смонтированный ~/.claude.
 func (r *Registry) agentEnv(ctx context.Context, sess store.Session, token string) []string {
-	var env []string
+	env := []string{"BRIGADE_SESSION_ID=" + sess.ID}
 	if token != "" {
 		env = append(env, "CLAUDE_CODE_OAUTH_TOKEN="+token)
 	}
@@ -1061,7 +1061,6 @@ func (r *Registry) previewEnv(sess store.Session) []string {
 		apiHost = r.dockerAPIHost()
 	}
 	return []string{
-		"BRIGADE_SESSION_ID=" + sess.ID,
 		"BRIGADE_PREVIEW_TOKEN=" + r.previews.TokenFor(sess.ID),
 		fmt.Sprintf("BRIGADE_API_URL=http://%s:%d", apiHost, cfg.APIPort),
 		"BRIGADE_PREVIEW_URL_TEMPLATE=" + cfg.URLTemplate(sess.ID),
@@ -1093,6 +1092,9 @@ func (r *Registry) installSkill(sess store.Session) {
 	if sess.Kind == store.SessionKindACP && agent.Get(sess.AgentType).ID == agent.Codex.ID {
 		if err := preview.InstallCodexUISkill(dir); err != nil {
 			log.Printf("session: install UI skill %s: %v", sess.ID, err)
+		}
+		if err := preview.InstallCodexFilesSkill(dir); err != nil {
+			log.Printf("session: install files skill %s: %v", sess.ID, err)
 		}
 	}
 	if !r.previews.Config().Enabled {
@@ -1603,6 +1605,41 @@ func (r *Registry) Get(ctx context.Context, sessionID, userID string) (store.Ses
 		return store.Session{}, store.ErrNotFound
 	}
 	return sess, nil
+}
+
+// OpenWorkspaceFile открывает обычный файл внутри workspace сессии её владельцу.
+// os.Root не позволяет пути и симлинкам выйти за границы workspace.
+func (r *Registry) OpenWorkspaceFile(ctx context.Context, sessionID, userID, name string) (*os.File, error) {
+	sess, err := r.Get(ctx, sessionID, userID)
+	if err != nil {
+		return nil, err
+	}
+	name = filepath.FromSlash(name)
+	if !filepath.IsLocal(name) {
+		return nil, os.ErrNotExist
+	}
+	rootPath := r.hostCwd(sess)
+	if rootPath == "" {
+		return nil, os.ErrNotExist
+	}
+	root, err := os.OpenRoot(rootPath)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	f, err := root.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		f.Close()
+		if err != nil {
+			return nil, err
+		}
+		return nil, os.ErrNotExist
+	}
+	return f, nil
 }
 
 // Fork создаёт ветку ACP-сессии: агент клонирует исходную сессию с историей

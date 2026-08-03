@@ -3,6 +3,8 @@ package session
 import (
 	"context"
 	"errors"
+	"io"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -12,6 +14,47 @@ import (
 	"github.com/grigory51/brigade/backend/internal/spawn"
 	"github.com/grigory51/brigade/backend/internal/store"
 )
+
+func TestOpenWorkspaceFile(t *testing.T) {
+	r := newTestRegistry(t)
+	dir := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(filepath.Join(dir, "result.zip"), []byte("archive"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(outside, []byte("secret"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, "escape")); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.store.CreateSession(context.Background(), store.Session{
+		ID: "s1", UserID: "u1", Mode: store.SessionModeLocal, Kind: store.SessionKindACP,
+		Status: store.SessionStatusRunning, Cwd: dir, CreatedAt: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := r.OpenWorkspaceFile(context.Background(), "s1", "u1", "result.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := io.ReadAll(f)
+	f.Close()
+	if err != nil || string(data) != "archive" {
+		t.Fatalf("read = %q, %v", data, err)
+	}
+	for _, name := range []string{"../secret.txt", "escape"} {
+		if f, err := r.OpenWorkspaceFile(context.Background(), "s1", "u1", name); err == nil {
+			f.Close()
+			t.Fatalf("unsafe path %q opened", name)
+		}
+	}
+	if f, err := r.OpenWorkspaceFile(context.Background(), "s1", "u2", "result.zip"); err == nil {
+		f.Close()
+		t.Fatal("foreign user opened file")
+	}
+}
 
 // fakeHandle — тестовая реализация spawn.Handle. Wait блокируется на канале exited,
 // который закрывается либо тестом напрямую («процесс завершился сам»), либо Terminate

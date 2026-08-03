@@ -5,12 +5,13 @@
 // пробрасывает ACP mcpServers в Claude Agent SDK. SDK стартует этот сервер как
 // subprocess ВНУТРИ контейнера сессии.
 //
-// Инструменты ничего не делают серверно — важно лишь, что вызов состоялся: он долетает
-// до клиента как tool_call (имя `mcp__brigade__<tool>`), и brigade рисует по нему карточку
-// (show_choice) или A2UI-поверхность из аргументов (render_ui). Результат — заглушка,
-// подсказывающая модели дождаться ответа пользователя. Сервер stateless.
+// UI-инструменты долетают до клиента как tool_call (имя `mcp__brigade__<tool>`), и brigade
+// рисует по ним карточку. publish_file проверяет локальный файл и возвращает защищённый URL,
+// содержимое файла остаётся в workspace и отдаётся backend'ом только владельцу сессии.
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { realpath, stat } from "node:fs/promises";
+import path from "node:path";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -153,6 +154,25 @@ const TOOLS = [
       required: ["title", "body"],
     },
   },
+  {
+    name: "publish_file",
+    description: [
+      "Сделать созданный в workspace файл доступным пользователю для скачивания.",
+      "Используй этот инструмент вместо ссылок на локальные абсолютные пути и file://.",
+      "Вызов отрисует карточку скачивания в чате. Он должен быть последним действием:",
+      "не повторяй ссылку и не пиши текст после него.",
+    ].join("\n"),
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: {
+          type: "string",
+          description: "Путь к файлу относительно текущего workspace или абсолютный путь внутри него",
+        },
+      },
+      required: ["path"],
+    },
+  },
 ];
 
 const server = new Server(
@@ -162,10 +182,43 @@ const server = new Server(
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 
-// Любой вызов — no-op с подсказкой: рисует клиент. Для save_note сохранение целиком на стороне
-// пользователя (кнопка в карточке шлёт запрос сама), поэтому модель НЕ должна ждать/дёргать API;
-// для остальных (render_ui/show_choice) — дождаться реакции пользователя, не крутя UI в цикле.
+// UI-вызовы возвращают подсказку: их результат рисует клиент. Для save_note сохранение целиком
+// на стороне пользователя; publish_file отдельно формирует download-ссылку выше.
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  if (request.params?.name === "publish_file") {
+    const requested = request.params.arguments?.path;
+    const sessionID = process.env.BRIGADE_SESSION_ID;
+    if (typeof requested !== "string" || !requested || !sessionID) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: "Не указан файл или идентификатор сессии." }],
+      };
+    }
+    try {
+      const cwd = await realpath(process.cwd());
+      const file = await realpath(path.resolve(cwd, requested));
+      const relative = path.relative(cwd, file);
+      const info = await stat(file);
+      if (
+        !relative ||
+        relative.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(relative) ||
+        !info.isFile()
+      ) {
+        throw new Error("path is outside workspace or is not a file");
+      }
+      const urlPath = relative.split(path.sep).map(encodeURIComponent).join("/");
+      const url = `/api/sessions/${encodeURIComponent(sessionID)}/files/${urlPath}`;
+      return {
+        content: [{ type: "text", text: JSON.stringify({ name: path.basename(file), url }) }],
+      };
+    } catch (error) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Не удалось опубликовать файл: ${error.message}` }],
+      };
+    }
+  }
   const text =
     request.params?.name === "save_note"
       ? "Карточка добавления в память показана. Сохранение — на стороне пользователя (кнопка «Сохранить» шлёт запрос сама); больше ничего делать не нужно."

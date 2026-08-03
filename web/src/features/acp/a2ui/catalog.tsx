@@ -5,6 +5,7 @@ import {
   createComponentImplementation,
   type ReactComponentImplementation,
 } from "@a2ui/react/v0_9";
+import { Download, FileArchive } from "lucide-react";
 import { FileDiffBlock } from "../tools/DiffCard";
 
 // basicCatalog — стандартный каталог A2UI (18 компонентов: Text/Card/Column/Row/Button/
@@ -54,9 +55,48 @@ const DiffView = createComponentImplementation(DiffViewApi, ({ props }) => {
   );
 });
 
+const DownloadViewApi = {
+  name: "DownloadView",
+  schema: z.object({
+    name: DynamicValueSchema,
+    url: DynamicValueSchema,
+  }),
+};
+
+const DownloadView = createComponentImplementation(
+  DownloadViewApi,
+  ({ props }) => {
+    const name = typeof props.name === "string" ? props.name : "Файл";
+    const url = typeof props.url === "string" ? props.url : "";
+    return (
+      <a
+        href={url}
+        download={name}
+        className="group flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3.5 shadow-[0_14px_38px_rgba(0,0,0,.18)] transition-colors hover:border-primary/50 hover:bg-accent/35"
+        data-a2ui="DownloadView"
+      >
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
+          <FileArchive className="size-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-xs text-muted-foreground">
+            Файл готов
+          </span>
+          <span className="block truncate text-sm font-medium text-foreground">
+            {name}
+          </span>
+        </span>
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors group-hover:border-primary/40 group-hover:bg-primary group-hover:text-primary-foreground">
+          <Download className="size-4" />
+        </span>
+      </a>
+    );
+  },
+);
+
 // cardsCatalog подключается к MessageProcessor (см. useAcpRuntime).
 export const cardsCatalog: Catalog<ReactComponentImplementation> = new Catalog(
   CARDS_CATALOG_ID,
-  [DiffView],
+  [DiffView, DownloadView],
   [],
 );

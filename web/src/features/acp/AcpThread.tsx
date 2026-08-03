@@ -17,11 +17,13 @@ import {
 } from "@/components/assistant-ui/composer-upload";
 import {
   FRONTEND_TOOL_NAMES,
+  PUBLISH_FILE_TOOL_NAME,
   RENDER_UI_TOOL_NAME,
   SAVE_NOTE_TOOL_NAME,
 } from "./frontendTools";
 import { A2uiContext } from "./a2ui/context";
 import { RenderUiCard } from "./a2ui/renderUi";
+import { PublishFileCard } from "./a2ui/PublishFileCard";
 import { SaveNoteCard } from "./SaveNoteCard";
 
 // AcpSessionContext — id текущей ACP-сессии для tool-карточек (SaveNoteCard шлёт его как
@@ -159,6 +161,10 @@ const ToolFallback: ToolCallMessagePartComponent = (props) => {
   // до generic-lookup, поэтому его поверхность идёт только через RenderUiCard.
   if (toolName === RENDER_UI_TOOL_NAME) {
     return <RenderUiCard {...toolProps} />;
+  }
+
+  if (toolName === PUBLISH_FILE_TOOL_NAME) {
+    return <PublishFileCard {...toolProps} />;
   }
 
   // A2UI-поверхность карточки (бэкенд синтезирует её из ACP-событий, surfaceId =

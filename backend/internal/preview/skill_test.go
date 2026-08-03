@@ -83,3 +83,17 @@ func TestInstallCodexUISkill(t *testing.T) {
 		t.Fatalf("UI skill не описывает Brigade A2UI: %s", data)
 	}
 }
+
+func TestInstallCodexFilesSkill(t *testing.T) {
+	cwd := t.TempDir()
+	if err := InstallCodexFilesSkill(cwd); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(cwd, ".agents/skills/brigade-files/SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "publish_file") {
+		t.Fatalf("files skill = %q", data)
+	}
+}

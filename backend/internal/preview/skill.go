@@ -18,6 +18,9 @@ var noteSkillMD []byte
 //go:embed skill/ui/SKILL.md
 var uiSkillMD []byte
 
+//go:embed skill/files/SKILL.md
+var filesSkillMD []byte
+
 //go:embed skill/plugin.json
 var pluginJSON []byte
 
@@ -66,6 +69,12 @@ func InstallCodexSkills(cwd string) error {
 // модель может решить, что A2UI недоступен, хотя сервер brigade успешно подключён.
 func InstallCodexUISkill(cwd string) error {
 	return writeFile(filepath.Join(cwd, ".agents/skills/brigade-ui/SKILL.md"), uiSkillMD)
+}
+
+// InstallCodexFilesSkill сообщает Codex о deferred publish_file: без скилла инструмент
+// может не попасть в контекст до поиска и модель вернёт локальный путь.
+func InstallCodexFilesSkill(cwd string) error {
+	return writeFile(filepath.Join(cwd, ".agents/skills/brigade-files/SKILL.md"), filesSkillMD)
 }
 
 // InstallSkill раскладывает per-session плагин brigade со скиллами preview и note в рабочую

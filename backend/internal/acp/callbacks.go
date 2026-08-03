@@ -102,6 +102,7 @@ var trustedBrigadeTools = map[string]bool{
 	"save_note":   true,
 	"render_ui":   true,
 	"show_choice": true,
+	"publish_file": true,
 }
 
 func trustedBrigadeFrontendTool(call acpsdk.ToolCallUpdate) bool {

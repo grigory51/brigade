@@ -32,6 +32,7 @@ import (
 	telegramsvc "github.com/grigory51/brigade/backend/internal/telegram"
 	aguitransport "github.com/grigory51/brigade/backend/internal/transport/agui"
 	connectsvc "github.com/grigory51/brigade/backend/internal/transport/connect"
+	"github.com/grigory51/brigade/backend/internal/transport/filedownload"
 	"github.com/grigory51/brigade/backend/internal/transport/termws"
 	"github.com/grigory51/brigade/backend/internal/web"
 )
@@ -233,6 +234,9 @@ func runServer(configPath string) {
 	// Единственная сырая HTTP-ручка ACP — Connect не выражает этот потоковый протокол;
 	// управляющие ручки живут в AcpService выше. Аутентификация — Bearer/cookie на запрос.
 	aguitransport.Mux(mux, jwtVerifier{jwt: authSvc.JWT()}, prov, perms)
+	// Файлы, созданные агентом, скачиваются из workspace только владельцем сессии.
+	// Отдельная HTTP-ручка сохраняет streaming/range semantics обычной загрузки файла.
+	mux.Handle("GET /api/sessions/{sessionId}/files/{path...}", filedownload.Handler(jwtVerifier{jwt: authSvc.JWT()}, registry))
 	// Telegram webhook авторизуется отдельным secret header, который Telegram присылает
 	// при setWebhook; пользовательского JWT у внешнего Bot API нет.
 	mux.Handle("/api/telegram/", telegramSvc.Handler())

@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strings"
 	"sync"
 
 	"github.com/grigory51/brigade/backend/internal/auth"
@@ -282,12 +281,5 @@ func runHandler(verifier TokenVerifier, provider ClientProvider, perms *Permissi
 // хранит токен в httpOnly-cookie, недоступной JS, — поэтому cookie-fallback
 // обязателен, иначе web-сессия теряет доступ к AG-UI после перезагрузки страницы.
 func accessToken(r *http.Request) string {
-	header := r.Header.Get("Authorization")
-	if after, ok := strings.CutPrefix(header, "Bearer "); ok {
-		return strings.TrimSpace(after)
-	}
-	if c, err := r.Cookie(auth.AccessCookieName); err == nil {
-		return c.Value
-	}
-	return ""
+	return auth.AccessTokenFromRequest(r)
 }

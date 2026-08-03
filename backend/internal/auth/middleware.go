@@ -56,6 +56,12 @@ func tokenFromHeaderOrCookie(h http.Header, cookie func(string) (*http.Cookie, e
 	return ""
 }
 
+// AccessTokenFromRequest извлекает access-токен из обычного HTTP-запроса. Нужен сырым
+// HTTP-транспортам, которые не проходят через Connect-интерсептор.
+func AccessTokenFromRequest(r *http.Request) string {
+	return tokenFromHeaderOrCookie(r.Header, r.Cookie)
+}
+
 // Interceptor — Connect-интерсептор для unary- и stream-вызовов. Кладёт User в
 // контекст при валидном токене (Bearer или cookie); обязательность
 // авторизации проверяет сам хендлер сервиса. Cookie читается из заголовка Cookie
