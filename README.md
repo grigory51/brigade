@@ -99,7 +99,7 @@ docker run -d --name brigade \
 users don't pick a mode. Docker mode also needs the agent image on the host:
 
 ```sh
-docker build -t brigade/claude-agent:latest docker/claude-agent
+docker build -t brigade/agent:latest -f docker/agent/Dockerfile .
 # or: docker pull ghcr.io/grigory51/brigade-agent:latest
 ```
 

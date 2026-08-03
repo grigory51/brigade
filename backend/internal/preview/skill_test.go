@@ -93,7 +93,7 @@ func TestInstallCodexFilesSkill(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "publish_file") {
+	if !strings.Contains(string(data), "publish_file") || !strings.Contains(string(data), "model.glb") {
 		t.Fatalf("files skill = %q", data)
 	}
 }

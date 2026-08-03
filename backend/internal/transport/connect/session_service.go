@@ -135,8 +135,8 @@ func (s *SessionService) Stop(ctx context.Context, req *connect.Request[v1.StopS
 	return connect.NewResponse(&v1.Empty{}), nil
 }
 
-// ReloadAgent переинициализирует ACP-агента сессии (session/load того же диалога), чтобы
-// подхватить обновлённые скиллы/плагины без пересоздания сессии.
+// ReloadAgent перезапускает ACP-агента сессии на актуальном окружении, сохраняя диалог через
+// session/load. В docker-режиме контейнер пересоздаётся с обновлённым runtime-образом.
 func (s *SessionService) ReloadAgent(ctx context.Context, req *connect.Request[v1.ReloadAgentRequest]) (*connect.Response[v1.Empty], error) {
 	userID, err := requireUser(ctx)
 	if err != nil {

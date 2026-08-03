@@ -190,9 +190,9 @@ service SessionService {
   rpc Fork(ForkSessionRequest) returns (ForkSessionResponse) {}
   rpc Stop(StopSessionRequest) returns (Empty) {}
   rpc Delete(DeleteSessionRequest) returns (Empty) {}
-  // ReloadAgent переинициализирует ACP-агента сессии (session/load того же диалога), чтобы
-  // подхватить обновлённые скиллы/плагины без пересоздания сессии. Только ACP; не во время
-  // генерации.
+  // ReloadAgent перезапускает ACP-агента сессии на актуальном окружении, сохраняя диалог
+  // через session/load. В docker-режиме контейнер пересоздаётся с обновлённым runtime-образом.
+  // Только ACP; не во время генерации.
   rpc ReloadAgent(ReloadAgentRequest) returns (Empty) {}
   // SetSessionMcpServers меняет набор MCP-серверов ACP-сессии и применяет его
   // переинициализацией агента. Не во время генерации.

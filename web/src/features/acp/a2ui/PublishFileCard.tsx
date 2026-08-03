@@ -7,19 +7,26 @@ import { A2uiContext } from "./context";
 import { CARDS_CATALOG_ID } from "./catalog";
 
 const downloadUrlPattern =
-  /\/api\/sessions\/[A-Za-z0-9._~-]+\/files\/[^\s)"\\]+/;
+  /\/api\/sessions\/[A-Za-z0-9._~-]+\/files\/[^\s)"\\]+/g;
 
-function publishedFile(result: unknown): { name: string; url: string } | null {
+type PublishedFile = { name: string; url: string; previewUrl?: string };
+
+function publishedFile(result: unknown): PublishedFile | null {
   const text =
     typeof result === "string"
       ? result
       : result == null
         ? ""
         : JSON.stringify(result);
-  const url = text.match(downloadUrlPattern)?.[0];
+  const urls = text.match(downloadUrlPattern);
+  const url = urls?.[0];
   if (!url) return null;
   try {
-    return { name: decodeURIComponent(url.slice(url.lastIndexOf("/") + 1)), url };
+    return {
+      name: decodeURIComponent(url.slice(url.lastIndexOf("/") + 1)),
+      url,
+      previewUrl: urls?.[1],
+    };
   } catch {
     return null;
   }
@@ -37,6 +44,27 @@ export const PublishFileCard: ToolCallMessagePartComponent = (props) => {
     if (!processor || !file) return;
     const surfaceId = props.toolCallId;
     const messages: A2uiMessage[] = [];
+    const component = file.previewUrl
+      ? {
+          id: "root",
+          component: "CadViewer",
+          name: { path: "/name" },
+          sourceUrl: { path: "/url" },
+          previewUrl: { path: "/previewUrl" },
+        }
+      : /\.(?:glb|gltf)$/i.test(file.url)
+        ? {
+            id: "root",
+            component: "ModelViewer",
+            name: { path: "/name" },
+            url: { path: "/url" },
+          }
+        : {
+            id: "root",
+            component: "DownloadView",
+            name: { path: "/name" },
+            url: { path: "/url" },
+          };
     if (!processor.model.getSurface(surfaceId)) {
       messages.push({
         version: "v0.9",
@@ -48,14 +76,7 @@ export const PublishFileCard: ToolCallMessagePartComponent = (props) => {
         version: "v0.9",
         updateComponents: {
           surfaceId,
-          components: [
-            {
-              id: "root",
-              component: "DownloadView",
-              name: { path: "/name" },
-              url: { path: "/url" },
-            },
-          ],
+          components: [component],
         },
       } as A2uiMessage,
       {

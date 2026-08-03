@@ -386,8 +386,8 @@ func TestTranslateToolCallNoInput(t *testing.T) {
 
 // TestTranslateToolCallUpdate проверяет жизненный цикл tool call'а: промежуточные
 // обновления копят результат и НЕ эмитят событий (клиент требует ровно один END),
-// терминальный статус даёт END + RESULT с последним содержательным выводом, повторный
-// терминальный update для закрытого вызова событий не даёт.
+// терминальный статус даёт END без generic output, повторный терминальный update для
+// закрытого вызова событий не даёт.
 func TestTranslateToolCallUpdate(t *testing.T) {
 	c := &Client{}
 	// START регистрирует вызов как открытый.
@@ -402,16 +402,12 @@ func TestTranslateToolCallUpdate(t *testing.T) {
 		t.Fatalf("промежуточный update: %d событий, want 0", len(got))
 	}
 
-	// Терминальный статус закрывает вызов: END + RESULT с накопленным выводом.
+	// Терминальный статус закрывает вызов; generic output в ленту не передаётся.
 	done := acpsdk.ToolCallStatusCompleted
 	got = c.translateUpdate(acpsdk.UpdateToolCall("tc-1", acpsdk.WithUpdateStatus(done)))
 	assertShapes(t, got, []eventShape{
 		{Type: agui.EventToolCallEnd, ToolCallID: "tc-1"},
-		{Type: agui.EventToolCallResult, MessageID: "tc-1", Role: "tool", ToolCallID: "tc-1"},
 	})
-	if got[1].Content != `{"ok":true}` {
-		t.Errorf("Content = %q, want %q", got[1].Content, `{"ok":true}`)
-	}
 
 	// Повторный терминальный update закрытого вызова — ничего.
 	got = c.translateUpdate(acpsdk.UpdateToolCall("tc-1", acpsdk.WithUpdateStatus(done)))

@@ -1390,15 +1390,21 @@ func (r *Registry) EnsureACPClient(ctx context.Context, sessionID, userID string
 	return newLv.client, true
 }
 
-// PromptAutoApprove отправляет prompt в ACP-сессию из доверенного персонального канала
-// и возвращает только текст ответа ассистента. История остаётся общей с web-чатом.
-func (r *Registry) PromptAutoApprove(ctx context.Context, sessionID, userID, text string) (string, error) {
+// PromptResult — содержательный ответ turn'а для внешнего персонального транспорта.
+type PromptResult struct {
+	Text   string
+	Images []acp.GeneratedImageFile
+}
+
+// PromptAutoApprove отправляет prompt в ACP-сессию из доверенного персонального канала.
+// История остаётся общей с web-чатом.
+func (r *Registry) PromptAutoApprove(ctx context.Context, sessionID, userID, text string) (PromptResult, error) {
 	client, ok := r.EnsureACPClient(ctx, sessionID, userID)
 	if !ok {
-		return "", store.ErrNotFound
+		return PromptResult{}, store.ErrNotFound
 	}
 	if _, err := client.PromptAutoApprove(ctx, text, nil); err != nil {
-		return "", err
+		return PromptResult{}, err
 	}
 	messages := client.Messages()
 	start := len(messages)
@@ -1410,12 +1416,15 @@ func (r *Registry) PromptAutoApprove(ctx context.Context, sessionID, userID, tex
 		}
 	}
 	var parts []string
+	var images []acp.GeneratedImageFile
 	for _, message := range messages[start:] {
 		if message.Role == "assistant" && strings.TrimSpace(message.Content) != "" {
 			parts = append(parts, strings.TrimSpace(message.Content))
+		} else if message.Role == "tool_call" {
+			images = append(images, acp.GeneratedImageFiles(message.Result)...)
 		}
 	}
-	return strings.Join(parts, "\n\n"), nil
+	return PromptResult{Text: strings.Join(parts, "\n\n"), Images: images}, nil
 }
 
 // acpAlive проверяет живость среды ACP-сессии: docker — существует ли запущенный контейнер
@@ -1468,18 +1477,15 @@ func (r *Registry) reviveACP(ctx context.Context, sess store.Session) (*live, er
 	return &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, client: client}, nil
 }
 
-// ReloadAgent переинициализирует ACP-агента сессии, чтобы подхватить обновлённые скиллы/плагины
-// (напр. после апгрейда brigade, переименовавшего скилл). Плагины ACP статичны на время сессии
-// (грузятся один раз при session/new|load), горячей перезагрузки в SDK/ACP нет — поэтому
-// переподнимаем адаптер через session/load того же agent_session_id: диалог сохраняется (агент
-// реплеит thread), а скиллы читаются заново. local — свежий subprocess; docker — новый
-// контейнер с актуальными runtime-слоями. Во время генерации отказываем.
+// ReloadAgent перезапускает ACP-агента сессии и сохраняет диалог через session/load того же
+// agent_session_id. local получает свежий subprocess, docker — новый контейнер с актуальным
+// runtime-образом и всеми его слоями. Во время генерации отказываем.
 func (r *Registry) ReloadAgent(ctx context.Context, sessionID, userID string) error {
 	lv, sess, err := r.reloadable(ctx, sessionID, userID)
 	if err != nil {
 		return err
 	}
-	return r.reinit(ctx, lv, sess)
+	return r.reinit(ctx, lv, sess, true)
 }
 
 // SetSessionMcpServers меняет набор MCP-серверов сессии. У ACP-сессии набор применяется
@@ -1513,7 +1519,7 @@ func (r *Registry) SetSessionMcpServers(ctx context.Context, sessionID, userID s
 		r.installMcpProject(ctx, sess)
 		return nil
 	}
-	return r.reinit(ctx, lv, sess)
+	return r.reinit(ctx, lv, sess, false)
 }
 
 // reloadable отдаёт живую ACP-сессию пользователя, готовую к переинициализации: чужая или
@@ -1538,7 +1544,7 @@ func (r *Registry) reloadable(ctx context.Context, sessionID, userID string) (*l
 
 // reinit переподнимает адаптер сессии с актуальными плагинами и MCP-серверами, сохраняя
 // диалог (session/load того же agent_session_id).
-func (r *Registry) reinit(ctx context.Context, lv *live, sess store.Session) error {
+func (r *Registry) reinit(ctx context.Context, lv *live, sess store.Session, refreshRuntime bool) error {
 	sessionID := sess.ID
 	// Обновляем файлы скиллов до реинициализации, чтобы свежая загрузка их прочитала.
 	r.installSkill(sess)
@@ -1552,11 +1558,20 @@ func (r *Registry) reinit(ctx context.Context, lv *live, sess store.Session) err
 		if current != lv {
 			return store.ErrNotFound
 		}
+		if refreshRuntime {
+			ds, ok := r.spawner.(*spawn.DockerSpawner)
+			if !ok {
+				return fmt.Errorf("session: docker-режим без DockerSpawner")
+			}
+			// Сначала готовим свежий runtime: при ошибке pull текущий контейнер остаётся
+			// живым, и пользователь не теряет рабочую сессию.
+			if err := ds.RefreshRuntime(ctx); err != nil {
+				return fmt.Errorf("session: refresh agent runtime: %w", err)
+			}
+		}
 
-		// Runtime-слои смонтированы read-only при создании контейнера. Повторный Configure
-		// живого демона не мог обновить ни их, ни MCP: Configure намеренно является no-op
-		// при reconnect. Пересоздаём только контейнер; workspace, agent home и журнал
-		// остаются в bind-mount, а session/load восстанавливает тот же диалог.
+		// Пересоздаём контейнер; workspace, agent home и журнал остаются в bind-mount,
+		// а session/load восстанавливает тот же диалог.
 		_ = lv.terminate(ctx)
 		newLv, err := r.reviveACP(ctx, sess)
 		if err != nil {

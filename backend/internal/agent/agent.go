@@ -38,7 +38,7 @@ func (l Layer) BinPath() string {
 }
 
 // Слои runtime. Имя слоя совпадает с каталогом в образе-доноре (см.
-// docker/claude-agent/Dockerfile) — расхождение ловится при подготовке volume'ов.
+// docker/agent/Dockerfile) — расхождение ловится при подготовке volume'ов.
 var (
 	// LayerDaemon — бинарь brigade (`brigade acp-agent`, pid1 контейнера). Приезжает
 	// всегда и ко всем агентам: именно ему brigade передаёт по RPC секреты сессии, и он

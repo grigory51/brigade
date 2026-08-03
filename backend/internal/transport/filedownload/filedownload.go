@@ -40,7 +40,11 @@ func Handler(verifier tokenVerifier, files fileProvider) http.Handler {
 			return
 		}
 
-		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": info.Name()}))
+		disposition := "attachment"
+		if r.URL.Query().Has("inline") {
+			disposition = "inline"
+		}
+		w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": info.Name()}))
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		http.ServeContent(w, r, info.Name(), info.ModTime(), f)
 	})

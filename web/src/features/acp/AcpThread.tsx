@@ -4,7 +4,7 @@ import {
   useContext,
   type PropsWithChildren,
 } from "react";
-import { Loader2, Wrench, ChevronRight } from "lucide-react";
+import { Download, Loader2, Wrench, ChevronRight } from "lucide-react";
 import { type ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { A2uiSurface } from "@a2ui/react/v0_9";
 import { sessionClient } from "@/api/client";
@@ -182,6 +182,43 @@ const ToolFallback: ToolCallMessagePartComponent = (props) => {
   const done = props.status.type === "complete" || props.result !== undefined;
   const running = !done;
 
+  const generatedImages = generatedImageFiles(props.result);
+  if (generatedImages.length > 0 && sessionId) {
+    return (
+      <div className="space-y-3">
+        <ToolInvocation name={props.toolName} argsText={props.argsText} done={done} />
+        <div className="grid gap-3">
+          {generatedImages.map((image) => {
+            const path = image.path
+              .split("/")
+              .map(encodeURIComponent)
+              .join("/");
+            const url = `/api/sessions/${encodeURIComponent(sessionId)}/files/${path}?inline=1`;
+            return (
+              <div key={image.path} className="group relative overflow-hidden rounded-xl border bg-card">
+                <img
+                  src={url}
+                  alt="Сгенерированное изображение"
+                  className="max-h-[70vh] w-full object-contain"
+                />
+                <Button
+                  asChild
+                  size="icon"
+                  variant="secondary"
+                  className="absolute right-3 top-3 opacity-0 shadow-md transition-opacity group-hover:opacity-100 focus-within:opacity-100"
+                >
+                  <a href={url} download aria-label="Скачать изображение">
+                    <Download className="size-4" />
+                  </a>
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   // Diff определяется по контенту, а не имени: Edit/Write оба несут структурный
   // diff-результат, а «липкий diff» бэкенда гарантирует, что статусная строка его
   // не затёрла.
@@ -199,15 +236,25 @@ const ToolFallback: ToolCallMessagePartComponent = (props) => {
       return <FileCard content={resultText} running={running} />;
   }
 
-  const args = prettyArgs(props.argsText);
-  const result = resultText;
+  return <ToolInvocation name={props.toolName} argsText={props.argsText} done={done} />;
+};
 
+function ToolInvocation({
+  name,
+  argsText,
+  done,
+}: {
+  name: string;
+  argsText?: string;
+  done: boolean;
+}) {
+  const args = prettyArgs(argsText);
   return (
     <div className="space-y-2 rounded-lg border border-dashed border-border bg-card/40 p-3">
       <div className="flex items-center gap-2 text-sm">
         <Wrench className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="min-w-0 truncate font-mono font-medium">
-          {props.toolName || "tool"}
+          {name || "tool"}
         </span>
         {done ? (
           <span className="size-1.5 shrink-0 rounded-full bg-success/70" />
@@ -216,10 +263,29 @@ const ToolFallback: ToolCallMessagePartComponent = (props) => {
         )}
       </div>
       {args && <Disclosure label="Аргументы" content={args} muted />}
-      {result && <Disclosure label="Результат" content={result} />}
     </div>
   );
-};
+}
+
+function generatedImageFiles(result: unknown): { path: string; mimeType: string }[] {
+  try {
+    const value = typeof result === "string" ? JSON.parse(result) : result;
+    if (!value || typeof value !== "object" || (value as { type?: unknown }).type !== "generated_images") {
+      return [];
+    }
+    const images = (value as { images?: unknown }).images;
+    if (!Array.isArray(images)) return [];
+    return images.filter(
+      (image): image is { path: string; mimeType: string } =>
+        !!image &&
+        typeof image === "object" &&
+        typeof (image as { path?: unknown }).path === "string" &&
+        typeof (image as { mimeType?: unknown }).mimeType === "string",
+    );
+  } catch {
+    return [];
+  }
+}
 
 // SnippetCard — рендер демо-сниппета show_choice: заголовок и набор вариантов.
 // Аргументы стримятся, поэтому JSON может быть ещё неполным — парсим осторожно.

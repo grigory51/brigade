@@ -15,7 +15,7 @@ OUT="${2:?usage: make-app.sh <binary> <output.app>}"
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 PKG="$REPO/packaging/macos"
-AGENT_DOCKERFILE="$REPO/docker/claude-agent/Dockerfile"
+AGENT_DOCKERFILE="$REPO/docker/agent/Dockerfile"
 
 # Версии агент-рантайма. Версию адаптера НЕ дублируем: единственный источник —
 # `ARG ACP_ADAPTER_VERSION` в образе агента, иначе .app и контейнер тихо разъезжаются
@@ -142,8 +142,8 @@ npm_cached agent "$RES/agent" "$CLAUDE_SPEC" "$ADAPTER_SPEC" "$CODEX_SPEC" "$COD
 # Манифест и скрипт кладём в кеш из репо: правка в репозитории переустановит зависимости.
 echo "make-app: ставлю MCP-сервер brigade (render_ui)…"
 mkdir -p "$CACHE/brigade-mcp"
-cp "$REPO/docker/claude-agent/mcp/brigade-tools.mjs" \
-   "$REPO/docker/claude-agent/mcp/package.json" "$CACHE/brigade-mcp/"
+cp "$REPO/docker/agent/mcp/brigade-tools.mjs" \
+   "$REPO/docker/agent/mcp/package.json" "$CACHE/brigade-mcp/"
 npm_cached brigade-mcp "$RES/brigade-mcp"
 
 echo "make-app: собрано $OUT (self-contained: node + Claude + Codex + mcp)"

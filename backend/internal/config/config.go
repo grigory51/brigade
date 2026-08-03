@@ -60,7 +60,7 @@ type Config struct {
 
 	// AgentImage — образ контейнера агента по умолчанию (docker-режим). Он же донор
 	// runtime-компонентов brigade для сессий на пользовательских образах. Пусто →
-	// spawn.DefaultImage (локально собранный brigade/claude-agent:latest); инсталляции,
+	// spawn.DefaultImage (локально собранный brigade/agent:latest); инсталляции,
 	// которые образ не собирают, указывают здесь опубликованный.
 	AgentImage string `koanf:"agent_image"`
 

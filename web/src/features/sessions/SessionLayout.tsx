@@ -254,13 +254,13 @@ export function SessionLayout() {
     [navigate],
   );
 
-  // reloadingId — сессия, чей ACP-агент сейчас переинициализируется (перезагрузка скиллов).
+  // reloadingId — сессия, чей ACP-агент сейчас перезапускается на актуальном окружении.
   const [reloadingId, setReloadingId] = useState<string | null>(null);
   const onReloadAgent = useCallback(async (id: string) => {
     setReloadingId(id);
     try {
       await sessionClient.reloadAgent({ sessionId: id });
-      toast.success("Агент перезагружен — скиллы обновлены");
+      toast.success("Агент перезапущен на актуальном окружении");
     } catch (err) {
       toast.error(
         err instanceof ConnectError
@@ -687,8 +687,8 @@ function SessionItem({
             e.stopPropagation();
             if (!busy) onReloadAgent();
           }}
-          aria-label="Перезагрузить агента (обновить скиллы)"
-          title="Перезагрузить агента (обновить скиллы)"
+          aria-label="Перезапустить агента на актуальном окружении"
+          title="Перезапустить агента на актуальном окружении"
           // showOnHover прячет без наведения — на время перезагрузки спиннер виден.
           className={
             reloading

@@ -14,21 +14,27 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"path"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/grigory51/brigade/backend/internal/acp"
 	"github.com/grigory51/brigade/backend/internal/agent"
 	"github.com/grigory51/brigade/backend/internal/agentimage"
 	"github.com/grigory51/brigade/backend/internal/session"
 	"github.com/grigory51/brigade/backend/internal/store"
 )
 
-const bindingTTL = 15 * time.Minute
+const (
+	bindingTTL           = 15 * time.Minute
+	maxTelegramPhotoSize = 10 << 20
+)
 
 type Service struct {
 	store      *store.Store
@@ -423,6 +429,13 @@ type inbound struct {
 	text                 string
 }
 
+type replyEnvelope struct {
+	Type      string                   `json:"type"`
+	Text      string                   `json:"text"`
+	SessionID string                   `json:"sessionId"`
+	Images    []acp.GeneratedImageFile `json:"images"`
+}
+
 func inboundFrom(update telegramUpdate) inbound {
 	message, guest := update.Message, false
 	if update.GuestMessage != nil {
@@ -514,11 +527,11 @@ func (s *Service) processQueued(bot store.TelegramBot, queued []store.TelegramUp
 	sessionID, err := s.session(bot, in)
 	if err == nil {
 		stopTyping := s.typing(bot, in)
-		var answer string
+		var answer session.PromptResult
 		answer, err = s.registry.PromptAutoApprove(s.ctx, sessionID, bot.UserID, strings.Join(prompts, "\n\n"))
 		stopTyping()
 		if err == nil {
-			s.finishWithReply(bot, batch, answer, nil)
+			s.finishWithReply(bot, batch, encodeReply(answer, sessionID), nil)
 			return
 		}
 	}
@@ -654,12 +667,75 @@ func (s *Service) finishWithReply(bot store.TelegramBot, updates []inbound, answ
 }
 
 func (s *Service) reply(ctx context.Context, bot store.TelegramBot, in inbound, text string) error {
+	reply := decodeReply(text)
+	type loadedImage struct {
+		name string
+		data []byte
+	}
+	images := make([]loadedImage, 0, len(reply.Images))
+	for _, image := range reply.Images {
+		file, err := s.registry.OpenWorkspaceFile(ctx, reply.SessionID, bot.UserID, image.Path)
+		if err != nil {
+			log.Printf("telegram: open generated image %s: %v", image.Path, err)
+			continue
+		}
+		data, readErr := io.ReadAll(io.LimitReader(file, maxTelegramPhotoSize+1))
+		file.Close()
+		if readErr != nil {
+			return readErr
+		}
+		if len(data) > maxTelegramPhotoSize {
+			return fmt.Errorf("telegram: generated image %s exceeds 10 MiB", image.Path)
+		}
+		images = append(images, loadedImage{name: path.Base(image.Path), data: data})
+	}
 	if in.guest {
 		if in.guestInlineMessageID != "" {
-			return s.api.editGuest(ctx, bot.Token, in.guestInlineMessageID, text)
+			if len(images) == 0 {
+				return s.api.editGuest(ctx, bot.Token, in.guestInlineMessageID, reply.Text)
+			}
+			fileIDs := make([]string, 0, len(images))
+			for _, image := range images {
+				message, err := s.api.sendPhoto(ctx, bot.Token, bot.OwnerTelegramID, 0, image.name, image.data, true)
+				if err != nil {
+					return err
+				}
+				if len(message.Photo) == 0 {
+					return errors.New("telegram: sendPhoto returned no photo id")
+				}
+				fileIDs = append(fileIDs, message.Photo[len(message.Photo)-1].FileID)
+				_ = s.api.deleteMessage(ctx, bot.Token, bot.OwnerTelegramID, message.MessageID)
+			}
+			return s.api.editGuestImages(ctx, bot.Token, in.guestInlineMessageID, reply.Text, fileIDs)
 		}
-		_, err := s.api.answerGuest(ctx, bot.Token, in.message.GuestQueryID, text)
+		_, err := s.api.answerGuest(ctx, bot.Token, in.message.GuestQueryID, reply.Text)
 		return err
 	}
-	return s.api.sendMessage(ctx, bot.Token, in.chatID, in.threadID, text)
+	if strings.TrimSpace(reply.Text) != "" || len(images) == 0 {
+		if err := s.api.sendMessage(ctx, bot.Token, in.chatID, in.threadID, reply.Text); err != nil {
+			return err
+		}
+	}
+	for _, image := range images {
+		if _, err := s.api.sendPhoto(ctx, bot.Token, in.chatID, in.threadID, image.name, image.data, false); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func encodeReply(result session.PromptResult, sessionID string) string {
+	if len(result.Images) == 0 {
+		return result.Text
+	}
+	encoded, _ := json.Marshal(replyEnvelope{Type: "brigade_reply", Text: result.Text, SessionID: sessionID, Images: result.Images})
+	return string(encoded)
+}
+
+func decodeReply(value string) replyEnvelope {
+	var reply replyEnvelope
+	if json.Unmarshal([]byte(value), &reply) != nil || reply.Type != "brigade_reply" {
+		return replyEnvelope{Text: value}
+	}
+	return reply
 }

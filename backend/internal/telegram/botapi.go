@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -48,7 +50,12 @@ type telegramMessage struct {
 	GuestBotCallerUser *telegramUser    `json:"guest_bot_caller_user"`
 	Chat               telegramChat     `json:"chat"`
 	Text               string           `json:"text"`
+	Photo              []telegramPhoto  `json:"photo"`
 	ReplyToMessage     *telegramMessage `json:"reply_to_message"`
+}
+
+type telegramPhoto struct {
+	FileID string `json:"file_id"`
 }
 
 type telegramUpdate struct {
@@ -68,6 +75,10 @@ func (a *botAPI) call(ctx context.Context, token, method string, in, out any) er
 		return fmt.Errorf("telegram: request %s: invalid Bot API URL", method)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	return a.do(req, method, out)
+}
+
+func (a *botAPI) do(req *http.Request, method string, out any) error {
 	resp, err := a.http.Do(req)
 	if err != nil {
 		// url.Error содержит полный URL, а Bot API включает секретный token в path.
@@ -102,6 +113,49 @@ func (a *botAPI) call(ctx context.Context, token, method string, in, out any) er
 		}
 	}
 	return nil
+}
+
+func (a *botAPI) callMultipart(ctx context.Context, token, method string, fields map[string]string, filename string, data []byte, out any) error {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for name, value := range fields {
+		if err := writer.WriteField(name, value); err != nil {
+			return fmt.Errorf("telegram: encode %s: %w", method, err)
+		}
+	}
+	part, err := writer.CreateFormFile("photo", filename)
+	if err != nil {
+		return fmt.Errorf("telegram: encode %s: %w", method, err)
+	}
+	if _, err := part.Write(data); err != nil {
+		return fmt.Errorf("telegram: encode %s: %w", method, err)
+	}
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("telegram: encode %s: %w", method, err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.baseURL+"/bot"+token+"/"+method, &body)
+	if err != nil {
+		return fmt.Errorf("telegram: request %s: invalid Bot API URL", method)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	return a.do(req, method, out)
+}
+
+func (a *botAPI) sendPhoto(ctx context.Context, token string, chatID, threadID int64, filename string, data []byte, silent bool) (telegramMessage, error) {
+	fields := map[string]string{"chat_id": strconv.FormatInt(chatID, 10)}
+	if threadID != 0 {
+		fields["message_thread_id"] = strconv.FormatInt(threadID, 10)
+	}
+	if silent {
+		fields["disable_notification"] = "true"
+	}
+	var message telegramMessage
+	err := a.callMultipart(ctx, token, "sendPhoto", fields, filename, data, &message)
+	return message, err
+}
+
+func (a *botAPI) deleteMessage(ctx context.Context, token string, chatID, messageID int64) error {
+	return a.call(ctx, token, "deleteMessage", map[string]any{"chat_id": chatID, "message_id": messageID}, nil)
 }
 
 func (a *botAPI) getMe(ctx context.Context, token string) (telegramUser, error) {
@@ -245,6 +299,26 @@ func (a *botAPI) editGuest(ctx context.Context, token, inlineMessageID, text str
 	return a.call(ctx, token, "editMessageText", map[string]any{
 		"inline_message_id": inlineMessageID,
 		"text":              text,
+	}, nil)
+}
+
+func (a *botAPI) editGuestImages(ctx context.Context, token, inlineMessageID, text string, fileIDs []string) error {
+	text = strings.TrimSpace(text)
+	if len([]rune(text)) > 32000 {
+		text = string([]rune(text)[:32000]) + "\n\n…"
+	}
+	media := make([]map[string]any, 0, len(fileIDs))
+	for index, fileID := range fileIDs {
+		id := fmt.Sprintf("image%d", index)
+		text += fmt.Sprintf("\n\n![](tg://photo?id=%s)", id)
+		media = append(media, map[string]any{
+			"id":    id,
+			"media": map[string]any{"type": "photo", "media": fileID},
+		})
+	}
+	return a.call(ctx, token, "editMessageText", map[string]any{
+		"inline_message_id": inlineMessageID,
+		"rich_message":      map[string]any{"markdown": text, "media": media},
 	}, nil)
 }
 

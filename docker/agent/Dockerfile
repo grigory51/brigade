@@ -1,10 +1,10 @@
 # Образ агента brigade: runtime-компоненты (демон, node, Claude Code CLI, ACP-адаптер,
 # MCP-сервер brigade) плюс базовое окружение для работы агента.
 #
-#   docker build -t brigade/claude-agent:latest -f docker/claude-agent/Dockerfile .
+#   docker build -t brigade/agent:latest -f docker/agent/Dockerfile .
 #
 # ВАЖНО: контекст сборки — КОРЕНЬ репо (нужен backend/ для бинаря brigade), поэтому пути
-# COPY даны от корня (docker/claude-agent/...). CI собирает образ с context: "." .
+# COPY даны от корня (docker/agent/...). CI собирает образ с context: "." .
 #
 # Один образ обслуживает оба режима сессий:
 #   - CLI: контейнер запускает `claude` в TTY (durable-терминал per-user демона);
@@ -32,23 +32,31 @@ COPY backend/ ./backend/
 RUN mkdir -p backend/internal/web/dist && touch backend/internal/web/dist/.gitkeep \
     && cd backend && CGO_ENABLED=0 go build -trimpath -o /out/brigade ./cmd/brigade
 
-# База — bullseye (glibc 2.31), а НЕ bookworm (2.36): node из слоя runtime исполняется в
-# образе пользователя, и собранный под 2.36 он не стартует, например, в ubuntu:jammy
-# (2.35). Сборка на 2.31 работает в bullseye+/jammy+/bookworm+. musl-дистрибутивы (alpine)
-# не поддерживаются — brigade отвергает такой образ проверкой совместимости.
-FROM node:22-bullseye-slim
+# Node runtime по-прежнему берём из bullseye (glibc 2.31): этот слой исполняется и в
+# пользовательских образах, включая ubuntu:jammy (glibc 2.35). Сам образ по умолчанию —
+# актуальная Ubuntu с полноценным Python-окружением.
+FROM node:22-bullseye-slim AS node-runtime
+FROM ghcr.io/astral-sh/uv:0.11.32 AS uv-runtime
+FROM ubuntu:26.04
+
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=uv-runtime /uv /uvx /usr/local/bin/
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
 # Инструменты, без которых кодинг-агент недееспособен в контейнере. Базовый slim-образ
 # несёт минимум ОС-утилит, поэтому доставляем ходовой набор для «простых операций»:
-# less (пейджер git), jq (JSON), python3-pip/venv (python3 без pip бесполезен),
+# less (пейджер git), jq (JSON), Python с привычными `python`/`python3`, pip/venv и uv,
 # unzip/zip/wget (архивы/загрузки), procps (ps), openssh-client (git по SSH), patch,
 # file, tree, vim-tiny (git $EDITOR). Компиляторы (build-essential) намеренно НЕ ставим —
 # образ остаётся лёгким; нужен тяжёлый тулчейн — пользователь приносит свой образ.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        git ripgrep ca-certificates curl wget \
+        git ripgrep ca-certificates curl wget libstdc++6 libgcc-s1 \
         python3 python3-pip python3-venv \
         jq less unzip zip procps openssh-client patch file tree vim-tiny \
+    && ln -s /usr/bin/python3 /usr/local/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
 # --- Слои runtime -----------------------------------------------------------------
@@ -84,7 +92,7 @@ RUN npm install -g --prefix /opt/brigade-runtime/claude-cli @anthropic-ai/claude
 # игнорирует кастомный _meta, но пробрасывает ACP mcpServers в Claude Agent SDK; SDK
 # стартует этот сервер как stdio-subprocess. Зависимости ставятся рядом со скриптом, чтобы
 # резолв @modelcontextprotocol/sdk не зависел от cwd сессии.
-COPY docker/claude-agent/mcp/ /opt/brigade-runtime/brigade-mcp/
+COPY docker/agent/mcp/ /opt/brigade-runtime/brigade-mcp/
 RUN cd /opt/brigade-runtime/brigade-mcp \
     && npm install --omit=dev \
     && npm cache clean --force
@@ -98,7 +106,7 @@ COPY --from=brigade-build /out/brigade /opt/brigade-runtime/daemon/bin/brigade
 
 # Сессии на этом образе получают те же компоненты слоями (как и на любом другом), но
 # PATH прописан и здесь: так образ остаётся самодостаточным для ручного запуска и отладки
-# (`docker run -it brigade/claude-agent claude`).
+# (`docker run -it brigade/agent claude`).
 ENV PATH=/opt/brigade-runtime/daemon/bin:/opt/brigade-runtime/claude-cli/bin:/opt/brigade-runtime/acp-adapter/bin:/opt/brigade-runtime/codex/bin:$PATH
 
 # Непривилегированный пользователь: агент исполняет произвольные команды.

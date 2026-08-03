@@ -36,8 +36,8 @@ work_dir: "./workspace"
 max_containers: 16
 
 # Образ контейнера агента по умолчанию (docker-режим). Он же донор runtime-компонентов
-# brigade для сессий на пользовательских образах. Не задано → brigade/claude-agent:latest
-# (собирается локально из docker/claude-agent/Dockerfile); инсталляции, которые образ не
+# brigade для сессий на пользовательских образах. Не задано → brigade/agent:latest
+# (собирается локально из docker/agent/Dockerfile); инсталляции, которые образ не
 # собирают, указывают опубликованный: ghcr.io/grigory51/brigade-agent:latest.
 agent_image: ""
 

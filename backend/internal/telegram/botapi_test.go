@@ -65,11 +65,15 @@ func TestRepliesUseRichMarkdown(t *testing.T) {
 	var requests []string
 	api.http.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		body, _ := io.ReadAll(request.Body)
-		requests = append(requests, request.URL.Path+" "+string(body))
+		requests = append(requests, request.URL.Path+" "+request.Header.Get("Content-Type")+" "+string(body))
+		response := `{"ok":true,"result":{"inline_message_id":"guest-inline"}}`
+		if strings.HasSuffix(request.URL.Path, "/sendPhoto") {
+			response = `{"ok":true,"result":{"message_id":12,"photo":[{"file_id":"small"},{"file_id":"large"}]}}`
+		}
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Header:     make(http.Header),
-			Body:       io.NopCloser(strings.NewReader(`{"ok":true,"result":{"inline_message_id":"guest-inline"}}`)),
+			Body:       io.NopCloser(strings.NewReader(response)),
 		}, nil
 	})
 	if err := api.sendMessage(context.Background(), "token", 42, 7, "**жирный**"); err != nil {
@@ -88,7 +92,14 @@ func TestRepliesUseRichMarkdown(t *testing.T) {
 	if err := api.setReaction(context.Background(), "token", 42, 9, ""); err != nil {
 		t.Fatal(err)
 	}
-	if len(requests) != 5 ||
+	photo, err := api.sendPhoto(context.Background(), "token", 42, 7, "generated.png", []byte("png"), false)
+	if err != nil || len(photo.Photo) != 2 {
+		t.Fatal(err)
+	}
+	if err := api.editGuestImages(context.Background(), "token", inlineMessageID, "**Готово**", []string{"large"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(requests) != 7 ||
 		!strings.Contains(requests[0], "/sendRichMessage ") ||
 		!strings.Contains(requests[0], `"message_thread_id":7`) ||
 		!strings.Contains(requests[0], `"markdown":"**жирный**"`) ||
@@ -98,7 +109,10 @@ func TestRepliesUseRichMarkdown(t *testing.T) {
 		!strings.Contains(requests[2], `"inline_message_id":"guest-inline"`) ||
 		!strings.Contains(requests[2], `"rich_message":{"markdown":"**Готово**"}`) ||
 		!strings.Contains(requests[3], `"message_id":9,"reaction":[{"emoji":"👀","type":"emoji"}]`) ||
-		!strings.Contains(requests[4], `"message_id":9,"reaction":[]`) {
+		!strings.Contains(requests[4], `"message_id":9,"reaction":[]`) ||
+		!strings.Contains(requests[5], "/sendPhoto multipart/form-data;") ||
+		!strings.Contains(requests[5], `name="photo"; filename="generated.png"`) ||
+		!strings.Contains(requests[6], `"media":[{"id":"image0","media":{"media":"large","type":"photo"}}]`) {
 		t.Fatalf("unexpected rich requests: %#v", requests)
 	}
 }

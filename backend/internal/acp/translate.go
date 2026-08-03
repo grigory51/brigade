@@ -2,6 +2,7 @@ package acp
 
 import (
 	"encoding/json"
+	"log"
 	"regexp"
 	"strings"
 
@@ -134,14 +135,20 @@ func (c *Client) translateUpdate(u acpsdk.SessionUpdate) []agui.Event {
 			st.argsJSON = rawJSON(tu.RawInput)
 		}
 
-		// Копим содержательный результат. Diff «липнет»: статусная строка
-		// («file updated successfully») его не затирает — diff нужен карточке рендера.
+		// Наружу уходят только результаты, для которых есть отдельный формат отображения.
+		// Generic output может занимать мегабайты и не нужен ни ленте, ни истории.
 		if tu.RawOutput != nil || len(tu.Content) > 0 {
 			content := toolResultText(tu)
 			if hasDiffContent(tu) {
 				st.result, st.isDiff = content, true
 				st.diffs = diffData(tu)
-			} else if !st.isDiff {
+			} else if materialized, found, err := MaterializeGeneratedImages(c.opts.Cwd, id, content); found {
+				if err != nil {
+					log.Printf("acp: materialize generated image %s: %v", id, err)
+				} else {
+					st.result = materialized
+				}
+			} else if !st.isDiff && keepToolResult(st.name) {
 				st.result = content
 			}
 		}
@@ -176,6 +183,11 @@ func (c *Client) translateUpdate(u acpsdk.SessionUpdate) []agui.Event {
 		// подмножестве не транслируются.
 		return nil
 	}
+}
+
+func keepToolResult(name string) bool {
+	name = strings.ToLower(name)
+	return name == "terminal" || name == "read file" || strings.Contains(name, "publish_file")
 }
 
 // emitUserMessage транслирует реплику пользователя (ACP user_message_chunk) в

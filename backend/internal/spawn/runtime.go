@@ -223,9 +223,9 @@ func (s *DockerSpawner) ensureRuntimeVolume(ctx context.Context, name, layer str
 		[]string{"sh", "-c", fmt.Sprintf("test -d %s && cp -a %s/. /out/", src, src)})
 	if err != nil {
 		// Обычная причина — образ агента собран версией brigade без runtime-слоёв: их
-		// раскладывает docker/claude-agent/Dockerfile, и после обновления brigade образ
+		// раскладывает docker/agent/Dockerfile, и после обновления brigade образ
 		// нужно пересобрать.
-		return fmt.Errorf("spawn: в образе %s нет runtime-слоя %q (%s: %w) — пересоберите образ агента: docker build -t %s -f docker/claude-agent/Dockerfile .",
+		return fmt.Errorf("spawn: в образе %s нет runtime-слоя %q (%s: %w) — пересоберите образ агента: docker build -t %s -f docker/agent/Dockerfile .",
 			s.baseImage, layer, strings.TrimSpace(out), err, s.baseImage)
 	}
 	s.runtimeReady[name] = true
@@ -297,6 +297,17 @@ func (s *DockerSpawner) baseImageDigest(ctx context.Context) (string, error) {
 	}
 	s.baseImageDigestCache = id
 	return s.baseImageDigestCache, nil
+}
+
+// RefreshRuntime сбрасывает кеш базового образа и заново разрешает его digest. Для
+// удалённого :latest это также подтягивает свежий образ; runtime-volume'ы получат новое
+// имя по digest и будут наполнены при следующем запуске контейнера.
+func (s *DockerSpawner) RefreshRuntime(ctx context.Context) error {
+	s.baseImageMu.Lock()
+	s.baseImageDigestCache = ""
+	s.baseImageMu.Unlock()
+	_, err := s.baseImageDigest(ctx)
+	return err
 }
 
 func runtimeVolumeName(layer, digest string) string {

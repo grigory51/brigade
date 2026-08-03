@@ -159,6 +159,7 @@ const TOOLS = [
     description: [
       "Сделать созданный в workspace файл доступным пользователю для скачивания.",
       "Используй этот инструмент вместо ссылок на локальные абсолютные пути и file://.",
+      "Для CAD передай исходный STEP в path и GLB-превью в preview — модель откроется прямо в чате.",
       "Вызов отрисует карточку скачивания в чате. Он должен быть последним действием:",
       "не повторяй ссылку и не пиши текст после него.",
     ].join("\n"),
@@ -168,6 +169,10 @@ const TOOLS = [
         path: {
           type: "string",
           description: "Путь к файлу относительно текущего workspace или абсолютный путь внутри него",
+        },
+        preview: {
+          type: "string",
+          description: "Опциональный путь к GLB/GLTF-превью для CAD-файла",
         },
       },
       required: ["path"],
@@ -187,6 +192,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (request.params?.name === "publish_file") {
     const requested = request.params.arguments?.path;
+    const requestedPreview = request.params.arguments?.preview;
     const sessionID = process.env.BRIGADE_SESSION_ID;
     if (typeof requested !== "string" || !requested || !sessionID) {
       return {
@@ -196,21 +202,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     try {
       const cwd = await realpath(process.cwd());
-      const file = await realpath(path.resolve(cwd, requested));
-      const relative = path.relative(cwd, file);
-      const info = await stat(file);
-      if (
-        !relative ||
-        relative.startsWith(`..${path.sep}`) ||
-        path.isAbsolute(relative) ||
-        !info.isFile()
-      ) {
-        throw new Error("path is outside workspace or is not a file");
-      }
-      const urlPath = relative.split(path.sep).map(encodeURIComponent).join("/");
-      const url = `/api/sessions/${encodeURIComponent(sessionID)}/files/${urlPath}`;
+      const publish = async (value) => {
+        const file = await realpath(path.resolve(cwd, value));
+        const relative = path.relative(cwd, file);
+        const info = await stat(file);
+        if (
+          !relative ||
+          relative.startsWith(`..${path.sep}`) ||
+          path.isAbsolute(relative) ||
+          !info.isFile()
+        ) {
+          throw new Error("path is outside workspace or is not a file");
+        }
+        const urlPath = relative.split(path.sep).map(encodeURIComponent).join("/");
+        return {
+          name: path.basename(file),
+          url: `/api/sessions/${encodeURIComponent(sessionID)}/files/${urlPath}`,
+        };
+      };
+      const file = await publish(requested);
+      const preview =
+        typeof requestedPreview === "string" && requestedPreview
+          ? await publish(requestedPreview)
+          : null;
       return {
-        content: [{ type: "text", text: JSON.stringify({ name: path.basename(file), url }) }],
+        content: [{
+          type: "text",
+          text: JSON.stringify({ name: file.name, url: file.url, previewUrl: preview?.url }),
+        }],
       };
     } catch (error) {
       return {
