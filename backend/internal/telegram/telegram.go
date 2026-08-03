@@ -566,6 +566,11 @@ func (s *Service) session(bot store.TelegramBot, in inbound) (string, error) {
 	conversation, err := s.store.TelegramConversation(s.ctx, bot.ID, in.scope, in.chatID, in.threadID)
 	if err == nil {
 		if existing, getErr := s.registry.Get(s.ctx, conversation.SessionID, bot.UserID); getErr == nil && existing.Status == store.SessionStatusRunning {
+			// Исправляем имя сессий, созданных до появления имени guest-собеседника, но не
+			// трогаем названия, которые пользователь уже мог изменить вручную.
+			if in.guest && existing.Name == "Telegram · @"+bot.Username {
+				_, _ = s.registry.Rename(s.ctx, existing.ID, bot.UserID, telegramSessionName(bot, in))
+			}
 			return conversation.SessionID, nil
 		}
 	}
@@ -574,20 +579,30 @@ func (s *Service) session(bot store.TelegramBot, in inbound) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	name := "Telegram · " + in.message.Chat.Title
-	if in.message.Chat.Type == "private" {
-		name = "Telegram · @" + bot.Username
-		if in.threadID != 0 {
-			name += fmt.Sprintf(" · %d", in.threadID)
-		}
-	} else if in.threadID != 0 {
-		name += fmt.Sprintf(" · %d", in.threadID)
-	}
+	name := telegramSessionName(bot, in)
 	_, _ = s.registry.Rename(s.ctx, created.ID, bot.UserID, name)
 	err = s.store.SetTelegramConversation(s.ctx, store.TelegramConversation{
 		BotID: bot.ID, Scope: in.scope, ChatID: in.chatID, ThreadID: in.threadID, SessionID: created.ID,
 	})
 	return created.ID, err
+}
+
+func telegramSessionName(bot store.TelegramBot, in inbound) string {
+	name := "Telegram · " + in.message.Chat.Title
+	if in.message.Chat.Type == "private" {
+		peer := "@" + bot.Username
+		if in.guest {
+			peer = fmt.Sprintf("%d", in.chatID)
+			if in.message.Chat.Username != "" {
+				peer = "@" + in.message.Chat.Username
+			}
+		}
+		name = "Telegram · " + peer
+	}
+	if in.threadID != 0 {
+		name += fmt.Sprintf(" · %d", in.threadID)
+	}
+	return name
 }
 
 func (s *Service) newSession(bot store.TelegramBot, in inbound) {

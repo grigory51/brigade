@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/grigory51/brigade/backend/internal/store"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -36,6 +38,16 @@ func TestGuestCallerAndMessageSplit(t *testing.T) {
 	}})
 	if !in.guest || in.from != owner || in.scope != "guest" {
 		t.Fatalf("unexpected guest route: %+v", in)
+	}
+	bot := store.TelegramBot{Username: "brigade_bot"}
+	in.message.Chat = telegramChat{ID: 77, Type: "private", Username: "alice"}
+	in.chatID = 77
+	if got := telegramSessionName(bot, in); got != "Telegram · @alice" {
+		t.Fatalf("guest session name: %q", got)
+	}
+	in.message.Chat.Username = ""
+	if got := telegramSessionName(bot, in); got != "Telegram · 77" {
+		t.Fatalf("guest session name fallback: %q", got)
 	}
 	chunks := splitMessage(strings.Repeat("я", 4097), 4096)
 	if len(chunks) != 2 || len([]rune(chunks[0])) > 4096 || strings.Join(chunks, "") != strings.Repeat("я", 4097) {

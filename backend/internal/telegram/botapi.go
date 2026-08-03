@@ -34,9 +34,10 @@ type telegramUser struct {
 }
 
 type telegramChat struct {
-	ID    int64  `json:"id"`
-	Type  string `json:"type"`
-	Title string `json:"title"`
+	ID       int64  `json:"id"`
+	Type     string `json:"type"`
+	Title    string `json:"title"`
+	Username string `json:"username"`
 }
 
 type telegramMessage struct {

@@ -11,7 +11,12 @@ permissions:
 jobs:
   push:
     runs-on: [self-hosted, brigade]
-    container: ubuntu:24.04
+    env:
+      DOCKER_HOST: unix://${{ vars.DOCKER_SOCKET }}
+    container:
+      image: ubuntu:24.04
+      volumes:
+        - ${{ vars.DOCKER_SOCKET }}:${{ vars.DOCKER_SOCKET }}
     strategy:
       matrix:
         include:
