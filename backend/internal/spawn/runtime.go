@@ -350,18 +350,20 @@ type runtimeState struct {
 // containerOutput читает логи завершившегося контейнера одной строкой. Best-effort: вывод
 // нужен только для диагностики (сообщение об ошибке), поэтому ошибки чтения гасятся.
 func containerOutput(ctx context.Context, cli *client.Client, id string) string {
-	rc, err := cli.ContainerLogs(ctx, id, container.LogsOptions{ShowStdout: true, ShowStderr: true})
+	out, _ := readContainerLogs(ctx, cli, id, "all")
+	return out
+}
+
+func readContainerLogs(ctx context.Context, cli *client.Client, id, tail string) (string, error) {
+	rc, err := cli.ContainerLogs(ctx, id, container.LogsOptions{ShowStdout: true, ShowStderr: true, Tail: tail})
 	if err != nil {
-		return ""
+		return "", err
 	}
 	defer rc.Close()
-	var out, errOut bytes.Buffer
+	var out bytes.Buffer
 	// Логи не-TTY контейнера идут мультиплексированным потоком docker — разбираем его.
-	if _, err := stdcopy.StdCopy(&out, &errOut, rc); err != nil {
-		return out.String()
+	if _, err := stdcopy.StdCopy(&out, &out, rc); err != nil {
+		return out.String(), err
 	}
-	if out.Len() > 0 {
-		return out.String()
-	}
-	return errOut.String()
+	return out.String(), nil
 }

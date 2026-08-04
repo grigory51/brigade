@@ -37,6 +37,8 @@ import (
 	"github.com/grigory51/brigade/backend/internal/web"
 )
 
+var buildVersion = "dev"
+
 func main() {
 	var configPath string
 	root := &cobra.Command{

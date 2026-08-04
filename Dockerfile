@@ -18,13 +18,14 @@ COPY web/ ./
 RUN VITE_APP_VERSION=$VERSION npm run build
 
 FROM golang:1.26 AS build
+ARG VERSION=dev
 WORKDIR /src
 COPY backend/go.mod backend/go.sum ./backend/
 RUN cd backend && go mod download
 COPY backend/ ./backend/
 COPY --from=web /src/web/dist/ ./backend/internal/web/dist/
 RUN touch backend/internal/web/dist/.gitkeep \
-    && cd backend && CGO_ENABLED=0 go build -trimpath -o /out/brigade ./cmd/brigade
+    && cd backend && CGO_ENABLED=0 go build -trimpath -ldflags "-X main.buildVersion=$VERSION" -o /out/brigade ./cmd/brigade
 
 FROM alpine:3.21
 # git + openssh-client нужны фиче «личная память»: brigade шелл-аутит в git для

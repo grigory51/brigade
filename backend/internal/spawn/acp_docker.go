@@ -36,6 +36,17 @@ type DockerACPSpawner struct {
 	spawner *DockerSpawner
 }
 
+// ACPContainerDebug — ограниченный диагностический снимок контейнера ACP-сессии.
+type ACPContainerDebug struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Image     string `json:"image"`
+	ImageID   string `json:"imageId"`
+	Status    string `json:"status"`
+	Logs      string `json:"logs,omitempty"`
+	LogsError string `json:"logsError,omitempty"`
+}
+
 // ACP создаёт фабрику контейнерных ACP-процессов поверх docker-клиента спавнера.
 func (s *DockerSpawner) ACP() *DockerACPSpawner { return &DockerACPSpawner{spawner: s} }
 
@@ -184,6 +195,30 @@ func (d *DockerACPSpawner) DaemonAddr(ctx context.Context, sessionID string) (st
 		return "", false
 	}
 	return addr, true
+}
+
+// DebugContainer читает inspect и последние 200 строк логов контейнера через Docker API.
+func (d *DockerACPSpawner) DebugContainer(ctx context.Context, sessionID string) (ACPContainerDebug, error) {
+	id, err := d.spawner.findBySessionLabel(ctx, sessionID)
+	if err != nil {
+		return ACPContainerDebug{}, err
+	}
+	info, err := d.spawner.cli.ContainerInspect(ctx, id)
+	if err != nil {
+		return ACPContainerDebug{}, err
+	}
+	out := ACPContainerDebug{ID: id, Name: strings.TrimPrefix(info.Name, "/"), ImageID: info.Image}
+	if info.Config != nil {
+		out.Image = info.Config.Image
+	}
+	if info.State != nil {
+		out.Status = info.State.Status
+	}
+	out.Logs, err = readContainerLogs(ctx, d.spawner.cli, id, "200")
+	if err != nil {
+		out.LogsError = err.Error()
+	}
+	return out, nil
 }
 
 // daemonAddr резолвит http-адрес демона сессии в зависимости от режима brigade:

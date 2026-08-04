@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"runtime/debug"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -18,17 +19,23 @@ import (
 	"github.com/grigory51/brigade/backend/internal/store"
 )
 
-const debugEventLimit = 50
+const debugEventLimit = 200
 const debugMessageLimit = 20
+const debugPayloadLimit = 4096
 
 type sessionDebugDump struct {
-	DumpedAt     time.Time       `json:"dumpedAt"`
-	Session      store.Session   `json:"session"`
-	Daemon       daemonDebugDump `json:"daemon"`
-	MessageCount int             `json:"messageCount"`
-	Messages     []debugMessage  `json:"messages,omitempty"`
-	Events       []debugEvent    `json:"events,omitempty"`
-	LiveEvents   []debugEvent    `json:"liveEvents,omitempty"`
+	Version        string                   `json:"version"`
+	Revision       string                   `json:"revision,omitempty"`
+	BuildModified  bool                     `json:"buildModified,omitempty"`
+	DumpedAt       time.Time                `json:"dumpedAt"`
+	Session        store.Session            `json:"session"`
+	Daemon         daemonDebugDump          `json:"daemon"`
+	Container      *spawn.ACPContainerDebug `json:"container,omitempty"`
+	ContainerError string                   `json:"containerError,omitempty"`
+	MessageCount   int                      `json:"messageCount"`
+	Messages       []debugMessage           `json:"messages,omitempty"`
+	Events         []debugEvent             `json:"events,omitempty"`
+	LiveEvents     []debugEvent             `json:"liveEvents,omitempty"`
 }
 
 type daemonDebugDump struct {
@@ -51,20 +58,25 @@ type debugMessage struct {
 }
 
 type debugEvent struct {
-	Seq           int64          `json:"seq"`
-	Type          agui.EventType `json:"type"`
-	MessageID     string         `json:"messageId,omitempty"`
-	ToolCallID    string         `json:"toolCallId,omitempty"`
-	ToolCallName  string         `json:"toolCallName,omitempty"`
-	Name          string         `json:"name,omitempty"`
-	DeltaLength   int            `json:"deltaLength,omitempty"`
-	ContentLength int            `json:"contentLength,omitempty"`
+	Seq             int64          `json:"seq"`
+	Type            agui.EventType `json:"type"`
+	MessageID       string         `json:"messageId,omitempty"`
+	ToolCallID      string         `json:"toolCallId,omitempty"`
+	ToolCallName    string         `json:"toolCallName,omitempty"`
+	Name            string         `json:"name,omitempty"`
+	ParentMessageID string         `json:"parentMessageId,omitempty"`
+	DeltaLength     int            `json:"deltaLength,omitempty"`
+	ContentLength   int            `json:"contentLength,omitempty"`
+	Delta           string         `json:"delta,omitempty"`
+	Content         string         `json:"content,omitempty"`
+	Message         string         `json:"message,omitempty"`
+	Value           string         `json:"value,omitempty"`
 }
 
 func newDumpCommand(configPath *string) *cobra.Command {
 	session := &cobra.Command{
 		Use:   "session <id>",
-		Short: "вывести безопасный диагностический снимок сессии в JSON",
+		Short: "вывести ограниченный диагностический снимок сессии в JSON",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return dumpDebugSession(cmd.Context(), cmd, *configPath, args[0])
@@ -92,7 +104,17 @@ func dumpDebugSession(ctx context.Context, cmd *cobra.Command, configPath, sessi
 	if err != nil {
 		return fmt.Errorf("dump session %s: %w", sessionID, err)
 	}
-	out := sessionDebugDump{DumpedAt: time.Now(), Session: sess}
+	out := sessionDebugDump{Version: buildVersion, DumpedAt: time.Now(), Session: sess}
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, setting := range info.Settings {
+			switch setting.Key {
+			case "vcs.revision":
+				out.Revision = setting.Value
+			case "vcs.modified":
+				out.BuildModified = setting.Value == "true"
+			}
+		}
+	}
 	if sess.Mode == store.SessionModeDocker && sess.Kind == store.SessionKindACP {
 		dumpDockerACP(ctx, cfg, sessionID, &out)
 	} else {
@@ -111,6 +133,11 @@ func dumpDockerACP(ctx context.Context, cfg *config.Config, sessionID string, ou
 		return
 	}
 	defer docker.Close()
+	if containerDump, err := docker.ACP().DebugContainer(ctx, sessionID); err != nil {
+		out.ContainerError = err.Error()
+	} else {
+		out.Container = &containerDump
+	}
 	addr, ok := docker.ACP().DaemonAddr(ctx, sessionID)
 	if !ok {
 		out.Daemon.Error = "agent daemon container is unavailable"
@@ -191,6 +218,27 @@ func summarizeDebugEvent(message *v1.DaemonEvent) (debugEvent, bool) {
 	return debugEvent{
 		Seq: message.Seq, Type: event.Type, MessageID: event.MessageID,
 		ToolCallID: event.ToolCallID, ToolCallName: event.ToolCallName, Name: event.Name,
-		DeltaLength: len(event.Delta), ContentLength: len(event.Content),
+		ParentMessageID: event.ParentMessageID,
+		DeltaLength:     len(event.Delta), ContentLength: len(event.Content),
+		Delta: debugPreview(event.Delta), Content: debugPreview(event.Content),
+		Message: debugPreview(event.Message), Value: debugJSONPreview(event.Value),
 	}, true
+}
+
+func debugPreview(value string) string {
+	if len(value) <= debugPayloadLimit {
+		return value
+	}
+	return value[:debugPayloadLimit] + "…"
+}
+
+func debugJSONPreview(value any) string {
+	if value == nil {
+		return ""
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprintf("<json error: %v>", err)
+	}
+	return debugPreview(string(raw))
 }

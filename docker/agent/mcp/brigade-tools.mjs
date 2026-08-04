@@ -191,8 +191,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
 // на стороне пользователя; publish_file отдельно формирует download-ссылку выше.
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (request.params?.name === "publish_file") {
-    const requested = request.params.arguments?.path;
-    const requestedPreview = request.params.arguments?.preview;
+    // Codex deferred MCP оборачивает аргументы исходного инструмента в `arguments`.
+    // Алиасы принимаем для уже установленных версий скилла, которые называли поле file.
+    const args = request.params.arguments?.arguments ?? request.params.arguments;
+    const requested = args?.path ?? args?.file ?? args?.file_path;
+    const requestedPreview = args?.preview;
     const sessionID = process.env.BRIGADE_SESSION_ID;
     if (typeof requested !== "string" || !requested || !sessionID) {
       return {

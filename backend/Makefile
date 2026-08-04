@@ -7,6 +7,8 @@
 # (GOROOT определяется самим go-бинарём автоматически); правки в этот Makefile не нужны.
 
 BIN       := bin/brigade
+VERSION   ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS   := -X main.buildVersion=$(VERSION)
 WEB_DIR   := ../web
 PROTO_DIR := ../proto
 # Собранный фронтенд встраивается в бинарь через go:embed из этого каталога.
@@ -39,7 +41,7 @@ embed:
 # Собрать Go-бинарь (фронтенд уже должен быть уложен в EMBED_DIR). Статический бинарь
 # без CGO и с -trimpath — для воспроизводимой сборки и встраивания в минимальный образ.
 build-go:
-	CGO_ENABLED=0 go build -trimpath -o $(BIN) ./cmd/brigade
+	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/brigade
 
 # Полная сборка единого бинаря: актуальный фронтенд → embed → бинарь. Так `make run`,
 # зависящий от build, всегда запускает свежий код фронта и бэкенда.
@@ -56,7 +58,7 @@ run: build
 # darwin/arm64-бинарь → бандл. Результат: ../dist/Brigade.app (не подписан; первый запуск —
 # правый клик → Открыть).
 app: build-web embed
-	CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -trimpath -o bin/brigade-darwin ./cmd/brigade
+	CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "$(LDFLAGS)" -o bin/brigade-darwin ./cmd/brigade
 	bash ../scripts/make-app.sh bin/brigade-darwin ../dist/Brigade.app
 
 # Прогнать тесты.

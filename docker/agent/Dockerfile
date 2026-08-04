@@ -23,6 +23,7 @@
 # статический — не зависит от libc образа, в котором будет исполняться. go:embed web/dist
 # довольствуется .gitkeep (демону web не нужен).
 FROM golang:1.26 AS brigade-build
+ARG VERSION=dev
 WORKDIR /src
 COPY backend/go.mod backend/go.sum ./backend/
 RUN cd backend && go mod download
@@ -30,7 +31,7 @@ COPY backend/ ./backend/
 # Демону web не нужен, но go:embed all:dist требует непустой каталог; в build-контексте
 # dist исключён .dockerignore — кладём заглушку .gitkeep.
 RUN mkdir -p backend/internal/web/dist && touch backend/internal/web/dist/.gitkeep \
-    && cd backend && CGO_ENABLED=0 go build -trimpath -o /out/brigade ./cmd/brigade
+    && cd backend && CGO_ENABLED=0 go build -trimpath -ldflags "-X main.buildVersion=$VERSION" -o /out/brigade ./cmd/brigade
 
 # Node runtime по-прежнему берём из bullseye (glibc 2.31): этот слой исполняется и в
 # пользовательских образах, включая ubuntu:jammy (glibc 2.35). Сам образ по умолчанию —
