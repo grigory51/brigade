@@ -125,16 +125,16 @@ function PermissionComposer({
   onDecide: (decision: string) => void;
 }) {
   return (
-    <div className="border-border/60 dark:border-muted-foreground/15 flex w-full flex-col gap-3 rounded-(--composer-radius) border bg-(--composer-bg) p-3 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] dark:shadow-none">
-      <div className="px-1">
+    <div className="border-border/60 dark:border-muted-foreground/15 flex w-full min-w-0 flex-col gap-3 rounded-(--composer-radius) border bg-(--composer-bg) p-3 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] dark:shadow-none">
+      <div className="min-w-0 px-1">
         <div className="text-muted-foreground mb-1 text-xs font-medium">
           Агент ждёт разрешения
         </div>
-        <pre className="max-h-32 overflow-auto font-mono text-sm leading-relaxed break-all whitespace-pre-wrap">
+        <pre className="max-h-32 max-w-full overflow-auto font-mono text-sm leading-relaxed break-words whitespace-pre-wrap">
           {permission.title}
         </pre>
       </div>
-      <div className="flex flex-wrap justify-end gap-2">
+      <div className="flex min-w-0 flex-wrap justify-end gap-2">
         {permission.options.map((option) => {
           const reject = option.kind?.startsWith("reject");
           return (
@@ -142,10 +142,13 @@ function PermissionComposer({
               key={option.optionId}
               type="button"
               variant={reject ? "outline" : "default"}
-              className={reject ? "text-destructive" : undefined}
+              className={reject ? "max-w-full text-destructive" : "max-w-full"}
               onClick={() => onDecide(option.optionId)}
+              title={option.name ?? option.optionId}
             >
-              {option.name ?? option.optionId}
+              <span className="line-clamp-2 max-w-[min(24rem,70vw)] break-words whitespace-normal">
+                {option.name ?? option.optionId}
+              </span>
             </Button>
           );
         })}
