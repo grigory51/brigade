@@ -114,12 +114,17 @@ var _ Bindable = (*acp.Client)(nil)
 
 // runAgentInput — подмножество канонического RunAgentInput (@ag-ui/core), которое
 // использует brigade. Остальные поля (state, context, forwardedProps, tools) принимаются,
-// но в текущем режиме не интерпретируются: кастомные инструменты агент получает через
-// MCP-сервер сессии (см. acp.BrigadeMCPServer), а не из tools[].
+// Кастомные инструменты агент получает через MCP-сервер сессии, а не из tools[]. Из
+// forwardedProps читается только внутренний маркер reconnect-run.
 type runAgentInput struct {
-	ThreadID string         `json:"threadId"`
-	RunID    string         `json:"runId"`
-	Messages []inputMessage `json:"messages"`
+	ThreadID       string         `json:"threadId"`
+	RunID          string         `json:"runId"`
+	Messages       []inputMessage `json:"messages"`
+	ForwardedProps struct {
+		RunConfig struct {
+			BrigadeReplay bool `json:"brigadeReplay"`
+		} `json:"runConfig"`
+	} `json:"forwardedProps"`
 }
 
 // inputMessage — сообщение из RunAgentInput. Для prompt берётся текст последнего

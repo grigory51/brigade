@@ -148,6 +148,21 @@ func TestServeReplay(t *testing.T) {
 	}
 }
 
+func TestServeExplicitReplayDoesNotRepeatLastUserMessage(t *testing.T) {
+	b := &fakeBindable{}
+	in := runAgentInput{
+		ThreadID: "t",
+		RunID:    "r",
+		Messages: []inputMessage{{Role: "user", Content: "не повторять"}},
+	}
+	in.ForwardedProps.RunConfig.BrigadeReplay = true
+	serveInput(b, in)
+
+	if b.promptCalled {
+		t.Fatal("Prompt вызван при явном replay, последнее user-сообщение было бы отправлено повторно")
+	}
+}
+
 func TestServeReplayWaitsForActivePrompt(t *testing.T) {
 	b := &fakeBindable{statuses: []bool{true, false}}
 	body := serveInput(b, runAgentInput{ThreadID: "t", RunID: "r"})

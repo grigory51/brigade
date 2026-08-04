@@ -2,6 +2,7 @@ import {
   AssistantRuntimeProvider,
   useAuiState,
   useComposer,
+  useThreadRuntime,
 } from "@assistant-ui/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckIcon, Loader2 } from "lucide-react";
@@ -106,14 +107,15 @@ function AcpSessionInner({
   );
 }
 
-// BackgroundActivity показывает индикатор фоновой работы агента и перезагружает историю,
-// когда в ленте бэкенда появились сообщения, не прошедшие через живой прогон этого
-// клиента (фоновый turn — agent wakeup после завершения Workflow/задачи). Детекция — по
+// BackgroundActivity подключает обычный runtime к фоновому turn и перезагружает историю,
+// когда в ленте бэкенда появились уже завершённые сообщения, не прошедшие через живой
+// прогон этого клиента. Детекция завершённых сообщений — по
 // росту seq в покое, а не по наблюдению generating: setInterval в фоновой вкладке
 // троттлится браузером до 1/мин, и короткий фоновый turn целиком проваливается между
 // поллами — момент generating=true можно не увидеть вовсе, но рост seq неустраним.
-// generating используется только для индикатора. Перезагрузку откладываем, пока это
-// небезопасно (идёт прогон или в поле ввода есть недописанный текст).
+// Активный turn подключается отдельным replay-run: UI получает обычное последнее сообщение,
+// pulsing indicator и Stop вместо специальной плашки. Перезагрузку завершённой истории
+// откладываем, пока в поле ввода есть недописанный текст.
 function BackgroundActivity({
   status,
   onReload,
@@ -126,7 +128,10 @@ function BackgroundActivity({
   refreshStatus: () => void;
 }) {
   const isRunning = useAuiState((s) => s.thread.isRunning);
+  const isLoading = useAuiState((s) => s.thread.isLoading);
+  const lastMessageId = useAuiState((s) => s.thread.messages.at(-1)?.id ?? null);
   const composerText = useComposer((c) => c.text);
+  const thread = useThreadRuntime();
 
   // idleSeq — seq ленты, до которого тред синхронизирован. null до первого достоверного
   // полла: маунт уже загрузил полную историю, поэтому первый полл лишь задаёт базу — без
@@ -140,7 +145,7 @@ function BackgroundActivity({
   // (мигание индикатора), seq занижен (события прогона ещё не учтены — сдвиг базы по
   // нему дал бы ложный «фоновый рост» и лишний ремоунт).
   const cooldownTick = useRef<number | null>(null);
-  const [bgActive, setBgActive] = useState(false);
+  const reconnectTick = useRef<number | null>(null);
 
   useEffect(() => {
     // До первого реального полла status — синтетический дефолт ({seq:0, tick:0}), а не
@@ -154,7 +159,6 @@ function BackgroundActivity({
       // выходе из остывания; здесь только фиксируем факт прогона.
       cooldownTick.current = null;
       wasRunning.current = true;
-      setBgActive(false);
       return;
     }
     if (wasRunning.current) {
@@ -163,13 +167,11 @@ function BackgroundActivity({
       // минуту, и фоновые события успели бы слиться с событиями прогона в одной дельте.
       wasRunning.current = false;
       cooldownTick.current = status.tick;
-      setBgActive(false);
       refreshStatus();
       return;
     }
     if (cooldownTick.current !== null) {
       if (status.tick <= cooldownTick.current) {
-        setBgActive(false);
         return; // stale-полл: ни generating, ни seq не достоверны — ждём свежий.
       }
       // Свежий полл после конца прогона: синхронизируем базу (события прогона уже в
@@ -179,17 +181,20 @@ function BackgroundActivity({
     }
 
     if (status.generating) {
-      // Возвращаем живой turn в обычный runtime: новый replay-SSE привяжется к нему,
-      // isRunning снова станет true и composer покажет штатную Stop-кнопку.
-      if (composerText.trim() === "") {
-        onReload();
-      } else {
-        setBgActive(true); // ремоунт затёр бы недописанный текст
+      // History adapter сам SSE не запускает. Явно открываем replay-run с маркером,
+      // чтобы backend привязался к живому turn, но не отправил последнее user-сообщение
+      // агенту повторно. Один запрос на status-tick защищает от request storm при ошибке.
+      if (!isLoading && reconnectTick.current !== status.tick) {
+        reconnectTick.current = status.tick;
+        thread.startRun({
+          parentId: lastMessageId,
+          runConfig: { custom: { brigadeReplay: true } },
+        });
       }
       return;
     }
+    reconnectTick.current = null;
     onReloadFinished();
-    setBgActive(false);
 
     if (idleSeq.current === null) {
       idleSeq.current = status.seq; // первый достоверный полл — задаём базу без reload
@@ -204,6 +209,8 @@ function BackgroundActivity({
     }
   }, [
     isRunning,
+    isLoading,
+    lastMessageId,
     status.generating,
     status.seq,
     status.tick,
@@ -211,17 +218,10 @@ function BackgroundActivity({
     onReload,
     onReloadFinished,
     refreshStatus,
+    thread,
   ]);
 
-  if (!bgActive) return null;
-  return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-28 z-10 flex justify-center">
-      <div className="bg-muted/90 text-muted-foreground flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs shadow-sm backdrop-blur">
-        <Loader2 className="size-3.5 animate-spin" />
-        Агент работает в фоне…
-      </div>
-    </div>
-  );
+  return null;
 }
 
 // WorkflowsPanel — панель фоновых workflow-запусков харнесса (deep-research и т.п.):

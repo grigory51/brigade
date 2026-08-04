@@ -71,6 +71,9 @@ func (rn *run) serve(in runAgentInput) {
 	// сообщения (history-адаптер с unstable_resume), чтобы восстановить ленту. Пустой
 	// prompt агенту не отправляем — иначе он ответил бы на пустой ввод.
 	text := lastUserText(in.Messages)
+	if in.ForwardedProps.RunConfig.BrigadeReplay {
+		text = ""
+	}
 
 	if text == "" {
 		// Reconnect без нового сообщения: привязываем sink немедленно, чтобы Bind переоткрыл
