@@ -15,15 +15,9 @@ concurrency:
 jobs:
   backend:
     if: github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, brigade]
-    env:
-      GOMODCACHE: /go/pkg/mod
-      GOCACHE: /go-build-cache
+    runs-on: ubuntu-latest
     container:
       image: golang:1.26-bookworm
-      volumes:
-        - brigade-go-mod:/go/pkg/mod
-        - brigade-go-build:/go-build-cache
     steps:
       - uses: actions/checkout@v4
       - name: vet
@@ -35,7 +29,7 @@ jobs:
 
   web:
     if: github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, brigade]
+    runs-on: ubuntu-latest
     container: node:22-bookworm
     steps:
       - uses: actions/checkout@v4
@@ -84,16 +78,10 @@ jobs:
   push:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: verify
-    runs-on: [self-hosted, brigade]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    env:
-      DOCKER_HOST: unix://${{ vars.DOCKER_SOCKET }}
-    container:
-      image: ubuntu:24.04
-      volumes:
-        - ${{ vars.DOCKER_SOCKET }}:${{ vars.DOCKER_SOCKET }}
     strategy:
       matrix:
         include:
@@ -104,19 +92,8 @@ jobs:
             context: .
             dockerfile: docker/agent/Dockerfile
     steps:
-      - name: install docker cli
-        run: apt-get update && apt-get install -y --no-install-recommends docker.io ca-certificates
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-        with:
-          name: brigade
-          keep-state: true
-          buildkitd-config-inline: |
-            [worker.oci]
-              gc = true
-              [[worker.oci.gcpolicy]]
-                all = true
-                maxUsedSpace = "10GB"
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -141,13 +118,10 @@ jobs:
             VERSION=${{ github.ref_name }}
   release:
     needs: push
-    runs-on: [self-hosted, brigade]
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-    container: ubuntu:24.04
     steps:
-      - name: install tools
-        run: apt-get update && apt-get install -y --no-install-recommends git gh make ca-certificates
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
