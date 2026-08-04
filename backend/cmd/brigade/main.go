@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
@@ -38,6 +39,7 @@ import (
 )
 
 var buildVersion = "dev"
+var processStartedAt = time.Now().UTC()
 
 func main() {
 	var configPath string
@@ -60,7 +62,7 @@ func main() {
 		Use:   "acp-agent",
 		Short: "durable ACP-демон: pid1 контейнера сессии (конфиг из env)",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			os.Exit(acpdaemon.Main())
+			os.Exit(acpdaemon.Main(buildVersion))
 			return nil
 		},
 	})

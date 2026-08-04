@@ -27,6 +27,7 @@ type sessionDebugDump struct {
 	Version        string                   `json:"version"`
 	Revision       string                   `json:"revision,omitempty"`
 	BuildModified  bool                     `json:"buildModified,omitempty"`
+	StartedAt      time.Time                `json:"startedAt"`
 	DumpedAt       time.Time                `json:"dumpedAt"`
 	Session        store.Session            `json:"session"`
 	Daemon         daemonDebugDump          `json:"daemon"`
@@ -43,6 +44,8 @@ type daemonDebugDump struct {
 	Generating         bool   `json:"generating"`
 	Seq                int64  `json:"seq"`
 	PendingPermissions int    `json:"pendingPermissions"`
+	Version            string `json:"version,omitempty"`
+	StartedAt          string `json:"startedAt,omitempty"`
 	Error              string `json:"error,omitempty"`
 	MessagesError      string `json:"messagesError,omitempty"`
 	EventsError        string `json:"eventsError,omitempty"`
@@ -104,7 +107,9 @@ func dumpDebugSession(ctx context.Context, cmd *cobra.Command, configPath, sessi
 	if err != nil {
 		return fmt.Errorf("dump session %s: %w", sessionID, err)
 	}
-	out := sessionDebugDump{Version: buildVersion, DumpedAt: time.Now(), Session: sess}
+	out := sessionDebugDump{
+		Version: buildVersion, StartedAt: processStartedAt, DumpedAt: time.Now(), Session: sess,
+	}
 	if info, ok := debug.ReadBuildInfo(); ok {
 		for _, setting := range info.Settings {
 			switch setting.Key {
@@ -155,6 +160,8 @@ func dumpDockerACP(ctx context.Context, cfg *config.Config, sessionID string, ou
 	out.Daemon.Generating = status.Msg.Generating
 	out.Daemon.Seq = status.Msg.Seq
 	out.Daemon.PendingPermissions = len(status.Msg.PendingPermissionsJson)
+	out.Daemon.Version = status.Msg.Version
+	out.Daemon.StartedAt = status.Msg.StartedAt
 
 	messages, err := conn.RPC.GetMessages(ctx, daemonrpc.Req(conn.Sign(), &v1.Empty{}))
 	if err != nil {

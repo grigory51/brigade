@@ -641,6 +641,18 @@ export class DaemonStatusResponse extends Message<DaemonStatusResponse> {
    */
   pendingPermissionsJson: Uint8Array[] = [];
 
+  /**
+   * Версия и время старта именно daemon-процесса внутри session-контейнера.
+   *
+   * @generated from field: string version = 4;
+   */
+  version = "";
+
+  /**
+   * @generated from field: string started_at = 5;
+   */
+  startedAt = "";
+
   constructor(data?: PartialMessage<DaemonStatusResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -652,6 +664,8 @@ export class DaemonStatusResponse extends Message<DaemonStatusResponse> {
     { no: 1, name: "generating", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 2, name: "seq", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
     { no: 3, name: "pending_permissions_json", kind: "scalar", T: 12 /* ScalarType.BYTES */, repeated: true },
+    { no: 4, name: "version", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "started_at", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaemonStatusResponse {

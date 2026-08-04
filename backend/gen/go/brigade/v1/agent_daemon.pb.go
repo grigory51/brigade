@@ -744,8 +744,11 @@ type DaemonStatusResponse struct {
 	// Живые permission-запросы принадлежат durable-демону и переживают reload brigade/UI.
 	// JSON совпадает с agui.PermissionRequest; Brigade прокидывает его в GetStatus фронту.
 	PendingPermissionsJson [][]byte `protobuf:"bytes,3,rep,name=pending_permissions_json,json=pendingPermissionsJson,proto3" json:"pending_permissions_json,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// Версия и время старта именно daemon-процесса внутри session-контейнера.
+	Version       string `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
+	StartedAt     string `protobuf:"bytes,5,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DaemonStatusResponse) Reset() {
@@ -797,6 +800,20 @@ func (x *DaemonStatusResponse) GetPendingPermissionsJson() [][]byte {
 		return x.PendingPermissionsJson
 	}
 	return nil
+}
+
+func (x *DaemonStatusResponse) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *DaemonStatusResponse) GetStartedAt() string {
+	if x != nil {
+		return x.StartedAt
+	}
+	return ""
 }
 
 // DaemonPayloadResponse — обобщённый ответ с JSON-нагрузкой (messages / commands / config).
@@ -1092,13 +1109,16 @@ const file_brigade_v1_agent_daemon_proto_rawDesc = "" +
 	"\x0fauto_allow_once\x18\x02 \x01(\bR\rautoAllowOnce\"7\n" +
 	"\x14DaemonPromptResponse\x12\x1f\n" +
 	"\vstop_reason\x18\x01 \x01(\tR\n" +
-	"stopReason\"\x82\x01\n" +
+	"stopReason\"\xbb\x01\n" +
 	"\x14DaemonStatusResponse\x12\x1e\n" +
 	"\n" +
 	"generating\x18\x01 \x01(\bR\n" +
 	"generating\x12\x10\n" +
 	"\x03seq\x18\x02 \x01(\x03R\x03seq\x128\n" +
-	"\x18pending_permissions_json\x18\x03 \x03(\fR\x16pendingPermissionsJson\"+\n" +
+	"\x18pending_permissions_json\x18\x03 \x03(\fR\x16pendingPermissionsJson\x12\x18\n" +
+	"\aversion\x18\x04 \x01(\tR\aversion\x12\x1d\n" +
+	"\n" +
+	"started_at\x18\x05 \x01(\tR\tstartedAt\"+\n" +
 	"\x15DaemonPayloadResponse\x12\x12\n" +
 	"\x04json\x18\x01 \x01(\fR\x04json\"Q\n" +
 	"\x1cDaemonSetConfigOptionRequest\x12\x1b\n" +

@@ -158,6 +158,9 @@ message DaemonStatusResponse {
   // Живые permission-запросы принадлежат durable-демону и переживают reload brigade/UI.
   // JSON совпадает с agui.PermissionRequest; Brigade прокидывает его в GetStatus фронту.
   repeated bytes pending_permissions_json = 3;
+  // Версия и время старта именно daemon-процесса внутри session-контейнера.
+  string version = 4;
+  string started_at = 5;
 }
 
 // DaemonPayloadResponse — обобщённый ответ с JSON-нагрузкой (messages / commands / config).

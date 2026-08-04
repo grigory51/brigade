@@ -13,7 +13,7 @@ import (
 )
 
 func TestStatusIncludesPendingPermissions(t *testing.T) {
-	d, err := New("s1", "")
+	d, err := New("s1", "", "v1.2.3")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,6 +30,9 @@ func TestStatusIncludesPendingPermissions(t *testing.T) {
 	}
 	if len(resp.Msg.PendingPermissionsJson) != 1 {
 		t.Fatalf("pending permissions = %d, want 1", len(resp.Msg.PendingPermissionsJson))
+	}
+	if resp.Msg.Version != "v1.2.3" || resp.Msg.StartedAt == "" {
+		t.Fatalf("daemon build = %q at %q", resp.Msg.Version, resp.Msg.StartedAt)
 	}
 	var pending agui.PermissionRequest
 	if err := json.Unmarshal(resp.Msg.PendingPermissionsJson[0], &pending); err != nil {

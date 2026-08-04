@@ -43,6 +43,7 @@ type ACPContainerDebug struct {
 	Image     string `json:"image"`
 	ImageID   string `json:"imageId"`
 	Status    string `json:"status"`
+	StartedAt string `json:"startedAt,omitempty"`
 	Logs      string `json:"logs,omitempty"`
 	LogsError string `json:"logsError,omitempty"`
 }
@@ -213,6 +214,7 @@ func (d *DockerACPSpawner) DebugContainer(ctx context.Context, sessionID string)
 	}
 	if info.State != nil {
 		out.Status = info.State.Status
+		out.StartedAt = info.State.StartedAt
 	}
 	out.Logs, err = readContainerLogs(ctx, d.spawner.cli, id, "200")
 	if err != nil {

@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"connectrpc.com/connect"
 	acpsdk "github.com/coder/acp-go-sdk"
@@ -45,6 +46,8 @@ var errPermissionCancelled = errors.New("acpdaemon: permission cancelled")
 // Daemon — состояние демона одной сессии.
 type Daemon struct {
 	sessionID string
+	version   string
+	startedAt time.Time
 	log       *eventlog.Log
 	perms     *permStore
 	terminals *terminalMgr // pty-терминалы (вспом. шелл, CLI-агент)
@@ -58,12 +61,15 @@ type Daemon struct {
 }
 
 // New создаёт демон с открытым журналом (durable по пути logPath).
-func New(sessionID, logPath string) (*Daemon, error) {
+func New(sessionID, logPath, version string) (*Daemon, error) {
 	l, err := eventlog.Open(logPath)
 	if err != nil {
 		return nil, err
 	}
-	return &Daemon{sessionID: sessionID, log: l, perms: newPermStore(), terminals: newTerminalMgr()}, nil
+	return &Daemon{
+		sessionID: sessionID, version: version, startedAt: time.Now().UTC(),
+		log: l, perms: newPermStore(), terminals: newTerminalMgr(),
+	}, nil
 }
 
 // journal сериализует AG-UI событие и добавляет его в журнал (получая seq).
@@ -271,7 +277,7 @@ type v1ConfigureRequest struct {
 //	BRIGADE_DAEMON_PORT   — порт Connect-сервера демона
 //	BRIGADE_DAEMON_PUBKEY — публичный Ed25519-ключ brigade (проверка подписи вызовов)
 //	BRIGADE_DAEMON_LOG    — путь журнала событий (дефолт ~/.brigade/acp-events.jsonl)
-func Main() int {
+func Main(version string) int {
 	sessionID := os.Getenv("BRIGADE_SESSION_ID")
 	port := os.Getenv("BRIGADE_DAEMON_PORT")
 	pubKey := os.Getenv("BRIGADE_DAEMON_PUBKEY")
@@ -285,7 +291,7 @@ func Main() int {
 		return 2
 	}
 
-	d, err := New(sessionID, logPath)
+	d, err := New(sessionID, logPath, version)
 	if err != nil {
 		log.Printf("acpdaemon: init: %v", err)
 		return 1

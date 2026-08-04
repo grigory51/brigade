@@ -887,7 +887,7 @@ func (r *Registry) mcpServers(ctx context.Context, sess store.Session) []acpsdk.
 		script = acp.LocalMCPServerPath()
 	}
 	if script != "" {
-		servers = append(servers, acp.BrigadeMCPServer(script))
+		servers = append(servers, acp.BrigadeMCPServer(script, sess.ID))
 	}
 	if len(sess.McpServers) == 0 {
 		return servers

@@ -33,13 +33,14 @@ func LocalMCPServerPath() string { return localMCPServerPath }
 // всеми ACP-агентами (в отличие от http/sse, зависящих от capability).
 //
 // script — путь к скрипту в среде агента: контейнерный (runtime-слой) либо хостовый
-// (local/desktop, см. LocalMCPServerPath). Выбирает его вызывающий по режиму сессии.
-func BrigadeMCPServer(script string) acpsdk.McpServer {
+// (local/desktop, см. LocalMCPServerPath). sessionID передаётся именно в env MCP-процесса:
+// ACP-агент не обязан наследовать окружение адаптера при запуске stdio-сервера.
+func BrigadeMCPServer(script, sessionID string) acpsdk.McpServer {
 	return acpsdk.McpServer{Stdio: &acpsdk.McpServerStdio{
 		Name:    "brigade",
 		Command: "node",
 		Args:    []string{script},
-		Env:     []acpsdk.EnvVariable{},
+		Env:     []acpsdk.EnvVariable{{Name: "BRIGADE_SESSION_ID", Value: sessionID}},
 	}}
 }
 

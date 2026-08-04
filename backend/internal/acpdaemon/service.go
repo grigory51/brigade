@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -119,7 +120,10 @@ func (s *service) Status(ctx context.Context, _ *connect.Request[v1.Empty]) (*co
 	}
 	generating, _ := c.Status()
 	// seq — из durable-журнала (переживает рестарт brigade), а не len(history) в RAM.
-	resp := &v1.DaemonStatusResponse{Generating: generating, Seq: s.d.log.LastSeq()}
+	resp := &v1.DaemonStatusResponse{
+		Generating: generating, Seq: s.d.log.LastSeq(),
+		Version: s.d.version, StartedAt: s.d.startedAt.Format(time.RFC3339Nano),
+	}
 	for _, pending := range s.d.perms.pendingList() {
 		if data, err := json.Marshal(pending); err == nil {
 			resp.PendingPermissionsJson = append(resp.PendingPermissionsJson, data)
