@@ -49,7 +49,8 @@ func main() {
 			return nil
 		},
 	}
-	root.Flags().StringVar(&configPath, "config", "config.yaml", "path to the YAML config file")
+	root.PersistentFlags().StringVar(&configPath, "config", "config.yaml", "path to the YAML config file")
+	root.AddCommand(newDumpCommand(&configPath))
 
 	// Субкоманда демона ACP: pid1 контейнера сессии, durable-relay адаптера
 	// (internal/acpdaemon). Тот же бинарь; конфиг демона — из env, без brigade-конфига.

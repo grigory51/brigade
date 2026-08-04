@@ -7,6 +7,8 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
+	"net/url"
+	"path/filepath"
 
 	"github.com/pressly/goose/v3"
 
@@ -44,6 +46,26 @@ func Open(path string, cipher *secret.Cipher) (*Store, error) {
 	}
 
 	return &Store{db: db, cipher: cipher}, nil
+}
+
+// OpenReadOnly открывает существующую БД без миграций и возможности записи.
+// Используется диагностическими командами, которые запускаются рядом с живым сервером.
+func OpenReadOnly(path string) (*Store, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("store: resolve read-only path %q: %w", path, err)
+	}
+	dsn := (&url.URL{Scheme: "file", Path: abs, RawQuery: "mode=ro"}).String()
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("store: open read-only %q: %w", path, err)
+	}
+	db.SetMaxOpenConns(1)
+	if err := db.Ping(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("store: open read-only %q: %w", path, err)
+	}
+	return &Store{db: db}, nil
 }
 
 // DB возвращает низкоуровневый пул для доменных запросов.

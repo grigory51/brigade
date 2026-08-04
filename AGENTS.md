@@ -62,6 +62,10 @@ Add focused unit tests for behavior changes and regression tests for fixes. Befo
 submitting, run `make test`, `make vet`, and, for web changes, `make -C web lint`.
 There is no configured coverage threshold.
 
+When diagnosis lacks enough evidence, propose a minimal temporary debug command,
+dump, or metric that the user can run and share. Prefer adding a focused diagnostic
+path over repeating speculative fixes or a long sequence of manual shell commands.
+
 ## Configuration and Security
 
 Copy `backend/config.example.yaml` to `backend/config.yaml` for local use. Environment
