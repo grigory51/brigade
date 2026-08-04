@@ -39,12 +39,15 @@ RUN mkdir -p backend/internal/web/dist && touch backend/internal/web/dist/.gitke
 FROM node:22-bullseye-slim AS node-runtime
 FROM ghcr.io/astral-sh/uv:0.11.32 AS uv-runtime
 FROM ubuntu:26.04
+LABEL org.opencontainers.image.description="Brigade agent runtime with Claude Code, Codex, ACP adapters, and built-in MCP tools" \
+      org.opencontainers.image.documentation="https://github.com/grigory51/brigade/releases"
 
-COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
-COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=node-runtime /usr/local/bin/node /opt/brigade-runtime/node/bin/node
+COPY --from=node-runtime /usr/local/lib/node_modules /opt/brigade-runtime/node/lib/node_modules
 COPY --from=uv-runtime /uv /uvx /usr/local/bin/
-RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
-    && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+RUN ln -s /opt/brigade-runtime/node/bin/node /usr/local/bin/node \
+    && ln -s /opt/brigade-runtime/node/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s /opt/brigade-runtime/node/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
 # Инструменты, без которых кодинг-агент недееспособен в контейнере. Базовый slim-образ
 # несёт минимум ОС-утилит, поэтому доставляем ходовой набор для «простых операций»:
@@ -63,10 +66,8 @@ RUN apt-get update \
 # --- Слои runtime -----------------------------------------------------------------
 
 # node — интерпретатор для агентов, написанных на Node (Claude Code и его ACP-адаптер).
-# Копия из образа, а не отдельная установка: версия та же, что у npm-пакетов ниже.
-RUN mkdir -p /opt/brigade-runtime/node/bin /opt/brigade-runtime/node/lib \
-    && cp /usr/local/bin/node /opt/brigade-runtime/node/bin/ \
-    && cp -a /usr/local/lib/node_modules /opt/brigade-runtime/node/lib/
+# Он сразу скопирован в runtime-каталог выше; /usr/local содержит только symlink, чтобы
+# не держать вторую копию Node в образе по умолчанию.
 
 # Adapter держим в ногу с claude-code (тот ставится latest): каретка ^0.54.1 капалась на
 # 0.54.x, отставая от свежего SDK на несколько миноров — старый adapter не прорелеивал через

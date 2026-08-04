@@ -28,6 +28,8 @@ RUN touch backend/internal/web/dist/.gitkeep \
     && cd backend && CGO_ENABLED=0 go build -trimpath -ldflags "-X main.buildVersion=$VERSION" -o /out/brigade ./cmd/brigade
 
 FROM alpine:3.21
+LABEL org.opencontainers.image.description="Brigade server and web UI for running coding agents in local or Docker sessions" \
+      org.opencontainers.image.documentation="https://github.com/grigory51/brigade/releases"
 # git + openssh-client нужны фиче «личная память»: brigade шелл-аутит в git для
 # clone/commit/push рабочей копии заметок ПРЯМО В ЭТОМ серверном контейнере, а SSH-remote
 # (git@host:...) требует ssh. /root/.ssh — чтобы ssh (accept-new) мог сохранять known_hosts.
