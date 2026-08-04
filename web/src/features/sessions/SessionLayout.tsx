@@ -424,7 +424,6 @@ export function SessionLayout() {
                           onFork={() => void onFork(s.id)}
                           onArchive={() => void onArchive(s.id)}
                           onReloadAgent={() => void onReloadAgent(s.id)}
-                          reloading={reloadingId === s.id}
                         />
                       ))}
                   </SidebarMenu>
@@ -510,6 +509,19 @@ export function SessionLayout() {
                   </div>
                 </div>
               )}
+              {activeId && reloadingId === activeId && (
+                <div className="bg-background/60 absolute inset-0 z-40 flex items-center justify-center backdrop-blur-sm">
+                  <div className="bg-background flex items-center gap-3 rounded-lg border px-5 py-4 shadow-lg">
+                    <Loader2 className="text-muted-foreground size-5 animate-spin" />
+                    <div className="text-sm">
+                      <div className="font-medium">Агент перезапускается…</div>
+                      <div className="text-muted-foreground text-xs">
+                        Обновляем окружение и восстанавливаем сессию.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </SidebarInset>
         </SidebarProvider>
@@ -566,7 +578,6 @@ function SessionItem({
   onFork,
   onArchive,
   onReloadAgent,
-  reloading = false,
 }: {
   session: Session;
   depth?: number;
@@ -579,7 +590,6 @@ function SessionItem({
   onFork: () => void;
   onArchive: () => void;
   onReloadAgent: () => void;
-  reloading?: boolean;
 }) {
   // locked — сессия в необратимой операции (удаление/архивация): её нельзя открывать,
   // переименовывать, а контент блокирован оверлеем.
@@ -689,18 +699,9 @@ function SessionItem({
           }}
           aria-label="Перезапустить агента на актуальном окружении"
           title="Перезапустить агента на актуальном окружении"
-          // showOnHover прячет без наведения — на время перезагрузки спиннер виден.
-          className={
-            reloading
-              ? "right-[7rem] text-sidebar-foreground/60 opacity-100"
-              : "right-[7rem] text-sidebar-foreground/60 hover:text-sidebar-foreground"
-          }
+          className="right-[7rem] text-sidebar-foreground/60 hover:text-sidebar-foreground"
         >
-          {reloading ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <RefreshCw className="size-4" />
-          )}
+          <RefreshCw className="size-4" />
         </SidebarMenuAction>
       )}
       {session.kind === SessionKind.ACP && (
