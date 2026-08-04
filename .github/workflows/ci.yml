@@ -140,6 +140,17 @@ jobs:
         run: |
           tar -czf "brigade-${{ github.ref_name }}-linux-amd64.tar.gz" -C backend/bin brigade
           cp "brigade-${{ github.ref_name }}-linux-amd64.tar.gz" brigade-linux-amd64.tar.gz
+      - name: release notes
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          previous_tag=$(git describe --tags --abbrev=0 "$TAG^")
+          {
+            echo "## What's Changed"
+            git log --reverse --format="- %s ([%h](https://github.com/$GITHUB_REPOSITORY/commit/%H))" "$previous_tag..$TAG"
+            echo
+            echo "**Full Changelog**: https://github.com/$GITHUB_REPOSITORY/compare/$previous_tag...$TAG"
+          } > release-notes.md
       - name: release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -154,6 +165,6 @@ jobs:
           gh release create "$TAG" \
             "brigade-$TAG-linux-amd64.tar.gz" \
             brigade-linux-amd64.tar.gz \
-            --generate-notes \
+            --notes-file release-notes.md \
             --verify-tag \
             "$@"
