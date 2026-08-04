@@ -28,6 +28,7 @@ type fakeBindable struct {
 	finishCalled bool
 	cancelCalled bool
 	cancelErr    error
+	statuses     []bool
 	// calls — порядок вызовов Bind/Prompt/FinishStreams для проверки, что стрим-стейт
 	// закрывается ДО привязки к новому sink (см. TestServePromptFinishesStreamsBeforeBind).
 	calls []string
@@ -69,7 +70,14 @@ func (b *fakeBindable) ConfigOptions() []acpsdk.SessionConfigOption { return nil
 func (b *fakeBindable) SetConfigOption(context.Context, string, string) ([]acpsdk.SessionConfigOption, error) {
 	return nil, nil
 }
-func (b *fakeBindable) Status() (bool, int) { return false, 0 }
+func (b *fakeBindable) Status() (bool, int) {
+	if len(b.statuses) == 0 {
+		return false, 0
+	}
+	status := b.statuses[0]
+	b.statuses = b.statuses[1:]
+	return status, 0
+}
 
 // flushRecorder — httptest.ResponseRecorder не реализует http.Flusher, а run.serve
 // требует Flusher. Оборачиваем запись в буфер собственным типом с no-op Flush.
@@ -104,6 +112,18 @@ func serveInputCtx(ctx context.Context, b *fakeBindable, in runAgentInput) strin
 	return rec.body.String()
 }
 
+func TestHeartbeatIsSSEComment(t *testing.T) {
+	rec := newFlushRecorder()
+	rn := newRun(context.Background(), rec, rec, &fakeBindable{}, NewPermissionStore(), "t", "r")
+	defer rn.cancel()
+	if err := rn.writeHeartbeat(); err != nil {
+		t.Fatal(err)
+	}
+	if got := rec.body.String(); got != ": keepalive\n\n" {
+		t.Fatalf("heartbeat = %q", got)
+	}
+}
+
 // TestServeReplay проверяет replay-ветку: без пользовательского сообщения агент не
 // вызывается (Prompt), поток закрывается FinishStreams + RUN_FINISHED со stopReason
 // "replay".
@@ -125,6 +145,17 @@ func TestServeReplay(t *testing.T) {
 	}
 	if !strings.Contains(body, `"stopReason":"replay"`) {
 		t.Errorf("в потоке нет stopReason replay:\n%s", body)
+	}
+}
+
+func TestServeReplayWaitsForActivePrompt(t *testing.T) {
+	b := &fakeBindable{statuses: []bool{true, false}}
+	body := serveInput(b, runAgentInput{ThreadID: "t", RunID: "r"})
+	if len(b.statuses) != 0 {
+		t.Fatal("replay не дождался завершения Prompt")
+	}
+	if !strings.Contains(body, `"RUN_FINISHED"`) {
+		t.Errorf("в потоке нет RUN_FINISHED:\n%s", body)
 	}
 }
 

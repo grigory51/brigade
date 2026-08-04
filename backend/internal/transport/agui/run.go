@@ -6,9 +6,12 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/grigory51/brigade/backend/internal/agui"
 )
+
+const sseHeartbeatInterval = 15 * time.Second
 
 // run — состояние одного SSE-прогона: HTTP-поток, привязанный ACP-клиент и контекст
 // permission-flow. Жизнь равна одному запросу POST /api/ag-ui/run.
@@ -56,11 +59,13 @@ func (rn *run) serve(in runAgentInput) {
 	h.Set("Content-Type", "text/event-stream")
 	h.Set("Cache-Control", "no-cache")
 	h.Set("Connection", "keep-alive")
+	h.Set("X-Accel-Buffering", "no")
 	rn.w.WriteHeader(http.StatusOK)
 
 	// RUN_STARTED обязан быть первым событием потока: клиент @ag-ui/client отклоняет run,
 	// если первым приходит что-либо иное. Поэтому открываем поток до Bind, не после.
 	rn.send(agui.Event{Type: agui.EventRunStarted, ThreadId: rn.threadID, RunId: rn.runID})
+	go rn.heartbeat()
 
 	// Replay-прогон: при открытии треда клиент стартует run без нового пользовательского
 	// сообщения (history-адаптер с unstable_resume), чтобы восстановить ленту. Пустой
@@ -70,12 +75,9 @@ func (rn *run) serve(in runAgentInput) {
 	if text == "" {
 		// Reconnect без нового сообщения: привязываем sink немедленно, чтобы Bind переоткрыл
 		// ещё живой поток того же turn'а (иначе последующий CONTENT/END прилетел бы без START
-		// и клиент отверг бы событие). Затем закрываем незавершённые потоки: история из
-		// session/load может оканчиваться незакрытым сообщением (load не проходит через
-		// Prompt), а RUN_FINISHED поверх открытого потока клиент отвергает.
+		// и клиент отверг бы событие).
 		unbind := rn.bindable.Bind(rn.sink, rn.resolvePermission)
 		defer unbind()
-		rn.bindable.FinishStreams()
 		// Переотправляем висящие запросы разрешения: turn пережил обрыв (Prompt на
 		// WithoutCancel) и всё ещё ждёт ответа, но исходный диалог ушёл в оборвавшийся
 		// поток. По этим CUSTOM-событиям клиент покажет диалог заново — пользователь
@@ -84,6 +86,24 @@ func (rn *run) serve(in runAgentInput) {
 			req := req
 			_ = rn.sink(agui.Event{Type: agui.EventPermissionRequest, Permission: &req})
 		}
+		// Если Prompt пережил перезагрузку страницы, держим replay-SSE открытым до его
+		// завершения. Тогда клиент остаётся в обычном isRunning-state со штатной Stop-кнопкой,
+		// а не показывает отдельный «фоновый» контрол.
+		if generating, _ := rn.bindable.Status(); generating {
+			ticker := time.NewTicker(500 * time.Millisecond)
+			defer ticker.Stop()
+			for generating {
+				select {
+				case <-rn.ctx.Done():
+					return
+				case <-ticker.C:
+					generating, _ = rn.bindable.Status()
+				}
+			}
+		}
+		// История из session/load может оканчиваться незакрытым сообщением. Закрываем его
+		// только после живого Prompt, иначе reconnect преждевременно оборвал бы его поток.
+		rn.bindable.FinishStreams()
 		rn.send(agui.Event{
 			Type:     agui.EventRunFinished,
 			ThreadId: rn.threadID,
@@ -173,6 +193,34 @@ func (rn *run) send(evt agui.Event) error {
 	}
 	if _, err := rn.w.Write([]byte("\n\n")); err != nil {
 		rn.cancel()
+		return err
+	}
+	rn.flusher.Flush()
+	return nil
+}
+
+// heartbeat не даёт reverse proxy закрыть SSE во время долгого молчаливого tool call.
+// SSE-комментарий игнорируется клиентом и не вмешивается в порядок AG-UI событий.
+func (rn *run) heartbeat() {
+	ticker := time.NewTicker(sseHeartbeatInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-rn.ctx.Done():
+			return
+		case <-ticker.C:
+			if err := rn.writeHeartbeat(); err != nil {
+				rn.cancel()
+				return
+			}
+		}
+	}
+}
+
+func (rn *run) writeHeartbeat() error {
+	rn.writeMu.Lock()
+	defer rn.writeMu.Unlock()
+	if _, err := rn.w.Write([]byte(": keepalive\n\n")); err != nil {
 		return err
 	}
 	rn.flusher.Flush()

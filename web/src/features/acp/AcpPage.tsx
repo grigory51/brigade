@@ -172,8 +172,17 @@ function BackgroundActivity({
       idleSeq.current = status.seq;
     }
 
-    setBgActive(status.generating);
-    if (status.generating) return; // фоновый turn идёт: базу держим дофоновой.
+    if (status.generating) {
+      // Возвращаем живой turn в обычный runtime: новый replay-SSE привяжется к нему,
+      // isRunning снова станет true и composer покажет штатную Stop-кнопку.
+      if (composerText.trim() === "") {
+        onReload();
+      } else {
+        setBgActive(true); // ремоунт затёр бы недописанный текст
+      }
+      return;
+    }
+    setBgActive(false);
 
     if (idleSeq.current === null) {
       idleSeq.current = status.seq; // первый достоверный полл — задаём базу без reload
