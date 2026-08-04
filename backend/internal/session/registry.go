@@ -427,8 +427,8 @@ var ErrClaudeTokenRequired = errors.New("session: требуется токен 
 // одновременных docker-контейнеров (config.max_containers).
 var ErrContainerLimitReached = errors.New("session: достигнут лимит контейнеров")
 
-// ErrReloadWhileGenerating возвращается ReloadAgent, если агент сейчас генерирует: переинициали-
-// зация (session/load) оборвала бы активный turn. Останови turn и повтори.
+// ErrReloadWhileGenerating запрещает неявную переинициализацию занятого агента при смене
+// настроек. Явный ReloadAgent сам отменяет текущий turn.
 var ErrReloadWhileGenerating = errors.New("session: агент генерирует — остановите turn перед перезагрузкой")
 
 // InstructionProfileTelegramGuest задаёт краткий фактологичный стиль для запросов из
@@ -1499,9 +1499,10 @@ func (r *Registry) reviveACP(ctx context.Context, sess store.Session) (*live, er
 
 // ReloadAgent перезапускает ACP-агента сессии и сохраняет диалог через session/load того же
 // agent_session_id. local получает свежий subprocess, docker — новый контейнер с актуальным
-// runtime-образом и всеми его слоями. Во время генерации отказываем.
+// runtime-образом и всеми его слоями. Активный turn сначала отменяется: иначе зависший на
+// permission старый daemon невозможно обновить до версии, которая восстановит этот запрос.
 func (r *Registry) ReloadAgent(ctx context.Context, sessionID, userID string) error {
-	lv, sess, err := r.reloadable(ctx, sessionID, userID)
+	lv, sess, err := r.reloadable(ctx, sessionID, userID, true)
 	if err != nil {
 		return err
 	}
@@ -1512,7 +1513,7 @@ func (r *Registry) ReloadAgent(ctx context.Context, sessionID, userID string) er
 // Нужен для guest-сессий, созданных до появления профиля: адаптер переинициализируется через
 // session/load, поэтому исходная переписка сохраняется и служебный текст в неё не попадает.
 func (r *Registry) SetInstructionProfile(ctx context.Context, sessionID, userID, profile string) error {
-	lv, sess, err := r.reloadable(ctx, sessionID, userID)
+	lv, sess, err := r.reloadable(ctx, sessionID, userID, false)
 	if err != nil {
 		return err
 	}
@@ -1547,7 +1548,7 @@ func (r *Registry) SetSessionMcpServers(ctx context.Context, sessionID, userID s
 	// ходом, чтобы не сохранить набор, который не удастся применить.
 	var lv *live
 	if sess.Kind == store.SessionKindACP {
-		if lv, sess, err = r.reloadable(ctx, sessionID, userID); err != nil {
+		if lv, sess, err = r.reloadable(ctx, sessionID, userID, false); err != nil {
 			return err
 		}
 	}
@@ -1565,10 +1566,9 @@ func (r *Registry) SetSessionMcpServers(ctx context.Context, sessionID, userID s
 	return r.reinit(ctx, lv, sess, false)
 }
 
-// reloadable отдаёт живую ACP-сессию пользователя, готовую к переинициализации: чужая или
-// отсутствующая — ErrNotFound, генерирующая — ErrReloadWhileGenerating (переподнимать
-// адаптер посреди хода нельзя).
-func (r *Registry) reloadable(ctx context.Context, sessionID, userID string) (*live, store.Session, error) {
+// reloadable отдаёт живую ACP-сессию пользователя, готовую к переинициализации. Явный reload
+// может отменить активный turn; изменения настроек по-прежнему отказывают во время генерации.
+func (r *Registry) reloadable(ctx context.Context, sessionID, userID string, cancelGenerating bool) (*live, store.Session, error) {
 	r.mu.Lock()
 	lv, ok := r.live[sessionID]
 	r.mu.Unlock()
@@ -1576,7 +1576,12 @@ func (r *Registry) reloadable(ctx context.Context, sessionID, userID string) (*l
 		return nil, store.Session{}, store.ErrNotFound
 	}
 	if gen, _ := lv.client.Status(); gen {
-		return nil, store.Session{}, ErrReloadWhileGenerating
+		if !cancelGenerating {
+			return nil, store.Session{}, ErrReloadWhileGenerating
+		}
+		if err := lv.client.Cancel(ctx); err != nil {
+			return nil, store.Session{}, fmt.Errorf("session: cancel before reload: %w", err)
+		}
 	}
 	sess, err := r.store.GetSession(ctx, sessionID)
 	if err != nil {

@@ -11,6 +11,10 @@ import (
 	"testing"
 	"time"
 
+	acpsdk "github.com/coder/acp-go-sdk"
+
+	"github.com/grigory51/brigade/backend/internal/acp"
+	"github.com/grigory51/brigade/backend/internal/agui"
 	"github.com/grigory51/brigade/backend/internal/preview"
 	"github.com/grigory51/brigade/backend/internal/spawn"
 	"github.com/grigory51/brigade/backend/internal/store"
@@ -90,6 +94,59 @@ type fakeHandle struct {
 
 func newFakeHandle() *fakeHandle {
 	return &fakeHandle{exited: make(chan struct{})}
+}
+
+type fakeACPSession struct {
+	generating bool
+	cancelled  bool
+}
+
+func (f *fakeACPSession) Bind(acp.EventSink, acp.PermissionResolver) func()      { return func() {} }
+func (f *fakeACPSession) Prompt(context.Context, string, func()) (string, error) { return "", nil }
+func (f *fakeACPSession) PromptAutoApprove(context.Context, string, func()) (string, error) {
+	return "", nil
+}
+func (f *fakeACPSession) Cancel(context.Context) error                { f.cancelled = true; return nil }
+func (f *fakeACPSession) FinishStreams()                              {}
+func (f *fakeACPSession) Messages() []acp.Message                     { return nil }
+func (f *fakeACPSession) SeedMessages([]acp.Message)                  {}
+func (f *fakeACPSession) Commands() []agui.AvailableCommand           { return nil }
+func (f *fakeACPSession) ConfigOptions() []acpsdk.SessionConfigOption { return nil }
+func (f *fakeACPSession) SetConfigOption(context.Context, string, string) ([]acpsdk.SessionConfigOption, error) {
+	return nil, nil
+}
+func (f *fakeACPSession) Status() (bool, int)                               { return f.generating, 0 }
+func (f *fakeACPSession) SessionID() string                                 { return "agent-session" }
+func (f *fakeACPSession) Summarize(context.Context, string) (string, error) { return "", nil }
+func (f *fakeACPSession) WriteFile(context.Context, string, []byte) error   { return nil }
+func (f *fakeACPSession) Close() error                                      { return nil }
+
+func TestReloadableCancelsGeneratingTurnOnlyForExplicitReload(t *testing.T) {
+	r := newTestRegistry(t)
+	client := &fakeACPSession{generating: true}
+	sess := store.Session{
+		ID: "acp", UserID: "u1", Mode: store.SessionModeLocal, Kind: store.SessionKindACP,
+		Status: store.SessionStatusRunning, Cwd: t.TempDir(), CreatedAt: time.Now(),
+	}
+	if err := r.store.CreateSession(context.Background(), sess); err != nil {
+		t.Fatal(err)
+	}
+	r.live[sess.ID] = &live{owner: sess.UserID, kind: sess.Kind, client: client}
+
+	if _, _, err := r.reloadable(context.Background(), sess.ID, sess.UserID, true); err != nil {
+		t.Fatal(err)
+	}
+	if !client.cancelled {
+		t.Fatal("explicit reload did not cancel generating turn")
+	}
+
+	client.cancelled = false
+	if _, _, err := r.reloadable(context.Background(), sess.ID, sess.UserID, false); !errors.Is(err, ErrReloadWhileGenerating) {
+		t.Fatalf("settings reload error = %v, want ErrReloadWhileGenerating", err)
+	}
+	if client.cancelled {
+		t.Fatal("settings reload cancelled generating turn")
+	}
 }
 
 func (h *fakeHandle) Read(p []byte) (int, error)  { return 0, nil }
