@@ -138,6 +138,7 @@ func (d *Daemon) configure(ctx context.Context, req *v1ConfigureRequest) (string
 		ForkFromSessionID: req.ForkFromSessionId,
 		McpServers:        mcp,
 		PluginDirs:        req.PluginDirs,
+		SystemPrompt:      req.SystemPrompt,
 		// SpawnProc nil → локальный subprocess адаптера внутри контейнера.
 	})
 	if err != nil {
@@ -257,6 +258,7 @@ type v1ConfigureRequest struct {
 	ForkFromSessionId string
 	PluginDirs        []string
 	McpServersJson    []byte
+	SystemPrompt      string
 }
 
 // --- entrypoint ---

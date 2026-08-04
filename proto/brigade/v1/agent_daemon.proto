@@ -123,6 +123,8 @@ message DaemonConfigureRequest {
   bytes mcp_servers_json = 7;
   // fork_from_session_id — непусто → session/fork (ветка сессии). Взаимоисключимо с resume.
   string fork_from_session_id = 8;
+  // system_prompt — дополнение стандартного system prompt; не попадает в user history.
+  string system_prompt = 9;
 }
 
 message DaemonConfigureResponse {

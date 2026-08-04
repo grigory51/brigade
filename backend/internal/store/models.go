@@ -138,6 +138,9 @@ type Session struct {
 	Image string
 	// AuthProfile фиксирует способ авторизации агента на весь срок жизни сессии.
 	AuthProfile string
+	// InstructionProfile — внутренний профиль поведения агента. Он применяется как
+	// system/developer instructions и не добавляется в историю сообщений.
+	InstructionProfile string
 }
 
 // McpTransport — способ связи агента с MCP-сервером.

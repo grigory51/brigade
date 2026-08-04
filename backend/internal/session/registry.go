@@ -431,6 +431,19 @@ var ErrContainerLimitReached = errors.New("session: достигнут лими�
 // зация (session/load) оборвала бы активный turn. Останови turn и повтори.
 var ErrReloadWhileGenerating = errors.New("session: агент генерирует — остановите turn перед перезагрузкой")
 
+// InstructionProfileTelegramGuest задаёт краткий фактологичный стиль для запросов из
+// Telegram Guest Mode. Профиль хранится в сессии, а не добавляется к сообщениям пользователя.
+const InstructionProfileTelegramGuest = "telegram-guest"
+
+const telegramGuestInstructions = `You are answering a focused factual question invoked from Telegram Guest Mode during a live conversation between people. Respond in the language of the question. Give a direct, self-contained answer with no greeting, task narration, tool-use narration, meta-commentary, or offer to continue. Answer exactly what was asked and include only facts needed to understand the answer. Clearly state any material uncertainty.`
+
+func instructionPrompt(profile string) string {
+	if profile == InstructionProfileTelegramGuest {
+		return telegramGuestInstructions
+	}
+	return ""
+}
+
 // atContainerLimit сообщает, превысит ли новая сессия (userID, kind) лимит docker-
 // контейнеров. Учёт зеркалит releaseUserContainerIfIdle: ACP-сессия = 1 контейнер,
 // docker-CLI сессии одного пользователя делят общий контейнер (1 на владельца). Новая
@@ -493,7 +506,7 @@ func (r *Registry) endTeardown(sessionID string) {
 // и сохраняет resume-поля. Режим спавна берётся у инстанса (r.mode), не выбирается
 // пользователем. agentType — тип агента; cwd пустой означает дефолт workDir; prompt
 // передаётся ACP-агенту первым ходом (для CLI игнорируется — ввод идёт по WS).
-func (r *Registry) Create(ctx context.Context, userID string, kind store.SessionKind, agentType, authProfile, cwd, prompt string, mcpServerIDs []string, image string) (store.Session, error) {
+func (r *Registry) Create(ctx context.Context, userID string, kind store.SessionKind, agentType, authProfile, cwd, prompt string, mcpServerIDs []string, image, instructionProfile string) (store.Session, error) {
 	at := agent.Get(agentType)
 	if at.ID == agent.Codex.ID {
 		settings, err := r.store.GetUserSettings(ctx, userID)
@@ -558,18 +571,19 @@ func (r *Registry) Create(ctx context.Context, userID string, kind store.Session
 	}
 
 	sess := store.Session{
-		ID:          id,
-		UserID:      userID,
-		Mode:        r.mode,
-		Kind:        kind,
-		AgentType:   agentType,
-		Status:      store.SessionStatusRunning,
-		Cwd:         cwd,
-		CreatedAt:   time.Now(),
-		Name:        autoName(prompt),
-		McpServers:  mcpServerIDs,
-		Image:       image,
-		AuthProfile: authProfile,
+		ID:                 id,
+		UserID:             userID,
+		Mode:               r.mode,
+		Kind:               kind,
+		AgentType:          agentType,
+		Status:             store.SessionStatusRunning,
+		Cwd:                cwd,
+		CreatedAt:          time.Now(),
+		Name:               autoName(prompt),
+		McpServers:         mcpServerIDs,
+		Image:              image,
+		AuthProfile:        authProfile,
+		InstructionProfile: instructionProfile,
 	}
 	if err := r.store.CreateSession(ctx, sess); err != nil {
 		log.Printf("session: create %s failed (store): %v", sess.ID, err)
@@ -745,6 +759,7 @@ func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token
 		ForkFromSessionID: forkFromSessionID,
 		McpServers:        r.mcpServers(ctx, sess),
 		PluginDirs:        r.acpPluginDirs(sess),
+		SystemPrompt:      instructionPrompt(sess.InstructionProfile),
 	})
 	if err != nil {
 		return nil, "", "", fmt.Errorf("session: configure acp daemon: %w", err)
@@ -850,6 +865,7 @@ func (r *Registry) acpLocalOptions(ctx context.Context, sess store.Session, toke
 		ExtraEnv:       r.agentEnv(ctx, sess, token),
 		McpServers:     r.mcpServers(ctx, sess),
 		PluginDirs:     r.acpPluginDirs(sess),
+		SystemPrompt:   instructionPrompt(sess.InstructionProfile),
 	}
 }
 
@@ -953,6 +969,10 @@ func (r *Registry) agentEnv(ctx context.Context, sess store.Session, token strin
 		env = append(env, "CLAUDE_CODE_OAUTH_TOKEN="+token)
 	}
 	if agent.Get(sess.AgentType).ID == agent.Codex.ID {
+		if instructions := instructionPrompt(sess.InstructionProfile); instructions != "" {
+			config, _ := json.Marshal(map[string]string{"developer_instructions": instructions})
+			env = append(env, "CODEX_CONFIG="+string(config))
+		}
 		settings, err := r.store.GetUserSettings(ctx, sess.UserID)
 		if err != nil {
 			log.Printf("session %s: codex auth: %v", sess.ID, err)
@@ -1488,6 +1508,29 @@ func (r *Registry) ReloadAgent(ctx context.Context, sessionID, userID string) er
 	return r.reinit(ctx, lv, sess, true)
 }
 
+// SetInstructionProfile применяет внутренние инструкции к уже существующей ACP-сессии.
+// Нужен для guest-сессий, созданных до появления профиля: адаптер переинициализируется через
+// session/load, поэтому исходная переписка сохраняется и служебный текст в неё не попадает.
+func (r *Registry) SetInstructionProfile(ctx context.Context, sessionID, userID, profile string) error {
+	lv, sess, err := r.reloadable(ctx, sessionID, userID)
+	if err != nil {
+		return err
+	}
+	if sess.InstructionProfile == profile {
+		return nil
+	}
+	previous := sess.InstructionProfile
+	if err := r.store.UpdateSessionInstructionProfile(ctx, sessionID, profile); err != nil {
+		return err
+	}
+	sess.InstructionProfile = profile
+	if err := r.reinit(ctx, lv, sess, false); err != nil {
+		_ = r.store.UpdateSessionInstructionProfile(context.WithoutCancel(ctx), sessionID, previous)
+		return err
+	}
+	return nil
+}
+
 // SetSessionMcpServers меняет набор MCP-серверов сессии. У ACP-сессии набор применяется
 // сразу — переинициализацией агента (session/load того же диалога: переписка сохраняется,
 // инструменты меняются). У CLI-сессии переписывается .mcp.json: `claude` читает его при
@@ -1699,9 +1742,10 @@ func (r *Registry) Fork(ctx context.Context, sessionID, userID string) (store.Se
 		ParentID:  src.ID,
 		// Ветка продолжает ту же работу — набор инструментов и образ наследуются от
 		// родителя.
-		McpServers:  src.McpServers,
-		Image:       src.Image,
-		AuthProfile: src.AuthProfile,
+		McpServers:         src.McpServers,
+		Image:              src.Image,
+		AuthProfile:        src.AuthProfile,
+		InstructionProfile: src.InstructionProfile,
 	}
 	if err := r.store.CreateSession(ctx, sess); err != nil {
 		return store.Session{}, err

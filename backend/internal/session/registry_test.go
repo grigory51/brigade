@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -53,6 +54,27 @@ func TestOpenWorkspaceFile(t *testing.T) {
 	if f, err := r.OpenWorkspaceFile(context.Background(), "s1", "u2", "result.zip"); err == nil {
 		f.Close()
 		t.Fatal("foreign user opened file")
+	}
+}
+
+func TestTelegramGuestInstructions(t *testing.T) {
+	r := newTestRegistry(t)
+	sess := store.Session{
+		ID: "guest", UserID: "u1", Mode: store.SessionModeLocal, Kind: store.SessionKindACP,
+		AgentType: "codex", Cwd: t.TempDir(), InstructionProfile: InstructionProfileTelegramGuest,
+	}
+	env := r.agentEnv(context.Background(), sess, "")
+	found := false
+	for _, value := range env {
+		if strings.HasPrefix(value, "CODEX_CONFIG=") && strings.Contains(value, `"developer_instructions"`) && strings.Contains(value, "focused factual question") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("CODEX_CONFIG with guest instructions missing: %v", env)
+	}
+	if instructionPrompt("") != "" || instructionPrompt(InstructionProfileTelegramGuest) == "" {
+		t.Fatal("unexpected instruction profile mapping")
 	}
 }
 

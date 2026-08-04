@@ -52,24 +52,26 @@ func mcpServersOrEmpty(servers []acpsdk.McpServer) []acpsdk.McpServer {
 	return servers
 }
 
-// pluginsMeta собирает _meta.claudeCode.options.plugins для session/new|load|fork из путей
-// локальных плагинов. Формат — как ждёт Claude Agent SDK: [{type:"local",path}]. nil, если
-// плагинов нет (не шлём пустой _meta). Адаптер спредит claudeCode.options в опции SDK-запроса
-// (acp-agent.js: userProvidedOptions = sessionMeta.claudeCode.options), поэтому это
-// единственный канал загрузки плагина в неинтерактивный агент.
-func pluginsMeta(pluginDirs []string) map[string]any {
-	if len(pluginDirs) == 0 {
+// sessionMeta собирает расширения Claude ACP для session/new|load|fork: локальные плагины
+// и дополнение стандартного system prompt. Другие ACP-агенты игнорируют неизвестный _meta.
+func sessionMeta(pluginDirs []string, systemPrompt string) map[string]any {
+	if len(pluginDirs) == 0 && systemPrompt == "" {
 		return nil
 	}
-	plugins := make([]map[string]any, 0, len(pluginDirs))
-	for _, d := range pluginDirs {
-		plugins = append(plugins, map[string]any{"type": "local", "path": d})
-	}
-	return map[string]any{
-		"claudeCode": map[string]any{
+	meta := make(map[string]any, 2)
+	if len(pluginDirs) > 0 {
+		plugins := make([]map[string]any, 0, len(pluginDirs))
+		for _, d := range pluginDirs {
+			plugins = append(plugins, map[string]any{"type": "local", "path": d})
+		}
+		meta["claudeCode"] = map[string]any{
 			"options": map[string]any{"plugins": plugins},
-		},
+		}
 	}
+	if systemPrompt != "" {
+		meta["systemPrompt"] = map[string]any{"append": systemPrompt}
+	}
+	return meta
 }
 
 // toUnstableMcpServers оборачивает стабильные McpServer в unstable-вариант для session/fork.

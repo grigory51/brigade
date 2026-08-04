@@ -7,6 +7,20 @@ import (
 	"github.com/grigory51/brigade/backend/internal/agui"
 )
 
+func TestSessionMetaAppendsSystemPrompt(t *testing.T) {
+	meta := sessionMeta([]string{"/plugin"}, "guest instructions")
+	prompt, ok := meta["systemPrompt"].(map[string]any)
+	if !ok || prompt["append"] != "guest instructions" {
+		t.Fatalf("systemPrompt: %#v", meta["systemPrompt"])
+	}
+	claude := meta["claudeCode"].(map[string]any)
+	options := claude["options"].(map[string]any)
+	plugins := options["plugins"].([]map[string]any)
+	if len(plugins) != 1 || plugins[0]["path"] != "/plugin" {
+		t.Fatalf("plugins: %#v", plugins)
+	}
+}
+
 // usageEvent конструирует CUSTOM usage-событие для проверки emit/Bind.
 func usageEvent(used, size int) agui.Event {
 	return agui.Event{Type: agui.EventCustom, Name: agui.CustomUsageName, Value: &agui.Usage{Used: used, Size: size}}

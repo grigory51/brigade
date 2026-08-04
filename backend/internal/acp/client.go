@@ -81,6 +81,10 @@ type Options struct {
 	// читает, это CLI-концепт). brigade кладёт сюда per-session плагин brigade (skill preview,
 	// namespace /brigade:preview). Задаётся в docker-режиме при включённом preview.
 	PluginDirs []string
+	// SystemPrompt дополняет стандартный system prompt агента и не становится сообщением
+	// пользователя. Поддерживается Claude ACP через _meta.systemPrompt; остальные агенты
+	// могут проигнорировать поле и получить инструкции своим adapter-specific каналом.
+	SystemPrompt string
 }
 
 // Client управляет одной ACP-сессией: владеет subprocess'ом adapter'а, реализует
@@ -267,7 +271,7 @@ func (c *Client) handshake(ctx context.Context) error {
 			SessionId:  acpsdk.SessionId(c.opts.ForkFromSessionID),
 			Cwd:        c.opts.Cwd,
 			McpServers: toUnstableMcpServers(c.opts.McpServers),
-			Meta:       pluginsMeta(c.opts.PluginDirs),
+			Meta:       sessionMeta(c.opts.PluginDirs, c.opts.SystemPrompt),
 		})
 		if err != nil {
 			return fmt.Errorf("acp: fork session %s: %w", c.opts.ForkFromSessionID, err)
@@ -289,7 +293,7 @@ func (c *Client) handshake(ctx context.Context) error {
 			SessionId:  acpsdk.SessionId(c.opts.ResumeSessionID),
 			Cwd:        c.opts.Cwd,
 			McpServers: mcpServersOrEmpty(c.opts.McpServers),
-			Meta:       pluginsMeta(c.opts.PluginDirs),
+			Meta:       sessionMeta(c.opts.PluginDirs, c.opts.SystemPrompt),
 		}); err != nil {
 			log.Printf("acp: load session %s failed (%v), starting fresh session", c.opts.ResumeSessionID, err)
 		} else {
@@ -311,7 +315,7 @@ func (c *Client) handshake(ctx context.Context) error {
 	newSess, err := c.conn.NewSession(ctx, acpsdk.NewSessionRequest{
 		Cwd:        c.opts.Cwd,
 		McpServers: mcpServersOrEmpty(c.opts.McpServers),
-		Meta:       pluginsMeta(c.opts.PluginDirs),
+		Meta:       sessionMeta(c.opts.PluginDirs, c.opts.SystemPrompt),
 	})
 	if err != nil {
 		return fmt.Errorf("acp: new session: %w", err)

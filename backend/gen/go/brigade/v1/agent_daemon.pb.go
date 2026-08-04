@@ -399,8 +399,10 @@ type DaemonConfigureRequest struct {
 	McpServersJson []byte `protobuf:"bytes,7,opt,name=mcp_servers_json,json=mcpServersJson,proto3" json:"mcp_servers_json,omitempty"`
 	// fork_from_session_id — непусто → session/fork (ветка сессии). Взаимоисключимо с resume.
 	ForkFromSessionId string `protobuf:"bytes,8,opt,name=fork_from_session_id,json=forkFromSessionId,proto3" json:"fork_from_session_id,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// system_prompt — дополнение стандартного system prompt; не попадает в user history.
+	SystemPrompt  string `protobuf:"bytes,9,opt,name=system_prompt,json=systemPrompt,proto3" json:"system_prompt,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DaemonConfigureRequest) Reset() {
@@ -485,6 +487,13 @@ func (x *DaemonConfigureRequest) GetMcpServersJson() []byte {
 func (x *DaemonConfigureRequest) GetForkFromSessionId() string {
 	if x != nil {
 		return x.ForkFromSessionId
+	}
+	return ""
+}
+
+func (x *DaemonConfigureRequest) GetSystemPrompt() string {
+	if x != nil {
+		return x.SystemPrompt
 	}
 	return ""
 }
@@ -1047,7 +1056,7 @@ const file_brigade_v1_agent_daemon_proto_rawDesc = "" +
 	"\x04rows\x18\x03 \x01(\rR\x04rows\"F\n" +
 	"\x16DaemonWriteFileRequest\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
-	"\acontent\x18\x02 \x01(\fR\acontent\"\xb9\x02\n" +
+	"\acontent\x18\x02 \x01(\fR\acontent\"\xde\x02\n" +
 	"\x16DaemonConfigureRequest\x12\x1f\n" +
 	"\voauth_token\x18\x01 \x01(\tR\n" +
 	"oauthToken\x12\x1b\n" +
@@ -1058,7 +1067,8 @@ const file_brigade_v1_agent_daemon_proto_rawDesc = "" +
 	"\vplugin_dirs\x18\x06 \x03(\tR\n" +
 	"pluginDirs\x12(\n" +
 	"\x10mcp_servers_json\x18\a \x01(\fR\x0emcpServersJson\x12/\n" +
-	"\x14fork_from_session_id\x18\b \x01(\tR\x11forkFromSessionId\"8\n" +
+	"\x14fork_from_session_id\x18\b \x01(\tR\x11forkFromSessionId\x12#\n" +
+	"\rsystem_prompt\x18\t \x01(\tR\fsystemPrompt\"8\n" +
 	"\x17DaemonConfigureResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\"6\n" +

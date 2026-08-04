@@ -579,6 +579,11 @@ func (s *Service) session(bot store.TelegramBot, in inbound) (string, error) {
 	conversation, err := s.store.TelegramConversation(s.ctx, bot.ID, in.scope, in.chatID, in.threadID)
 	if err == nil {
 		if existing, getErr := s.registry.Get(s.ctx, conversation.SessionID, bot.UserID); getErr == nil && existing.Status == store.SessionStatusRunning {
+			if in.guest && existing.InstructionProfile != session.InstructionProfileTelegramGuest {
+				if err := s.registry.SetInstructionProfile(s.ctx, existing.ID, bot.UserID, session.InstructionProfileTelegramGuest); err != nil {
+					return "", err
+				}
+			}
 			// Исправляем имя сессий, созданных до появления имени guest-собеседника, но не
 			// трогаем названия, которые пользователь уже мог изменить вручную.
 			if in.guest && existing.Name == "Telegram · @"+bot.Username {
@@ -587,8 +592,12 @@ func (s *Service) session(bot store.TelegramBot, in inbound) (string, error) {
 			return conversation.SessionID, nil
 		}
 	}
+	instructionProfile := ""
+	if in.guest {
+		instructionProfile = session.InstructionProfileTelegramGuest
+	}
 	created, err := s.registry.Create(s.ctx, bot.UserID, store.SessionKindACP, bot.AgentType,
-		bot.AuthProfile, "", "", bot.McpServers, bot.Image)
+		bot.AuthProfile, "", "", bot.McpServers, bot.Image, instructionProfile)
 	if err != nil {
 		return "", err
 	}

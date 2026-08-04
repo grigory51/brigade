@@ -27,6 +27,7 @@ func (s *service) Configure(ctx context.Context, req *connect.Request[v1.DaemonC
 		ForkFromSessionId: req.Msg.ForkFromSessionId,
 		PluginDirs:        req.Msg.PluginDirs,
 		McpServersJson:    req.Msg.McpServersJson,
+		SystemPrompt:      req.Msg.SystemPrompt,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)

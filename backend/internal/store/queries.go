@@ -329,11 +329,11 @@ func (s *Store) DeleteTelegramConversation(ctx context.Context, botID, scope str
 func (s *Store) CreateSession(ctx context.Context, sess Session) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO sessions
-		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name, parent_id, mcp_servers, image, auth_profile)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name, parent_id, mcp_servers, image, auth_profile, instruction_profile)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		sess.ID, sess.UserID, string(sess.Mode), string(sess.Kind), sess.AgentType,
 		sess.AgentSessionID, sess.ContainerLabel, string(sess.Status), sess.Cwd, toUnix(sess.CreatedAt), sess.Name, sess.ParentID,
-		strings.Join(sess.McpServers, ","), sess.Image, sess.AuthProfile,
+		strings.Join(sess.McpServers, ","), sess.Image, sess.AuthProfile, sess.InstructionProfile,
 	)
 	if err != nil {
 		return fmt.Errorf("store: create session: %w", err)
@@ -400,7 +400,7 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 }
 
 const sessionSelect = `SELECT id, user_id, mode, kind, agent_type, agent_session_id,
-	container_label, status, cwd, created_at, name, parent_id, mcp_servers, image, auth_profile FROM sessions`
+	container_label, status, cwd, created_at, name, parent_id, mcp_servers, image, auth_profile, instruction_profile FROM sessions`
 
 func (s *Store) querySessions(ctx context.Context, query string, args ...any) ([]Session, error) {
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -442,7 +442,7 @@ func scanSessionRow(r rowScanner) (Session, error) {
 	var mode, kind, status, mcp string
 	var createdAt int64
 	err := r.Scan(&sess.ID, &sess.UserID, &mode, &kind, &sess.AgentType,
-		&sess.AgentSessionID, &sess.ContainerLabel, &status, &sess.Cwd, &createdAt, &sess.Name, &sess.ParentID, &mcp, &sess.Image, &sess.AuthProfile)
+		&sess.AgentSessionID, &sess.ContainerLabel, &status, &sess.Cwd, &createdAt, &sess.Name, &sess.ParentID, &mcp, &sess.Image, &sess.AuthProfile, &sess.InstructionProfile)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Session{}, err
@@ -496,6 +496,15 @@ func (s *Store) UpdateSessionMcp(ctx context.Context, id string, serverIDs []str
 		return fmt.Errorf("store: update session mcp: %w", err)
 	}
 	return affectedOne(res, "update session mcp")
+}
+
+// UpdateSessionInstructionProfile сохраняет внутренний профиль поведения агента.
+func (s *Store) UpdateSessionInstructionProfile(ctx context.Context, id, profile string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE sessions SET instruction_profile = ? WHERE id = ?`, profile, id)
+	if err != nil {
+		return fmt.Errorf("store: update session instruction profile: %w", err)
+	}
+	return affectedOne(res, "update session instruction profile")
 }
 
 // --- mcp_servers ---

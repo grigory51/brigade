@@ -373,6 +373,13 @@ export class DaemonConfigureRequest extends Message<DaemonConfigureRequest> {
    */
   forkFromSessionId = "";
 
+  /**
+   * system_prompt — дополнение стандартного system prompt; не попадает в user history.
+   *
+   * @generated from field: string system_prompt = 9;
+   */
+  systemPrompt = "";
+
   constructor(data?: PartialMessage<DaemonConfigureRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -389,6 +396,7 @@ export class DaemonConfigureRequest extends Message<DaemonConfigureRequest> {
     { no: 6, name: "plugin_dirs", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 7, name: "mcp_servers_json", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
     { no: 8, name: "fork_from_session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 9, name: "system_prompt", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaemonConfigureRequest {

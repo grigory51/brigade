@@ -77,6 +77,7 @@ type ConfigureOptions struct {
 	ForkFromSessionID string
 	PluginDirs        []string
 	McpServers        []acpsdk.McpServer
+	SystemPrompt      string
 }
 
 // Configure просит демон (пере)поднять адаптер (секреты — здесь, не в env контейнера).
@@ -95,6 +96,7 @@ func (c *Client) Configure(ctx context.Context, opts ConfigureOptions) (string, 
 		ForkFromSessionId: opts.ForkFromSessionID,
 		PluginDirs:        opts.PluginDirs,
 		McpServersJson:    mcpJSON,
+		SystemPrompt:      opts.SystemPrompt,
 	}))
 	if err != nil {
 		return "", err
