@@ -3,7 +3,7 @@ import {
   useAuiState,
   useComposer,
 } from "@assistant-ui/react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckIcon, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,11 +34,24 @@ import {
 // время /run. Инкремент ремоунтит AcpSessionInner, и history-адаптер перечитывает ленту.
 export function AcpSession({ sessionId }: { sessionId: string }) {
   const [reloadNonce, setReloadNonce] = useState(0);
+  // Guard живёт выше remount: иначе каждый status poll с generating=true создаёт
+  // новый runtime и обрывает replay-SSE до подключения.
+  const reloadPending = useRef(false);
+  const reload = useCallback(() => {
+    if (reloadPending.current) return;
+    reloadPending.current = true;
+    setReloadNonce((n) => n + 1);
+  }, []);
+  const finishReload = useCallback(() => {
+    reloadPending.current = false;
+  }, []);
+
   return (
     <AcpSessionInner
       key={reloadNonce}
       sessionId={sessionId}
-      onReload={() => setReloadNonce((n) => n + 1)}
+      onReload={reload}
+      onReloadFinished={finishReload}
     />
   );
 }
@@ -46,9 +59,11 @@ export function AcpSession({ sessionId }: { sessionId: string }) {
 function AcpSessionInner({
   sessionId,
   onReload,
+  onReloadFinished,
 }: {
   sessionId: string;
   onReload: () => void;
+  onReloadFinished: () => void;
 }) {
   const {
     runtime,
@@ -83,6 +98,7 @@ function AcpSessionInner({
         <BackgroundActivity
           status={status}
           onReload={onReload}
+          onReloadFinished={onReloadFinished}
           refreshStatus={refreshStatus}
         />
         <WorkflowsPanel workflows={workflows} />
@@ -114,10 +130,12 @@ function AcpSessionInner({
 function BackgroundActivity({
   status,
   onReload,
+  onReloadFinished,
   refreshStatus,
 }: {
   status: AgentStatus;
   onReload: () => void;
+  onReloadFinished: () => void;
   refreshStatus: () => void;
 }) {
   const isRunning = useAuiState((s) => s.thread.isRunning);
@@ -144,6 +162,7 @@ function BackgroundActivity({
     // цикл перезагрузок. Ждём первый полл (tick >= 1).
     if (status.tick === 0) return;
     if (isRunning) {
+      onReloadFinished();
       // Foreground-прогон: сообщения стримятся в тред живьём. База синхронизируется на
       // выходе из остывания; здесь только фиксируем факт прогона.
       cooldownTick.current = null;
@@ -182,6 +201,7 @@ function BackgroundActivity({
       }
       return;
     }
+    onReloadFinished();
     setBgActive(false);
 
     if (idleSeq.current === null) {
@@ -202,6 +222,7 @@ function BackgroundActivity({
     status.tick,
     composerText,
     onReload,
+    onReloadFinished,
     refreshStatus,
   ]);
 
