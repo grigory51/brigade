@@ -85,6 +85,9 @@ export type ThreadProps = {
   commands?: AvailableCommand[] | undefined;
   // footer — дополнительный блок над composer'ом (например, план агента).
   footer?: ReactNode | undefined;
+  // composer — замена обычного ввода для другого ожидаемого действия, например
+  // ответа на permission-запрос агента.
+  composer?: ReactNode | undefined;
   // configOptions — конфигурационные опции сессии (модель, усилие) для селекторов
   // в composer'е; onConfigChange отправляет новое значение бэкенду.
   configOptions?: ConfigOption[] | undefined;
@@ -128,6 +131,7 @@ export const Thread: FC<ThreadProps> = ({
   components,
   commands = [],
   footer,
+  composer,
   configOptions = [],
   onConfigChange,
   readonly = false,
@@ -142,7 +146,12 @@ export const Thread: FC<ThreadProps> = ({
     <ThreadComponentsContext.Provider value={components}>
       <CommandsContext.Provider value={commands}>
         <ConfigContext.Provider value={configValue}>
-          <ThreadRoot isEmpty={isEmpty} footer={footer} readonly={readonly} />
+          <ThreadRoot
+            isEmpty={isEmpty}
+            footer={footer}
+            composer={composer}
+            readonly={readonly}
+          />
         </ConfigContext.Provider>
       </CommandsContext.Provider>
     </ThreadComponentsContext.Provider>
@@ -152,8 +161,9 @@ export const Thread: FC<ThreadProps> = ({
 const ThreadRoot: FC<{
   isEmpty: boolean;
   footer?: ReactNode;
+  composer?: ReactNode;
   readonly?: boolean;
-}> = ({ isEmpty, footer, readonly = false }) => {
+}> = ({ isEmpty, footer, composer, readonly = false }) => {
   return (
     <ThreadPrimitive.Root
       className="aui-root aui-thread-root bg-background @container flex h-full flex-col"
@@ -201,7 +211,7 @@ const ThreadRoot: FC<{
           >
             <ThreadScrollToBottom />
             {footer}
-            {!readonly && <Composer />}
+            {!readonly && (composer ?? <Composer />)}
           </ThreadPrimitive.ViewportFooter>
         </div>
       </ThreadPrimitive.Viewport>
@@ -795,4 +805,3 @@ const EditComposer: FC = () => {
     </MessagePrimitive.Root>
   );
 };
-

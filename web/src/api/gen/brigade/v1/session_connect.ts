@@ -79,9 +79,9 @@ export const SessionService = {
       kind: MethodKind.Unary,
     },
     /**
-     * ReloadAgent переинициализирует ACP-агента сессии (session/load того же диалога), чтобы
-     * подхватить обновлённые скиллы/плагины без пересоздания сессии. Только ACP; не во время
-     * генерации.
+     * ReloadAgent перезапускает ACP-агента сессии на актуальном окружении, сохраняя диалог
+     * через session/load. В docker-режиме контейнер пересоздаётся с обновлённым runtime-образом.
+     * Только ACP; не во время генерации.
      *
      * @generated from rpc brigade.v1.SessionService.ReloadAgent
      */

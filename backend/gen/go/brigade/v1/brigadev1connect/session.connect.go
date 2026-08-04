@@ -75,9 +75,9 @@ type SessionServiceClient interface {
 	Fork(context.Context, *connect.Request[v1.ForkSessionRequest]) (*connect.Response[v1.ForkSessionResponse], error)
 	Stop(context.Context, *connect.Request[v1.StopSessionRequest]) (*connect.Response[v1.Empty], error)
 	Delete(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.Empty], error)
-	// ReloadAgent переинициализирует ACP-агента сессии (session/load того же диалога), чтобы
-	// подхватить обновлённые скиллы/плагины без пересоздания сессии. Только ACP; не во время
-	// генерации.
+	// ReloadAgent перезапускает ACP-агента сессии на актуальном окружении, сохраняя диалог
+	// через session/load. В docker-режиме контейнер пересоздаётся с обновлённым runtime-образом.
+	// Только ACP; не во время генерации.
 	ReloadAgent(context.Context, *connect.Request[v1.ReloadAgentRequest]) (*connect.Response[v1.Empty], error)
 	// SetSessionMcpServers меняет набор MCP-серверов ACP-сессии и применяет его
 	// переинициализацией агента. Не во время генерации.
@@ -276,9 +276,9 @@ type SessionServiceHandler interface {
 	Fork(context.Context, *connect.Request[v1.ForkSessionRequest]) (*connect.Response[v1.ForkSessionResponse], error)
 	Stop(context.Context, *connect.Request[v1.StopSessionRequest]) (*connect.Response[v1.Empty], error)
 	Delete(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.Empty], error)
-	// ReloadAgent переинициализирует ACP-агента сессии (session/load того же диалога), чтобы
-	// подхватить обновлённые скиллы/плагины без пересоздания сессии. Только ACP; не во время
-	// генерации.
+	// ReloadAgent перезапускает ACP-агента сессии на актуальном окружении, сохраняя диалог
+	// через session/load. В docker-режиме контейнер пересоздаётся с обновлённым runtime-образом.
+	// Только ACP; не во время генерации.
 	ReloadAgent(context.Context, *connect.Request[v1.ReloadAgentRequest]) (*connect.Response[v1.Empty], error)
 	// SetSessionMcpServers меняет набор MCP-серверов ACP-сессии и применяет его
 	// переинициализацией агента. Не во время генерации.

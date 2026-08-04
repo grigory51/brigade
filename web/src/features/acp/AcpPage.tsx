@@ -5,15 +5,6 @@ import {
 } from "@assistant-ui/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckIcon, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { PendingContextProvider } from "@/components/assistant-ui/composer-context";
 import { AcpThread } from "./AcpThread";
 import { SelectionMenu } from "./SelectionMenu";
@@ -21,7 +12,6 @@ import { SessionDock } from "./dock/SessionDock";
 import {
   useAcpRuntime,
   type AgentStatus,
-  type PendingPermission,
   type WorkflowInfo,
 } from "./useAcpRuntime";
 
@@ -90,6 +80,10 @@ function AcpSessionInner({
             plan={plan}
             a2ui={a2ui}
             configOptions={configOptions}
+            permission={permission}
+            onPermissionDecision={(decision) =>
+              permission && resolvePermission(permission.id, decision)
+            }
             onConfigChange={(configId, value) =>
               void setConfigOption(configId, value)
             }
@@ -106,13 +100,6 @@ function AcpSessionInner({
             Внутри провайдера рантайма — шкале и ссылкам нужна лента сообщений. */}
         <SessionDock sessionId={sessionId} />
       </div>
-
-      <PermissionDialog
-        permission={permission}
-        onDecide={(decision) =>
-          permission && resolvePermission(permission.id, decision)
-        }
-      />
       <SelectionMenu />
       </PendingContextProvider>
     </AssistantRuntimeProvider>
@@ -279,50 +266,4 @@ function WorkflowsPanel({ workflows }: { workflows: WorkflowInfo[] }) {
 function formatAgo(sec: number): string {
   if (sec < 60) return `${sec}с назад`;
   return `${Math.floor(sec / 60)}м назад`;
-}
-
-// PermissionDialog — human-in-the-loop: показывает запрос разрешения от агента и
-// отправляет выбранное решение. Закрытие только через выбор варианта (без крестика),
-// чтобы прогон не остался без ответа.
-function PermissionDialog({
-  permission,
-  onDecide,
-}: {
-  permission: PendingPermission | null;
-  onDecide: (decision: string) => void;
-}) {
-  return (
-    <Dialog open={permission !== null}>
-      <DialogContent showCloseButton={false} className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Разрешить действие?</DialogTitle>
-          <DialogDescription>
-            Агент запрашивает разрешение на выполнение команды.
-          </DialogDescription>
-        </DialogHeader>
-        {/* title часто содержит саму команду (напр. curl) — показываем её отдельным
-            моноширинным скролл-боксом, а не гигантским заголовком. */}
-        {permission && (
-          <pre className="max-h-56 overflow-auto rounded-md border bg-muted/50 p-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap text-muted-foreground">
-            {permission.title}
-          </pre>
-        )}
-        <DialogFooter className="flex-row flex-wrap justify-end gap-2">
-          {permission?.options.map((o) => {
-            const reject = o.kind?.startsWith("reject");
-            return (
-              <Button
-                key={o.optionId}
-                variant={reject ? "outline" : "default"}
-                className={reject ? "text-destructive" : undefined}
-                onClick={() => onDecide(o.optionId)}
-              >
-                {o.name ?? o.optionId}
-              </Button>
-            );
-          })}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
 }

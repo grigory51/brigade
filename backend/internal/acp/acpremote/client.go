@@ -42,6 +42,9 @@ type Client struct {
 	// deliveredSeq — seq последнего события, доставленного текущему sink (streamLoop). По нему
 	// FinishStreams дожидается, что закрывающие потоки события доехали до SSE до RUN_FINISHED.
 	deliveredSeq int64
+	// pendingPermissions — последний снимок ожиданий durable-демона из Status.
+	// GetStatus фронта читает его без второго RPC.
+	pendingPermissions [][]byte
 	// baseline — снимок ленты родителя, засеянный при fork. Демон форк-сессии историю не
 	// реплеит (session/fork ≠ session/load), поэтому его GetMessages пуст — разворачиваем
 	// baseline перед лентой демона в Messages(). См. Registry.Fork.
@@ -318,7 +321,17 @@ func (c *Client) Status() (generating bool, seq int) {
 	if err != nil {
 		return false, 0
 	}
+	c.mu.Lock()
+	c.pendingPermissions = resp.Msg.PendingPermissionsJson
+	c.mu.Unlock()
 	return resp.Msg.Generating, int(resp.Msg.Seq)
+}
+
+// PendingPermissionsJSON возвращает снимок ожиданий из последнего Status RPC.
+func (c *Client) PendingPermissionsJSON() [][]byte {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([][]byte(nil), c.pendingPermissions...)
 }
 
 // ResolvePermission доставляет решение пользователя ожидающему turn'у в демоне (диалог

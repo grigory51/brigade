@@ -738,11 +738,14 @@ func (x *DaemonPromptResponse) GetStopReason() string {
 }
 
 type DaemonStatusResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Generating    bool                   `protobuf:"varint,1,opt,name=generating,proto3" json:"generating,omitempty"`
-	Seq           int64                  `protobuf:"varint,2,opt,name=seq,proto3" json:"seq,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Generating bool                   `protobuf:"varint,1,opt,name=generating,proto3" json:"generating,omitempty"`
+	Seq        int64                  `protobuf:"varint,2,opt,name=seq,proto3" json:"seq,omitempty"`
+	// Живые permission-запросы принадлежат durable-демону и переживают reload brigade/UI.
+	// JSON совпадает с agui.PermissionRequest; Brigade прокидывает его в GetStatus фронту.
+	PendingPermissionsJson [][]byte `protobuf:"bytes,3,rep,name=pending_permissions_json,json=pendingPermissionsJson,proto3" json:"pending_permissions_json,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *DaemonStatusResponse) Reset() {
@@ -787,6 +790,13 @@ func (x *DaemonStatusResponse) GetSeq() int64 {
 		return x.Seq
 	}
 	return 0
+}
+
+func (x *DaemonStatusResponse) GetPendingPermissionsJson() [][]byte {
+	if x != nil {
+		return x.PendingPermissionsJson
+	}
+	return nil
 }
 
 // DaemonPayloadResponse — обобщённый ответ с JSON-нагрузкой (messages / commands / config).
@@ -1082,12 +1092,13 @@ const file_brigade_v1_agent_daemon_proto_rawDesc = "" +
 	"\x0fauto_allow_once\x18\x02 \x01(\bR\rautoAllowOnce\"7\n" +
 	"\x14DaemonPromptResponse\x12\x1f\n" +
 	"\vstop_reason\x18\x01 \x01(\tR\n" +
-	"stopReason\"H\n" +
+	"stopReason\"\x82\x01\n" +
 	"\x14DaemonStatusResponse\x12\x1e\n" +
 	"\n" +
 	"generating\x18\x01 \x01(\bR\n" +
 	"generating\x12\x10\n" +
-	"\x03seq\x18\x02 \x01(\x03R\x03seq\"+\n" +
+	"\x03seq\x18\x02 \x01(\x03R\x03seq\x128\n" +
+	"\x18pending_permissions_json\x18\x03 \x03(\fR\x16pendingPermissionsJson\"+\n" +
 	"\x15DaemonPayloadResponse\x12\x12\n" +
 	"\x04json\x18\x01 \x01(\fR\x04json\"Q\n" +
 	"\x1cDaemonSetConfigOptionRequest\x12\x1b\n" +

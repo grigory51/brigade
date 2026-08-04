@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	acpsdk "github.com/coder/acp-go-sdk"
 	"connectrpc.com/connect"
+	acpsdk "github.com/coder/acp-go-sdk"
 
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
 	"github.com/grigory51/brigade/backend/internal/transport/agui"
@@ -92,6 +92,13 @@ func (s *AcpService) GetStatus(ctx context.Context, req *connect.Request[v1.GetS
 	// JSON — та же форма PermissionRequest, что у CUSTOM-события (клиент парсит тем же кодом).
 	for _, p := range s.perms.Pending(req.Msg.ThreadId) {
 		if data, err := json.Marshal(p); err == nil {
+			resp.PendingPermissions = append(resp.PendingPermissions, string(data))
+		}
+	}
+	// В docker-режиме ожидание живёт в durable-демоне, а не в локальном PermissionStore.
+	// Status уже получил его тем же RPC; отдельного сетевого вызова здесь нет.
+	if remote, ok := b.(interface{ PendingPermissionsJSON() [][]byte }); ok {
+		for _, data := range remote.PendingPermissionsJSON() {
 			resp.PendingPermissions = append(resp.PendingPermissions, string(data))
 		}
 	}

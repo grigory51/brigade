@@ -633,6 +633,14 @@ export class DaemonStatusResponse extends Message<DaemonStatusResponse> {
    */
   seq = protoInt64.zero;
 
+  /**
+   * Живые permission-запросы принадлежат durable-демону и переживают reload brigade/UI.
+   * JSON совпадает с agui.PermissionRequest; Brigade прокидывает его в GetStatus фронту.
+   *
+   * @generated from field: repeated bytes pending_permissions_json = 3;
+   */
+  pendingPermissionsJson: Uint8Array[] = [];
+
   constructor(data?: PartialMessage<DaemonStatusResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -643,6 +651,7 @@ export class DaemonStatusResponse extends Message<DaemonStatusResponse> {
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "generating", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 2, name: "seq", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 3, name: "pending_permissions_json", kind: "scalar", T: 12 /* ScalarType.BYTES */, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaemonStatusResponse {

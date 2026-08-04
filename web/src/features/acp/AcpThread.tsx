@@ -40,6 +40,7 @@ import type {
   AvailableCommand,
   A2uiState,
   ConfigOption,
+  PendingPermission,
 } from "./useAcpRuntime";
 import { parseDiffResult } from "./tools/diff";
 import { DiffCard } from "./tools/DiffCard";
@@ -58,6 +59,8 @@ export function AcpThread({
   a2ui,
   configOptions,
   onConfigChange,
+  permission,
+  onPermissionDecision,
   readonly = false,
   sessionId,
 }: {
@@ -66,6 +69,8 @@ export function AcpThread({
   a2ui: A2uiState;
   configOptions: ConfigOption[];
   onConfigChange: (configId: string, value: string) => void;
+  permission?: PendingPermission | null;
+  onPermissionDecision?: (decision: string) => void;
   readonly?: boolean;
   sessionId?: string;
 }) {
@@ -94,6 +99,14 @@ export function AcpThread({
             commands={commands}
             components={{ ToolFallback, ToolGroup: AcpToolGroup }}
             footer={readonly ? undefined : <PlanPanel plan={plan} />}
+            composer={
+              permission && onPermissionDecision ? (
+                <PermissionComposer
+                  permission={permission}
+                  onDecide={onPermissionDecision}
+                />
+              ) : undefined
+            }
             configOptions={configOptions}
             onConfigChange={onConfigChange}
             readonly={readonly}
@@ -101,6 +114,43 @@ export function AcpThread({
         </ComposerUploadContext.Provider>
       </AcpSessionContext.Provider>
     </A2uiContext.Provider>
+  );
+}
+
+function PermissionComposer({
+  permission,
+  onDecide,
+}: {
+  permission: PendingPermission;
+  onDecide: (decision: string) => void;
+}) {
+  return (
+    <div className="border-border/60 dark:border-muted-foreground/15 flex w-full flex-col gap-3 rounded-(--composer-radius) border bg-(--composer-bg) p-3 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] dark:shadow-none">
+      <div className="px-1">
+        <div className="text-muted-foreground mb-1 text-xs font-medium">
+          Агент ждёт разрешения
+        </div>
+        <pre className="max-h-32 overflow-auto font-mono text-sm leading-relaxed break-all whitespace-pre-wrap">
+          {permission.title}
+        </pre>
+      </div>
+      <div className="flex flex-wrap justify-end gap-2">
+        {permission.options.map((option) => {
+          const reject = option.kind?.startsWith("reject");
+          return (
+            <Button
+              key={option.optionId}
+              type="button"
+              variant={reject ? "outline" : "default"}
+              className={reject ? "text-destructive" : undefined}
+              onClick={() => onDecide(option.optionId)}
+            >
+              {option.name ?? option.optionId}
+            </Button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

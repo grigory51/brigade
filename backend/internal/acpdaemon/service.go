@@ -119,7 +119,13 @@ func (s *service) Status(ctx context.Context, _ *connect.Request[v1.Empty]) (*co
 	}
 	generating, _ := c.Status()
 	// seq — из durable-журнала (переживает рестарт brigade), а не len(history) в RAM.
-	return connect.NewResponse(&v1.DaemonStatusResponse{Generating: generating, Seq: s.d.log.LastSeq()}), nil
+	resp := &v1.DaemonStatusResponse{Generating: generating, Seq: s.d.log.LastSeq()}
+	for _, pending := range s.d.perms.pendingList() {
+		if data, err := json.Marshal(pending); err == nil {
+			resp.PendingPermissionsJson = append(resp.PendingPermissionsJson, data)
+		}
+	}
+	return connect.NewResponse(resp), nil
 }
 
 func (s *service) GetMessages(ctx context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.DaemonPayloadResponse], error) {

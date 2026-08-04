@@ -32,12 +32,13 @@ type sessionDebugDump struct {
 }
 
 type daemonDebugDump struct {
-	Address       string `json:"address,omitempty"`
-	Generating    bool   `json:"generating"`
-	Seq           int64  `json:"seq"`
-	Error         string `json:"error,omitempty"`
-	MessagesError string `json:"messagesError,omitempty"`
-	EventsError   string `json:"eventsError,omitempty"`
+	Address            string `json:"address,omitempty"`
+	Generating         bool   `json:"generating"`
+	Seq                int64  `json:"seq"`
+	PendingPermissions int    `json:"pendingPermissions"`
+	Error              string `json:"error,omitempty"`
+	MessagesError      string `json:"messagesError,omitempty"`
+	EventsError        string `json:"eventsError,omitempty"`
 }
 
 type debugMessage struct {
@@ -126,6 +127,7 @@ func dumpDockerACP(ctx context.Context, cfg *config.Config, sessionID string, ou
 	}
 	out.Daemon.Generating = status.Msg.Generating
 	out.Daemon.Seq = status.Msg.Seq
+	out.Daemon.PendingPermissions = len(status.Msg.PendingPermissionsJson)
 
 	messages, err := conn.RPC.GetMessages(ctx, daemonrpc.Req(conn.Sign(), &v1.Empty{}))
 	if err != nil {
