@@ -4,13 +4,17 @@ import {
   useContext,
   type PropsWithChildren,
 } from "react";
-import { Download, Loader2, Wrench, ChevronRight } from "lucide-react";
+import { Activity, Download, Loader2, Wrench, ChevronRight } from "lucide-react";
 import { type ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { A2uiSurface } from "@a2ui/react/v0_9";
 import { sessionClient } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Thread, type ThreadGroupPart } from "@/components/assistant-ui/thread";
+import {
+  Thread,
+  type ThreadGroupPart,
+  type ThreadToolPart,
+} from "@/components/assistant-ui/thread";
 import {
   ComposerUploadContext,
   type UploadFn,
@@ -31,11 +35,25 @@ import { SaveNoteCard } from "./SaveNoteCard";
 // провенанс session заметки). undefined в readonly-архиве / вне сессии.
 const AcpSessionContext = createContext<string | undefined>(undefined);
 
-// AcpToolGroup заменяет дефолтный аккордеон «N tool calls»: все вызовы тулов рендерятся
-// ПЛОСКО, прямо в ленте — карточки (save_note, render_ui/A2UI, diff, терминал, файл) и
-// generic-блоки видны сразу, а не спрятаны в свёртке. Детей рисуем как есть.
-function AcpToolGroup({ children }: PropsWithChildren<{ group: ThreadGroupPart }>) {
-  return <div className="space-y-2">{children}</div>;
+function AcpToolGroup({
+  children,
+  group,
+}: PropsWithChildren<{ group: ThreadGroupPart }>) {
+  const running = group.status.type === "running";
+  return (
+    <details className="group/activity my-2 rounded-lg border border-border/60 bg-card/30">
+      <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 px-3 text-sm text-muted-foreground select-none hover:text-foreground">
+        <Activity className="size-4 shrink-0" />
+        <span className="font-medium">Активность · {group.indices.length}</span>
+        {running ? (
+          <Loader2 className="ml-auto size-3.5 animate-spin" />
+        ) : (
+          <ChevronRight className="ml-auto size-4 transition-transform group-open/activity:rotate-90" />
+        )}
+      </summary>
+      <div className="space-y-2 border-t border-border/50 p-2">{children}</div>
+    </details>
+  );
 }
 import type {
   AvailableCommand,
@@ -89,6 +107,21 @@ export function AcpThread({
     },
     [sessionId],
   );
+  const isToolStandalone = useCallback(
+    (part: ThreadToolPart) => {
+      const name = bareToolName(part.toolName);
+      return (
+        name === SAVE_NOTE_TOOL_NAME ||
+        name === RENDER_UI_TOOL_NAME ||
+        name === PUBLISH_FILE_TOOL_NAME ||
+        FRONTEND_TOOL_NAMES.has(name) ||
+        generatedImageFiles(part.result).length > 0 ||
+        parseDiffResult(part.result) !== null ||
+        a2ui.processor.model.surfacesMap.has(part.toolCallId)
+      );
+    },
+    [a2ui.processor, a2ui.version],
+  );
 
   return (
     <A2uiContext.Provider value={a2ui}>
@@ -98,7 +131,11 @@ export function AcpThread({
         >
           <Thread
             commands={commands}
-            components={{ ToolFallback, ToolGroup: AcpToolGroup }}
+            components={{
+              ToolFallback,
+              ToolGroup: AcpToolGroup,
+              isToolStandalone,
+            }}
             footer={readonly ? undefined : <PlanPanel plan={plan} />}
             composer={
               permission && onPermissionDecision ? (

@@ -70,6 +70,17 @@ import {
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 
+const defaultMessageGroupBy = groupPartByType({
+  reasoning: ["group-chainOfThought", "group-reasoning"],
+  "tool-call": ["group-chainOfThought", "group-tool"],
+  "standalone-tool-call": [],
+});
+
+export type ThreadToolPart = Extract<
+  Parameters<typeof defaultMessageGroupBy>[0],
+  { type: "tool-call" }
+>;
+
 /**
  * Переопределения рендера ленты. Оба слота обязательны по смыслу: карточки
  * инструментов и их группировку задаёт ACP-слой (см. features/acp/AcpThread).
@@ -77,6 +88,7 @@ export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 export type ThreadComponents = {
   ToolFallback: ToolCallMessagePartComponent;
   ToolGroup: ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>;
+  isToolStandalone?: (part: ThreadToolPart) => boolean;
 };
 
 export type ThreadProps = {
@@ -619,7 +631,17 @@ const MessageError: FC = () => {
 };
 
 const AssistantMessage: FC = () => {
-  const { ToolFallback, ToolGroup } = useThreadComponents();
+  const { ToolFallback, ToolGroup, isToolStandalone } = useThreadComponents();
+  const messageGroupBy = useMemo(() => {
+    if (!isToolStandalone) return defaultMessageGroupBy;
+    return (
+      part: Parameters<typeof defaultMessageGroupBy>[0],
+      context: Parameters<typeof defaultMessageGroupBy>[1],
+    ) => {
+      if (part.type === "tool-call" && isToolStandalone(part)) return [];
+      return defaultMessageGroupBy(part, context);
+    };
+  }, [isToolStandalone]);
   // navId — якорь для прыжка по шкале навигации и панели ссылок (см. dock/jumpToMessage).
   const navId = useAuiState((s) => s.message.id);
 
@@ -642,11 +664,7 @@ const AssistantMessage: FC = () => {
         className="text-foreground px-2 leading-relaxed wrap-break-word [contain-intrinsic-size:auto_24px] [content-visibility:auto]"
       >
         <MessagePrimitive.GroupedParts
-          groupBy={groupPartByType({
-            reasoning: ["group-chainOfThought", "group-reasoning"],
-            "tool-call": ["group-chainOfThought", "group-tool"],
-            "standalone-tool-call": [],
-          })}
+          groupBy={messageGroupBy}
         >
           {({ part, children }) => {
             switch (part.type) {
