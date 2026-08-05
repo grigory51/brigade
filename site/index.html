@@ -4,12 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>brigade — self-hosted multiplexer for coding agents</title>
-  <meta name="description" content="Run coding agents on your own hardware and talk to them from any browser. Close the laptop, open the phone — the agent keeps working." />
+  <meta name="description" content="Run Claude Code and Codex on your own hardware. Persistent CLI and ACP sessions in the browser, macOS app and Telegram." />
   <meta name="theme-color" content="#262624" />
   <link rel="icon" href="logo.svg" type="image/svg+xml" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="brigade — self-hosted multiplexer for coding agents" />
-  <meta property="og:description" content="Run coding agents on your own hardware. Close the laptop, open the phone — the agent keeps working." />
+  <meta property="og:description" content="Run Claude Code and Codex on your own hardware. Persistent CLI and ACP sessions in the browser, macOS app and Telegram." />
   <meta property="og:image" content="https://grigory51.github.io/brigade/logo.svg" />
   <meta name="twitter:card" content="summary" />
   <style>
@@ -85,10 +85,6 @@
     .band h2 { font-size: clamp(1.6rem, 3.4vw, 2.2rem); letter-spacing: -.02em; margin: 10px 0 0; font-weight: 660; }
     .band p { color: var(--muted-fg); max-width: 56ch; margin: 16px auto 0; font-size: 1.05rem; }
 
-    .shot-lg { width: 100%; display: block; border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 40px 80px -44px rgba(0,0,0,.75); }
-    .shot-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
-    .shot-row img { width: 100%; display: block; border: 1px solid var(--border); border-radius: 14px; }
-
     section { padding: 84px 0; }
     .sec-head { max-width: 48ch; margin-bottom: 44px; }
     .sec-head h2 { font-size: clamp(1.7rem, 3.6vw, 2.3rem); letter-spacing: -.025em; margin: 12px 0 0; font-weight: 660; }
@@ -161,7 +157,7 @@
       .hero { padding: 64px 0 56px; }
       .feats { grid-template-columns: 1fr; }
       .qs-grid { grid-template-columns: 1fr; }
-      .row2, .grid3, .shot-row { grid-template-columns: 1fr; }
+      .row2, .grid3 { grid-template-columns: 1fr; }
       .nav-links .hide-sm { display: none; }
     }
   </style>
@@ -186,7 +182,7 @@
       <div>
         <div class="eyebrow">Self-hosted · Open source · MIT</div>
         <h1>Your coding agents,<br /><span class="accent">running on your hardware.</span></h1>
-        <p class="lede">brigade keeps agent sessions alive on your own server and mirrors them to any browser. Close the laptop, open the phone — the agent keeps working.</p>
+        <p class="lede">brigade keeps Claude Code and Codex sessions alive on your own server and mirrors them to the browser, macOS app and Telegram.</p>
         <div class="cta-row">
           <a class="btn btn-primary" href="#quickstart">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
@@ -197,7 +193,7 @@
         <div class="meta-line">
           <span><i class="dot"></i> Single Go binary</span>
           <span><i class="dot"></i> Local or Docker</span>
-          <span><i class="dot"></i> Web, desktop &amp; mobile</span>
+          <span><i class="dot"></i> Claude Code &amp; Codex</span>
         </div>
       </div>
 
@@ -228,24 +224,9 @@
     <div class="wrap band-inner">
       <div class="eyebrow">Persist &amp; resume</div>
       <h2>The session outlives the connection.</h2>
-      <p>Agents run on the server, not in the tab. Sessions survive backend restarts and reconnects — a turn that started on your desktop finishes while you watch from your phone. Nothing to babysit.</p>
+      <p>Agents run on the server, not in the tab. Sessions survive backend restarts and reconnects — start a turn in the browser, then receive the result through Telegram or a notification.</p>
     </div>
   </div>
-
-  <section>
-    <div class="wrap">
-      <div class="sec-head">
-        <div class="eyebrow">See it</div>
-        <h2>A real interface, not a wrapper.</h2>
-        <p>Structured chat with tool-call cards and quoted context, a git-backed memory dashboard, and a live session list — all in one dark, keyboard-friendly UI.</p>
-      </div>
-      <img class="shot-lg" src="shots/chat.png" alt="ACP chat with tool-call cards and quoted context" />
-      <div class="shot-row">
-        <img src="shots/memory.png" alt="Git-backed memory dashboard" />
-        <img src="shots/sessions.png" alt="Session list" />
-      </div>
-    </div>
-  </section>
 
   <section id="features">
     <div class="wrap">
@@ -281,26 +262,23 @@
           </div>
         </div>
 
-        <!-- Any ACP agent -->
+        <!-- Supported agents -->
         <div class="feat">
           <div class="feat-top">
             <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><circle cx="12" cy="12" r="4"/></svg></div>
-            <div><h3>Any ACP agent</h3><p>Claude Code works today. Sessions speak <span class="accent">ACP</span> (with a CLI under the hood), so opencode and other agents drop in next — no rewrite.</p></div>
+            <div><h3>Claude Code and Codex</h3><p>Choose the agent per session and run it as CLI or ACP. Claude uses a subscription token; Codex supports ChatGPT device login and API keys.</p></div>
           </div>
           <div class="schema">
-            <svg class="sv" viewBox="0 0 300 132" role="img" aria-label="brigade speaks ACP to swappable agents">
+            <svg class="sv" viewBox="0 0 300 132" role="img" aria-label="brigade runs Claude Code and Codex through CLI or ACP">
               <rect class="s-box" x="10" y="46" width="86" height="40" rx="9"/>
               <text x="30" y="70" class="s-tb" font-size="12">brigade</text>
               <path class="s-acc" d="M96 66 H150"/>
-              <text x="104" y="60" class="accent" font-size="9" fill="#c96442">ACP</text>
-              <rect class="s-box" x="150" y="16" width="132" height="26" rx="7"/>
-              <circle class="s-g" cx="164" cy="29" r="4"/><text x="176" y="33" class="s-tb" font-size="11">Claude Code</text>
-              <rect class="s-dash" x="150" y="53" width="132" height="26" rx="7"/>
-              <circle cx="164" cy="66" r="4" fill="#6a6660"/><text x="176" y="70" font-size="11">opencode · soon</text>
-              <rect class="s-dash" x="150" y="90" width="132" height="26" rx="7"/>
-              <text x="164" y="107" font-size="11">…any ACP agent</text>
-              <path class="s-l" d="M150 29 H150 M138 66 H150 M138 103 H150"/>
-              <path class="s-acc" d="M96 66 C120 66 126 29 150 29 M96 66 C120 66 126 103 150 103"/>
+              <text x="104" y="60" class="accent" font-size="9" fill="#c96442">CLI · ACP</text>
+              <rect class="s-box" x="150" y="29" width="132" height="30" rx="7"/>
+              <circle class="s-g" cx="164" cy="44" r="4"/><text x="176" y="48" class="s-tb" font-size="11">Claude Code</text>
+              <rect class="s-box" x="150" y="73" width="132" height="30" rx="7"/>
+              <circle class="s-g" cx="164" cy="88" r="4"/><text x="176" y="92" class="s-tb" font-size="11">Codex</text>
+              <path class="s-acc" d="M96 66 C120 66 126 44 150 44 M96 66 C120 66 126 88 150 88"/>
             </svg>
           </div>
         </div>
@@ -309,7 +287,7 @@
         <div class="feat">
           <div class="feat-top">
             <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M21 8V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v2"/><path d="M7 12h.01M7 16h.01"/></svg></div>
-            <div><h3>Local or Docker isolation</h3><p>Run agents as host processes, or one container per session. Set per instance; every session resumes from agent state after a restart.</p></div>
+            <div><h3>Local or Docker isolation</h3><p>Run agents as host processes or in Docker. ACP gets a container per session; CLI shares one long-lived container per user. Bring a custom image when the built-in toolset is not enough.</p></div>
           </div>
           <div class="schema">
             <svg class="sv" viewBox="0 0 300 132" role="img" aria-label="local process vs docker container">
@@ -320,10 +298,28 @@
               <line class="s-l" x1="74" y1="88" x2="74" y2="98"/>
               <text x="162" y="20" font-size="9">DOCKER</text>
               <rect class="s-dash" x="162" y="28" width="130" height="86" rx="10"/>
-              <rect class="s-box" x="182" y="54" width="90" height="34" rx="9"/>
-              <text x="196" y="75" class="s-tb" font-size="11">session</text>
-              <text x="172" y="46" font-size="9">container</text>
+              <rect class="s-box" x="174" y="48" width="106" height="24" rx="7"/>
+              <text x="188" y="64" class="s-tb" font-size="10">ACP session</text>
+              <rect class="s-box" x="174" y="80" width="106" height="24" rx="7"/>
+              <text x="188" y="96" class="s-tb" font-size="10">CLI · user</text>
+              <text x="172" y="42" font-size="9">containers</text>
             </svg>
+          </div>
+        </div>
+
+        <!-- MCP -->
+        <div class="feat">
+          <div class="feat-top">
+            <div class="ic"><svg viewBox="0 0 24 24"><path d="M8 7V5a3 3 0 0 1 6 0v10a4 4 0 0 1-8 0V7a2 2 0 0 1 4 0v8"/><path d="M14 9h4a3 3 0 0 1 0 6h-1"/></svg></div>
+            <div><h3>Per-user MCP and secret vault</h3><p>Add stdio, HTTP and SSE servers, select them per session, then toggle them in a running ACP chat. Environment variables and headers reference encrypted server-side secrets.</p></div>
+          </div>
+        </div>
+
+        <!-- Telegram -->
+        <div class="feat">
+          <div class="feat-top">
+            <div class="ic"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg></div>
+            <div><h3>Your agent in Telegram</h3><p>Connect your own bot and choose its ACP agent, auth, image and MCP set. Direct chats and forum topics become persistent sessions with formatted replies, images and files.</p></div>
           </div>
         </div>
 
@@ -370,7 +366,7 @@
         <div class="feat">
           <div class="feat-top">
             <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M14 3v5h5M8 13h6M8 17h4"/></svg></div>
-            <div><h3>Memory in your own git</h3><p>You and the agent save notes to a personal, searchable store — markdown <span class="accent">committed to your own git repo</span>. Delete the chat, keep the knowledge; organized into topics.</p></div>
+            <div><h3>Memory and archive in your git</h3><p>Searchable Markdown notes and complete archived chats are <span class="accent">committed to your own private repository</span>. Archive keeps a read-only session snapshot; delete removes it permanently.</p></div>
           </div>
           <div class="schema">
             <svg class="sv" viewBox="0 0 300 132" role="img" aria-label="a note committed to a git repo">
@@ -390,12 +386,16 @@
       </div>
 
       <div class="more">
-        <span class="chip"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m8 10 2 2-2 2M13 15h3"/></svg> Side terminal</span>
-        <span class="chip"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/></svg> Model switcher</span>
-        <span class="chip"><svg viewBox="0 0 24 24"><path d="m7 8-4 4 4 4M17 8l4 4-4 4M14 4l-4 16"/></svg> Slash commands</span>
+        <span class="chip"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m8 10 2 2-2 2M13 15h3"/></svg> Floating terminal</span>
+        <span class="chip"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h5"/></svg> A2UI cards</span>
+        <span class="chip"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><circle cx="9" cy="9" r="2"/><path d="m4 17 5-5 4 4 2-2 5 5"/></svg> Images &amp; file cards</span>
+        <span class="chip"><svg viewBox="0 0 24 24"><path d="m12 2 8 5v10l-8 5-8-5V7z"/><path d="m4 7 8 5 8-5M12 12v10"/></svg> 3D &amp; CAD viewer</span>
+        <span class="chip"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg> Multiple ntfy connections</span>
+        <span class="chip"><svg viewBox="0 0 24 24"><path d="M4 12h16M12 4v16"/><circle cx="12" cy="12" r="8"/></svg> Time Machine navigation</span>
+        <span class="chip"><svg viewBox="0 0 24 24"><path d="M7 10V7a5 5 0 0 1 10 0v3"/><rect x="4" y="10" width="16" height="11" rx="2"/></svg> In-memory SSH agent</span>
         <span class="chip"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m7 14 4-4 3 3 5-6"/></svg> Live usage</span>
+        <span class="chip"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/></svg> Model &amp; mode controls</span>
         <span class="chip"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg> Desktop app (macOS)</span>
-        <span class="chip"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg> Mobile client (KMP)</span>
       </div>
     </div>
   </section>
@@ -405,15 +405,16 @@
       <div class="sec-head">
         <div class="eyebrow">Architecture</div>
         <h2>Browser in, agents out.</h2>
-        <p>One Go binary serves every surface — API, embedded SPA, terminal and chat streams, auth, storage, the preview proxy — then spawns an agent per session.</p>
+        <p>One Go binary serves the UI and transports, owns session state, and starts agent runtimes locally or through the host Docker daemon.</p>
       </div>
 
       <div class="arch">
         <div class="layer">
-          <div class="cap">Clients — share the proto contract</div>
-          <div class="row2">
+          <div class="cap">Clients and integrations</div>
+          <div class="grid3">
             <div class="node"><div class="n">Browser</div><div class="s">React · xterm.js · AG-UI chat</div></div>
-            <div class="node"><div class="n">Mobile</div><div class="s">Kotlin Multiplatform · iOS &amp; Android</div></div>
+            <div class="node"><div class="n">Brigade.app</div><div class="s">native macOS webview · local or Docker</div></div>
+            <div class="node"><div class="n">Telegram</div><div class="s">personal bots · poll or webhook</div></div>
           </div>
         </div>
 
@@ -426,22 +427,22 @@
             <div class="mod"><b>WS streams</b><span>terminal · side shell</span></div>
             <div class="mod"><b>SSE chat</b><span>ACP → AG-UI</span></div>
             <div class="mod"><b>L7 preview proxy</b><span>wildcard + TLS</span></div>
-            <div class="mod"><b>Auth · SQLite</b><span>JWT · sessions · resume</span></div>
+            <div class="mod"><b>Auth · SQLite</b><span>users · settings · sessions</span></div>
             <div class="mod hl"><b>Spawner</b><span>local pty │ docker</span></div>
           </div>
         </div>
 
-        <div class="conn">spawns one agent per session</div>
+        <div class="conn">starts and restores agent runtimes</div>
 
         <div class="layer">
-          <div class="cap">Per session</div>
+          <div class="cap">Agents and durable user data</div>
           <div class="row2">
-            <div class="node"><div class="n">claude-agent-acp → agent</div><div class="s">local process or docker container · resumable</div></div>
-            <div class="node"><div class="n">Git-backed memory</div><div class="s">notes committed to your repo</div></div>
+            <div class="node"><div class="n">Claude Code · Codex</div><div class="s">CLI or ACP · local process or Docker</div></div>
+            <div class="node"><div class="n">User's git repository</div><div class="s">Markdown notes · archived chats</div></div>
           </div>
         </div>
       </div>
-      <div class="arch-foot">The protobuf contract in <span class="accent">proto/</span> is the single source of truth — the web and mobile clients are generated from it.</div>
+      <div class="arch-foot">The protobuf files in <span class="accent">proto/</span> are the API source of truth. WebSocket and SSE are reserved for terminal and streaming chat protocols.</div>
     </div>
   </section>
 
@@ -450,21 +451,29 @@
       <div class="sec-head">
         <div class="eyebrow">Quick start</div>
         <h2>Running in a couple of commands.</h2>
-        <p>Two ways to run it — a prebuilt binary or Docker. It drives Claude Code today; more ACP agents are on the way.</p>
+        <p>Use the prebuilt Linux binary or the server container, then connect Claude Code or Codex from Settings.</p>
       </div>
       <div class="qs-grid">
         <div class="code">
           <div class="code-head"><span>Prebuilt binary — embeds the web UI</span><button class="copy" type="button">Copy</button></div>
 <pre><code><span class="cm"># latest linux/amd64 build from GitHub Releases</span>
+curl -LO https://raw.githubusercontent.com/grigory51/brigade/main/backend/config.example.yaml
+mv config.example.yaml config.yaml
 curl -L https://github.com/grigory51/brigade/releases/latest/download/brigade-linux-amd64.tar.gz | tar xz
 ./brigade --config config.yaml   <span class="cm"># → http://localhost:8080</span></code></pre>
         </div>
         <div class="code">
-          <div class="code-head"><span>Docker — a container per session</span><button class="copy" type="button">Copy</button></div>
-<pre><code>docker run -d --name brigade -p 8080:8080 \
+          <div class="code-head"><span>Docker — host daemon</span><button class="copy" type="button">Copy</button></div>
+<pre><code>mkdir -p /srv/brigade/{workspace,agent-home,memory}
+docker run -d --name brigade -p 8080:8080 \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  -v brigade-data:/data \
+  -v /srv/brigade:/srv/brigade \
   -e <span class="ca">BRIGADE_MODE</span>=docker \
+  -e <span class="ca">BRIGADE_SQLITE_PATH</span>=/srv/brigade/brigade.db \
+  -e <span class="ca">BRIGADE_WORK_DIR</span>=/srv/brigade/workspace \
+  -e <span class="ca">BRIGADE_AGENT_HOME_DIR</span>=/srv/brigade/agent-home \
+  -e <span class="ca">BRIGADE_MEMORY__DIR</span>=/srv/brigade/memory \
+  -e <span class="ca">BRIGADE_AGENT_IMAGE</span>=ghcr.io/grigory51/brigade-agent:latest \
   -e <span class="ca">BRIGADE_JWT__SECRET</span>=change-me \
   ghcr.io/grigory51/brigade:latest</code></pre>
         </div>
@@ -472,7 +481,7 @@ curl -L https://github.com/grigory51/brigade/releases/latest/download/brigade-li
       <p style="margin-top:18px; color:var(--muted-fg); font-size:14.5px;">
         Prefer a native window? <span class="accent">make app</span> bundles a self-contained
         <b style="color:var(--fg); font-weight:600;">Brigade.app</b> for macOS — the same brigade,
-        node and agent runtime included. A Kotlin Multiplatform mobile client shares the backend too.
+        node and agent runtime included. It can run agents locally or through a selected Docker context.
       </p>
     </div>
   </section>

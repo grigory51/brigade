@@ -5,8 +5,8 @@
 <h1 align="center">brigade</h1>
 
 <p align="center">
-  Self-hosted multiplexer for coding agents.<br/>
-  Run Claude Code sessions on your own hardware — talk to them from any browser.
+  Self-hosted workspace for coding agents.<br/>
+  Run Claude Code and Codex on your own hardware — use them from any browser or Telegram.
 </p>
 
 <p align="center">
@@ -17,133 +17,150 @@
 
 ---
 
-brigade is a single Go binary that spawns coding agents (Claude Code today, anything
-speaking [ACP](https://agentclientprotocol.com) tomorrow), keeps their sessions alive on
-the server, and mirrors them to a web UI — or a native **macOS desktop app**. Close the
-laptop, open the phone — the agent keeps working, the session is right where you left it.
+brigade is a Go service with an embedded React UI. It starts Claude Code and Codex
+sessions, keeps them running when the browser disconnects, and restores them after a
+backend restart. Use a full terminal or structured ACP chat from the web UI and the
+native macOS app.
 
 ## Features
 
-- **Two session modes** — full terminal (pty + xterm.js) or structured chat
-  (ACP → AG-UI over SSE) with tool-call cards, diffs, plans and permission prompts.
-- **Local or Docker isolation** — agents run as host processes or one container per
-  session; sessions survive backend restarts (resume via agent state).
-- **Session tree** — fork any chat session into an independent branch with full context.
-- **Personal memory (git-backed)** — you and the agent save notes to a private,
-  searchable store: markdown committed to your own git repo, organized into topics,
-  surviving session deletion. The agent gets a `/note` skill to write to it.
-- **Preview proxy** — a dev server started by the agent is instantly reachable at
-  `https://<session>-<port>.your.domain` (built-in L7 proxy + TLS, no external
-  reverse proxy needed). The agent gets a skill telling it how to publish ports.
-- **Side terminal** — open a shell next to any session to inspect the working
-  directory by hand.
-- **Model switcher, slash commands, live usage** — session config is driven by the
-  agent itself over ACP.
-- **Push notifications** — per-user [ntfy](https://ntfy.sh) pings when a turn finishes
-  or fails, so you can close the tab and get pinged when the agent needs you.
-- **Desktop & mobile** — a native macOS app (`make app` → `Brigade.app`) and a Kotlin
-  Multiplatform mobile client, both on the same backend.
-
-## Screenshots
-
-Structured ACP chat — tool-call cards, quoted context, model / mode / effort:
-
-![ACP chat](site/shots/chat.png)
-
-Git-backed memory and the session list:
-
-| ![Memory](site/shots/memory.png) | ![Sessions](site/shots/sessions.png) |
-|:---:|:---:|
+- **Claude Code and Codex** — choose either agent for every session. Claude accepts a
+  subscription token; Codex supports ChatGPT device login and OpenAI API keys.
+- **CLI or ACP chat** — use a full pty through xterm.js, or structured ACP → AG-UI chat
+  with diffs, plans, permission controls, slash commands, model settings and live usage.
+- **Local or Docker runtime** — run agents as host processes or in Docker. ACP sessions
+  get isolated containers; CLI sessions share one long-lived container per user. Custom
+  user images are supported, while brigade injects its runtime separately.
+- **Live session controls** — fork ACP sessions, reload the agent runtime, open a movable
+  side terminal, jump through long chats with Time Machine, and collect links emitted by
+  the agent.
+- **Per-user MCP** — add stdio, HTTP or SSE servers, select them when creating a session,
+  and enable or disable them in a running ACP session. Secret environment variables and
+  headers use references to values stored in brigade's encrypted server-side vault.
+- **Generative UI and files** — agents can render interactive A2UI cards, publish files,
+  return generated images, and show GLB/GLTF or CAD models directly in chat. Workspace
+  file downloads use authenticated session URLs.
+- **Personal memory and archive in git** — notes are searchable Markdown in your own
+  private repository. Archiving a session commits its complete read-only chat under
+  `archive/`; deleting a session removes it permanently.
+- **Telegram bots** — connect your own BotFather token and choose the ACP agent, auth
+  profile, image and MCP set. Direct chats and forum topics map to brigade sessions;
+  replies support formatted text, files and images. Instances use polling or webhooks;
+  the desktop app always polls.
+- **Notifications** — connect multiple notification destinations per user. The backend
+  supports multiple providers and connections; ntfy is the first implemented provider.
+- **Preview proxy** — expose an agent's dev server through a per-session URL using the
+  built-in L7 proxy and optional TLS. Subdomain and single-host cookie routing are
+  supported.
+- **SSH keys stay in memory** — brigade exposes the user's key through an in-process
+  ssh-agent to sessions and the memory repository instead of writing private keys into
+  workspaces.
 
 ## Quick start
 
-Requirements: a [Claude subscription token](https://docs.anthropic.com/claude-code)
-(`claude setup-token`), and Docker if you want containerized sessions.
+Choose at least one agent after signing in: a Claude subscription token, or Codex through
+ChatGPT device login / an OpenAI API key. Docker is only required for containerized
+sessions.
+
+### Prebuilt binary
+
+The release archive contains a Linux amd64 binary with the web UI embedded:
 
 ```sh
-# prebuilt binary (linux/amd64) — embeds the web UI
+curl -LO https://raw.githubusercontent.com/grigory51/brigade/main/backend/config.example.yaml
+mv config.example.yaml config.yaml
 curl -L https://github.com/grigory51/brigade/releases/latest/download/brigade-linux-amd64.tar.gz | tar xz
-./brigade --config config.yaml   # bring your own config.yaml → http://localhost:8080
+
+# Edit config.yaml: change jwt.secret and the seed credentials.
+./brigade --config config.yaml
+# http://localhost:8080
 ```
 
-or build from source (`make app` also produces the macOS desktop `Brigade.app`):
+### Build from source
 
 ```sh
-git clone https://github.com/grigory51/brigade && cd brigade
+git clone https://github.com/grigory51/brigade
+cd brigade
 make build
-cp backend/config.example.yaml backend/config.yaml   # edit: seed user, jwt secret
-make run                                             # → http://localhost:8080
+cp backend/config.example.yaml backend/config.yaml
+# Edit backend/config.yaml: change jwt.secret and the seed credentials.
+make run
 ```
 
-or with Docker:
+`make app` also produces the self-contained macOS `Brigade.app`. In the desktop UI,
+**Settings → Agent environment** can switch between local processes and a Docker context.
+
+### Docker
+
+Docker mode uses the host daemon. The state directory must have the same absolute path
+inside the brigade container and on the host because session bind mounts are created by
+that host daemon.
 
 ```sh
-# BRIGADE_MODE=docker runs each session in its own container; it needs the host
-# docker socket, and the workspace + claude-home dirs must be mounted at the SAME
-# path inside and outside the container (brigade passes these paths to the host
-# Docker daemon for session bind-mounts).
-docker run -d --name brigade \
+mkdir -p /srv/brigade/{workspace,agent-home,memory}
+
+docker run -d --name brigade --restart unless-stopped \
   -p 8080:8080 \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  -v brigade-data:/data \
-  -v /srv/brigade/workspace:/srv/brigade/workspace \
-  -v /srv/brigade/claude:/srv/brigade/claude \
+  -v /srv/brigade:/srv/brigade \
   -e BRIGADE_MODE=docker \
+  -e BRIGADE_SQLITE_PATH=/srv/brigade/brigade.db \
   -e BRIGADE_WORK_DIR=/srv/brigade/workspace \
-  -e BRIGADE_CLAUDE_HOME_DIR=/srv/brigade/claude \
+  -e BRIGADE_AGENT_HOME_DIR=/srv/brigade/agent-home \
+  -e BRIGADE_MEMORY__DIR=/srv/brigade/memory \
+  -e BRIGADE_AGENT_IMAGE=ghcr.io/grigory51/brigade-agent:latest \
   -e BRIGADE_JWT__SECRET=change-me \
   ghcr.io/grigory51/brigade:latest
 ```
 
-`BRIGADE_MODE` (`local` | `docker`) is set per instance — all its sessions inherit it,
-users don't pick a mode. Docker mode also needs the agent image on the host:
+The published agent image is the default runtime and the donor for custom user images.
+To build it locally instead:
 
 ```sh
 docker build -t brigade/agent:latest -f docker/agent/Dockerfile .
-# or: docker pull ghcr.io/grigory51/brigade-agent:latest
 ```
-
-**Claude auth.** The Claude subscription token is no longer a global env var — each
-brigade user sets their own in the UI (**Settings → Claude**, `claude setup-token`).
-In docker mode, `BRIGADE_CLAUDE_HOME_DIR` gives each user a personal `~/.claude`
-(`<dir>/<userID>`) bind-mounted into all their containers, so a one-time `/login` in a
-CLI session is shared across their CLI and ACP sessions.
-
-**Desktop app (macOS).** Prefer a native window to a browser tab? `make app` bundles a
-self-contained `Brigade.app` (embeds node + the agent runtime) — the same brigade in a
-native webview, with its config under `~/Library/Application Support/Brigade`.
 
 ## Configuration
 
-YAML file plus env overrides (`BRIGADE_` prefix, `__` as the nesting separator):
-`BRIGADE_MODE`, `BRIGADE_JWT__SECRET`, `BRIGADE_WORK_DIR`, `BRIGADE_CLAUDE_HOME_DIR`,
-`BRIGADE_PREVIEW__DOMAIN`, … See
-[`backend/config.example.yaml`](backend/config.example.yaml)
-for the full annotated list, including exposing dev servers behind a wildcard
-domain with built-in TLS.
+Configuration is YAML with environment overrides: prefix `BRIGADE_`, and `__` between
+nested fields. Examples: `BRIGADE_MODE`, `BRIGADE_JWT__SECRET`,
+`BRIGADE_AGENT_HOME_DIR`, `BRIGADE_PREVIEW__DOMAIN`, and
+`BRIGADE_TELEGRAM__MODE`.
+
+See [`backend/config.example.yaml`](backend/config.example.yaml) for the annotated list.
+Runtime mode and Telegram polling/webhook transport belong to the instance. Agent auth,
+custom images, MCP servers, notification connections, Telegram bot tokens and memory
+remotes belong to individual users and are configured in the UI.
 
 ## Architecture
 
-```
-browser (React + xterm.js + AG-UI)  ──►  brigade (single Go binary)
-                                          ├─ ConnectRPC API + embedded SPA
-                                          ├─ WS: terminal / side shell
-                                          ├─ SSE: chat (ACP → AG-UI)
-                                          ├─ L7 preview proxy (+ TLS)
-                                          ├─ SQLite: sessions · users · memory
-                                          └─ spawner: local pty │ docker
-                                                        │
-                                              claude-agent-acp (per session)
+```text
+browser / Brigade.app / Telegram
+              │
+              ├─ ConnectRPC
+              ├─ WebSocket: terminal and shell
+              └─ SSE: ACP → AG-UI, including A2UI events
+              │
+      brigade (single Go binary)
+              ├─ embedded React UI
+              ├─ auth, settings and session registry → SQLite
+              ├─ notes and archived chats → user's git repository
+              ├─ preview and authenticated session-file endpoints
+              └─ local or Docker spawner
+                         ├─ Claude Code: claude / claude-agent-acp
+                         └─ Codex: codex / codex-acp
 ```
 
-The protobuf contract in [`proto/`](proto) is the single source of truth for the API;
-mobile (Kotlin Multiplatform) shares it. Personal notes live in a git repo of your own.
+The protobuf files in [`proto/`](proto) are the API source of truth. Raw WebSocket and
+SSE transports are reserved for terminal and streaming chat protocols that ConnectRPC
+does not represent. A Kotlin Multiplatform client scaffold also lives in `mobile/`, but
+it is not currently shipped as a supported mobile application.
 
 ## Status
 
-Early and moving fast. Interfaces may change without notice; use behind a VPN or on a
-trusted network — preview links are intentionally public, and the seed user is a single
-admin account.
+Early and moving fast. Interfaces may change without notice. Run brigade behind a VPN or
+on a trusted network; preview URLs are intentionally public when the preview proxy is
+enabled. Replace the default seed credentials and JWT secret before exposing an instance.
 
 ## License
 
