@@ -16,6 +16,7 @@ import {
   type UploadFn,
 } from "@/components/assistant-ui/composer-upload";
 import {
+  bareToolName,
   FRONTEND_TOOL_NAMES,
   PUBLISH_FILE_TOOL_NAME,
   RENDER_UI_TOOL_NAME,
@@ -161,12 +162,6 @@ function PermissionComposer({
 // содержимому результата (структурный diff) и человекочитаемому имени инструмента от
 // ACP-адаптера («Terminal», «Read File»); всё прочее — generic-блок с раскрывающимися
 // аргументами и результатом.
-// bareToolName снимает MCP-префикс с имени инструмента. Claude использует
-// `mcp__<server>__<tool>`, Codex ACP — `mcp.<server>.<tool>`.
-function bareToolName(name: string): string {
-  return name.replace(/^mcp__.*?__/, "").replace(/^mcp\.[^.]+\./, "");
-}
-
 // Codex ACP передаёт rawInput MCP-вызова транспортным конвертом
 // {server, tool, arguments}; Claude отдаёт непосредственно arguments. Карточкам нужен
 // единый внутренний формат — только аргументы конкретного инструмента.

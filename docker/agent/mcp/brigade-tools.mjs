@@ -218,9 +218,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error("path is outside workspace or is not a file");
         }
         const urlPath = relative.split(path.sep).map(encodeURIComponent).join("/");
+        const version = `${info.mtimeMs.toString(36)}-${info.size.toString(36)}`;
         return {
           name: path.basename(file),
-          url: `/api/sessions/${encodeURIComponent(sessionID)}/files/${urlPath}`,
+          url: `/api/sessions/${encodeURIComponent(sessionID)}/files/${urlPath}?v=${version}`,
         };
       };
       const file = await publish(requested);

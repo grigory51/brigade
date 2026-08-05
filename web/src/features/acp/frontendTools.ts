@@ -13,5 +13,11 @@ export const SAVE_NOTE_TOOL_NAME = "save_note";
 // PUBLISH_FILE_TOOL_NAME — карточка скачивания файла через A2UI cardsCatalog.
 export const PUBLISH_FILE_TOOL_NAME = "publish_file";
 
+// bareToolName снимает MCP-префикс с имени инструмента. Claude использует
+// `mcp__<server>__<tool>`, Codex ACP — `mcp.<server>.<tool>`.
+export function bareToolName(name: string): string {
+  return name.replace(/^mcp__.*?__/, "").replace(/^mcp\.[^.]+\./, "");
+}
+
 // FRONTEND_TOOL_NAMES — инструменты, которые рисует SnippetCard (простой рендер по имени).
 export const FRONTEND_TOOL_NAMES = new Set(["show_choice"]);

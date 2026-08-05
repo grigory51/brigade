@@ -1,15 +1,16 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { A2uiSurface } from "@a2ui/react/v0_9";
-import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
+import { useAuiState, type ToolCallMessagePartComponent } from "@assistant-ui/react";
 import type { A2uiMessage } from "@a2ui/web_core/v0_9";
 import { FileArchive, Loader2 } from "lucide-react";
+import { bareToolName, PUBLISH_FILE_TOOL_NAME } from "../frontendTools";
 import { A2uiContext } from "./context";
 import { CARDS_CATALOG_ID } from "./catalog";
 
 const downloadUrlPattern =
   /\/api\/sessions\/[A-Za-z0-9._~-]+\/files\/[^\s)"\\]+/g;
 
-type PublishedFile = { name: string; url: string; previewUrl?: string };
+type PublishedFile = { name: string; url: string; previewUrl?: string; key: string };
 
 function publishedFile(result: unknown): PublishedFile | null {
   const text =
@@ -22,10 +23,12 @@ function publishedFile(result: unknown): PublishedFile | null {
   const url = urls?.[0];
   if (!url) return null;
   try {
+    const [urlPath] = url.split(/[?#]/);
     return {
-      name: decodeURIComponent(url.slice(url.lastIndexOf("/") + 1)),
+      name: decodeURIComponent(urlPath.slice(urlPath.lastIndexOf("/") + 1)),
       url,
       previewUrl: urls?.[1],
+      key: urlPath,
     };
   } catch {
     return null;
@@ -39,9 +42,30 @@ export const PublishFileCard: ToolCallMessagePartComponent = (props) => {
   const processor = a2ui?.processor;
   const file = useMemo(() => publishedFile(props.result), [props.result]);
   const [failed, setFailed] = useState(false);
+  const outdated = useAuiState((state) => {
+    let currentSeen = false;
+    for (const message of state.thread.messages) {
+      for (const part of message.content) {
+        if (part.type !== "tool-call") continue;
+        if (part.toolCallId === props.toolCallId) {
+          currentSeen = true;
+          continue;
+        }
+        if (
+          currentSeen &&
+          file &&
+          bareToolName(part.toolName) === PUBLISH_FILE_TOOL_NAME &&
+          publishedFile(part.result)?.key === file.key
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  });
 
   useEffect(() => {
-    if (!processor || !file) return;
+    if (!processor || !file || outdated) return;
     const surfaceId = props.toolCallId;
     const messages: A2uiMessage[] = [];
     const component = file.previewUrl
@@ -52,7 +76,7 @@ export const PublishFileCard: ToolCallMessagePartComponent = (props) => {
           sourceUrl: { path: "/url" },
           previewUrl: { path: "/previewUrl" },
         }
-      : /\.(?:glb|gltf)$/i.test(file.url)
+      : /\.(?:glb|gltf)$/i.test(file.name)
         ? {
             id: "root",
             component: "ModelViewer",
@@ -90,7 +114,18 @@ export const PublishFileCard: ToolCallMessagePartComponent = (props) => {
     } catch {
       setFailed(true);
     }
-  }, [file, processor, props.toolCallId]);
+  }, [file, outdated, processor, props.toolCallId]);
+
+  if (outdated) {
+    return (
+      <div className="flex items-center gap-2.5 rounded-lg border bg-card/60 p-3 text-sm text-muted-foreground">
+        <FileArchive className="size-4 shrink-0 opacity-70" />
+        <span className="min-w-0 truncate">
+          Предыдущая версия{file?.name && <span className="text-foreground/70"> · {file.name}</span>}
+        </span>
+      </div>
+    );
+  }
 
   const surface = processor?.model.surfacesMap.get(props.toolCallId);
   if (surface && !failed) {
