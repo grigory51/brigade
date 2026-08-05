@@ -653,6 +653,38 @@ export class DaemonStatusResponse extends Message<DaemonStatusResponse> {
    */
   startedAt = "";
 
+  /**
+   * Последняя попытка смены ACP config option. Диагностика цепочки UI → Brigade → daemon → adapter.
+   *
+   * @generated from field: string last_config_id = 6;
+   */
+  lastConfigId = "";
+
+  /**
+   * @generated from field: string last_config_value = 7;
+   */
+  lastConfigValue = "";
+
+  /**
+   * @generated from field: string last_config_before = 8;
+   */
+  lastConfigBefore = "";
+
+  /**
+   * @generated from field: string last_config_after = 9;
+   */
+  lastConfigAfter = "";
+
+  /**
+   * @generated from field: string last_config_error = 10;
+   */
+  lastConfigError = "";
+
+  /**
+   * @generated from field: string last_config_at = 11;
+   */
+  lastConfigAt = "";
+
   constructor(data?: PartialMessage<DaemonStatusResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -666,6 +698,12 @@ export class DaemonStatusResponse extends Message<DaemonStatusResponse> {
     { no: 3, name: "pending_permissions_json", kind: "scalar", T: 12 /* ScalarType.BYTES */, repeated: true },
     { no: 4, name: "version", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 5, name: "started_at", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "last_config_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "last_config_value", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 8, name: "last_config_before", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 9, name: "last_config_after", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 10, name: "last_config_error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 11, name: "last_config_at", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaemonStatusResponse {

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	acpsdk "github.com/coder/acp-go-sdk"
 
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
 	"github.com/grigory51/brigade/backend/internal/acp"
@@ -125,6 +126,15 @@ func (s *service) Status(ctx context.Context, _ *connect.Request[v1.Empty]) (*co
 		Generating: generating, Seq: s.d.log.LastSeq(),
 		Version: s.d.version, StartedAt: s.d.startedAt.Format(time.RFC3339Nano),
 	}
+	s.d.mu.Lock()
+	lastConfig := s.d.lastConfig
+	s.d.mu.Unlock()
+	resp.LastConfigId = lastConfig.ID
+	resp.LastConfigValue = lastConfig.Value
+	resp.LastConfigBefore = lastConfig.Before
+	resp.LastConfigAfter = lastConfig.After
+	resp.LastConfigError = lastConfig.Error
+	resp.LastConfigAt = lastConfig.At
 	for _, pending := range s.d.perms.pendingList() {
 		if data, err := json.Marshal(pending); err == nil {
 			resp.PendingPermissionsJson = append(resp.PendingPermissionsJson, data)
@@ -162,14 +172,39 @@ func (s *service) SetConfigOption(ctx context.Context, req *connect.Request[v1.D
 	if err != nil {
 		return nil, err
 	}
+	change := configChangeDebug{
+		ID: req.Msg.ConfigId, Value: req.Msg.Value,
+		Before: configOptionValue(c.ConfigOptions(), req.Msg.ConfigId),
+		At:     time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	s.d.mu.Lock()
+	s.d.lastConfig = change
+	s.d.mu.Unlock()
 	opts, err := c.SetConfigOption(ctx, req.Msg.ConfigId, req.Msg.Value)
 	if err != nil {
+		change.Error = err.Error()
+		s.d.mu.Lock()
+		s.d.lastConfig = change
+		s.d.mu.Unlock()
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	change.After = configOptionValue(opts, req.Msg.ConfigId)
+	s.d.mu.Lock()
+	s.d.lastConfig = change
+	s.d.mu.Unlock()
 	if acp.ConfigValueAutoApproves(req.Msg.ConfigId, req.Msg.Value) {
 		s.d.perms.allowAllOnce()
 	}
 	return payload(opts)
+}
+
+func configOptionValue(options []acpsdk.SessionConfigOption, id string) string {
+	for _, option := range options {
+		if option.Select != nil && string(option.Select.Id) == id {
+			return string(option.Select.CurrentValue)
+		}
+	}
+	return ""
 }
 
 func (s *service) ResolvePermission(ctx context.Context, req *connect.Request[v1.DaemonResolvePermissionRequest]) (*connect.Response[v1.Empty], error) {

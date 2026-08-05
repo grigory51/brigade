@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HttpAgent, type HttpAgentFetchFn } from "@ag-ui/client";
+import { ConnectError } from "@connectrpc/connect";
 import { fromAgUiMessages, useAgUiRuntime } from "@assistant-ui/react-ag-ui";
 import {
   ExportedMessageRepository,
@@ -7,6 +8,7 @@ import {
 } from "@assistant-ui/react";
 import { MessageProcessor, type A2uiClientAction } from "@a2ui/web_core/v0_9";
 import type { ReactComponentImplementation } from "@a2ui/react/v0_9";
+import { toast } from "sonner";
 import { useAuth } from "@/features/auth/AuthContext";
 import { refreshSession, acpClient } from "@/api/client";
 import type { AcpConfigOption } from "@/api/gen/brigade/v1/acp_pb";
@@ -477,18 +479,25 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
 
   // setConfigOption меняет значение опции сессии (модель, режим, усилие) и обновляет
   // локальный снимок из ответа бэкенда.
-  const setConfigOptionRef = useRef(async (configId: string, value: string) => {
+  const setConfigOption = useCallback(async (configId: string, value: string) => {
     try {
       const data = await acpClient.setConfigOption({
         threadId: sessionId,
         configId,
         value,
       });
-      setConfigOptions(configOptionsFromProto(data.configOptions));
-    } catch {
-      // Ошибка смены опции — оставляем прежний снимок.
+      const updated = configOptionsFromProto(data.configOptions);
+      const actual = updated.find((option) => option.id === configId)?.currentValue;
+      if (actual !== value) {
+        throw new Error(`агент вернул ${configId}=${actual ?? "<missing>"}`);
+      }
+      setConfigOptions(updated);
+    } catch (err) {
+      toast.error("Не удалось изменить настройку агента", {
+        description: err instanceof ConnectError ? err.rawMessage : String(err),
+      });
     }
-  });
+  }, [sessionId]);
 
   return {
     runtime,
@@ -498,7 +507,7 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
     plan,
     a2ui: { processor: a2uiProcessor, version: a2uiVersion },
     configOptions,
-    setConfigOption: setConfigOptionRef.current,
+    setConfigOption,
     status,
     refreshStatus: refreshStatusStable,
     workflows,

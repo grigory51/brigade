@@ -48,6 +48,12 @@ type daemonDebugDump struct {
 	PendingPermissions int    `json:"pendingPermissions"`
 	Version            string `json:"version,omitempty"`
 	StartedAt          string `json:"startedAt,omitempty"`
+	LastConfigID       string `json:"lastConfigId,omitempty"`
+	LastConfigValue    string `json:"lastConfigValue,omitempty"`
+	LastConfigBefore   string `json:"lastConfigBefore,omitempty"`
+	LastConfigAfter    string `json:"lastConfigAfter,omitempty"`
+	LastConfigError    string `json:"lastConfigError,omitempty"`
+	LastConfigAt       string `json:"lastConfigAt,omitempty"`
 	Error              string `json:"error,omitempty"`
 	MessagesError      string `json:"messagesError,omitempty"`
 	EventsError        string `json:"eventsError,omitempty"`
@@ -165,6 +171,12 @@ func dumpDockerACP(ctx context.Context, cfg *config.Config, sessionID string, ou
 	out.Daemon.PendingPermissions = len(status.Msg.PendingPermissionsJson)
 	out.Daemon.Version = status.Msg.Version
 	out.Daemon.StartedAt = status.Msg.StartedAt
+	out.Daemon.LastConfigID = status.Msg.LastConfigId
+	out.Daemon.LastConfigValue = status.Msg.LastConfigValue
+	out.Daemon.LastConfigBefore = status.Msg.LastConfigBefore
+	out.Daemon.LastConfigAfter = status.Msg.LastConfigAfter
+	out.Daemon.LastConfigError = status.Msg.LastConfigError
+	out.Daemon.LastConfigAt = status.Msg.LastConfigAt
 	configOptions, err := conn.RPC.GetConfigOptions(ctx, daemonrpc.Req(conn.Sign(), &v1.Empty{}))
 	if err == nil {
 		var options []acpsdk.SessionConfigOption

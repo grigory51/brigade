@@ -161,6 +161,13 @@ message DaemonStatusResponse {
   // Версия и время старта именно daemon-процесса внутри session-контейнера.
   string version = 4;
   string started_at = 5;
+  // Последняя попытка смены ACP config option. Диагностика цепочки UI → Brigade → daemon → adapter.
+  string last_config_id = 6;
+  string last_config_value = 7;
+  string last_config_before = 8;
+  string last_config_after = 9;
+  string last_config_error = 10;
+  string last_config_at = 11;
 }
 
 // DaemonPayloadResponse — обобщённый ответ с JSON-нагрузкой (messages / commands / config).

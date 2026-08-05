@@ -745,10 +745,17 @@ type DaemonStatusResponse struct {
 	// JSON совпадает с agui.PermissionRequest; Brigade прокидывает его в GetStatus фронту.
 	PendingPermissionsJson [][]byte `protobuf:"bytes,3,rep,name=pending_permissions_json,json=pendingPermissionsJson,proto3" json:"pending_permissions_json,omitempty"`
 	// Версия и время старта именно daemon-процесса внутри session-контейнера.
-	Version       string `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
-	StartedAt     string `protobuf:"bytes,5,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Version   string `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
+	StartedAt string `protobuf:"bytes,5,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	// Последняя попытка смены ACP config option. Диагностика цепочки UI → Brigade → daemon → adapter.
+	LastConfigId     string `protobuf:"bytes,6,opt,name=last_config_id,json=lastConfigId,proto3" json:"last_config_id,omitempty"`
+	LastConfigValue  string `protobuf:"bytes,7,opt,name=last_config_value,json=lastConfigValue,proto3" json:"last_config_value,omitempty"`
+	LastConfigBefore string `protobuf:"bytes,8,opt,name=last_config_before,json=lastConfigBefore,proto3" json:"last_config_before,omitempty"`
+	LastConfigAfter  string `protobuf:"bytes,9,opt,name=last_config_after,json=lastConfigAfter,proto3" json:"last_config_after,omitempty"`
+	LastConfigError  string `protobuf:"bytes,10,opt,name=last_config_error,json=lastConfigError,proto3" json:"last_config_error,omitempty"`
+	LastConfigAt     string `protobuf:"bytes,11,opt,name=last_config_at,json=lastConfigAt,proto3" json:"last_config_at,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *DaemonStatusResponse) Reset() {
@@ -812,6 +819,48 @@ func (x *DaemonStatusResponse) GetVersion() string {
 func (x *DaemonStatusResponse) GetStartedAt() string {
 	if x != nil {
 		return x.StartedAt
+	}
+	return ""
+}
+
+func (x *DaemonStatusResponse) GetLastConfigId() string {
+	if x != nil {
+		return x.LastConfigId
+	}
+	return ""
+}
+
+func (x *DaemonStatusResponse) GetLastConfigValue() string {
+	if x != nil {
+		return x.LastConfigValue
+	}
+	return ""
+}
+
+func (x *DaemonStatusResponse) GetLastConfigBefore() string {
+	if x != nil {
+		return x.LastConfigBefore
+	}
+	return ""
+}
+
+func (x *DaemonStatusResponse) GetLastConfigAfter() string {
+	if x != nil {
+		return x.LastConfigAfter
+	}
+	return ""
+}
+
+func (x *DaemonStatusResponse) GetLastConfigError() string {
+	if x != nil {
+		return x.LastConfigError
+	}
+	return ""
+}
+
+func (x *DaemonStatusResponse) GetLastConfigAt() string {
+	if x != nil {
+		return x.LastConfigAt
 	}
 	return ""
 }
@@ -1109,7 +1158,7 @@ const file_brigade_v1_agent_daemon_proto_rawDesc = "" +
 	"\x0fauto_allow_once\x18\x02 \x01(\bR\rautoAllowOnce\"7\n" +
 	"\x14DaemonPromptResponse\x12\x1f\n" +
 	"\vstop_reason\x18\x01 \x01(\tR\n" +
-	"stopReason\"\xbb\x01\n" +
+	"stopReason\"\xb9\x03\n" +
 	"\x14DaemonStatusResponse\x12\x1e\n" +
 	"\n" +
 	"generating\x18\x01 \x01(\bR\n" +
@@ -1118,7 +1167,14 @@ const file_brigade_v1_agent_daemon_proto_rawDesc = "" +
 	"\x18pending_permissions_json\x18\x03 \x03(\fR\x16pendingPermissionsJson\x12\x18\n" +
 	"\aversion\x18\x04 \x01(\tR\aversion\x12\x1d\n" +
 	"\n" +
-	"started_at\x18\x05 \x01(\tR\tstartedAt\"+\n" +
+	"started_at\x18\x05 \x01(\tR\tstartedAt\x12$\n" +
+	"\x0elast_config_id\x18\x06 \x01(\tR\flastConfigId\x12*\n" +
+	"\x11last_config_value\x18\a \x01(\tR\x0flastConfigValue\x12,\n" +
+	"\x12last_config_before\x18\b \x01(\tR\x10lastConfigBefore\x12*\n" +
+	"\x11last_config_after\x18\t \x01(\tR\x0flastConfigAfter\x12*\n" +
+	"\x11last_config_error\x18\n" +
+	" \x01(\tR\x0flastConfigError\x12$\n" +
+	"\x0elast_config_at\x18\v \x01(\tR\flastConfigAt\"+\n" +
 	"\x15DaemonPayloadResponse\x12\x12\n" +
 	"\x04json\x18\x01 \x01(\fR\x04json\"Q\n" +
 	"\x1cDaemonSetConfigOptionRequest\x12\x1b\n" +

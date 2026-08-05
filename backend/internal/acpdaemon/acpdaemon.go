@@ -58,6 +58,13 @@ type Daemon struct {
 	// ssh — ssh-agent с ключом пользователя в памяти (nil, пока ключ не загружен).
 	// Приватный ключ на диск среды не пишется.
 	ssh *sshagent.Agent
+	// lastConfig — последняя попытка смены опции через daemon RPC. Нужна dump-команде,
+	// чтобы отличить неотправленный UI-вызов от ошибки или отката адаптера.
+	lastConfig configChangeDebug
+}
+
+type configChangeDebug struct {
+	ID, Value, Before, After, Error, At string
 }
 
 // New создаёт демон с открытым журналом (durable по пути logPath).
