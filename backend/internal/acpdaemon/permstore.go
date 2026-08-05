@@ -75,3 +75,14 @@ func (p *permStore) cancelAll() {
 		pp.ch <- ""
 	}
 }
+
+func (p *permStore) allowAllOnce() {
+	for _, req := range p.pendingList() {
+		for _, option := range req.Options {
+			if option.Kind == "allow_once" {
+				p.deliver(req.ID, option.OptionID)
+				break
+			}
+		}
+	}
+}

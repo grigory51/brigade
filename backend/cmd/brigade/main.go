@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"time"
 
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
@@ -39,7 +38,6 @@ import (
 )
 
 var buildVersion = "dev"
-var processStartedAt = time.Now().UTC()
 
 func main() {
 	var configPath string

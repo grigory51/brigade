@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect"
 
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
+	"github.com/grigory51/brigade/backend/internal/acp"
 	"github.com/grigory51/brigade/backend/internal/agui"
 	"github.com/grigory51/brigade/backend/internal/eventlog"
 )
@@ -164,6 +165,9 @@ func (s *service) SetConfigOption(ctx context.Context, req *connect.Request[v1.D
 	opts, err := c.SetConfigOption(ctx, req.Msg.ConfigId, req.Msg.Value)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if acp.ConfigValueAutoApproves(req.Msg.ConfigId, req.Msg.Value) {
+		s.d.perms.allowAllOnce()
 	}
 	return payload(opts)
 }

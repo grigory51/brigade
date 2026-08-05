@@ -225,6 +225,19 @@ func (p *PermissionStore) CancelPending(threadID string) {
 	}
 }
 
+// AllowPending разрешает уже показанные запросы треда одноразовым вариантом. Это
+// применяет переключение сессии в Full Access к текущему turn, а не только к следующему.
+func (p *PermissionStore) AllowPending(threadID string) {
+	for _, req := range p.Pending(threadID) {
+		for _, option := range req.Options {
+			if option.Kind == "allow_once" {
+				p.Deliver(PermissionKey(threadID, req.ID), option.OptionID)
+				break
+			}
+		}
+	}
+}
+
 // PermissionKey строит ключ ожидания разрешения из threadId и id запроса. Общий формат
 // для регистрации (резолвер /run) и доставки (AcpService.ResolvePermission).
 func PermissionKey(threadID, id string) string { return threadID + "\x00" + id }

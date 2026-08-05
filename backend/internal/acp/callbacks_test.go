@@ -29,3 +29,14 @@ func TestTrustedBrigadeFrontendTool(t *testing.T) {
 		})
 	}
 }
+
+func TestConfigValueAutoApproves(t *testing.T) {
+	for _, value := range []string{"agent-full-access", "bypassPermissions"} {
+		if !ConfigValueAutoApproves("mode", value) {
+			t.Errorf("mode=%s must auto-approve", value)
+		}
+	}
+	if ConfigValueAutoApproves("mode", "agent") || ConfigValueAutoApproves("model", "agent-full-access") {
+		t.Error("ordinary config must not auto-approve")
+	}
+}

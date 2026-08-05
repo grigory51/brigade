@@ -8,6 +8,7 @@ import (
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
+	"github.com/grigory51/brigade/backend/internal/acp"
 	"github.com/grigory51/brigade/backend/internal/transport/agui"
 )
 
@@ -152,6 +153,9 @@ func (s *AcpService) SetConfigOption(ctx context.Context, req *connect.Request[v
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
+	if acp.ConfigValueAutoApproves(req.Msg.ConfigId, req.Msg.Value) {
+		s.perms.AllowPending(req.Msg.ThreadId)
+	}
 	return connect.NewResponse(&v1.SetConfigOptionResponse{ConfigOptions: configOptionsToProto(opts)}), nil
 }
 
@@ -177,8 +181,7 @@ func (s *AcpService) ResolvePermission(ctx context.Context, req *connect.Request
 // configOptionsToProto нормализует опции сессии из union-формата ACP-SDK в типизированный
 // proto. Берутся только Select-опции (Boolean UI не показывает). UI-модель — плоский
 // список значений, поэтому grouped-варианты сплющиваются (заголовки групп отбрасываются:
-// селектор группировку не рисует). Политику скрытия небезопасных значений
-// (bypassPermissions) применяет web-клиент.
+// селектор группировку не рисует).
 func configOptionsToProto(opts []acpsdk.SessionConfigOption) []*v1.AcpConfigOption {
 	var out []*v1.AcpConfigOption
 	for _, o := range opts {

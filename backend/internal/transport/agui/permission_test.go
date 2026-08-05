@@ -103,3 +103,19 @@ func TestPermissionCancelPending(t *testing.T) {
 	default:
 	}
 }
+
+func TestPermissionAllowPending(t *testing.T) {
+	p := NewPermissionStore()
+	req := permReq("a")
+	req.Options = []aguimodel.PermissionOption{
+		{OptionID: "reject", Kind: "reject_once"},
+		{OptionID: "allow", Kind: "allow_once"},
+	}
+	ch, release := p.Register("t", req.ID, req)
+	defer release()
+
+	p.AllowPending("t")
+	if got := <-ch; got != "allow" {
+		t.Fatalf("решение = %q, want allow", got)
+	}
+}

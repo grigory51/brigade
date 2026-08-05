@@ -43,19 +43,23 @@ func (c *Client) RequestPermission(ctx context.Context, params acpsdk.RequestPer
 	// ровно известные инструменты сервера brigade; одноимённые пользовательские MCP сюда
 	// не попадут.
 	if trustedBrigadeFrontendTool(params.ToolCall) {
-		for _, opt := range params.Options {
-			if opt.Kind == acpsdk.PermissionOptionKindAllowOnce {
-				return selectedPermission(opt.OptionId), nil
-			}
+		if optionID, ok := allowOnceOption(params.Options); ok {
+			return selectedPermission(optionID), nil
 		}
 	}
 
 	c.mu.Lock()
+	autoApprove := configOptionsAutoApprove(c.configOptions)
 	resolver := c.turnResolver
 	if resolver == nil {
 		resolver = c.resolver
 	}
 	c.mu.Unlock()
+	if autoApprove {
+		if optionID, ok := allowOnceOption(params.Options); ok {
+			return selectedPermission(optionID), nil
+		}
+	}
 
 	// Вне WS-сеанса (resolver не привязан) разрешить интерактивное действие некому —
 	// отвечаем агенту cancelled, чтобы он корректно свернул turn.
@@ -92,6 +96,34 @@ func (c *Client) RequestPermission(ctx context.Context, params acpsdk.RequestPer
 	return selectedPermission(acpsdk.PermissionOptionId(optionID)), nil
 }
 
+func allowOnceOption(options []acpsdk.PermissionOption) (acpsdk.PermissionOptionId, bool) {
+	for _, option := range options {
+		if option.Kind == acpsdk.PermissionOptionKindAllowOnce {
+			return option.OptionId, true
+		}
+	}
+	return "", false
+}
+
+func configOptionsAutoApprove(options []acpsdk.SessionConfigOption) bool {
+	for _, option := range options {
+		if option.Select != nil && string(option.Select.Id) == "mode" {
+			return configValueAutoApproves("mode", string(option.Select.CurrentValue))
+		}
+	}
+	return false
+}
+
+// ConfigValueAutoApproves сообщает транспортам, что выбранный режим не должен
+// оставлять уже начатый turn на интерактивном запросе разрешения.
+func ConfigValueAutoApproves(configID, value string) bool {
+	return configValueAutoApproves(configID, value)
+}
+
+func configValueAutoApproves(configID, value string) bool {
+	return configID == "mode" && (value == "agent-full-access" || value == "bypassPermissions")
+}
+
 func selectedPermission(optionID acpsdk.PermissionOptionId) acpsdk.RequestPermissionResponse {
 	return acpsdk.RequestPermissionResponse{Outcome: acpsdk.RequestPermissionOutcome{
 		Selected: &acpsdk.RequestPermissionOutcomeSelected{OptionId: optionID},
@@ -99,9 +131,9 @@ func selectedPermission(optionID acpsdk.PermissionOptionId) acpsdk.RequestPermis
 }
 
 var trustedBrigadeTools = map[string]bool{
-	"save_note":   true,
-	"render_ui":   true,
-	"show_choice": true,
+	"save_note":    true,
+	"render_ui":    true,
+	"show_choice":  true,
 	"publish_file": true,
 }
 

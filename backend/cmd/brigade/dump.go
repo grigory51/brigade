@@ -7,6 +7,7 @@ import (
 	"runtime/debug"
 	"time"
 
+	acpsdk "github.com/coder/acp-go-sdk"
 	"github.com/spf13/cobra"
 
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
@@ -27,12 +28,13 @@ type sessionDebugDump struct {
 	Version        string                   `json:"version"`
 	Revision       string                   `json:"revision,omitempty"`
 	BuildModified  bool                     `json:"buildModified,omitempty"`
-	StartedAt      time.Time                `json:"startedAt"`
+	StartedAt      string                   `json:"startedAt,omitempty"`
 	DumpedAt       time.Time                `json:"dumpedAt"`
 	Session        store.Session            `json:"session"`
 	Daemon         daemonDebugDump          `json:"daemon"`
 	Container      *spawn.ACPContainerDebug `json:"container,omitempty"`
 	ContainerError string                   `json:"containerError,omitempty"`
+	ConfigOptions  map[string]string        `json:"configOptions,omitempty"`
 	MessageCount   int                      `json:"messageCount"`
 	Messages       []debugMessage           `json:"messages,omitempty"`
 	Events         []debugEvent             `json:"events,omitempty"`
@@ -107,9 +109,7 @@ func dumpDebugSession(ctx context.Context, cmd *cobra.Command, configPath, sessi
 	if err != nil {
 		return fmt.Errorf("dump session %s: %w", sessionID, err)
 	}
-	out := sessionDebugDump{
-		Version: buildVersion, StartedAt: processStartedAt, DumpedAt: time.Now(), Session: sess,
-	}
+	out := sessionDebugDump{Version: buildVersion, DumpedAt: time.Now(), Session: sess}
 	if info, ok := debug.ReadBuildInfo(); ok {
 		for _, setting := range info.Settings {
 			switch setting.Key {
@@ -138,6 +138,9 @@ func dumpDockerACP(ctx context.Context, cfg *config.Config, sessionID string, ou
 		return
 	}
 	defer docker.Close()
+	if startedAt, err := docker.SelfStartedAt(ctx); err == nil {
+		out.StartedAt = startedAt
+	}
 	if containerDump, err := docker.ACP().DebugContainer(ctx, sessionID); err != nil {
 		out.ContainerError = err.Error()
 	} else {
@@ -162,6 +165,18 @@ func dumpDockerACP(ctx context.Context, cfg *config.Config, sessionID string, ou
 	out.Daemon.PendingPermissions = len(status.Msg.PendingPermissionsJson)
 	out.Daemon.Version = status.Msg.Version
 	out.Daemon.StartedAt = status.Msg.StartedAt
+	configOptions, err := conn.RPC.GetConfigOptions(ctx, daemonrpc.Req(conn.Sign(), &v1.Empty{}))
+	if err == nil {
+		var options []acpsdk.SessionConfigOption
+		if json.Unmarshal(configOptions.Msg.Json, &options) == nil {
+			out.ConfigOptions = make(map[string]string)
+			for _, option := range options {
+				if option.Select != nil {
+					out.ConfigOptions[string(option.Select.Id)] = string(option.Select.CurrentValue)
+				}
+			}
+		}
+	}
 
 	messages, err := conn.RPC.GetMessages(ctx, daemonrpc.Req(conn.Sign(), &v1.Empty{}))
 	if err != nil {

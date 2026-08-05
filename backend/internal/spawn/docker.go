@@ -90,6 +90,23 @@ type DockerSpawner struct {
 // BaseImage — образ агента по умолчанию этого инстанса.
 func (s *DockerSpawner) BaseImage() string { return s.baseImage }
 
+// SelfStartedAt возвращает время старта контейнера brigade. В host-режиме inspect
+// недоступен, поэтому вызывающий код трактует ошибку как отсутствие значения.
+func (s *DockerSpawner) SelfStartedAt(ctx context.Context) (string, error) {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "", err
+	}
+	info, err := s.cli.ContainerInspect(ctx, hostname)
+	if err != nil {
+		return "", err
+	}
+	if info.State == nil {
+		return "", errors.New("spawn: self container has no state")
+	}
+	return info.State.StartedAt, nil
+}
+
 // NewDockerSpawner создаёт DockerSpawner с клиентом Docker из окружения
 // (DOCKER_HOST и т. п.). Определяет собственную сеть brigade: если процесс работает
 // в docker-контейнере, контейнеры сессий будут спавниться в ту же сеть, чтобы агент
