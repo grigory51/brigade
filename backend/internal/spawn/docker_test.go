@@ -24,3 +24,14 @@ func TestRuntimeMountsCurrent(t *testing.T) {
 		t.Fatal("старый Codex runtime не потребовал пересоздания контейнера")
 	}
 }
+
+func TestHardenAgentContainer(t *testing.T) {
+	hostCfg := &container.HostConfig{}
+	hardenAgentContainer(hostCfg)
+	if len(hostCfg.CapDrop) != 1 || hostCfg.CapDrop[0] != "ALL" {
+		t.Fatalf("CapDrop = %v, want [ALL]", hostCfg.CapDrop)
+	}
+	if len(hostCfg.SecurityOpt) != 1 || hostCfg.SecurityOpt[0] != "no-new-privileges=true" {
+		t.Fatalf("SecurityOpt = %v, want no-new-privileges", hostCfg.SecurityOpt)
+	}
+}

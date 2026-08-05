@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	acpsdk "github.com/coder/acp-go-sdk"
+
 	"github.com/grigory51/brigade/backend/internal/agui"
 )
 
@@ -18,6 +20,26 @@ func TestSessionMetaAppendsSystemPrompt(t *testing.T) {
 	plugins := options["plugins"].([]map[string]any)
 	if len(plugins) != 1 || plugins[0]["path"] != "/plugin" {
 		t.Fatalf("plugins: %#v", plugins)
+	}
+}
+
+func TestContainerSandboxHidesMode(t *testing.T) {
+	values := acpsdk.SessionConfigSelectOptionsUngrouped{
+		{Name: "Agent", Value: "agent"},
+		{Name: "Agent full access", Value: "agent-full-access"},
+	}
+	mode := acpsdk.SessionConfigOption{Select: &acpsdk.SessionConfigOptionSelect{
+		Id: "mode", CurrentValue: "agent-full-access",
+		Options: acpsdk.SessionConfigSelectOptions{Ungrouped: &values},
+	}}
+	model := acpsdk.SessionConfigOption{Select: &acpsdk.SessionConfigOptionSelect{Id: "model"}}
+	c := &Client{opts: Options{ContainerSandbox: true}, configOptions: []acpsdk.SessionConfigOption{mode, model}}
+	if !selectHasValue(mode.Select.Options, "agent-full-access") {
+		t.Fatal("agent-full-access не найден среди значений mode")
+	}
+	got := c.ConfigOptions()
+	if len(got) != 1 || got[0].Select == nil || got[0].Select.Id != "model" {
+		t.Fatalf("ConfigOptions = %+v, want only model", got)
 	}
 }
 

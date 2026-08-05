@@ -152,6 +152,7 @@ func (d *Daemon) configure(ctx context.Context, req *v1ConfigureRequest) (string
 		McpServers:        mcp,
 		PluginDirs:        req.PluginDirs,
 		SystemPrompt:      req.SystemPrompt,
+		ContainerSandbox:  true,
 		// SpawnProc nil → локальный subprocess адаптера внутри контейнера.
 	})
 	if err != nil {

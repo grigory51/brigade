@@ -11,6 +11,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 
@@ -201,6 +202,11 @@ func (s *DockerSpawner) Ping(ctx context.Context) error {
 	return err
 }
 
+func hardenAgentContainer(hostCfg *container.HostConfig) {
+	hostCfg.CapDrop = strslice.StrSlice{"ALL"}
+	hostCfg.SecurityOpt = append(hostCfg.SecurityOpt, "no-new-privileges=true")
+}
+
 // homeBind добавляет bind-mount персонального home пользователя
 // (spec.HomeHost → /home/agent) к hostCfg.Binds, если путь задан. Весь home общий
 // между контейнерами пользователя (per-user): состояние Claude и рабочие файлы
@@ -312,6 +318,7 @@ func (s *DockerSpawner) ensureUserContainer(ctx context.Context, userID, image, 
 		// Публикуем порт демона на 127.0.0.1:<эфемерный> для host-режима brigade (см. daemonAddrByID).
 		PortBindings: nat.PortMap{daemonNatPort: []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: ""}}},
 	}
+	hardenAgentContainer(hostCfg)
 	homeBind(hostCfg, Spec{HomeHost: homeHost})
 
 	created, err := s.cli.ContainerCreate(ctx, cfg, hostCfg, s.networkingConfig(), nil, "brigade-user-"+userID)

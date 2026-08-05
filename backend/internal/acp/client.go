@@ -85,6 +85,10 @@ type Options struct {
 	// пользователя. Поддерживается Claude ACP через _meta.systemPrompt; остальные агенты
 	// могут проигнорировать поле и получить инструкции своим adapter-specific каналом.
 	SystemPrompt string
+	// ContainerSandbox означает, что процесс уже изолирован per-session контейнером.
+	// В этом режиме вложенный sandbox агента отключается: Linux bwrap не работает под
+	// стандартным Docker seccomp, а ослаблять внешнюю границу контейнера ради него нельзя.
+	ContainerSandbox bool
 }
 
 // Client управляет одной ACP-сессией: владеет subprocess'ом adapter'а, реализует
@@ -280,7 +284,7 @@ func (c *Client) handshake(ctx context.Context) error {
 		// Unstable-вариант типа опций структурно идентичен стабильному (одинаковый
 		// wire-формат) — конвертируем через JSON, чтобы не дублировать union-логику.
 		c.configOptions = convertConfigOptions(forkResp.ConfigOptions)
-		return nil
+		return c.disableNestedSandbox(ctx)
 	}
 
 	// Resume через session/load: агент реплеит прошлый thread нотификациями
@@ -299,6 +303,9 @@ func (c *Client) handshake(ctx context.Context) error {
 		} else {
 			c.sessionID = acpsdk.SessionId(c.opts.ResumeSessionID)
 			c.configOptions = loadResp.ConfigOptions
+			if err := c.disableNestedSandbox(ctx); err != nil {
+				return err
+			}
 			// Реплей session/load не закрывает потоковые сообщения — последний текст
 			// остаётся «открытым» в stream-состоянии. Без закрытия первый Bind нового
 			// run'а переоткрыл бы старый messageId, и клиентский агрегатор принял бы его
@@ -322,7 +329,55 @@ func (c *Client) handshake(ctx context.Context) error {
 	}
 	c.sessionID = newSess.SessionId
 	c.configOptions = newSess.ConfigOptions
+	return c.disableNestedSandbox(ctx)
+}
+
+func (c *Client) disableNestedSandbox(ctx context.Context) error {
+	if !c.opts.ContainerSandbox {
+		return nil
+	}
+	for _, option := range c.configOptions {
+		if option.Select == nil || string(option.Select.Id) != "mode" ||
+			!selectHasValue(option.Select.Options, "agent-full-access") {
+			continue
+		}
+		if string(option.Select.CurrentValue) == "agent-full-access" {
+			return nil
+		}
+		resp, err := c.conn.SetSessionConfigOption(ctx, acpsdk.SetSessionConfigOptionRequest{
+			ValueId: &acpsdk.SetSessionConfigOptionValueId{
+				SessionId: c.sessionID,
+				ConfigId:  option.Select.Id,
+				Value:     acpsdk.SessionConfigValueId("agent-full-access"),
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("acp: disable nested sandbox: %w", err)
+		}
+		c.configOptions = resp.ConfigOptions
+		return nil
+	}
 	return nil
+}
+
+func selectHasValue(options acpsdk.SessionConfigSelectOptions, value string) bool {
+	if options.Ungrouped != nil {
+		for _, option := range *options.Ungrouped {
+			if string(option.Value) == value {
+				return true
+			}
+		}
+	}
+	if options.Grouped != nil {
+		for _, group := range *options.Grouped {
+			for _, option := range group.Options {
+				if string(option.Value) == value {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // convertConfigOptions приводит unstable-вариант опций (session/fork) к стабильному
@@ -347,8 +402,15 @@ func convertConfigOptions(in []acpsdk.UnstableSessionConfigOption) []acpsdk.Sess
 func (c *Client) ConfigOptions() []acpsdk.SessionConfigOption {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	out := make([]acpsdk.SessionConfigOption, len(c.configOptions))
-	copy(out, c.configOptions)
+	out := make([]acpsdk.SessionConfigOption, 0, len(c.configOptions))
+	for _, option := range c.configOptions {
+		// В контейнере права ограничивает Docker. Показывать переключатель вложенного
+		// sandbox нельзя: его включение ломает bwrap и не усиливает внешнюю границу.
+		if c.opts.ContainerSandbox && option.Select != nil && string(option.Select.Id) == "mode" {
+			continue
+		}
+		out = append(out, option)
+	}
 	return out
 }
 
@@ -356,6 +418,9 @@ func (c *Client) ConfigOptions() []acpsdk.SessionConfigOption {
 // (session/set_config_option) и возвращает актуальный полный набор опций из ответа
 // агента.
 func (c *Client) SetConfigOption(ctx context.Context, configID, value string) ([]acpsdk.SessionConfigOption, error) {
+	if c.opts.ContainerSandbox && configID == "mode" {
+		return c.ConfigOptions(), nil
+	}
 	resp, err := c.conn.SetSessionConfigOption(ctx, acpsdk.SetSessionConfigOptionRequest{
 		ValueId: &acpsdk.SetSessionConfigOptionValueId{
 			SessionId: c.sessionID,

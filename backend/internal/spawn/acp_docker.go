@@ -134,6 +134,7 @@ func (d *DockerACPSpawner) StartDaemon(ctx context.Context, spec Spec, stateID, 
 		// используется прямой IP:port (см. daemonAddr).
 		PortBindings: nat.PortMap{daemonNatPort: []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: ""}}},
 	}
+	hardenAgentContainer(hostCfg)
 
 	name := "brigade-acp-" + spec.SessionID
 	if err := cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true}); err != nil && !strings.Contains(err.Error(), "No such container") {
