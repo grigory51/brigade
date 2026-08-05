@@ -43,6 +43,20 @@ func TestContainerSandboxHidesMode(t *testing.T) {
 	}
 }
 
+func TestContainerSandboxHidesModeFromUpdates(t *testing.T) {
+	mode := acpsdk.SessionConfigOption{Select: &acpsdk.SessionConfigOptionSelect{Id: "mode"}}
+	model := acpsdk.SessionConfigOption{Select: &acpsdk.SessionConfigOptionSelect{Id: "model"}}
+	c := &Client{opts: Options{ContainerSandbox: true}}
+
+	events := c.translateUpdate(acpsdk.SessionUpdate{ConfigOptionUpdate: &acpsdk.SessionConfigOptionUpdate{
+		ConfigOptions: []acpsdk.SessionConfigOption{mode, model},
+	}})
+	options := events[0].Value.([]acpsdk.SessionConfigOption)
+	if len(options) != 1 || options[0].Select == nil || options[0].Select.Id != "model" {
+		t.Fatalf("config_options event = %+v, want only model", options)
+	}
+}
+
 // usageEvent конструирует CUSTOM usage-событие для проверки emit/Bind.
 func usageEvent(used, size int) agui.Event {
 	return agui.Event{Type: agui.EventCustom, Name: agui.CustomUsageName, Value: &agui.Usage{Used: used, Size: size}}

@@ -402,11 +402,15 @@ func convertConfigOptions(in []acpsdk.UnstableSessionConfigOption) []acpsdk.Sess
 func (c *Client) ConfigOptions() []acpsdk.SessionConfigOption {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	out := make([]acpsdk.SessionConfigOption, 0, len(c.configOptions))
-	for _, option := range c.configOptions {
+	return visibleConfigOptions(c.configOptions, c.opts.ContainerSandbox)
+}
+
+func visibleConfigOptions(options []acpsdk.SessionConfigOption, containerSandbox bool) []acpsdk.SessionConfigOption {
+	out := make([]acpsdk.SessionConfigOption, 0, len(options))
+	for _, option := range options {
 		// В контейнере права ограничивает Docker. Показывать переключатель вложенного
 		// sandbox нельзя: его включение ломает bwrap и не усиливает внешнюю границу.
-		if c.opts.ContainerSandbox && option.Select != nil && string(option.Select.Id) == "mode" {
+		if containerSandbox && option.Select != nil && string(option.Select.Id) == "mode" {
 			continue
 		}
 		out = append(out, option)

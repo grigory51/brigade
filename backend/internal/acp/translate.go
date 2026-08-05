@@ -71,7 +71,7 @@ func (c *Client) translateUpdate(u acpsdk.SessionUpdate) []agui.Event {
 		return []agui.Event{{
 			Type:  agui.EventCustom,
 			Name:  agui.CustomConfigOptionsName,
-			Value: u.ConfigOptionUpdate.ConfigOptions,
+			Value: visibleConfigOptions(c.configOptions, c.opts.ContainerSandbox),
 		}}
 
 	case u.AgentMessageChunk != nil:
