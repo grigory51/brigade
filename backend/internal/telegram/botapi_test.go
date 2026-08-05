@@ -2,9 +2,11 @@ package telegram
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -57,6 +59,82 @@ func TestGuestCallerAndMessageSplit(t *testing.T) {
 	defer service.Close()
 	if service.webhookSecret("bot", "old-token") == service.webhookSecret("bot", "new-token") {
 		t.Fatal("webhook secret must rotate with BotFather token")
+	}
+}
+
+func TestInboundContentSupportsMediaAndGuestMessages(t *testing.T) {
+	var update telegramUpdate
+	err := json.Unmarshal([]byte(`{
+		"update_id": 8,
+		"guest_message": {
+			"message_id": 12,
+			"guest_query_id": "query",
+			"guest_bot_caller_user": {"id": 42},
+			"chat": {"id": -100, "type": "supergroup"},
+			"caption": "@brigade_bot что на фото?",
+			"photo": [
+				{"file_id": "small", "file_size": 10, "width": 100, "height": 100},
+				{"file_id": "large", "file_size": 20, "width": 1000, "height": 1000}
+			],
+			"location": {"latitude": 55.75, "longitude": 37.62}
+		}
+	}`), &update)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := inboundFrom(update)
+	files := telegramMessageFiles(in.message)
+	if !in.guest || !in.hasContent() || in.text != "@brigade_bot что на фото?" || len(files) != 1 || files[0].fileID != "large" {
+		t.Fatalf("unexpected inbound: %+v files=%+v", in, files)
+	}
+	if !addressedTo(store.TelegramBot{Username: "brigade_bot"}, in.message) {
+		t.Fatal("caption mention must address the bot")
+	}
+	if details := telegramMessageDetails(in.message); len(details) != 1 || !strings.Contains(details[0], `"latitude": 55.75`) {
+		t.Fatalf("unexpected details: %#v", details)
+	}
+}
+
+func TestMessageFilesIncludesNestedAndLiveMedia(t *testing.T) {
+	var message telegramMessage
+	err := json.Unmarshal([]byte(`{
+		"message_id": 13,
+		"live_photo": {
+			"file_id": "live-video",
+			"photo": [{"file_id": "live-small", "width": 10, "height": 10}, {"file_id": "live-large", "width": 100, "height": 100}]
+		},
+		"rich_message": {"blocks": [{"photo": [{"file_id": "rich-small", "file_size": 10}, {"file_id": "rich-large", "file_size": 20}]}]}
+	}`), &message)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := telegramMessageFiles(&message)
+	var ids []string
+	for _, file := range files {
+		ids = append(ids, file.fileID)
+	}
+	if strings.Join(ids, ",") != "live-large,live-video,rich-large" {
+		t.Fatalf("unexpected files: %#v", files)
+	}
+}
+
+func TestDownloadFile(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/bottoken/getFile":
+			_, _ = io.WriteString(writer, `{"ok":true,"result":{"file_id":"photo","file_size":3,"file_path":"photos/photo.jpg"}}`)
+		case "/file/bottoken/photos/photo.jpg":
+			_, _ = writer.Write([]byte("jpg"))
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+	api := newBotAPI()
+	api.baseURL = server.URL
+	data, name, err := api.downloadFile(t.Context(), "token", "photo", 20<<20)
+	if err != nil || string(data) != "jpg" || name != "photo.jpg" {
+		t.Fatalf("downloadFile: data=%q name=%q err=%v", data, name, err)
 	}
 }
 

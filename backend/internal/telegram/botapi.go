@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -43,19 +44,58 @@ type telegramChat struct {
 }
 
 type telegramMessage struct {
-	MessageID          int64            `json:"message_id"`
-	MessageThreadID    int64            `json:"message_thread_id"`
-	GuestQueryID       string           `json:"guest_query_id"`
-	From               *telegramUser    `json:"from"`
-	GuestBotCallerUser *telegramUser    `json:"guest_bot_caller_user"`
-	Chat               telegramChat     `json:"chat"`
-	Text               string           `json:"text"`
-	Photo              []telegramPhoto  `json:"photo"`
-	ReplyToMessage     *telegramMessage `json:"reply_to_message"`
+	MessageID          int64              `json:"message_id"`
+	MessageThreadID    int64              `json:"message_thread_id"`
+	MediaGroupID       string             `json:"media_group_id"`
+	GuestQueryID       string             `json:"guest_query_id"`
+	From               *telegramUser      `json:"from"`
+	GuestBotCallerUser *telegramUser      `json:"guest_bot_caller_user"`
+	Chat               telegramChat       `json:"chat"`
+	Text               string             `json:"text"`
+	Caption            string             `json:"caption"`
+	Animation          *telegramFile      `json:"animation"`
+	Audio              *telegramFile      `json:"audio"`
+	Document           *telegramFile      `json:"document"`
+	LivePhoto          *telegramLivePhoto `json:"live_photo"`
+	Photo              []telegramFile     `json:"photo"`
+	Sticker            *telegramFile      `json:"sticker"`
+	Video              *telegramFile      `json:"video"`
+	VideoNote          *telegramFile      `json:"video_note"`
+	Voice              *telegramFile      `json:"voice"`
+	RichMessage        json.RawMessage    `json:"rich_message"`
+	PaidMedia          json.RawMessage    `json:"paid_media"`
+	Checklist          json.RawMessage    `json:"checklist"`
+	Contact            json.RawMessage    `json:"contact"`
+	Dice               json.RawMessage    `json:"dice"`
+	Game               json.RawMessage    `json:"game"`
+	Poll               json.RawMessage    `json:"poll"`
+	Venue              json.RawMessage    `json:"venue"`
+	Location           json.RawMessage    `json:"location"`
+	Story              json.RawMessage    `json:"story"`
+	WebAppData         json.RawMessage    `json:"web_app_data"`
+	ReplyToMessage     *telegramMessage   `json:"reply_to_message"`
 }
 
-type telegramPhoto struct {
-	FileID string `json:"file_id"`
+type telegramFile struct {
+	FileID       string `json:"file_id"`
+	FileUniqueID string `json:"file_unique_id"`
+	FileName     string `json:"file_name"`
+	MimeType     string `json:"mime_type"`
+	FileSize     int64  `json:"file_size"`
+	Width        int64  `json:"width"`
+	Height       int64  `json:"height"`
+	Emoji        string `json:"emoji"`
+}
+
+type telegramLivePhoto struct {
+	telegramFile
+	Photo []telegramFile `json:"photo"`
+}
+
+type telegramRemoteFile struct {
+	FileID   string `json:"file_id"`
+	FileSize int64  `json:"file_size"`
+	FilePath string `json:"file_path"`
 }
 
 type telegramUpdate struct {
@@ -162,6 +202,46 @@ func (a *botAPI) getMe(ctx context.Context, token string) (telegramUser, error) 
 	var user telegramUser
 	err := a.call(ctx, token, "getMe", struct{}{}, &user)
 	return user, err
+}
+
+func (a *botAPI) downloadFile(ctx context.Context, token, fileID string, maxBytes int64) ([]byte, string, error) {
+	var file telegramRemoteFile
+	if err := a.call(ctx, token, "getFile", map[string]any{"file_id": fileID}, &file); err != nil {
+		return nil, "", err
+	}
+	if file.FilePath == "" {
+		return nil, "", errors.New("telegram: getFile returned no file path")
+	}
+	if file.FileSize > maxBytes {
+		return nil, "", fmt.Errorf("telegram: file exceeds %d MiB", maxBytes>>20)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.baseURL+"/file/bot"+token+"/"+strings.TrimLeft(file.FilePath, "/"), nil)
+	if err != nil {
+		return nil, "", errors.New("telegram: invalid file URL")
+	}
+	resp, err := a.http.Do(req)
+	if err != nil {
+		for {
+			var urlErr *url.Error
+			if !errors.As(err, &urlErr) {
+				break
+			}
+			err = urlErr.Err
+		}
+		return nil, "", fmt.Errorf("telegram: download file: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, "", fmt.Errorf("telegram: download file: HTTP %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
+	if err != nil {
+		return nil, "", fmt.Errorf("telegram: download file: %w", err)
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, "", fmt.Errorf("telegram: file exceeds %d MiB", maxBytes>>20)
+	}
+	return data, path.Base(file.FilePath), nil
 }
 
 func (a *botAPI) getUpdates(ctx context.Context, token string, offset int64) ([]telegramUpdate, error) {

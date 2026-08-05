@@ -32,8 +32,9 @@ import (
 )
 
 const (
-	bindingTTL           = 15 * time.Minute
-	maxTelegramPhotoSize = 10 << 20
+	bindingTTL                 = 15 * time.Minute
+	maxTelegramPhotoSize       = 10 << 20
+	maxTelegramInboundFileSize = 20 << 20
 )
 
 type Service struct {
@@ -429,6 +430,11 @@ type inbound struct {
 	text                 string
 }
 
+type telegramInboundFile struct {
+	fileID   string
+	filename string
+}
+
 type replyEnvelope struct {
 	Type      string                   `json:"type"`
 	Text      string                   `json:"text"`
@@ -452,7 +458,196 @@ func inboundFrom(update telegramUpdate) inbound {
 	if guest && message.GuestBotCallerUser != nil {
 		from = message.GuestBotCallerUser
 	}
-	return inbound{updateID: update.UpdateID, message: message, from: from, guest: guest, guestInlineMessageID: update.GuestInlineMessageID, scope: scope, chatID: message.Chat.ID, threadID: message.MessageThreadID, text: strings.TrimSpace(message.Text)}
+	return inbound{updateID: update.UpdateID, message: message, from: from, guest: guest, guestInlineMessageID: update.GuestInlineMessageID, scope: scope, chatID: message.Chat.ID, threadID: message.MessageThreadID, text: telegramMessageText(message)}
+}
+
+func telegramMessageText(message *telegramMessage) string {
+	if text := strings.TrimSpace(message.Text); text != "" {
+		return text
+	}
+	return strings.TrimSpace(message.Caption)
+}
+
+func (in inbound) hasContent() bool {
+	return in.text != "" || len(telegramMessageFiles(in.message)) > 0 || len(telegramMessageDetails(in.message)) > 0
+}
+
+func telegramMessageFiles(message *telegramMessage) []telegramInboundFile {
+	if message == nil {
+		return nil
+	}
+	var files []telegramInboundFile
+	add := func(kind, fallbackExtension string, file *telegramFile) {
+		if file == nil || file.FileID == "" {
+			return
+		}
+		name := file.FileName
+		if name == "" && fallbackExtension != "" {
+			name = kind + fallbackExtension
+		}
+		if name != "" {
+			name = fmt.Sprintf("telegram-%d-%s", message.MessageID, name)
+		}
+		files = append(files, telegramInboundFile{
+			fileID: file.FileID, filename: name,
+		})
+	}
+	addPhoto := func(kind string, photos []telegramFile) {
+		if len(photos) == 0 {
+			return
+		}
+		largest := &photos[0]
+		for index := range photos[1:] {
+			candidate := &photos[index+1]
+			if candidate.FileSize > largest.FileSize ||
+				(candidate.FileSize == largest.FileSize && candidate.Width*candidate.Height > largest.Width*largest.Height) {
+				largest = candidate
+			}
+		}
+		add(kind, ".jpg", largest)
+	}
+
+	add("animation", ".mp4", message.Animation)
+	add("audio", ".mp3", message.Audio)
+	if message.Animation == nil {
+		add("document", "", message.Document)
+	}
+	if message.LivePhoto != nil {
+		addPhoto("live-photo", message.LivePhoto.Photo)
+		add("live-photo-video", ".mp4", &message.LivePhoto.telegramFile)
+	} else {
+		addPhoto("photo", message.Photo)
+	}
+	add("sticker", ".webp", message.Sticker)
+	add("video", ".mp4", message.Video)
+	add("video-note", ".mp4", message.VideoNote)
+	add("voice", ".ogg", message.Voice)
+	for _, raw := range []json.RawMessage{
+		message.RichMessage, message.PaidMedia, message.Checklist, message.Contact, message.Dice,
+		message.Game, message.Poll, message.Venue, message.Location, message.Story, message.WebAppData,
+	} {
+		var value any
+		if len(raw) == 0 || json.Unmarshal(raw, &value) != nil {
+			continue
+		}
+		var collect func(any)
+		collect = func(value any) {
+			switch value := value.(type) {
+			case map[string]any:
+				if fileID, ok := value["file_id"].(string); ok && fileID != "" {
+					name, _ := value["file_name"].(string)
+					if name != "" {
+						name = fmt.Sprintf("telegram-%d-%s", message.MessageID, name)
+					}
+					files = append(files, telegramInboundFile{fileID: fileID, filename: name})
+					return
+				}
+				for _, nested := range value {
+					collect(nested)
+				}
+			case []any:
+				// Массив PhotoSize представляет один файл в разных разрешениях.
+				best := -1
+				var bestScore float64
+				for index, nested := range value {
+					object, ok := nested.(map[string]any)
+					if !ok || object["file_id"] == nil {
+						best = -1
+						break
+					}
+					score, _ := object["file_size"].(float64)
+					if score == 0 {
+						width, _ := object["width"].(float64)
+						height, _ := object["height"].(float64)
+						score = width * height
+					}
+					if best < 0 || score > bestScore {
+						best, bestScore = index, score
+					}
+				}
+				if best >= 0 {
+					collect(value[best])
+					return
+				}
+				for _, nested := range value {
+					collect(nested)
+				}
+			}
+		}
+		collect(value)
+	}
+
+	seen := make(map[string]bool, len(files))
+	unique := files[:0]
+	for _, file := range files {
+		if !seen[file.fileID] {
+			seen[file.fileID] = true
+			unique = append(unique, file)
+		}
+	}
+	return unique
+}
+
+func telegramMessageDetails(message *telegramMessage) []string {
+	if message == nil {
+		return nil
+	}
+	var details []string
+	if message.Sticker != nil && message.Sticker.Emoji != "" {
+		details = append(details, "Стикер: "+message.Sticker.Emoji)
+	}
+	for _, value := range []struct {
+		label string
+		raw   json.RawMessage
+	}{
+		{"Rich message", message.RichMessage},
+		{"Платный media-контент", message.PaidMedia},
+		{"Чек-лист", message.Checklist},
+		{"Контакт", message.Contact},
+		{"Dice", message.Dice},
+		{"Игра", message.Game},
+		{"Опрос", message.Poll},
+		{"Место", message.Venue},
+		{"Геопозиция", message.Location},
+		{"Story", message.Story},
+		{"Web App data", message.WebAppData},
+	} {
+		if len(value.raw) > 0 && string(value.raw) != "null" {
+			details = append(details, value.label+": "+string(value.raw))
+		}
+	}
+	return details
+}
+
+func (s *Service) promptForInbound(ctx context.Context, bot store.TelegramBot, sessionID string, in inbound) (string, error) {
+	var paths []string
+	for _, file := range telegramMessageFiles(in.message) {
+		data, remoteName, err := s.api.downloadFile(ctx, bot.Token, file.fileID, maxTelegramInboundFileSize)
+		if err != nil {
+			return "", err
+		}
+		filename := file.filename
+		if filename == "" {
+			filename = fmt.Sprintf("telegram-%d-%s", in.message.MessageID, remoteName)
+		}
+		uploadPath, err := s.registry.UploadFile(ctx, sessionID, bot.UserID, filename, data)
+		if err != nil {
+			return "", err
+		}
+		paths = append(paths, uploadPath)
+	}
+	contextLines := telegramMessageDetails(in.message)
+	if len(paths) > 0 {
+		contextLines = append(contextLines, "Приложенные файлы: "+strings.Join(paths, ", "))
+	}
+	if len(contextLines) == 0 {
+		return in.text, nil
+	}
+	contextBlock := "Контекст:\n" + strings.Join(contextLines, "\n")
+	if in.text == "" {
+		return contextBlock, nil
+	}
+	return in.text + "\n\n" + contextBlock, nil
 }
 
 func (s *Service) processQueued(bot store.TelegramBot, queued []store.TelegramUpdate) {
@@ -462,7 +657,7 @@ func (s *Service) processQueued(bot store.TelegramBot, queued []store.TelegramUp
 		return
 	}
 	in := inboundFrom(update)
-	if in.message == nil || in.text == "" {
+	if in.message == nil || !in.hasContent() {
 		_ = s.store.DeleteTelegramUpdate(s.ctx, bot.ID, in.updateID)
 		return
 	}
@@ -511,7 +706,7 @@ func (s *Service) processQueued(bot store.TelegramBot, queued []store.TelegramUp
 			addressed := other.message != nil && (other.message.Chat.Type == "private" || addressedTo(bot, other.message))
 			if addressed && other.from != nil && other.from.ID == bot.OwnerTelegramID &&
 				!other.guest && other.scope == in.scope && other.chatID == in.chatID && other.threadID == in.threadID &&
-				other.text != "" && !strings.HasPrefix(other.text, "/") {
+				other.hasContent() && !strings.HasPrefix(other.text, "/") {
 				other.text = stripAddress(bot, other.text)
 				batch = append(batch, other)
 			}
@@ -520,12 +715,21 @@ func (s *Service) processQueued(bot store.TelegramBot, queued []store.TelegramUp
 	for _, item := range batch {
 		_ = s.store.SetTelegramUpdateState(s.ctx, bot.ID, item.updateID, "running", "", "")
 	}
-	var prompts []string
-	for _, item := range batch {
-		prompts = append(prompts, item.text)
-	}
 	sessionID, err := s.session(bot, in)
 	if err == nil {
+		var prompts []string
+		for _, item := range batch {
+			prompt, promptErr := s.promptForInbound(s.ctx, bot, sessionID, item)
+			if promptErr != nil {
+				err = promptErr
+				break
+			}
+			prompts = append(prompts, prompt)
+		}
+		if err != nil {
+			s.finishWithReply(bot, batch, "Не удалось загрузить вложение из Telegram: "+err.Error(), err)
+			return
+		}
 		stopTyping := s.typing(bot, in)
 		var answer session.PromptResult
 		answer, err = s.registry.PromptAutoApprove(s.ctx, sessionID, bot.UserID, strings.Join(prompts, "\n\n"))
@@ -556,7 +760,7 @@ func (s *Service) bindOwner(bot store.TelegramBot, in inbound) {
 
 func addressedTo(bot store.TelegramBot, message *telegramMessage) bool {
 	mention := "@" + strings.ToLower(bot.Username)
-	text := strings.ToLower(message.Text)
+	text := strings.ToLower(telegramMessageText(message))
 	if strings.Contains(text, mention) || strings.HasPrefix(text, "/new@"+strings.ToLower(bot.Username)) {
 		return true
 	}
