@@ -288,6 +288,13 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
         } else if (event.name === "config_options") {
           // Снимок опций сессии изменился на стороне агента (value — массив опций).
           setConfigOptions(toConfigOptions(event.value));
+        } else if (event.name === "session_title") {
+          const title = (event.value as CustomEventValue)?.title;
+          if (typeof title === "string" && title.trim()) {
+            window.dispatchEvent(new CustomEvent("brigade:session-title", {
+              detail: { sessionId, title: title.trim() },
+            }));
+          }
         }
       },
       onStateSnapshotEvent: ({ event }) => {
@@ -295,7 +302,7 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
       },
     });
     return () => sub.unsubscribe();
-  }, [agent, a2uiProcessor]);
+  }, [agent, a2uiProcessor, sessionId]);
 
   // Поллинг состояния сессии: пока тред открыт, дёргаем GET /status. Он несёт признак
   // «агент генерирует» (в т.ч. фоновый turn без активного /run) и seq ленты — по ним

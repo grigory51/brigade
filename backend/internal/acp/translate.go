@@ -74,6 +74,17 @@ func (c *Client) translateUpdate(u acpsdk.SessionUpdate) []agui.Event {
 			Value: visibleConfigOptions(c.configOptions, c.opts.ContainerSandbox),
 		}}
 
+	case u.SessionInfoUpdate != nil && u.SessionInfoUpdate.Title != nil:
+		title := strings.TrimSpace(*u.SessionInfoUpdate.Title)
+		if title == "" || strings.EqualFold(title, "Untitled") {
+			return nil
+		}
+		c.sessionTitle = title
+		return []agui.Event{{
+			Type: agui.EventCustom, Name: agui.CustomSessionTitleName,
+			Value: map[string]string{"title": title},
+		}}
+
 	case u.AgentMessageChunk != nil:
 		id := deref(u.AgentMessageChunk.MessageId)
 		return c.streamText(id, contentText(u.AgentMessageChunk.Content))

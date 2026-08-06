@@ -27,6 +27,9 @@ func (c *Client) SessionUpdate(ctx context.Context, params acpsdk.SessionNotific
 	c.mu.Unlock()
 	for _, evt := range evts {
 		c.emit(evt)
+		if evt.Type == agui.EventCustom && evt.Name == agui.CustomSessionTitleName && c.OnSessionTitle != nil {
+			go c.OnSessionTitle(c.SessionTitle())
+		}
 	}
 	return nil
 }

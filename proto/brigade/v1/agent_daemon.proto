@@ -130,6 +130,7 @@ message DaemonConfigureRequest {
 message DaemonConfigureResponse {
   // session_id — ACP session id (brigade персистит как resume-поле).
   string session_id = 1;
+  string session_title = 2;
 }
 
 message DaemonStreamEventsRequest {
@@ -150,6 +151,7 @@ message DaemonPromptRequest {
 
 message DaemonPromptResponse {
   string stop_reason = 1;
+  string session_title = 2;
 }
 
 message DaemonStatusResponse {

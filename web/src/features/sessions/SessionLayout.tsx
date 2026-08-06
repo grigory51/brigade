@@ -149,6 +149,19 @@ export function SessionLayout() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    const onSessionTitle = (event: Event) => {
+      const { sessionId, title } = (event as CustomEvent<{ sessionId: string; title: string }>).detail;
+      setSessions((prev) => prev.map((session) =>
+        session.id === sessionId && !session.name
+          ? withName(session, sessionId, title)
+          : session,
+      ));
+    };
+    window.addEventListener("brigade:session-title", onSessionTitle);
+    return () => window.removeEventListener("brigade:session-title", onSessionTitle);
+  }, []);
+
   const onDelete = useCallback(
     async (id: string) => {
       setDeletingIds((prev) => new Set(prev).add(id));

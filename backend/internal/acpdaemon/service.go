@@ -35,7 +35,12 @@ func (s *service) Configure(ctx context.Context, req *connect.Request[v1.DaemonC
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&v1.DaemonConfigureResponse{SessionId: sid}), nil
+	c, _ := s.d.getClient()
+	title := ""
+	if c != nil {
+		title = c.SessionTitle()
+	}
+	return connect.NewResponse(&v1.DaemonConfigureResponse{SessionId: sid, SessionTitle: title}), nil
 }
 
 // StreamEvents отдаёт события журнала с from_seq и далее live-tail, пока brigade подключён.
@@ -89,7 +94,7 @@ func (s *service) Prompt(ctx context.Context, req *connect.Request[v1.DaemonProm
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&v1.DaemonPromptResponse{StopReason: stop}), nil
+	return connect.NewResponse(&v1.DaemonPromptResponse{StopReason: stop, SessionTitle: c.SessionTitle()}), nil
 }
 
 func (s *service) Cancel(ctx context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.Empty], error) {

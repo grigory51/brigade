@@ -377,6 +377,19 @@ func (s *Store) UpdateSessionName(ctx context.Context, id, name string) error {
 	return affectedOne(res, "update session name")
 }
 
+// UpdateSessionNameIfEmpty сохраняет имя от агента, не перетирая ручное переименование.
+func (s *Store) UpdateSessionNameIfEmpty(ctx context.Context, id, name string) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE sessions SET name = ? WHERE id = ? AND name = ''`, name, id)
+	if err != nil {
+		return false, fmt.Errorf("store: update empty session name: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("store: update empty session name rows: %w", err)
+	}
+	return n > 0, nil
+}
+
 // UpdateSessionResume сохраняет данные для восстановления (agent_session_id для
 // `claude --resume`, container_label для re-attach в docker). Заполняются после
 // фактического спавна агента, когда идентификаторы становятся известны.

@@ -143,6 +143,7 @@ func (r *Registry) Run(ctx context.Context, userID string, output io.Writer) ([]
 // Реестр работает с ACP-сессией только через этот интерфейс; он же — надмножество
 // transport/agui.Bindable (ACPClient отдаёт объект транспорту как Bindable).
 type acpSession interface {
+	SetHooks(onTurnEnd func(string, error), onSessionTitle func(string))
 	Bind(sink acp.EventSink, resolver acp.PermissionResolver) (unbind func())
 	Prompt(ctx context.Context, text string, onTurnStart func()) (stopReason string, err error)
 	PromptAutoApprove(ctx context.Context, text string, onTurnStart func()) (stopReason string, err error)
@@ -695,7 +696,7 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 		if err != nil {
 			return nil, "", "", fmt.Errorf("session: spawn acp: %w", err)
 		}
-		client.OnTurnEnd = r.turnEndHook(sess)
+		r.setACPHooks(sess, client)
 		if prompt != "" {
 			// Стартовый промпт отправляем в фоне: turn доходит до конца независимо от
 			// того, подключился ли уже WS-клиент (события буферизуются клиентом ACP).
@@ -728,6 +729,27 @@ func (r *Registry) turnEndHook(sess store.Session) func(string, error) {
 	}
 }
 
+func (r *Registry) sessionTitleHook(sess store.Session) func(string) {
+	if strings.TrimSpace(sess.Name) != "" {
+		return nil
+	}
+	return func(title string) {
+		title = autoName(title)
+		if title == "" {
+			return
+		}
+		go func() {
+			if _, err := r.store.UpdateSessionNameIfEmpty(context.Background(), sess.ID, title); err != nil {
+				log.Printf("session %s: save agent title: %v", sess.ID, err)
+			}
+		}()
+	}
+}
+
+func (r *Registry) setACPHooks(sess store.Session, client acpSession) {
+	client.SetHooks(r.turnEndHook(sess), r.sessionTitleHook(sess))
+}
+
 // spawnACPDaemon поднимает durable ACP-демон в контейнере сессии (docker-режим) и
 // возвращает acpremote-клиент к нему. Секреты (OAuth-токен, preview-env) уходят демону
 // через Configure — в env контейнера их НЕТ (не видны из /ws/shell docker exec).
@@ -748,7 +770,7 @@ func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token
 	}
 
 	rc := acpremote.New(addr, "", r.daemonTokenFn(sess.ID))
-	rc.OnTurnEnd = r.turnEndHook(sess)
+	r.setACPHooks(sess, rc)
 	r.loadAgentSSHKey(ctx, sess.UserID, rc.SetSSHKey)
 	sid, err := rc.Configure(ctx, acpremote.ConfigureOptions{
 		OAuthToken:        token,
@@ -1489,7 +1511,7 @@ func (r *Registry) reviveACP(ctx context.Context, sess store.Session) (*live, er
 	if err != nil {
 		return nil, err
 	}
-	client.OnTurnEnd = r.turnEndHook(sess)
+	r.setACPHooks(sess, client)
 	if err := r.store.UpdateSessionResume(ctx, sess.ID, client.SessionID(), ""); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("persist acp resume: %w", err)
@@ -1645,7 +1667,7 @@ func (r *Registry) reinit(ctx context.Context, lv *live, sess store.Session, ref
 	if err != nil {
 		return fmt.Errorf("session: reload acp: %w", err)
 	}
-	client.OnTurnEnd = r.turnEndHook(sess)
+	r.setACPHooks(sess, client)
 	r.mu.Lock()
 	// Проверяем, что live не сменился (Stop/Delete в гонке) перед подменой.
 	if cur, ok := r.live[sessionID]; !ok || cur != lv {
@@ -1779,7 +1801,7 @@ func (r *Registry) Fork(ctx context.Context, sessionID, userID string) (store.Se
 			_ = r.store.DeleteSession(ctx, sess.ID)
 			return store.Session{}, fmt.Errorf("session: fork acp: %w", err)
 		}
-		client.OnTurnEnd = r.turnEndHook(sess)
+		r.setACPHooks(sess, client)
 		lv, sid = &live{owner: userID, kind: sess.Kind, mode: sess.Mode, client: client}, client.SessionID()
 	}
 
@@ -2141,7 +2163,7 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 			if ds, ok := r.spawner.(*spawn.DockerSpawner); ok {
 				if addr, alive := ds.ACP().DaemonAddr(ctx, sess.ID); alive {
 					c := acpremote.New(addr, sess.AgentSessionID, r.daemonTokenFn(sess.ID))
-					c.OnTurnEnd = r.turnEndHook(sess)
+					r.setACPHooks(sess, c)
 					rc = c
 				}
 			}
@@ -2171,7 +2193,7 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 		if err != nil {
 			return fmt.Errorf("reattach acp: %w", err)
 		}
-		client.OnTurnEnd = r.turnEndHook(sess)
+		r.setACPHooks(sess, client)
 		if err := r.store.UpdateSessionResume(ctx, sess.ID, client.SessionID(), ""); err != nil {
 			_ = client.Close()
 			return fmt.Errorf("persist acp resume: %w", err)

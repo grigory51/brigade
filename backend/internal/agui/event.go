@@ -88,6 +88,9 @@ const CustomA2UIName = "a2ui"
 // Value — массив ACP SessionConfigOption (wire-формат ACP).
 const CustomConfigOptionsName = "config_options"
 
+// CustomSessionTitleName — новое человекочитаемое имя сессии от ACP-агента.
+const CustomSessionTitleName = "session_title"
+
 // Event — обобщённое событие AG-UI. Незаполненные поля опускаются при сериализации,
 // поэтому одна структура покрывает все варианты без отдельных типов на каждый. Имена
 // полей в JSON соответствуют каноническим *EventSchema из @ag-ui/core.

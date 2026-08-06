@@ -127,7 +127,8 @@ type Client struct {
 	// (internal/notify). Служебный Summarize (recap при архивации) идёт мимо — через
 	// внутренний prompt(), не через публичный Prompt. Устанавливается при создании клиента,
 	// до первого Prompt — гонки нет.
-	OnTurnEnd func(stopReason string, err error)
+	OnTurnEnd      func(stopReason string, err error)
+	OnSessionTitle func(title string)
 
 	sessionID acpsdk.SessionId
 
@@ -166,6 +167,8 @@ type Client struct {
 	// ответами session/set_config_option. Отдаётся фронту вместе с историей
 	// (history-endpoint); изменение — SetConfigOption. Доступ — под mu.
 	configOptions []acpsdk.SessionConfigOption
+	// sessionTitle — последнее содержательное имя из ACP session_info_update.
+	sessionTitle string
 	// promptActive — true, пока выполняется живой Prompt. В этом окне трансляцию
 	// user_message_chunk подавляем, чтобы не дублировать оптимистичное сообщение фронта
 	// (см. translate.emitUserMessage). Доступ — под mu.
@@ -445,6 +448,21 @@ func (c *Client) SetConfigOption(ctx context.Context, configID, value string) ([
 // SessionID возвращает идентификатор ACP-сессии агента. Сохраняется в store как
 // agent_session_id для последующего resume.
 func (c *Client) SessionID() string { return string(c.sessionID) }
+
+// SessionTitle возвращает последнее содержательное имя, предложенное ACP-агентом.
+func (c *Client) SessionTitle() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.sessionTitle
+}
+
+func (c *Client) SetHooks(onTurnEnd func(string, error), onSessionTitle func(string)) {
+	c.OnTurnEnd = onTurnEnd
+	c.OnSessionTitle = onSessionTitle
+	if title := c.SessionTitle(); title != "" && onSessionTitle != nil {
+		onSessionTitle(title)
+	}
+}
 
 // Message — одно сообщение чата для восстановления истории на клиенте (ThreadHistory).
 type Message struct {

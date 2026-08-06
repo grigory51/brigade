@@ -101,6 +101,8 @@ type fakeACPSession struct {
 	cancelled  bool
 }
 
+func (f *fakeACPSession) SetHooks(func(string, error), func(string)) {}
+
 func (f *fakeACPSession) Bind(acp.EventSink, acp.PermissionResolver) func()      { return func() {} }
 func (f *fakeACPSession) Prompt(context.Context, string, func()) (string, error) { return "", nil }
 func (f *fakeACPSession) PromptAutoApprove(context.Context, string, func()) (string, error) {

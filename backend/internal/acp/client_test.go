@@ -57,6 +57,19 @@ func TestContainerSandboxHidesModeFromUpdates(t *testing.T) {
 	}
 }
 
+func TestSessionInfoUpdatePublishesMeaningfulTitle(t *testing.T) {
+	title := "  Починить авторизацию  "
+	c := &Client{}
+	events := c.translateUpdate(acpsdk.SessionUpdate{SessionInfoUpdate: &acpsdk.SessionSessionInfoUpdate{Title: &title}})
+	if len(events) != 1 || c.sessionTitle != "Починить авторизацию" {
+		t.Fatalf("events=%+v title=%q", events, c.sessionTitle)
+	}
+	untitled := "Untitled"
+	if got := c.translateUpdate(acpsdk.SessionUpdate{SessionInfoUpdate: &acpsdk.SessionSessionInfoUpdate{Title: &untitled}}); len(got) != 0 {
+		t.Fatalf("Untitled опубликован: %+v", got)
+	}
+}
+
 // usageEvent конструирует CUSTOM usage-событие для проверки emit/Bind.
 func usageEvent(used, size int) agui.Event {
 	return agui.Event{Type: agui.EventCustom, Name: agui.CustomUsageName, Value: &agui.Usage{Used: used, Size: size}}

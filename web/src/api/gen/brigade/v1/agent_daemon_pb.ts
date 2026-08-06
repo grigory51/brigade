@@ -427,6 +427,11 @@ export class DaemonConfigureResponse extends Message<DaemonConfigureResponse> {
    */
   sessionId = "";
 
+  /**
+   * @generated from field: string session_title = 2;
+   */
+  sessionTitle = "";
+
   constructor(data?: PartialMessage<DaemonConfigureResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -436,6 +441,7 @@ export class DaemonConfigureResponse extends Message<DaemonConfigureResponse> {
   static readonly typeName = "brigade.v1.DaemonConfigureResponse";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "session_title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaemonConfigureResponse {
@@ -591,6 +597,11 @@ export class DaemonPromptResponse extends Message<DaemonPromptResponse> {
    */
   stopReason = "";
 
+  /**
+   * @generated from field: string session_title = 2;
+   */
+  sessionTitle = "";
+
   constructor(data?: PartialMessage<DaemonPromptResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -600,6 +611,7 @@ export class DaemonPromptResponse extends Message<DaemonPromptResponse> {
   static readonly typeName = "brigade.v1.DaemonPromptResponse";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "stop_reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "session_title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaemonPromptResponse {

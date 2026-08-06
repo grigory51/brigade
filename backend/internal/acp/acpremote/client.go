@@ -58,7 +58,9 @@ type Client struct {
 	// OnTurnEnd (может быть nil) вызывается по завершении каждого Prompt со stopReason и
 	// ошибкой; реестр вешает сюда push-уведомление (internal/notify). Summarize идёт отдельным
 	// RPC мимо Prompt, поэтому recap-архивации уведомление не шлёт. Ставится до первого Prompt.
-	OnTurnEnd func(stopReason string, err error)
+	OnTurnEnd      func(stopReason string, err error)
+	OnSessionTitle func(title string)
+	sessionTitle   string
 }
 
 // New создаёт клиент к демону по baseURL (http://<host>:<port>). signToken подписывает токен
@@ -106,7 +108,11 @@ func (c *Client) Configure(ctx context.Context, opts ConfigureOptions) (string, 
 	}
 	c.mu.Lock()
 	c.sessionID = resp.Msg.SessionId
+	c.sessionTitle = resp.Msg.SessionTitle
 	c.mu.Unlock()
+	if resp.Msg.SessionTitle != "" && c.OnSessionTitle != nil {
+		c.OnSessionTitle(resp.Msg.SessionTitle)
+	}
 	return resp.Msg.SessionId, nil
 }
 
@@ -122,6 +128,17 @@ func (c *Client) SessionID() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.sessionID
+}
+
+func (c *Client) SetHooks(onTurnEnd func(string, error), onSessionTitle func(string)) {
+	c.mu.Lock()
+	c.OnTurnEnd = onTurnEnd
+	c.OnSessionTitle = onSessionTitle
+	title := c.sessionTitle
+	c.mu.Unlock()
+	if title != "" && onSessionTitle != nil {
+		onSessionTitle(title)
+	}
 }
 
 // Bind подписывается на поток событий демона и льёт их в sink. from_seq = текущий seq
@@ -208,6 +225,16 @@ func (c *Client) prompt(ctx context.Context, text string, onTurnStart func(), au
 	stopReason := ""
 	if resp != nil {
 		stopReason = resp.Msg.StopReason
+		if resp.Msg.SessionTitle != "" {
+			c.mu.Lock()
+			changed := c.sessionTitle != resp.Msg.SessionTitle
+			c.sessionTitle = resp.Msg.SessionTitle
+			onTitle := c.OnSessionTitle
+			c.mu.Unlock()
+			if changed && onTitle != nil {
+				onTitle(resp.Msg.SessionTitle)
+			}
+		}
 	}
 	if c.OnTurnEnd != nil {
 		c.OnTurnEnd(stopReason, err)

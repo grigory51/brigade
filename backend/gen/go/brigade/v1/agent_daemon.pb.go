@@ -502,6 +502,7 @@ type DaemonConfigureResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// session_id — ACP session id (brigade персистит как resume-поле).
 	SessionId     string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	SessionTitle  string `protobuf:"bytes,2,opt,name=session_title,json=sessionTitle,proto3" json:"session_title,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -539,6 +540,13 @@ func (*DaemonConfigureResponse) Descriptor() ([]byte, []int) {
 func (x *DaemonConfigureResponse) GetSessionId() string {
 	if x != nil {
 		return x.SessionId
+	}
+	return ""
+}
+
+func (x *DaemonConfigureResponse) GetSessionTitle() string {
+	if x != nil {
+		return x.SessionTitle
 	}
 	return ""
 }
@@ -696,6 +704,7 @@ func (x *DaemonPromptRequest) GetAutoAllowOnce() bool {
 type DaemonPromptResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	StopReason    string                 `protobuf:"bytes,1,opt,name=stop_reason,json=stopReason,proto3" json:"stop_reason,omitempty"`
+	SessionTitle  string                 `protobuf:"bytes,2,opt,name=session_title,json=sessionTitle,proto3" json:"session_title,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -733,6 +742,13 @@ func (*DaemonPromptResponse) Descriptor() ([]byte, []int) {
 func (x *DaemonPromptResponse) GetStopReason() string {
 	if x != nil {
 		return x.StopReason
+	}
+	return ""
+}
+
+func (x *DaemonPromptResponse) GetSessionTitle() string {
+	if x != nil {
+		return x.SessionTitle
 	}
 	return ""
 }
@@ -1144,10 +1160,11 @@ const file_brigade_v1_agent_daemon_proto_rawDesc = "" +
 	"pluginDirs\x12(\n" +
 	"\x10mcp_servers_json\x18\a \x01(\fR\x0emcpServersJson\x12/\n" +
 	"\x14fork_from_session_id\x18\b \x01(\tR\x11forkFromSessionId\x12#\n" +
-	"\rsystem_prompt\x18\t \x01(\tR\fsystemPrompt\"8\n" +
+	"\rsystem_prompt\x18\t \x01(\tR\fsystemPrompt\"]\n" +
 	"\x17DaemonConfigureResponse\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"6\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12#\n" +
+	"\rsession_title\x18\x02 \x01(\tR\fsessionTitle\"6\n" +
 	"\x19DaemonStreamEventsRequest\x12\x19\n" +
 	"\bfrom_seq\x18\x01 \x01(\x03R\afromSeq\"<\n" +
 	"\vDaemonEvent\x12\x10\n" +
@@ -1155,10 +1172,11 @@ const file_brigade_v1_agent_daemon_proto_rawDesc = "" +
 	"\tagui_json\x18\x02 \x01(\fR\baguiJson\"Q\n" +
 	"\x13DaemonPromptRequest\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12&\n" +
-	"\x0fauto_allow_once\x18\x02 \x01(\bR\rautoAllowOnce\"7\n" +
+	"\x0fauto_allow_once\x18\x02 \x01(\bR\rautoAllowOnce\"\\\n" +
 	"\x14DaemonPromptResponse\x12\x1f\n" +
 	"\vstop_reason\x18\x01 \x01(\tR\n" +
-	"stopReason\"\xb9\x03\n" +
+	"stopReason\x12#\n" +
+	"\rsession_title\x18\x02 \x01(\tR\fsessionTitle\"\xb9\x03\n" +
 	"\x14DaemonStatusResponse\x12\x1e\n" +
 	"\n" +
 	"generating\x18\x01 \x01(\bR\n" +
