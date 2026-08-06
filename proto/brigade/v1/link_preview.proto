@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package brigade.v1;
+
+service LinkPreviewService {
+  rpc Get(LinkPreviewRequest) returns (LinkPreviewResponse) {}
+}
+
+message LinkPreviewRequest {
+  string url = 1;
+}
+
+message LinkPreviewResponse {
+  string url = 1;
+  string title = 2;
+  string description = 3;
+  string image_url = 4;
+  string site_name = 5;
+  string icon_url = 6;
+}

@@ -21,6 +21,7 @@ import (
 	"github.com/grigory51/brigade/backend/internal/auth"
 	"github.com/grigory51/brigade/backend/internal/codexlogin"
 	"github.com/grigory51/brigade/backend/internal/config"
+	"github.com/grigory51/brigade/backend/internal/linkpreview"
 	"github.com/grigory51/brigade/backend/internal/memory"
 	"github.com/grigory51/brigade/backend/internal/notify"
 	"github.com/grigory51/brigade/backend/internal/preview"
@@ -221,6 +222,8 @@ func runServer(configPath string) {
 	mux.Handle(brigadev1connect.NewMemoryServiceHandler(connectsvc.NewMemoryService(memorySvc), interceptors))
 	// McpService — персональные MCP-серверы и vault секретов для них. JWT.
 	mux.Handle(brigadev1connect.NewMcpServiceHandler(connectsvc.NewMcpService(st), interceptors))
+	mux.Handle(brigadev1connect.NewLinkPreviewServiceHandler(
+		connectsvc.NewLinkPreviewService(linkpreview.New()), interceptors))
 	// AgentBridgeService — вызовы ИЗ сессии (скилл в контейнере). БЕЗ JWT-интерсептора:
 	// авторизация — per-session HMAC-токен, проверяется в самом хендлере.
 	mux.Handle(brigadev1connect.NewAgentBridgeServiceHandler(connectsvc.NewAgentBridgeService(previewSvc, memorySvc, st)))

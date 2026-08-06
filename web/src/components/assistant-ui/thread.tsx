@@ -7,6 +7,7 @@ import {
   useComposerContextSend,
 } from "@/components/assistant-ui/composer-context";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
+import { LinkWithPreview } from "@/components/assistant-ui/link-with-preview";
 import {
   Reasoning,
   ReasoningContent,
@@ -31,6 +32,7 @@ import {
   useAuiState,
   useComposer,
   useComposerRuntime,
+  useMessagePartText,
 } from "@assistant-ui/react";
 import {
   ArrowDownIcon,
@@ -48,6 +50,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -785,10 +788,70 @@ const UserMessage: FC = () => {
 
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
         <div className="aui-user-message-content peer bg-secondary text-foreground border-border rounded-[16px_16px_4px_16px] border px-4 py-3 text-[14px] leading-[1.55] wrap-break-word empty:hidden">
-          <MessagePrimitive.Parts />
+          <MessagePrimitive.Parts components={{ Text: UserMessageText }} />
         </div>
       </div>
     </MessagePrimitive.Root>
+  );
+};
+
+const URL_PATTERN = /https?:\/\/[^\s<]+/gi;
+const TRAILING_URL_PUNCTUATION = /[.,!?;:)}\]]+$/;
+
+const UserMessageText: FC = () => {
+  const { text, status } = useMessagePartText();
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+
+  useLayoutEffect(() => {
+    const element = contentRef.current;
+    if (!element || expanded) return;
+    const update = () => setOverflowing(element.scrollHeight > element.clientHeight);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [expanded, text]);
+
+  const parts: ReactNode[] = [];
+  let offset = 0;
+  for (const match of text.matchAll(URL_PATTERN)) {
+    const index = match.index;
+    const rawURL = match[0];
+    const url = rawURL.replace(TRAILING_URL_PUNCTUATION, "");
+    parts.push(text.slice(offset, index));
+    parts.push(
+      <LinkWithPreview key={`${index}-${url}`} href={url}>
+        {url}
+      </LinkWithPreview>,
+    );
+    parts.push(rawURL.slice(url.length));
+    offset = index + rawURL.length;
+  }
+  parts.push(text.slice(offset));
+
+  return (
+    <div data-status={status.type}>
+      <div
+        ref={contentRef}
+        className={cn(
+          "whitespace-pre-wrap break-words",
+          !expanded && "max-h-40 overflow-hidden",
+        )}
+      >
+        {parts}
+      </div>
+      {overflowing && (
+        <button
+          type="button"
+          className="text-primary mt-2 text-xs font-medium hover:underline"
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? "Свернуть" : "Развернуть"}
+        </button>
+      )}
+    </div>
   );
 };
 
