@@ -15,6 +15,7 @@ import { McpService } from "./gen/brigade/v1/mcp_connect";
 import { NotificationService } from "./gen/brigade/v1/notification_connect";
 import { TelegramService } from "./gen/brigade/v1/telegram_connect";
 import { LinkPreviewService } from "./gen/brigade/v1/link_preview_connect";
+import { ResponseProfileService } from "./gen/brigade/v1/response_profile_connect";
 
 // refreshOnUnauthenticated — Connect-интерсептор тихого обновления access-токена.
 // Короткий access-токен (минуты) живёт в httpOnly-cookie; при его истечении вызов
@@ -85,6 +86,7 @@ export const mcpClient = createPromiseClient(McpService, transport);
 export const notificationClient = createPromiseClient(NotificationService, transport);
 export const telegramClient = createPromiseClient(TelegramService, transport);
 export const linkPreviewClient = createPromiseClient(LinkPreviewService, transport);
+export const responseProfileClient = createPromiseClient(ResponseProfileService, transport);
 
 // refreshSession принудительно обновляет токены через Refresh (refresh-токен берётся из
 // httpOnly-cookie). Используется неконнектовыми путями (AG-UI/SSE поверх обычного fetch),

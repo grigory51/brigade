@@ -204,6 +204,7 @@ func runServer(configPath string) {
 	authService.SetCodexLogin(codexlogin.New(st, codexLoginRunner))
 	mux.Handle(brigadev1connect.NewAuthServiceHandler(authService, interceptors))
 	mux.Handle(brigadev1connect.NewNotificationServiceHandler(connectsvc.NewNotificationService(st, notifySvc), interceptors))
+	mux.Handle(brigadev1connect.NewResponseProfileServiceHandler(connectsvc.NewResponseProfileService(st), interceptors))
 	mux.Handle(brigadev1connect.NewTelegramServiceHandler(connectsvc.NewTelegramService(telegramSvc), interceptors))
 	// Десктоп-режим: авто-логин сид-пользователя без экрана входа (локальный
 	// однопользовательский запуск). /desktop/auth ставит сессионные cookie и редиректит на SPA;

@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package brigade.v1;
+
+import "brigade/v1/auth.proto";
+
+service ResponseProfileService {
+  rpc List(Empty) returns (ListResponseProfilesResponse) {}
+  rpc Create(CreateResponseProfileRequest) returns (ResponseProfile) {}
+  rpc Update(UpdateResponseProfileRequest) returns (ResponseProfile) {}
+  rpc Delete(DeleteResponseProfileRequest) returns (Empty) {}
+}
+
+message ResponseProfile {
+  string id = 1;
+  string name = 2;
+  string instructions = 3;
+  bool read_only = 4;
+  int64 created_at = 5;
+  int64 updated_at = 6;
+}
+
+message ListResponseProfilesResponse {
+  repeated ResponseProfile profiles = 1;
+}
+
+message CreateResponseProfileRequest {
+  string name = 1;
+  string instructions = 2;
+}
+
+message UpdateResponseProfileRequest {
+  string id = 1;
+  string name = 2;
+  string instructions = 3;
+}
+
+message DeleteResponseProfileRequest {
+  string id = 1;
+}

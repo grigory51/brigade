@@ -59,21 +59,23 @@ func statusToProto(s store.SessionStatus) v1.SessionStatus {
 // sessionToProto переводит доменную сессию store в proto-сообщение.
 func sessionToProto(s store.Session) *v1.Session {
 	return &v1.Session{
-		Id:             s.ID,
-		UserId:         s.UserID,
-		Mode:           modeToProto(s.Mode),
-		Kind:           kindToProto(s.Kind),
-		AgentType:      s.AgentType,
-		AgentSessionId: s.AgentSessionID,
-		ContainerLabel: s.ContainerLabel,
-		Status:         statusToProto(s.Status),
-		Cwd:            s.Cwd,
-		CreatedAt:      s.CreatedAt.Unix(),
-		Name:           s.Name,
-		ParentId:       s.ParentID,
-		McpServerIds:   s.McpServers,
-		Image:          s.Image,
-		AuthProfile:    s.AuthProfile,
+		Id:                   s.ID,
+		UserId:               s.UserID,
+		Mode:                 modeToProto(s.Mode),
+		Kind:                 kindToProto(s.Kind),
+		AgentType:            s.AgentType,
+		AgentSessionId:       s.AgentSessionID,
+		ContainerLabel:       s.ContainerLabel,
+		Status:               statusToProto(s.Status),
+		Cwd:                  s.Cwd,
+		CreatedAt:            s.CreatedAt.Unix(),
+		Name:                 s.Name,
+		ParentId:             s.ParentID,
+		McpServerIds:         s.McpServers,
+		Image:                s.Image,
+		AuthProfile:          s.AuthProfile,
+		ResponseProfileId:   s.ResponseProfileID,
+		ResponseProfileName: s.ResponseProfileName,
 	}
 }
 

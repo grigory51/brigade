@@ -78,6 +78,10 @@ export function AcpThread({
   a2ui,
   configOptions,
   onConfigChange,
+  responseProfiles,
+  responseProfileId,
+  responseProfileBusy,
+  onResponseProfileChange,
   permission,
   onPermissionDecision,
   readonly = false,
@@ -88,6 +92,10 @@ export function AcpThread({
   a2ui: A2uiState;
   configOptions: ConfigOption[];
   onConfigChange: (configId: string, value: string) => void;
+  responseProfiles?: { id: string; name: string; deleted?: boolean }[];
+  responseProfileId?: string;
+  responseProfileBusy?: boolean;
+  onResponseProfileChange?: (id: string) => void;
   permission?: PendingPermission | null;
   onPermissionDecision?: (decision: string) => void;
   readonly?: boolean;
@@ -147,6 +155,10 @@ export function AcpThread({
             }
             configOptions={configOptions}
             onConfigChange={onConfigChange}
+            responseProfiles={responseProfiles}
+            responseProfileId={responseProfileId}
+            responseProfileBusy={responseProfileBusy}
+            onResponseProfileChange={onResponseProfileChange}
             readonly={readonly}
           />
         </ComposerUploadContext.Provider>

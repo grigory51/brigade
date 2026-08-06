@@ -140,7 +140,19 @@ type Session struct {
 	AuthProfile string
 	// InstructionProfile — внутренний профиль поведения агента. Он применяется как
 	// system/developer instructions и не добавляется в историю сообщений.
-	InstructionProfile string
+	InstructionProfile   string
+	ResponseProfileID    string
+	ResponseProfileName  string
+	ResponseInstructions string
+}
+
+type ResponseProfile struct {
+	ID           string
+	UserID       string
+	Name         string
+	Instructions string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 // McpTransport — способ связи агента с MCP-сервером.

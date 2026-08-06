@@ -6,12 +6,14 @@ import {
   agentClient,
   authClient,
   mcpClient,
+  responseProfileClient,
   sessionClient,
 } from "@/api/client";
 import { AgentType } from "@/api/gen/brigade/v1/agent_pb";
 import type { AgentImagesSettings } from "@/api/gen/brigade/v1/auth_pb";
 import { McpServer } from "@/api/gen/brigade/v1/mcp_pb";
 import { Session, SessionKind } from "@/api/gen/brigade/v1/session_pb";
+import type { ResponseProfile } from "@/api/gen/brigade/v1/response_profile_pb";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -87,6 +89,8 @@ export function CreateSessionDialog({
   const [image, setImage] = useState<string>(
     () => localStorage.getItem(IMAGE_KEY) ?? "",
   );
+  const [responseProfiles, setResponseProfiles] = useState<ResponseProfile[]>([]);
+  const [responseProfileId, setResponseProfileId] = useState("default");
 
   // Список типов агентов подгружается один раз при первом открытии диалога.
   // Режим взаимодействия (kind) выбирается независимо от агента, поэтому при
@@ -131,6 +135,16 @@ export function CreateSessionDialog({
     return () => {
       cancelled = true;
     };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setResponseProfileId("default");
+    responseProfileClient.list({})
+      .then((result) => !cancelled && setResponseProfiles(result.profiles))
+      .catch(() => !cancelled && setResponseProfiles([]));
+    return () => { cancelled = true; };
   }, [open]);
 
   // Список MCP-серверов перечитывается при открытии: он мог измениться в настройках.
@@ -208,6 +222,7 @@ export function CreateSessionDialog({
         mcpServerIds: mcpSelected,
         image,
         authProfile,
+        responseProfileId: kind === SessionKind.ACP ? responseProfileId : "default",
       });
       const session = res.session;
       if (!session) throw new Error("пустой ответ Create");
@@ -296,6 +311,20 @@ export function CreateSessionDialog({
 
             {agentId === "codex" && codexProfiles.length > 1 && (
               <div className="space-y-2"><Label>Авторизация</Label><Select value={authProfile} onValueChange={setAuthProfile}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="chatgpt">ChatGPT Plus</SelectItem><SelectItem value="api-key">OpenAI API key</SelectItem></SelectContent></Select></div>
+            )}
+
+            {kind === SessionKind.ACP && responseProfiles.length > 0 && (
+              <div className="space-y-2">
+                <Label>Профиль ответов</Label>
+                <Select value={responseProfileId} onValueChange={setResponseProfileId}>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {responseProfiles.map((profile) => (
+                      <SelectItem key={profile.id} value={profile.id}>{profile.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             )}
 
             {images !== null && images.images.length > 0 && (

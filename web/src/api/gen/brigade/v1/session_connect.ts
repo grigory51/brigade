@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ArchiveSessionRequest, ArchiveSessionResponse, CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, ForkSessionRequest, ForkSessionResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, ReloadAgentRequest, SetSessionMcpServersRequest, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse, UploadFileRequest, UploadFileResponse } from "./session_pb.js";
+import { ArchiveSessionRequest, ArchiveSessionResponse, CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, ForkSessionRequest, ForkSessionResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, ReloadAgentRequest, SetSessionMcpServersRequest, SetSessionResponseProfileRequest, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse, UploadFileRequest, UploadFileResponse } from "./session_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { Empty } from "./auth_pb.js";
 
@@ -101,6 +101,15 @@ export const SessionService = {
       name: "SetSessionMcpServers",
       I: SetSessionMcpServersRequest,
       O: Empty,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.SessionService.SetSessionResponseProfile
+     */
+    setSessionResponseProfile: {
+      name: "SetSessionResponseProfile",
+      I: SetSessionResponseProfileRequest,
+      O: UpdateSessionResponse,
       kind: MethodKind.Unary,
     },
     /**

@@ -20,6 +20,7 @@ import {
   KeyRound,
   Loader2,
   NotebookText,
+  MessageSquareText,
   Plus,
   Plug,
   RefreshCw,
@@ -44,6 +45,7 @@ import { TerminalOutput } from "@/features/terminal/TerminalView";
 import { EnvironmentSection } from "./EnvironmentSection";
 import { McpSection } from "./McpSection";
 import { TelegramSection } from "./TelegramSection";
+import { ResponseProfilesSection } from "./ResponseProfilesSection";
 import {
   Badge,
   Code,
@@ -71,9 +73,9 @@ import {
  * в поле всегда пустой драфт, а состояние показывается флагом «задан».
  */
 
-type SectionId = "claude" | "codex" | "mcp" | "env" | "memory" | "ssh" | "notifications" | "telegram";
+type SectionId = "claude" | "codex" | "mcp" | "profiles" | "env" | "memory" | "ssh" | "notifications" | "telegram";
 
-const SECTIONS: SectionId[] = ["claude", "codex", "mcp", "env", "memory", "ssh", "notifications", "telegram"];
+const SECTIONS: SectionId[] = ["claude", "codex", "mcp", "profiles", "env", "memory", "ssh", "notifications", "telegram"];
 
 const AGENTS_OPEN_KEY = "brigade.settings.agentsOpen";
 
@@ -220,6 +222,12 @@ export function SettingsPage() {
             trailing={<StatusDot on={mcpCount > 0} />}
           />
           <NavRow
+            icon={MessageSquareText}
+            label="Профили ответов"
+            active={active === "profiles"}
+            onClick={() => go("profiles")}
+          />
+          <NavRow
             icon={Container}
             label="Среда агента"
             active={active === "env"}
@@ -351,6 +359,7 @@ export function SettingsPage() {
             )}
             {active === "codex" && <CodexSection state={codex} onChange={setCodex} />}
             {active === "mcp" && <McpSection onCountChange={setMcpCount} />}
+            {active === "profiles" && <ResponseProfilesSection />}
             {active === "env" && <EnvironmentSection />}
             {active === "memory" && (
               <MemorySection

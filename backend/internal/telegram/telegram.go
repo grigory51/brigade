@@ -801,7 +801,7 @@ func (s *Service) session(bot store.TelegramBot, in inbound) (string, error) {
 		instructionProfile = session.InstructionProfileTelegramGuest
 	}
 	created, err := s.registry.Create(s.ctx, bot.UserID, store.SessionKindACP, bot.AgentType,
-		bot.AuthProfile, "", "", bot.McpServers, bot.Image, instructionProfile)
+		bot.AuthProfile, "", "", bot.McpServers, bot.Image, instructionProfile, "default")
 	if err != nil {
 		return "", err
 	}

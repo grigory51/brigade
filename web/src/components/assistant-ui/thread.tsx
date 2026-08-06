@@ -42,6 +42,7 @@ import {
   CopyIcon,
   DownloadIcon,
   InfoIcon,
+  Loader2Icon,
   MicIcon,
   MoreHorizontalIcon,
   SquareIcon,
@@ -107,6 +108,10 @@ export type ThreadProps = {
   // в composer'е; onConfigChange отправляет новое значение бэкенду.
   configOptions?: ConfigOption[] | undefined;
   onConfigChange?: ((configId: string, value: string) => void) | undefined;
+  responseProfiles?: { id: string; name: string; deleted?: boolean }[] | undefined;
+  responseProfileId?: string | undefined;
+  responseProfileBusy?: boolean | undefined;
+  onResponseProfileChange?: ((id: string) => void) | undefined;
   // readonly — режим только для чтения (архивная сессия): скрывает composer и
   // suggestions, лента остаётся. Ввод недоступен — живого агента нет.
   readonly?: boolean | undefined;
@@ -136,6 +141,19 @@ const ConfigContext = createContext<ConfigContextValue>({
   onChange: () => {},
 });
 
+type ResponseProfileContextValue = {
+  profiles: { id: string; name: string; deleted?: boolean }[];
+  selected: string;
+  busy: boolean;
+  onChange: (id: string) => void;
+};
+const ResponseProfileContext = createContext<ResponseProfileContextValue>({
+  profiles: [],
+  selected: "default",
+  busy: false,
+  onChange: () => {},
+});
+
 // Startup exposes a loading placeholder thread; treat it as a new chat so
 // the composer mounts centered. Loads after startup keep the docked layout.
 const isNewChatView = (s: AssistantState) =>
@@ -149,6 +167,10 @@ export const Thread: FC<ThreadProps> = ({
   composer,
   configOptions = [],
   onConfigChange,
+  responseProfiles = [],
+  responseProfileId = "default",
+  responseProfileBusy = false,
+  onResponseProfileChange,
   readonly = false,
 }) => {
   const isEmpty = useAuiState(isNewChatView);
@@ -156,17 +178,28 @@ export const Thread: FC<ThreadProps> = ({
     () => ({ options: configOptions, onChange: onConfigChange ?? (() => {}) }),
     [configOptions, onConfigChange],
   );
+  const profileValue = useMemo<ResponseProfileContextValue>(
+    () => ({
+      profiles: responseProfiles,
+      selected: responseProfileId,
+      busy: responseProfileBusy,
+      onChange: onResponseProfileChange ?? (() => {}),
+    }),
+    [responseProfiles, responseProfileId, responseProfileBusy, onResponseProfileChange],
+  );
 
   return (
     <ThreadComponentsContext.Provider value={components}>
       <CommandsContext.Provider value={commands}>
         <ConfigContext.Provider value={configValue}>
-          <ThreadRoot
-            isEmpty={isEmpty}
-            footer={footer}
-            composer={composer}
-            readonly={readonly}
-          />
+          <ResponseProfileContext.Provider value={profileValue}>
+            <ThreadRoot
+              isEmpty={isEmpty}
+              footer={footer}
+              composer={composer}
+              readonly={readonly}
+            />
+          </ResponseProfileContext.Provider>
         </ConfigContext.Provider>
       </CommandsContext.Provider>
     </ThreadComponentsContext.Provider>
@@ -520,6 +553,45 @@ const ConfigSelectors: FC = () => {
   );
 };
 
+const ResponseProfileSelector: FC = () => {
+  const { profiles, selected, busy, onChange } = useContext(ResponseProfileContext);
+  const running = useAuiState((s) => s.thread.isRunning);
+  if (profiles.length === 0) return null;
+  const current = profiles.find((profile) => profile.id === selected);
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={busy || running}
+          className="text-muted-foreground hover:text-foreground h-7 shrink-0 gap-1 px-2 text-xs font-normal"
+        >
+          <span className="opacity-60">Ответы:</span>
+          {current?.name ?? "Обычно"}
+          {busy ? <Loader2Icon className="size-3 animate-spin" /> : <ChevronDownIcon className="size-3 opacity-60" />}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="start" className="w-56">
+        {profiles.map((profile) => (
+          <DropdownMenuItem
+            key={profile.id}
+            disabled={profile.deleted}
+            onSelect={() => onChange(profile.id)}
+          >
+            <span className="flex w-full items-center justify-between">
+              {profile.name}{profile.deleted ? " · удалён" : ""}
+              {profile.id === selected && <CheckIcon className="size-3.5" />}
+            </span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
+
 // SendButton — кнопка отправки. При непустой зоне контекста шлёт через sendWithContext
 // (дописывает контекст к промпту), иначе — нативная ComposerPrimitive.Send (с её disabled-
 // логикой на пустой ввод). AuiIf в ComposerAction рендерит её только когда не идёт генерация.
@@ -567,6 +639,7 @@ const ComposerAction: FC = () => {
           кнопку отправки за край экрана (горизонтальный скролл страницы). */}
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         <ComposerUploadButton />
+        <ResponseProfileSelector />
         <ConfigSelectors />
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
@@ -690,11 +763,7 @@ const AssistantMessage: FC = () => {
                 // Ответ агента набран серифом — фирменная черта Claude. Серифом идёт
                 // только сам текст: карточки инструментов, размышления и action-bar
                 // остаются в UI-шрифте, код внутри markdown — моноширинным.
-                return (
-                  <div className="font-serif text-[16px] leading-[1.72]">
-                    <MarkdownText />
-                  </div>
-                );
+                return <AssistantMessageText />;
               case "reasoning":
                 return <Reasoning {...part} />;
               case "tool-call":
@@ -726,6 +795,47 @@ const AssistantMessage: FC = () => {
         <AssistantActionBar />
       </div>
     </MessagePrimitive.Root>
+  );
+};
+
+const AssistantMessageText: FC = () => {
+  const { text, status } = useMessagePartText();
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+
+  useLayoutEffect(() => {
+    const element = contentRef.current;
+    if (!element || status.type !== "complete") {
+      setOverflowing(false);
+      return;
+    }
+    if (expanded) return;
+    const update = () => setOverflowing(element.scrollHeight > element.clientHeight);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [expanded, status.type, text]);
+
+  return (
+    <div className="font-serif text-[16px] leading-[1.72]">
+      <div
+        ref={contentRef}
+        className={cn(!expanded && status.type === "complete" && "max-h-[80rem] overflow-hidden")}
+      >
+        <MarkdownText />
+      </div>
+      {overflowing && (
+        <button
+          type="button"
+          className="text-primary mt-2 font-sans text-xs font-medium hover:underline"
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? "Свернуть" : "Развернуть ответ"}
+        </button>
+      )}
+    </div>
   );
 };
 

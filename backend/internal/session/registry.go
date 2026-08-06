@@ -438,11 +438,36 @@ const InstructionProfileTelegramGuest = "telegram-guest"
 
 const telegramGuestInstructions = `You are answering a focused factual question invoked from Telegram Guest Mode during a live conversation between people. Respond in the language of the question. Give a direct, self-contained answer with no greeting, task narration, tool-use narration, meta-commentary, or offer to continue. Answer exactly what was asked and include only facts needed to understand the answer. Clearly state any material uncertainty.`
 
-func instructionPrompt(profile string) string {
+func instructionPrompt(profile, responseInstructions string) string {
+	var parts []string
 	if profile == InstructionProfileTelegramGuest {
-		return telegramGuestInstructions
+		parts = append(parts, telegramGuestInstructions)
 	}
-	return ""
+	if responseInstructions = strings.TrimSpace(responseInstructions); responseInstructions != "" {
+		parts = append(parts, responseInstructions)
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+func (r *Registry) resolveResponseProfile(ctx context.Context, sess store.Session) (store.Session, bool, error) {
+	if sess.ResponseProfileID == "" || sess.ResponseProfileID == "default" {
+		changed := sess.ResponseProfileID != "default" || sess.ResponseProfileName != "Обычно" || sess.ResponseInstructions != ""
+		sess.ResponseProfileID = "default"
+		sess.ResponseProfileName = "Обычно"
+		sess.ResponseInstructions = ""
+		return sess, changed, nil
+	}
+	profile, err := r.store.GetResponseProfile(ctx, sess.ResponseProfileID, sess.UserID)
+	if errors.Is(err, store.ErrNotFound) && sess.ResponseInstructions != "" {
+		return sess, false, nil
+	}
+	if err != nil {
+		return store.Session{}, false, err
+	}
+	changed := sess.ResponseProfileName != profile.Name || sess.ResponseInstructions != profile.Instructions
+	sess.ResponseProfileName = profile.Name
+	sess.ResponseInstructions = profile.Instructions
+	return sess, changed, nil
 }
 
 // atContainerLimit сообщает, превысит ли новая сессия (userID, kind) лимит docker-
@@ -507,7 +532,7 @@ func (r *Registry) endTeardown(sessionID string) {
 // и сохраняет resume-поля. Режим спавна берётся у инстанса (r.mode), не выбирается
 // пользователем. agentType — тип агента; cwd пустой означает дефолт workDir; prompt
 // передаётся ACP-агенту первым ходом (для CLI игнорируется — ввод идёт по WS).
-func (r *Registry) Create(ctx context.Context, userID string, kind store.SessionKind, agentType, authProfile, cwd, prompt string, mcpServerIDs []string, image, instructionProfile string) (store.Session, error) {
+func (r *Registry) Create(ctx context.Context, userID string, kind store.SessionKind, agentType, authProfile, cwd, prompt string, mcpServerIDs []string, image, instructionProfile, responseProfileID string) (store.Session, error) {
 	at := agent.Get(agentType)
 	if at.ID == agent.Codex.ID {
 		settings, err := r.store.GetUserSettings(ctx, userID)
@@ -585,6 +610,12 @@ func (r *Registry) Create(ctx context.Context, userID string, kind store.Session
 		Image:              image,
 		AuthProfile:        authProfile,
 		InstructionProfile: instructionProfile,
+		ResponseProfileID:  responseProfileID,
+	}
+	var err error
+	sess, _, err = r.resolveResponseProfile(ctx, sess)
+	if err != nil {
+		return store.Session{}, err
 	}
 	if err := r.store.CreateSession(ctx, sess); err != nil {
 		log.Printf("session: create %s failed (store): %v", sess.ID, err)
@@ -781,7 +812,7 @@ func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token
 		ForkFromSessionID: forkFromSessionID,
 		McpServers:        r.mcpServers(ctx, sess),
 		PluginDirs:        r.acpPluginDirs(sess),
-		SystemPrompt:      instructionPrompt(sess.InstructionProfile),
+		SystemPrompt:      instructionPrompt(sess.InstructionProfile, sess.ResponseInstructions),
 	})
 	if err != nil {
 		return nil, "", "", fmt.Errorf("session: configure acp daemon: %w", err)
@@ -887,7 +918,7 @@ func (r *Registry) acpLocalOptions(ctx context.Context, sess store.Session, toke
 		ExtraEnv:       r.agentEnv(ctx, sess, token),
 		McpServers:     r.mcpServers(ctx, sess),
 		PluginDirs:     r.acpPluginDirs(sess),
-		SystemPrompt:   instructionPrompt(sess.InstructionProfile),
+		SystemPrompt:   instructionPrompt(sess.InstructionProfile, sess.ResponseInstructions),
 	}
 }
 
@@ -991,7 +1022,7 @@ func (r *Registry) agentEnv(ctx context.Context, sess store.Session, token strin
 		env = append(env, "CLAUDE_CODE_OAUTH_TOKEN="+token)
 	}
 	if agent.Get(sess.AgentType).ID == agent.Codex.ID {
-		if instructions := instructionPrompt(sess.InstructionProfile); instructions != "" {
+		if instructions := instructionPrompt(sess.InstructionProfile, sess.ResponseInstructions); instructions != "" {
 			config, _ := json.Marshal(map[string]string{"developer_instructions": instructions})
 			env = append(env, "CODEX_CONFIG="+string(config))
 		}
@@ -1493,6 +1524,17 @@ func (r *Registry) acpAlive(ctx context.Context, lv *live, sessionID string) boo
 // остановленный и поднимает свежий) + session/load; local: новый subprocess-адаптер + session/load.
 // Диалог сохраняется — агент реплеит thread по agent_session_id.
 func (r *Registry) reviveACP(ctx context.Context, sess store.Session) (*live, error) {
+	var profileChanged bool
+	var err error
+	sess, profileChanged, err = r.resolveResponseProfile(ctx, sess)
+	if err != nil {
+		return nil, err
+	}
+	if profileChanged {
+		if err := r.store.UpdateSessionResponseProfile(ctx, sess.ID, sess.ResponseProfileID, sess.ResponseProfileName, sess.ResponseInstructions); err != nil {
+			return nil, err
+		}
+	}
 	token := r.agentToken(ctx, sess)
 	if sess.Mode == store.SessionModeDocker {
 		lv, sid, _, err := r.spawnACPDaemon(ctx, sess, token, "", sess.AgentSessionID, "")
@@ -1552,6 +1594,30 @@ func (r *Registry) SetInstructionProfile(ctx context.Context, sessionID, userID,
 		return err
 	}
 	return nil
+}
+
+func (r *Registry) SetSessionResponseProfile(ctx context.Context, sessionID, userID, profileID string) (store.Session, error) {
+	lv, sess, err := r.reloadable(ctx, sessionID, userID, false)
+	if err != nil {
+		return store.Session{}, err
+	}
+	previous := sess
+	sess.ResponseProfileID = profileID
+	sess.ResponseProfileName = ""
+	sess.ResponseInstructions = ""
+	sess, _, err = r.resolveResponseProfile(ctx, sess)
+	if err != nil {
+		return store.Session{}, err
+	}
+	if err := r.store.UpdateSessionResponseProfile(ctx, sessionID, sess.ResponseProfileID, sess.ResponseProfileName, sess.ResponseInstructions); err != nil {
+		return store.Session{}, err
+	}
+	if err := r.reinit(ctx, lv, sess, false); err != nil {
+		_ = r.store.UpdateSessionResponseProfile(context.WithoutCancel(ctx), sessionID,
+			previous.ResponseProfileID, previous.ResponseProfileName, previous.ResponseInstructions)
+		return store.Session{}, err
+	}
+	return sess, nil
 }
 
 // SetSessionMcpServers меняет набор MCP-серверов сессии. У ACP-сессии набор применяется
@@ -1614,8 +1680,24 @@ func (r *Registry) reloadable(ctx context.Context, sessionID, userID string, can
 
 // reinit переподнимает адаптер сессии с актуальными плагинами и MCP-серверами, сохраняя
 // диалог (session/load того же agent_session_id).
-func (r *Registry) reinit(ctx context.Context, lv *live, sess store.Session, refreshRuntime bool) error {
+func (r *Registry) reinit(ctx context.Context, lv *live, sess store.Session, refreshRuntime bool) (err error) {
 	sessionID := sess.ID
+	previous := sess
+	sess, profileChanged, err := r.resolveResponseProfile(ctx, sess)
+	if err != nil {
+		return err
+	}
+	if profileChanged {
+		if err := r.store.UpdateSessionResponseProfile(ctx, sessionID, sess.ResponseProfileID, sess.ResponseProfileName, sess.ResponseInstructions); err != nil {
+			return err
+		}
+		defer func() {
+			if err != nil {
+				_ = r.store.UpdateSessionResponseProfile(context.WithoutCancel(ctx), sessionID,
+					previous.ResponseProfileID, previous.ResponseProfileName, previous.ResponseInstructions)
+			}
+		}()
+	}
 	// Обновляем файлы скиллов до реинициализации, чтобы свежая загрузка их прочитала.
 	r.installSkill(sess)
 
@@ -1769,10 +1851,17 @@ func (r *Registry) Fork(ctx context.Context, sessionID, userID string) (store.Se
 		ParentID:  src.ID,
 		// Ветка продолжает ту же работу — набор инструментов и образ наследуются от
 		// родителя.
-		McpServers:         src.McpServers,
-		Image:              src.Image,
-		AuthProfile:        src.AuthProfile,
-		InstructionProfile: src.InstructionProfile,
+		McpServers:           src.McpServers,
+		Image:                src.Image,
+		AuthProfile:          src.AuthProfile,
+		InstructionProfile:   src.InstructionProfile,
+		ResponseProfileID:    src.ResponseProfileID,
+		ResponseProfileName:  src.ResponseProfileName,
+		ResponseInstructions: src.ResponseInstructions,
+	}
+	sess, _, err = r.resolveResponseProfile(ctx, sess)
+	if err != nil {
+		return store.Session{}, err
 	}
 	if err := r.store.CreateSession(ctx, sess); err != nil {
 		return store.Session{}, err
@@ -2153,6 +2242,17 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 		return r.store.UpdateSessionStatus(ctx, sess.ID, store.SessionStatusStopped)
 
 	case store.SessionKindACP:
+		var profileChanged bool
+		var err error
+		sess, profileChanged, err = r.resolveResponseProfile(ctx, sess)
+		if err != nil {
+			return fmt.Errorf("restore response profile: %w", err)
+		}
+		if profileChanged {
+			if err := r.store.UpdateSessionResponseProfile(ctx, sess.ID, sess.ResponseProfileID, sess.ResponseProfileName, sess.ResponseInstructions); err != nil {
+				return fmt.Errorf("persist response profile: %w", err)
+			}
+		}
 		token := r.agentToken(ctx, sess)
 		if sess.Mode == store.SessionModeDocker {
 			// docker: демон и адаптер живут в контейнере и ПЕРЕЖИВАЮТ рестарт brigade.

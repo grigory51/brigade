@@ -46,7 +46,7 @@ func (s *SessionService) Create(ctx context.Context, req *connect.Request[v1.Cre
 
 	sess, err := s.registry.Create(ctx, userID,
 		kindFromProto(req.Msg.Kind),
-		req.Msg.AgentType, req.Msg.AuthProfile, req.Msg.Cwd, req.Msg.Prompt, req.Msg.McpServerIds, image, "")
+		req.Msg.AgentType, req.Msg.AuthProfile, req.Msg.Cwd, req.Msg.Prompt, req.Msg.McpServerIds, image, "", req.Msg.ResponseProfileId)
 	if err != nil {
 		if errors.Is(err, session.ErrClaudeTokenRequired) {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
@@ -159,6 +159,18 @@ func (s *SessionService) SetSessionMcpServers(ctx context.Context, req *connect.
 		return nil, sessionError(err)
 	}
 	return connect.NewResponse(&v1.Empty{}), nil
+}
+
+func (s *SessionService) SetSessionResponseProfile(ctx context.Context, req *connect.Request[v1.SetSessionResponseProfileRequest]) (*connect.Response[v1.UpdateSessionResponse], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sess, err := s.registry.SetSessionResponseProfile(ctx, req.Msg.SessionId, userID, req.Msg.ResponseProfileId)
+	if err != nil {
+		return nil, sessionError(err)
+	}
+	return connect.NewResponse(&v1.UpdateSessionResponse{Session: sessionToProto(sess)}), nil
 }
 
 // Delete останавливает сессию (если жива) и удаляет её запись.

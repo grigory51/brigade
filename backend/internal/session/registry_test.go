@@ -77,8 +77,35 @@ func TestTelegramGuestInstructions(t *testing.T) {
 	if !found {
 		t.Fatalf("CODEX_CONFIG with guest instructions missing: %v", env)
 	}
-	if instructionPrompt("") != "" || instructionPrompt(InstructionProfileTelegramGuest) == "" {
+	if instructionPrompt("", "") != "" || instructionPrompt(InstructionProfileTelegramGuest, "") == "" {
 		t.Fatal("unexpected instruction profile mapping")
+	}
+}
+
+func TestResolveResponseProfileKeepsDeletedSnapshot(t *testing.T) {
+	r := newTestRegistry(t)
+	ctx := context.Background()
+	if _, err := r.store.DB().ExecContext(ctx, `INSERT INTO users (id, username, password_hash, created_at) VALUES ('u1', 'user', '', 0)`); err != nil {
+		t.Fatal(err)
+	}
+	seeded, err := r.store.ListResponseProfiles(ctx, "u1")
+	if err != nil || len(seeded) != 2 {
+		t.Fatalf("seeded profiles = %d, err=%v", len(seeded), err)
+	}
+	profile := store.ResponseProfile{ID: "calm", UserID: "u1", Name: "Спокойный", Instructions: "Be calm.", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	if err := r.store.CreateResponseProfile(ctx, profile); err != nil {
+		t.Fatal(err)
+	}
+	sess, changed, err := r.resolveResponseProfile(ctx, store.Session{UserID: "u1", ResponseProfileID: profile.ID})
+	if err != nil || !changed || sess.ResponseInstructions != profile.Instructions {
+		t.Fatalf("resolve = %+v, changed=%v, err=%v", sess, changed, err)
+	}
+	if err := r.store.DeleteResponseProfile(ctx, profile.ID, profile.UserID); err != nil {
+		t.Fatal(err)
+	}
+	resolved, changed, err := r.resolveResponseProfile(ctx, sess)
+	if err != nil || changed || resolved.ResponseInstructions != profile.Instructions {
+		t.Fatalf("deleted snapshot = %+v, changed=%v, err=%v", resolved, changed, err)
 	}
 }
 

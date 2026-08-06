@@ -53,6 +53,9 @@ const (
 	// SessionServiceSetSessionMcpServersProcedure is the fully-qualified name of the SessionService's
 	// SetSessionMcpServers RPC.
 	SessionServiceSetSessionMcpServersProcedure = "/brigade.v1.SessionService/SetSessionMcpServers"
+	// SessionServiceSetSessionResponseProfileProcedure is the fully-qualified name of the
+	// SessionService's SetSessionResponseProfile RPC.
+	SessionServiceSetSessionResponseProfileProcedure = "/brigade.v1.SessionService/SetSessionResponseProfile"
 	// SessionServiceArchiveProcedure is the fully-qualified name of the SessionService's Archive RPC.
 	SessionServiceArchiveProcedure = "/brigade.v1.SessionService/Archive"
 	// SessionServiceIssueStreamTicketProcedure is the fully-qualified name of the SessionService's
@@ -82,6 +85,7 @@ type SessionServiceClient interface {
 	// SetSessionMcpServers меняет набор MCP-серверов ACP-сессии и применяет его
 	// переинициализацией агента. Не во время генерации.
 	SetSessionMcpServers(context.Context, *connect.Request[v1.SetSessionMcpServersRequest]) (*connect.Response[v1.Empty], error)
+	SetSessionResponseProfile(context.Context, *connect.Request[v1.SetSessionResponseProfileRequest]) (*connect.Response[v1.UpdateSessionResponse], error)
 	// Archive переносит сессию в архив (recap + снимок истории + остановка контейнера).
 	// Чтение архива (список, история) — в отдельном ArchiveService.
 	Archive(context.Context, *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error)
@@ -158,6 +162,12 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(sessionServiceMethods.ByName("SetSessionMcpServers")),
 			connect.WithClientOptions(opts...),
 		),
+		setSessionResponseProfile: connect.NewClient[v1.SetSessionResponseProfileRequest, v1.UpdateSessionResponse](
+			httpClient,
+			baseURL+SessionServiceSetSessionResponseProfileProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("SetSessionResponseProfile")),
+			connect.WithClientOptions(opts...),
+		),
 		archive: connect.NewClient[v1.ArchiveSessionRequest, v1.ArchiveSessionResponse](
 			httpClient,
 			baseURL+SessionServiceArchiveProcedure,
@@ -187,19 +197,20 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 
 // sessionServiceClient implements SessionServiceClient.
 type sessionServiceClient struct {
-	create               *connect.Client[v1.CreateSessionRequest, v1.CreateSessionResponse]
-	list                 *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
-	get                  *connect.Client[v1.GetSessionRequest, v1.GetSessionResponse]
-	update               *connect.Client[v1.UpdateSessionRequest, v1.UpdateSessionResponse]
-	fork                 *connect.Client[v1.ForkSessionRequest, v1.ForkSessionResponse]
-	stop                 *connect.Client[v1.StopSessionRequest, v1.Empty]
-	delete               *connect.Client[v1.DeleteSessionRequest, v1.Empty]
-	reloadAgent          *connect.Client[v1.ReloadAgentRequest, v1.Empty]
-	setSessionMcpServers *connect.Client[v1.SetSessionMcpServersRequest, v1.Empty]
-	archive              *connect.Client[v1.ArchiveSessionRequest, v1.ArchiveSessionResponse]
-	issueStreamTicket    *connect.Client[v1.IssueStreamTicketRequest, v1.IssueStreamTicketResponse]
-	listPreviews         *connect.Client[v1.ListPreviewsRequest, v1.ListPreviewsResponse]
-	uploadFile           *connect.Client[v1.UploadFileRequest, v1.UploadFileResponse]
+	create                    *connect.Client[v1.CreateSessionRequest, v1.CreateSessionResponse]
+	list                      *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
+	get                       *connect.Client[v1.GetSessionRequest, v1.GetSessionResponse]
+	update                    *connect.Client[v1.UpdateSessionRequest, v1.UpdateSessionResponse]
+	fork                      *connect.Client[v1.ForkSessionRequest, v1.ForkSessionResponse]
+	stop                      *connect.Client[v1.StopSessionRequest, v1.Empty]
+	delete                    *connect.Client[v1.DeleteSessionRequest, v1.Empty]
+	reloadAgent               *connect.Client[v1.ReloadAgentRequest, v1.Empty]
+	setSessionMcpServers      *connect.Client[v1.SetSessionMcpServersRequest, v1.Empty]
+	setSessionResponseProfile *connect.Client[v1.SetSessionResponseProfileRequest, v1.UpdateSessionResponse]
+	archive                   *connect.Client[v1.ArchiveSessionRequest, v1.ArchiveSessionResponse]
+	issueStreamTicket         *connect.Client[v1.IssueStreamTicketRequest, v1.IssueStreamTicketResponse]
+	listPreviews              *connect.Client[v1.ListPreviewsRequest, v1.ListPreviewsResponse]
+	uploadFile                *connect.Client[v1.UploadFileRequest, v1.UploadFileResponse]
 }
 
 // Create calls brigade.v1.SessionService.Create.
@@ -247,6 +258,11 @@ func (c *sessionServiceClient) SetSessionMcpServers(ctx context.Context, req *co
 	return c.setSessionMcpServers.CallUnary(ctx, req)
 }
 
+// SetSessionResponseProfile calls brigade.v1.SessionService.SetSessionResponseProfile.
+func (c *sessionServiceClient) SetSessionResponseProfile(ctx context.Context, req *connect.Request[v1.SetSessionResponseProfileRequest]) (*connect.Response[v1.UpdateSessionResponse], error) {
+	return c.setSessionResponseProfile.CallUnary(ctx, req)
+}
+
 // Archive calls brigade.v1.SessionService.Archive.
 func (c *sessionServiceClient) Archive(ctx context.Context, req *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error) {
 	return c.archive.CallUnary(ctx, req)
@@ -283,6 +299,7 @@ type SessionServiceHandler interface {
 	// SetSessionMcpServers меняет набор MCP-серверов ACP-сессии и применяет его
 	// переинициализацией агента. Не во время генерации.
 	SetSessionMcpServers(context.Context, *connect.Request[v1.SetSessionMcpServersRequest]) (*connect.Response[v1.Empty], error)
+	SetSessionResponseProfile(context.Context, *connect.Request[v1.SetSessionResponseProfileRequest]) (*connect.Response[v1.UpdateSessionResponse], error)
 	// Archive переносит сессию в архив (recap + снимок истории + остановка контейнера).
 	// Чтение архива (список, история) — в отдельном ArchiveService.
 	Archive(context.Context, *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error)
@@ -355,6 +372,12 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		connect.WithSchema(sessionServiceMethods.ByName("SetSessionMcpServers")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sessionServiceSetSessionResponseProfileHandler := connect.NewUnaryHandler(
+		SessionServiceSetSessionResponseProfileProcedure,
+		svc.SetSessionResponseProfile,
+		connect.WithSchema(sessionServiceMethods.ByName("SetSessionResponseProfile")),
+		connect.WithHandlerOptions(opts...),
+	)
 	sessionServiceArchiveHandler := connect.NewUnaryHandler(
 		SessionServiceArchiveProcedure,
 		svc.Archive,
@@ -399,6 +422,8 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 			sessionServiceReloadAgentHandler.ServeHTTP(w, r)
 		case SessionServiceSetSessionMcpServersProcedure:
 			sessionServiceSetSessionMcpServersHandler.ServeHTTP(w, r)
+		case SessionServiceSetSessionResponseProfileProcedure:
+			sessionServiceSetSessionResponseProfileHandler.ServeHTTP(w, r)
 		case SessionServiceArchiveProcedure:
 			sessionServiceArchiveHandler.ServeHTTP(w, r)
 		case SessionServiceIssueStreamTicketProcedure:
@@ -450,6 +475,10 @@ func (UnimplementedSessionServiceHandler) ReloadAgent(context.Context, *connect.
 
 func (UnimplementedSessionServiceHandler) SetSessionMcpServers(context.Context, *connect.Request[v1.SetSessionMcpServersRequest]) (*connect.Response[v1.Empty], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.SetSessionMcpServers is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) SetSessionResponseProfile(context.Context, *connect.Request[v1.SetSessionResponseProfileRequest]) (*connect.Response[v1.UpdateSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.SetSessionResponseProfile is not implemented"))
 }
 
 func (UnimplementedSessionServiceHandler) Archive(context.Context, *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error) {

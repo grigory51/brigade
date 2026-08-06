@@ -329,11 +329,12 @@ func (s *Store) DeleteTelegramConversation(ctx context.Context, botID, scope str
 func (s *Store) CreateSession(ctx context.Context, sess Session) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO sessions
-		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name, parent_id, mcp_servers, image, auth_profile, instruction_profile)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name, parent_id, mcp_servers, image, auth_profile, instruction_profile, response_profile_id, response_profile_name, response_instructions)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		sess.ID, sess.UserID, string(sess.Mode), string(sess.Kind), sess.AgentType,
 		sess.AgentSessionID, sess.ContainerLabel, string(sess.Status), sess.Cwd, toUnix(sess.CreatedAt), sess.Name, sess.ParentID,
 		strings.Join(sess.McpServers, ","), sess.Image, sess.AuthProfile, sess.InstructionProfile,
+		sess.ResponseProfileID, sess.ResponseProfileName, sess.ResponseInstructions,
 	)
 	if err != nil {
 		return fmt.Errorf("store: create session: %w", err)
@@ -413,7 +414,8 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 }
 
 const sessionSelect = `SELECT id, user_id, mode, kind, agent_type, agent_session_id,
-	container_label, status, cwd, created_at, name, parent_id, mcp_servers, image, auth_profile, instruction_profile FROM sessions`
+	container_label, status, cwd, created_at, name, parent_id, mcp_servers, image, auth_profile, instruction_profile,
+	response_profile_id, response_profile_name, response_instructions FROM sessions`
 
 func (s *Store) querySessions(ctx context.Context, query string, args ...any) ([]Session, error) {
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -455,7 +457,8 @@ func scanSessionRow(r rowScanner) (Session, error) {
 	var mode, kind, status, mcp string
 	var createdAt int64
 	err := r.Scan(&sess.ID, &sess.UserID, &mode, &kind, &sess.AgentType,
-		&sess.AgentSessionID, &sess.ContainerLabel, &status, &sess.Cwd, &createdAt, &sess.Name, &sess.ParentID, &mcp, &sess.Image, &sess.AuthProfile, &sess.InstructionProfile)
+		&sess.AgentSessionID, &sess.ContainerLabel, &status, &sess.Cwd, &createdAt, &sess.Name, &sess.ParentID, &mcp, &sess.Image, &sess.AuthProfile, &sess.InstructionProfile,
+		&sess.ResponseProfileID, &sess.ResponseProfileName, &sess.ResponseInstructions)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Session{}, err
@@ -518,6 +521,81 @@ func (s *Store) UpdateSessionInstructionProfile(ctx context.Context, id, profile
 		return fmt.Errorf("store: update session instruction profile: %w", err)
 	}
 	return affectedOne(res, "update session instruction profile")
+}
+
+func (s *Store) UpdateSessionResponseProfile(ctx context.Context, id, profileID, name, instructions string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE sessions SET response_profile_id = ?, response_profile_name = ?, response_instructions = ? WHERE id = ?`,
+		profileID, name, instructions, id)
+	if err != nil {
+		return fmt.Errorf("store: update session response profile: %w", err)
+	}
+	return affectedOne(res, "update session response profile")
+}
+
+// --- response_profiles ---
+
+const responseProfileSelect = `SELECT id, user_id, name, instructions, created_at, updated_at FROM response_profiles`
+
+func (s *Store) ListResponseProfiles(ctx context.Context, userID string) ([]ResponseProfile, error) {
+	rows, err := s.db.QueryContext(ctx, responseProfileSelect+` WHERE user_id = ? ORDER BY created_at, name`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("store: list response profiles: %w", err)
+	}
+	defer rows.Close()
+	var out []ResponseProfile
+	for rows.Next() {
+		profile, err := scanResponseProfile(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, profile)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) GetResponseProfile(ctx context.Context, id, userID string) (ResponseProfile, error) {
+	profile, err := scanResponseProfile(s.db.QueryRowContext(ctx, responseProfileSelect+` WHERE id = ? AND user_id = ?`, id, userID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return ResponseProfile{}, ErrNotFound
+	}
+	return profile, err
+}
+
+func (s *Store) CreateResponseProfile(ctx context.Context, profile ResponseProfile) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO response_profiles (id, user_id, name, instructions, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		profile.ID, profile.UserID, profile.Name, profile.Instructions, toUnix(profile.CreatedAt), toUnix(profile.UpdatedAt))
+	if err != nil {
+		return fmt.Errorf("store: create response profile: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) UpdateResponseProfile(ctx context.Context, profile ResponseProfile) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE response_profiles SET name = ?, instructions = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+		profile.Name, profile.Instructions, toUnix(profile.UpdatedAt), profile.ID, profile.UserID)
+	if err != nil {
+		return fmt.Errorf("store: update response profile: %w", err)
+	}
+	return affectedOne(res, "update response profile")
+}
+
+func (s *Store) DeleteResponseProfile(ctx context.Context, id, userID string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM response_profiles WHERE id = ? AND user_id = ?`, id, userID)
+	if err != nil {
+		return fmt.Errorf("store: delete response profile: %w", err)
+	}
+	return affectedOne(res, "delete response profile")
+}
+
+func scanResponseProfile(row rowScanner) (ResponseProfile, error) {
+	var profile ResponseProfile
+	var createdAt, updatedAt int64
+	if err := row.Scan(&profile.ID, &profile.UserID, &profile.Name, &profile.Instructions, &createdAt, &updatedAt); err != nil {
+		return ResponseProfile{}, err
+	}
+	profile.CreatedAt = fromUnix(createdAt)
+	profile.UpdatedAt = fromUnix(updatedAt)
+	return profile, nil
 }
 
 // --- mcp_servers ---

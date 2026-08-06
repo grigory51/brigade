@@ -61,6 +61,8 @@ message Session {
   string image = 16;
   // auth_profile — закреплённый за сессией профиль авторизации агента.
   string auth_profile = 17;
+  string response_profile_id = 18;
+  string response_profile_name = 19;
 }
 
 message CreateSessionRequest {
@@ -80,6 +82,7 @@ message CreateSessionRequest {
   // Пусто — базовый образ brigade.
   string image = 7;
   string auth_profile = 8;
+  string response_profile_id = 9;
 }
 
 message CreateSessionResponse {
@@ -140,6 +143,11 @@ message SetSessionMcpServersRequest {
   repeated string mcp_server_ids = 2;
 }
 
+message SetSessionResponseProfileRequest {
+  string session_id = 1;
+  string response_profile_id = 2;
+}
+
 // Archive переносит сессию в архив: агент генерирует recap (summary), brigade сохраняет
 // снимок истории чата, останавливает контейнер и помечает сессию archived.
 message ArchiveSessionRequest {
@@ -197,6 +205,7 @@ service SessionService {
   // SetSessionMcpServers меняет набор MCP-серверов ACP-сессии и применяет его
   // переинициализацией агента. Не во время генерации.
   rpc SetSessionMcpServers(SetSessionMcpServersRequest) returns (Empty) {}
+  rpc SetSessionResponseProfile(SetSessionResponseProfileRequest) returns (UpdateSessionResponse) {}
   // Archive переносит сессию в архив (recap + снимок истории + остановка контейнера).
   // Чтение архива (список, история) — в отдельном ArchiveService.
   rpc Archive(ArchiveSessionRequest) returns (ArchiveSessionResponse) {}

@@ -6,6 +6,9 @@ import {
 } from "@assistant-ui/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckIcon, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { ConnectError } from "@connectrpc/connect";
+import { responseProfileClient, sessionClient } from "@/api/client";
 import { PendingContextProvider } from "@/components/assistant-ui/composer-context";
 import { AcpThread } from "./AcpThread";
 import { SelectionMenu } from "./SelectionMenu";
@@ -56,6 +59,41 @@ function AcpSessionInner({
   onReload: () => void;
   onReloadFinished: () => void;
 }) {
+  const [responseProfiles, setResponseProfiles] = useState<{ id: string; name: string; deleted?: boolean }[]>([]);
+  const [responseProfileId, setResponseProfileId] = useState("default");
+  const [responseProfileBusy, setResponseProfileBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([responseProfileClient.list({}), sessionClient.get({ sessionId })])
+      .then(([profiles, session]) => {
+        if (cancelled) return;
+        const selected = session.session?.responseProfileId || "default";
+        const items: { id: string; name: string; deleted?: boolean }[] = profiles.profiles.map((profile) => ({ id: profile.id, name: profile.name }));
+        if (!items.some((profile) => profile.id === selected)) {
+          items.push({ id: selected, name: session.session?.responseProfileName || "Удалённый профиль", deleted: true });
+        }
+        setResponseProfiles(items);
+        setResponseProfileId(selected);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [sessionId]);
+
+  const changeResponseProfile = useCallback(async (id: string) => {
+    if (id === responseProfileId) return;
+    setResponseProfileBusy(true);
+    try {
+      const result = await sessionClient.setSessionResponseProfile({ sessionId, responseProfileId: id });
+      setResponseProfileId(result.session?.responseProfileId || "default");
+      toast.success("Профиль ответов применён");
+    } catch (error) {
+      toast.error(error instanceof ConnectError ? error.rawMessage : "Не удалось применить профиль");
+    } finally {
+      setResponseProfileBusy(false);
+    }
+  }, [sessionId, responseProfileId]);
+
   const {
     runtime,
     permission,
@@ -88,6 +126,10 @@ function AcpSessionInner({
             onConfigChange={(configId, value) =>
               void setConfigOption(configId, value)
             }
+            responseProfiles={responseProfiles}
+            responseProfileId={responseProfileId}
+            responseProfileBusy={responseProfileBusy}
+            onResponseProfileChange={(id) => void changeResponseProfile(id)}
           />
         </div>
         <BackgroundActivity

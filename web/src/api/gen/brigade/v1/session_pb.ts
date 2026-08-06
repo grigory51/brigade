@@ -213,6 +213,16 @@ export class Session extends Message<Session> {
    */
   authProfile = "";
 
+  /**
+   * @generated from field: string response_profile_id = 18;
+   */
+  responseProfileId = "";
+
+  /**
+   * @generated from field: string response_profile_name = 19;
+   */
+  responseProfileName = "";
+
   constructor(data?: PartialMessage<Session>) {
     super();
     proto3.util.initPartial(data, this);
@@ -238,6 +248,8 @@ export class Session extends Message<Session> {
     { no: 15, name: "mcp_server_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 16, name: "image", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 17, name: "auth_profile", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 18, name: "response_profile_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 19, name: "response_profile_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Session {
@@ -305,6 +317,11 @@ export class CreateSessionRequest extends Message<CreateSessionRequest> {
    */
   authProfile = "";
 
+  /**
+   * @generated from field: string response_profile_id = 9;
+   */
+  responseProfileId = "";
+
   constructor(data?: PartialMessage<CreateSessionRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -320,6 +337,7 @@ export class CreateSessionRequest extends Message<CreateSessionRequest> {
     { no: 6, name: "mcp_server_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 7, name: "image", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 8, name: "auth_profile", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 9, name: "response_profile_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CreateSessionRequest {
@@ -832,6 +850,49 @@ export class SetSessionMcpServersRequest extends Message<SetSessionMcpServersReq
 
   static equals(a: SetSessionMcpServersRequest | PlainMessage<SetSessionMcpServersRequest> | undefined, b: SetSessionMcpServersRequest | PlainMessage<SetSessionMcpServersRequest> | undefined): boolean {
     return proto3.util.equals(SetSessionMcpServersRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.SetSessionResponseProfileRequest
+ */
+export class SetSessionResponseProfileRequest extends Message<SetSessionResponseProfileRequest> {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId = "";
+
+  /**
+   * @generated from field: string response_profile_id = 2;
+   */
+  responseProfileId = "";
+
+  constructor(data?: PartialMessage<SetSessionResponseProfileRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.SetSessionResponseProfileRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "response_profile_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SetSessionResponseProfileRequest {
+    return new SetSessionResponseProfileRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SetSessionResponseProfileRequest {
+    return new SetSessionResponseProfileRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SetSessionResponseProfileRequest {
+    return new SetSessionResponseProfileRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SetSessionResponseProfileRequest | PlainMessage<SetSessionResponseProfileRequest> | undefined, b: SetSessionResponseProfileRequest | PlainMessage<SetSessionResponseProfileRequest> | undefined): boolean {
+    return proto3.util.equals(SetSessionResponseProfileRequest, a, b);
   }
 }
 
