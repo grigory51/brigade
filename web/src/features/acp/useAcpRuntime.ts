@@ -448,14 +448,11 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
     agent,
     showThinking: true,
     adapters: { history },
-    // onCancel вызывается при клике Stop. Клиентская отмена рантайма гасит только UI и
-    // абортит СВОЙ AbortController, но не HTTP-запрос /run (@ag-ui/client абортит fetch
-    // отдельным контроллером, который никто не дёргает), поэтому turn агента продолжал
-    // генерироваться. Явно шлём session/cancel через отдельный эндпоинт — агент сворачивает
-    // turn кооперативно (stopReason=cancelled). Намеренно НЕ зовём agent.abortRun(): не
-    // обрываем HTTP/ctx, чтобы весь хвост turn'а пришёл под серверным turn-барьером и не
-    // слипся со следующим прогоном (см. backend acp.Client.Cancel/Prompt). Best-effort.
+    // onCancel вызывается при клике Stop. Закрываем старый AG-UI SSE, чтобы его незавершённый
+    // runAgent не пересёкся в runtime со следующим сообщением. Серверный turn от HTTP-контекста
+    // отвязан и сохранит хвост в history; отдельный session/cancel кооперативно остановит агента.
     onCancel: () => {
+      agent.abortRun();
       void acpClient.cancel({ threadId: sessionId }).catch(() => {});
     },
   });
