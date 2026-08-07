@@ -1,0 +1,10 @@
+{
+  "name": "brigade-site",
+  "private": true,
+  "scripts": {
+    "build": "rm -rf dist && mkdir -p dist/docs && cp index.html logo.svg install.sh dist/ && cp -R shots dist/ && yfm build -i docs -o dist/docs"
+  },
+  "devDependencies": {
+    "@diplodoc/cli": "5.50.3"
+  }
+}

@@ -7,6 +7,8 @@
 # Зависимости и сборки web.
 web/node_modules/
 web/dist/
+site/node_modules/
+site/dist/
 
 # Артефакты инструментов в корне репозитория (не часть проекта): node_modules —
 # остатки npx-запусков, data — служебное хранилище memoir, .playwright-mcp —

@@ -168,6 +168,7 @@
       <a class="brand" href="#top"><img src="logo.svg" alt="" /> brigade</a>
       <nav class="nav-links">
         <a class="btn btn-ghost btn-sm hide-sm" href="#features">Features</a>
+        <a class="btn btn-ghost btn-sm" href="docs/">Docs</a>
         <a class="btn btn-ghost btn-sm" href="https://github.com/grigory51/brigade" target="_blank" rel="noopener">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.09.68-.22.68-.49 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.49-1.11-1.49-.91-.64.07-.62.07-.62 1 .07 1.53 1.05 1.53 1.05.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.55-1.14-4.55-5.05 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05a9.4 9.4 0 0 1 5 0c1.91-1.32 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.92-2.34 4.79-4.57 5.04.36.32.68.94.68 1.9 0 1.37-.01 2.48-.01 2.82 0 .27.18.59.69.49A10.03 10.03 0 0 0 22 12.25C22 6.58 17.52 2 12 2Z"/></svg>
           GitHub
@@ -184,7 +185,7 @@
         <h1>Your coding agents,<br /><span class="accent">running on your hardware.</span></h1>
         <p class="lede">brigade keeps Claude Code and Codex sessions alive on your own server and mirrors them to the browser, macOS app and Telegram.</p>
         <div class="cta-row">
-          <a class="btn btn-primary" href="#quickstart">
+          <a class="btn btn-primary" href="docs/quickstart.html">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
             Get started
           </a>
@@ -450,32 +451,23 @@
     <div class="wrap">
       <div class="sec-head">
         <div class="eyebrow">Quick start</div>
-        <h2>Running in a couple of commands.</h2>
-        <p>Use the prebuilt Linux binary or the server container, then connect Claude Code or Codex from Settings.</p>
+        <h2>Running in one command.</h2>
+        <p>Use the installer for an isolated Docker setup, then connect Claude Code or Codex from Settings.</p>
       </div>
       <div class="qs-grid">
         <div class="code">
-          <div class="code-head"><span>Prebuilt binary — embeds the web UI</span><button class="copy" type="button">Copy</button></div>
-<pre><code><span class="cm"># latest linux/amd64 build from GitHub Releases</span>
-curl -LO https://raw.githubusercontent.com/grigory51/brigade/main/backend/config.example.yaml
-mv config.example.yaml config.yaml
-curl -L https://github.com/grigory51/brigade/releases/latest/download/brigade-linux-amd64.tar.gz | tar xz
-./brigade --config config.yaml   <span class="cm"># → http://localhost:8080</span></code></pre>
+          <div class="code-head"><span>Docker — recommended</span><button class="copy" type="button">Copy</button></div>
+<pre><code>curl -fsSL https://grigory51.github.io/brigade/install.sh | sudo sh
+
+<span class="cm"># → http://localhost:8080</span></code></pre>
         </div>
         <div class="code">
-          <div class="code-head"><span>Docker — host daemon</span><button class="copy" type="button">Copy</button></div>
-<pre><code>mkdir -p /srv/brigade/{workspace,agent-home,memory}
-docker run -d --name brigade -p 8080:8080 \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -v /srv/brigade:/srv/brigade \
-  -e <span class="ca">BRIGADE_MODE</span>=docker \
-  -e <span class="ca">BRIGADE_SQLITE_PATH</span>=/srv/brigade/brigade.db \
-  -e <span class="ca">BRIGADE_WORK_DIR</span>=/srv/brigade/workspace \
-  -e <span class="ca">BRIGADE_AGENT_HOME_DIR</span>=/srv/brigade/agent-home \
-  -e <span class="ca">BRIGADE_MEMORY__DIR</span>=/srv/brigade/memory \
-  -e <span class="ca">BRIGADE_AGENT_IMAGE</span>=ghcr.io/grigory51/brigade-agent:latest \
-  -e <span class="ca">BRIGADE_JWT__SECRET</span>=change-me \
-  ghcr.io/grigory51/brigade:latest</code></pre>
+          <div class="code-head"><span>Prebuilt Linux amd64 binary</span><button class="copy" type="button">Copy</button></div>
+<pre><code>curl -L https://github.com/grigory51/brigade/releases/latest/download/brigade-linux-amd64.tar.gz | tar xz
+curl -Lo config.yaml https://raw.githubusercontent.com/grigory51/brigade/main/backend/config.example.yaml
+./brigade --config config.yaml
+
+<span class="cm"># Edit the credentials before exposing the server.</span></code></pre>
         </div>
       </div>
       <p style="margin-top:18px; color:var(--muted-fg); font-size:14.5px;">
@@ -493,6 +485,7 @@ docker run -d --name brigade -p 8080:8080 \
         <div class="foot-meta" style="margin-top:10px">Self-hosted multiplexer for coding agents · MIT</div>
       </div>
       <div style="display:flex; flex-direction:column; align-items:flex-end; gap:10px">
+        <a class="btn btn-ghost btn-sm" href="docs/">Documentation</a>
         <a class="btn btn-ghost btn-sm" href="https://github.com/grigory51/brigade" target="_blank" rel="noopener">github.com/grigory51/brigade</a>
         <span class="status"><i class="sd"></i> Early and moving fast — run it behind a VPN</span>
       </div>

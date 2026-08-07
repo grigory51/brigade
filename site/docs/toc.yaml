@@ -1,0 +1,48 @@
+title: Brigade
+href: index.md
+items:
+  - name: Обзор
+    href: index.md
+  - name: Быстрый старт
+    href: quickstart.md
+  - name: Установка
+    expanded: true
+    items:
+      - name: Docker
+        href: installation/docker.md
+      - name: Linux-бинарь
+        href: installation/linux.md
+      - name: macOS
+        href: installation/macos.md
+      - name: Сборка из исходников
+        href: installation/source.md
+      - name: Обновление
+        href: installation/update.md
+  - name: Работа с Brigade
+    items:
+      - name: Сессии
+        href: guides/sessions.md
+      - name: Claude Code и Codex
+        href: guides/agents.md
+      - name: Среда агента
+        href: guides/environment.md
+      - name: MCP и секреты
+        href: guides/mcp.md
+      - name: Профили ответов
+        href: guides/profiles.md
+      - name: Память и архив
+        href: guides/memory.md
+      - name: Telegram
+        href: guides/telegram.md
+      - name: Уведомления
+        href: guides/notifications.md
+      - name: Файлы, preview и A2UI
+        href: guides/files-and-ui.md
+  - name: Эксплуатация
+    items:
+      - name: Конфигурация
+        href: reference/configuration.md
+      - name: Резервное копирование
+        href: reference/backup.md
+      - name: Диагностика
+        href: reference/troubleshooting.md

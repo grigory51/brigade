@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="https://grigory51.github.io/brigade">Website</a> ·
+  <a href="https://grigory51.github.io/brigade/docs/">Documentation</a> ·
   <a href="https://github.com/grigory51/brigade/releases">Releases</a> ·
   <a href="#quick-start">Quick start</a>
 </p>
