@@ -126,6 +126,7 @@ func newFakeHandle() *fakeHandle {
 type fakeACPSession struct {
 	generating bool
 	cancelled  bool
+	messages   []acp.Message
 }
 
 func (f *fakeACPSession) SetHooks(func(string, error), func(string)) {}
@@ -137,7 +138,7 @@ func (f *fakeACPSession) PromptAutoApprove(context.Context, string, func()) (str
 }
 func (f *fakeACPSession) Cancel(context.Context) error                { f.cancelled = true; return nil }
 func (f *fakeACPSession) FinishStreams()                              {}
-func (f *fakeACPSession) Messages() []acp.Message                     { return nil }
+func (f *fakeACPSession) Messages() []acp.Message                     { return f.messages }
 func (f *fakeACPSession) SeedMessages([]acp.Message)                  {}
 func (f *fakeACPSession) Commands() []agui.AvailableCommand           { return nil }
 func (f *fakeACPSession) ConfigOptions() []acpsdk.SessionConfigOption { return nil }
@@ -175,6 +176,24 @@ func TestReloadableCancelsGeneratingTurnOnlyForExplicitReload(t *testing.T) {
 	}
 	if client.cancelled {
 		t.Fatal("settings reload cancelled generating turn")
+	}
+}
+
+func TestPromptAutoApprovePreservesAssistantMessages(t *testing.T) {
+	r := newTestRegistry(t)
+	client := &fakeACPSession{messages: []acp.Message{
+		{ID: "u", Role: "user", Content: "Вопрос"},
+		{ID: "a1", Role: "assistant", Content: "Первое"},
+		{ID: "a2", Role: "assistant", Content: "Второе"},
+	}}
+	sess := store.Session{ID: "acp", UserID: "u1", Mode: store.SessionModeLocal, Kind: store.SessionKindACP, Status: store.SessionStatusRunning, CreatedAt: time.Now()}
+	if err := r.store.CreateSession(context.Background(), sess); err != nil {
+		t.Fatal(err)
+	}
+	r.live[sess.ID] = &live{owner: sess.UserID, kind: sess.Kind, client: client}
+	result, err := r.PromptAutoApprove(context.Background(), sess.ID, sess.UserID, "Вопрос")
+	if err != nil || len(result.Messages) != 2 || result.Messages[0] != "Первое" || result.Messages[1] != "Второе" {
+		t.Fatalf("result = %+v, err=%v", result, err)
 	}
 }
 

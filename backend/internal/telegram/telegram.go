@@ -52,6 +52,13 @@ type Service struct {
 	polls  map[string]context.CancelFunc
 	busy   map[string]bool
 	again  map[string]bool
+	latest map[telegramConversation]int64
+}
+
+type telegramConversation struct {
+	botID    string
+	chatID   int64
+	threadID int64
 }
 
 func New(st *store.Store, registry *session.Registry, images *agentimage.Service, mode, webhookURL string, secretKey []byte) *Service {
@@ -59,7 +66,7 @@ func New(st *store.Store, registry *session.Registry, images *agentimage.Service
 	return &Service{
 		store: st, registry: registry, images: images, api: newBotAPI(), mode: mode,
 		webhookURL: strings.TrimRight(webhookURL, "/"), secretKey: secretKey,
-		ctx: ctx, cancel: cancel, polls: make(map[string]context.CancelFunc), busy: make(map[string]bool), again: make(map[string]bool),
+		ctx: ctx, cancel: cancel, polls: make(map[string]context.CancelFunc), busy: make(map[string]bool), again: make(map[string]bool), latest: make(map[telegramConversation]int64),
 	}
 }
 
@@ -298,6 +305,10 @@ func (s *Service) accept(ctx context.Context, bot store.TelegramBot, update tele
 			return err
 		}
 	}
+	in := inboundFrom(update)
+	if in.message != nil && !in.guest {
+		s.rememberMessage(bot.ID, in.chatID, in.threadID, in.message.MessageID)
+	}
 	s.kick(bot.ID)
 	return nil
 }
@@ -438,8 +449,35 @@ type telegramInboundFile struct {
 type replyEnvelope struct {
 	Type      string                   `json:"type"`
 	Text      string                   `json:"text"`
+	Messages  []string                 `json:"messages,omitempty"`
 	SessionID string                   `json:"sessionId"`
 	Images    []acp.GeneratedImageFile `json:"images"`
+}
+
+func (s *Service) rememberMessage(botID string, chatID, threadID, messageID int64) {
+	if messageID == 0 {
+		return
+	}
+	key := telegramConversation{botID: botID, chatID: chatID, threadID: threadID}
+	s.mu.Lock()
+	if messageID > s.latest[key] {
+		s.latest[key] = messageID
+	}
+	s.mu.Unlock()
+}
+
+func (s *Service) replyToMessage(botID string, in inbound) int64 {
+	if in.guest || in.message == nil {
+		return 0
+	}
+	key := telegramConversation{botID: botID, chatID: in.chatID, threadID: in.threadID}
+	s.mu.Lock()
+	latest := s.latest[key]
+	s.mu.Unlock()
+	if latest != 0 && latest != in.message.MessageID {
+		return in.message.MessageID
+	}
+	return 0
 }
 
 func inboundFrom(update telegramUpdate) inbound {
@@ -881,6 +919,10 @@ func (s *Service) finishWithReply(bot store.TelegramBot, updates []inbound, answ
 
 func (s *Service) reply(ctx context.Context, bot store.TelegramBot, in inbound, text string) error {
 	reply := decodeReply(text)
+	messages := reply.Messages
+	if len(messages) == 0 && strings.TrimSpace(reply.Text) != "" {
+		messages = []string{reply.Text}
+	}
 	type loadedImage struct {
 		name string
 		data []byte
@@ -903,13 +945,14 @@ func (s *Service) reply(ctx context.Context, bot store.TelegramBot, in inbound, 
 		images = append(images, loadedImage{name: path.Base(image.Path), data: data})
 	}
 	if in.guest {
+		guestText := strings.Join(messages, "\n\n")
 		if in.guestInlineMessageID != "" {
 			if len(images) == 0 {
-				return s.api.editGuest(ctx, bot.Token, in.guestInlineMessageID, reply.Text)
+				return s.api.editGuest(ctx, bot.Token, in.guestInlineMessageID, guestText)
 			}
 			fileIDs := make([]string, 0, len(images))
 			for _, image := range images {
-				message, err := s.api.sendPhoto(ctx, bot.Token, bot.OwnerTelegramID, 0, image.name, image.data, true)
+				message, err := s.api.sendPhoto(ctx, bot.Token, bot.OwnerTelegramID, 0, 0, image.name, image.data, true)
 				if err != nil {
 					return err
 				}
@@ -919,29 +962,42 @@ func (s *Service) reply(ctx context.Context, bot store.TelegramBot, in inbound, 
 				fileIDs = append(fileIDs, message.Photo[len(message.Photo)-1].FileID)
 				_ = s.api.deleteMessage(ctx, bot.Token, bot.OwnerTelegramID, message.MessageID)
 			}
-			return s.api.editGuestImages(ctx, bot.Token, in.guestInlineMessageID, reply.Text, fileIDs)
+			return s.api.editGuestImages(ctx, bot.Token, in.guestInlineMessageID, guestText, fileIDs)
 		}
-		_, err := s.api.answerGuest(ctx, bot.Token, in.message.GuestQueryID, reply.Text)
+		_, err := s.api.answerGuest(ctx, bot.Token, in.message.GuestQueryID, guestText)
 		return err
 	}
-	if strings.TrimSpace(reply.Text) != "" || len(images) == 0 {
-		if err := s.api.sendMessage(ctx, bot.Token, in.chatID, in.threadID, reply.Text); err != nil {
-			return err
-		}
+	replyTo := s.replyToMessage(bot.ID, in)
+	if len(messages) == 0 && len(images) == 0 {
+		messages = []string{"Агент не вернул текстовый ответ."}
 	}
-	for _, image := range images {
-		if _, err := s.api.sendPhoto(ctx, bot.Token, in.chatID, in.threadID, image.name, image.data, false); err != nil {
+	for _, message := range messages {
+		sent, err := s.api.sendMessage(ctx, bot.Token, in.chatID, in.threadID, replyTo, message)
+		if err != nil {
 			return err
 		}
+		s.rememberMessage(bot.ID, in.chatID, in.threadID, sent.MessageID)
+		replyTo = 0
+	}
+	for index, image := range images {
+		photoReplyTo := int64(0)
+		if len(messages) == 0 && index == 0 {
+			photoReplyTo = replyTo
+		}
+		sent, err := s.api.sendPhoto(ctx, bot.Token, in.chatID, in.threadID, photoReplyTo, image.name, image.data, false)
+		if err != nil {
+			return err
+		}
+		s.rememberMessage(bot.ID, in.chatID, in.threadID, sent.MessageID)
 	}
 	return nil
 }
 
 func encodeReply(result session.PromptResult, sessionID string) string {
-	if len(result.Images) == 0 {
-		return result.Text
+	if len(result.Messages) == 1 && len(result.Images) == 0 {
+		return result.Messages[0]
 	}
-	encoded, _ := json.Marshal(replyEnvelope{Type: "brigade_reply", Text: result.Text, SessionID: sessionID, Images: result.Images})
+	encoded, _ := json.Marshal(replyEnvelope{Type: "brigade_reply", Messages: result.Messages, SessionID: sessionID, Images: result.Images})
 	return string(encoded)
 }
 

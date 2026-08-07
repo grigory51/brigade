@@ -181,13 +181,16 @@ func (a *botAPI) callMultipart(ctx context.Context, token, method string, fields
 	return a.do(req, method, out)
 }
 
-func (a *botAPI) sendPhoto(ctx context.Context, token string, chatID, threadID int64, filename string, data []byte, silent bool) (telegramMessage, error) {
+func (a *botAPI) sendPhoto(ctx context.Context, token string, chatID, threadID, replyToMessageID int64, filename string, data []byte, silent bool) (telegramMessage, error) {
 	fields := map[string]string{"chat_id": strconv.FormatInt(chatID, 10)}
 	if threadID != 0 {
 		fields["message_thread_id"] = strconv.FormatInt(threadID, 10)
 	}
 	if silent {
 		fields["disable_notification"] = "true"
+	}
+	if replyToMessageID != 0 {
+		fields["reply_parameters"] = fmt.Sprintf(`{"message_id":%d}`, replyToMessageID)
 	}
 	var message telegramMessage
 	err := a.callMultipart(ctx, token, "sendPhoto", fields, filename, data, &message)
@@ -265,7 +268,7 @@ func (a *botAPI) deleteWebhook(ctx context.Context, token string) error {
 	return a.call(ctx, token, "deleteWebhook", map[string]any{"drop_pending_updates": false}, nil)
 }
 
-func (a *botAPI) sendMessage(ctx context.Context, token string, chatID, threadID int64, text string) error {
+func (a *botAPI) sendMessage(ctx context.Context, token string, chatID, threadID, replyToMessageID int64, text string) (telegramMessage, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		text = "Агент не вернул текстовый ответ."
@@ -278,21 +281,29 @@ func (a *botAPI) sendMessage(ctx context.Context, token string, chatID, threadID
 		if threadID != 0 {
 			in["message_thread_id"] = threadID
 		}
-		if err := a.call(ctx, token, "sendRichMessage", in, nil); err == nil {
-			return nil
+		if replyToMessageID != 0 {
+			in["reply_parameters"] = map[string]any{"message_id": replyToMessageID}
+		}
+		var sent telegramMessage
+		if err := a.call(ctx, token, "sendRichMessage", in, &sent); err == nil {
+			return sent, nil
 		}
 	}
 	chunks := splitMessage(text, 4096)
-	for _, chunk := range chunks {
+	var sent telegramMessage
+	for index, chunk := range chunks {
 		in := map[string]any{"chat_id": chatID, "text": chunk}
 		if threadID != 0 {
 			in["message_thread_id"] = threadID
 		}
-		if err := a.call(ctx, token, "sendMessage", in, nil); err != nil {
-			return err
+		if index == 0 && replyToMessageID != 0 {
+			in["reply_parameters"] = map[string]any{"message_id": replyToMessageID}
+		}
+		if err := a.call(ctx, token, "sendMessage", in, &sent); err != nil {
+			return telegramMessage{}, err
 		}
 	}
-	return nil
+	return sent, nil
 }
 
 func (a *botAPI) sendTyping(ctx context.Context, token string, chatID, threadID int64) error {

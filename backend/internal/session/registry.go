@@ -1465,8 +1465,8 @@ func (r *Registry) EnsureACPClient(ctx context.Context, sessionID, userID string
 
 // PromptResult — содержательный ответ turn'а для внешнего персонального транспорта.
 type PromptResult struct {
-	Text   string
-	Images []acp.GeneratedImageFile
+	Messages []string
+	Images   []acp.GeneratedImageFile
 }
 
 // PromptAutoApprove отправляет prompt в ACP-сессию из доверенного персонального канала.
@@ -1497,7 +1497,7 @@ func (r *Registry) PromptAutoApprove(ctx context.Context, sessionID, userID, tex
 			images = append(images, acp.GeneratedImageFiles(message.Result)...)
 		}
 	}
-	return PromptResult{Text: strings.Join(parts, "\n\n"), Images: images}, nil
+	return PromptResult{Messages: parts, Images: images}, nil
 }
 
 // acpAlive проверяет живость среды ACP-сессии: docker — существует ли запущенный контейнер

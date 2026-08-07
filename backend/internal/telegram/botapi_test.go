@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/grigory51/brigade/backend/internal/session"
 	"github.com/grigory51/brigade/backend/internal/store"
 )
 
@@ -59,6 +61,33 @@ func TestGuestCallerAndMessageSplit(t *testing.T) {
 	defer service.Close()
 	if service.webhookSecret("bot", "old-token") == service.webhookSecret("bot", "new-token") {
 		t.Fatal("webhook secret must rotate with BotFather token")
+	}
+}
+
+func TestReplyPreservesAssistantMessagesAndTracksConversation(t *testing.T) {
+	service := New(nil, nil, nil, "webhook", "", nil)
+	defer service.Close()
+	var requests []string
+	nextMessageID := int64(12)
+	service.api.http.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		body, _ := io.ReadAll(request.Body)
+		requests = append(requests, string(body))
+		response := fmt.Sprintf(`{"ok":true,"result":{"message_id":%d}}`, nextMessageID)
+		nextMessageID++
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(response))}, nil
+	})
+	in := inbound{message: &telegramMessage{MessageID: 10}, chatID: 42, threadID: 7}
+	service.rememberMessage("bot", in.chatID, in.threadID, 11)
+	encoded := encodeReply(session.PromptResult{Messages: []string{"Первое", "Второе"}}, "session")
+	if err := service.reply(t.Context(), store.TelegramBot{ID: "bot", Token: "token"}, in, encoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(requests) != 2 ||
+		!strings.Contains(requests[0], `"markdown":"Первое"`) ||
+		!strings.Contains(requests[0], `"reply_parameters":{"message_id":10}`) ||
+		!strings.Contains(requests[1], `"markdown":"Второе"`) ||
+		strings.Contains(requests[1], `"reply_parameters"`) {
+		t.Fatalf("unexpected replies: %#v", requests)
 	}
 }
 
@@ -145,7 +174,9 @@ func TestRepliesUseRichMarkdown(t *testing.T) {
 		body, _ := io.ReadAll(request.Body)
 		requests = append(requests, request.URL.Path+" "+request.Header.Get("Content-Type")+" "+string(body))
 		response := `{"ok":true,"result":{"inline_message_id":"guest-inline"}}`
-		if strings.HasSuffix(request.URL.Path, "/sendPhoto") {
+		if strings.HasSuffix(request.URL.Path, "/sendRichMessage") {
+			response = `{"ok":true,"result":{"message_id":21}}`
+		} else if strings.HasSuffix(request.URL.Path, "/sendPhoto") {
 			response = `{"ok":true,"result":{"message_id":12,"photo":[{"file_id":"small"},{"file_id":"large"}]}}`
 		}
 		return &http.Response{
@@ -154,7 +185,8 @@ func TestRepliesUseRichMarkdown(t *testing.T) {
 			Body:       io.NopCloser(strings.NewReader(response)),
 		}, nil
 	})
-	if err := api.sendMessage(context.Background(), "token", 42, 7, "**жирный**"); err != nil {
+	sent, err := api.sendMessage(context.Background(), "token", 42, 7, 9, "**жирный**")
+	if err != nil || sent.MessageID != 21 {
 		t.Fatal(err)
 	}
 	inlineMessageID, err := api.answerGuest(context.Background(), "token", "query", "# Заголовок")
@@ -170,7 +202,7 @@ func TestRepliesUseRichMarkdown(t *testing.T) {
 	if err := api.setReaction(context.Background(), "token", 42, 9, ""); err != nil {
 		t.Fatal(err)
 	}
-	photo, err := api.sendPhoto(context.Background(), "token", 42, 7, "generated.png", []byte("png"), false)
+	photo, err := api.sendPhoto(context.Background(), "token", 42, 7, 9, "generated.png", []byte("png"), false)
 	if err != nil || len(photo.Photo) != 2 {
 		t.Fatal(err)
 	}
@@ -180,6 +212,7 @@ func TestRepliesUseRichMarkdown(t *testing.T) {
 	if len(requests) != 7 ||
 		!strings.Contains(requests[0], "/sendRichMessage ") ||
 		!strings.Contains(requests[0], `"message_thread_id":7`) ||
+		!strings.Contains(requests[0], `"reply_parameters":{"message_id":9}`) ||
 		!strings.Contains(requests[0], `"markdown":"**жирный**"`) ||
 		!strings.Contains(requests[1], "/answerGuestQuery ") ||
 		!strings.Contains(requests[1], `"rich_message":{"markdown":"# Заголовок"}`) ||
@@ -190,6 +223,8 @@ func TestRepliesUseRichMarkdown(t *testing.T) {
 		!strings.Contains(requests[4], `"message_id":9,"reaction":[]`) ||
 		!strings.Contains(requests[5], "/sendPhoto multipart/form-data;") ||
 		!strings.Contains(requests[5], `name="photo"; filename="generated.png"`) ||
+		!strings.Contains(requests[5], `name="reply_parameters"`) ||
+		!strings.Contains(requests[5], `{"message_id":9}`) ||
 		!strings.Contains(requests[6], `"media":[{"id":"image0","media":{"media":"large","type":"photo"}}]`) {
 		t.Fatalf("unexpected rich requests: %#v", requests)
 	}
