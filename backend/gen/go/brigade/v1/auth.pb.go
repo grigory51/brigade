@@ -613,6 +613,7 @@ type CodexLogin struct {
 	Status        string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
 	Output        string                 `protobuf:"bytes,3,opt,name=output,proto3" json:"output,omitempty"`
 	Error         string                 `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	ConnectionId  string                 `protobuf:"bytes,5,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -671,6 +672,13 @@ func (x *CodexLogin) GetOutput() string {
 func (x *CodexLogin) GetError() string {
 	if x != nil {
 		return x.Error
+	}
+	return ""
+}
+
+func (x *CodexLogin) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
 	}
 	return ""
 }
@@ -1381,13 +1389,14 @@ const file_brigade_v1_auth_proto_rawDesc = "" +
 	"\x1dSetCodexDefaultProfileRequest\x12\x18\n" +
 	"\aprofile\x18\x01 \x01(\tR\aprofile\"9\n" +
 	"\x1aSetCodexChatGPTAuthRequest\x12\x1b\n" +
-	"\tauth_json\x18\x01 \x01(\tR\bauthJson\"b\n" +
+	"\tauth_json\x18\x01 \x01(\tR\bauthJson\"\x87\x01\n" +
 	"\n" +
 	"CodexLogin\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12\x16\n" +
 	"\x06output\x18\x03 \x01(\tR\x06output\x12\x14\n" +
-	"\x05error\x18\x04 \x01(\tR\x05error\"&\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\x12#\n" +
+	"\rconnection_id\x18\x05 \x01(\tR\fconnectionId\"&\n" +
 	"\x14GetCodexLoginRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\")\n" +
 	"\x17CancelCodexLoginRequest\x12\x0e\n" +

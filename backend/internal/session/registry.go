@@ -412,6 +412,12 @@ func (r *Registry) agentToken(ctx context.Context, sess store.Session) string {
 	if agent.Get(sess.AgentType).ID != agent.Claude.ID {
 		return ""
 	}
+	if connection, err := r.store.GetAgentConnection(ctx, sess.UserID, sess.AuthProfile); err == nil {
+		return connection.Secret
+	}
+	if sess.AuthProfile != "" && sess.AuthProfile != "claude-token" {
+		return ""
+	}
 	return r.userClaudeToken(ctx, sess.UserID)
 }
 
@@ -534,25 +540,46 @@ func (r *Registry) endTeardown(sessionID string) {
 // передаётся ACP-агенту первым ходом (для CLI игнорируется — ввод идёт по WS).
 func (r *Registry) Create(ctx context.Context, userID string, kind store.SessionKind, agentType, authProfile, cwd, prompt string, mcpServerIDs []string, image, instructionProfile, responseProfileID string) (store.Session, error) {
 	at := agent.Get(agentType)
+	connection, connectionErr := r.store.GetAgentConnection(ctx, userID, authProfile)
+	if connectionErr != nil && !errors.Is(connectionErr, store.ErrNotFound) {
+		return store.Session{}, connectionErr
+	}
+	if connectionErr == nil {
+		if connection.AgentType != at.ID || connection.Secret == "" {
+			return store.Session{}, errors.New("session: выбранное подключение агента недоступно")
+		}
+	} else if authProfile != "" && authProfile != "claude-token" && authProfile != "chatgpt" && authProfile != "api-key" {
+		return store.Session{}, errors.New("session: подключение агента не найдено")
+	}
 	if at.ID == agent.Codex.ID {
 		settings, err := r.store.GetUserSettings(ctx, userID)
 		if err != nil {
 			return store.Session{}, err
 		}
-		if authProfile == "" {
+		profile := connection.AuthProfile
+		secret := connection.Secret
+		if connectionErr != nil && authProfile == "" {
 			authProfile = settings.CodexDefaultProfile
 		}
-		if authProfile == "" {
+		if connectionErr != nil && authProfile == "" {
 			if settings.CodexAuthJSON != "" {
 				authProfile = "chatgpt"
 			} else if settings.CodexAPIKey != "" {
 				authProfile = "api-key"
 			}
 		}
-		if (authProfile == "chatgpt" && settings.CodexAuthJSON == "") || (authProfile == "api-key" && settings.CodexAPIKey == "") {
+		if connectionErr != nil {
+			profile = authProfile
+			if profile == "chatgpt" {
+				secret = settings.CodexAuthJSON
+			} else {
+				secret = settings.CodexAPIKey
+			}
+		}
+		if secret == "" {
 			return store.Session{}, errors.New("session: выбранный профиль Codex не настроен")
 		}
-		if authProfile == "chatgpt" && r.mode == store.SessionModeDocker && r.claudeHomeDir == "" {
+		if profile == "chatgpt" && r.mode == store.SessionModeDocker && r.claudeHomeDir == "" {
 			return store.Session{}, errors.New("session: ChatGPT-профиль Codex в Docker требует настроенный agent home")
 		}
 	} else {
@@ -560,7 +587,7 @@ func (r *Registry) Create(ctx context.Context, userID string, kind store.Session
 	}
 	// ACP стартует агента сразу (non-interactive) — без токена не авторизуется.
 	// CLI можно создать без токена: пользователь авторизуется в терминале.
-	if at.ID == agent.Claude.ID && kind == store.SessionKindACP && r.userClaudeToken(ctx, userID) == "" {
+	if at.ID == agent.Claude.ID && kind == store.SessionKindACP && connection.Secret == "" && r.userClaudeToken(ctx, userID) == "" {
 		return store.Session{}, ErrClaudeTokenRequired
 	}
 	// Набор MCP проверяем до записи сессии: сломанную ссылку на секрет пользователь должен
@@ -1026,27 +1053,25 @@ func (r *Registry) agentEnv(ctx context.Context, sess store.Session, token strin
 			config, _ := json.Marshal(map[string]string{"developer_instructions": instructions})
 			env = append(env, "CODEX_CONFIG="+string(config))
 		}
-		settings, err := r.store.GetUserSettings(ctx, sess.UserID)
-		if err != nil {
-			log.Printf("session %s: codex auth: %v", sess.ID, err)
-		} else {
+		profile, secret := r.codexCredentials(ctx, sess)
+		if secret != "" {
 			hostHome := filepath.Join(r.hostCwd(sess), ".brigade", "codex-home")
 			codexHome := hostHome
 			if sess.Mode == store.SessionModeDocker {
 				codexHome = filepath.Join(sess.Cwd, ".brigade", "codex-home")
 			}
 			env = append(env, "CODEX_HOME="+codexHome)
-			if sess.AuthProfile == "api-key" {
-				env = append(env, "CODEX_API_KEY="+settings.CodexAPIKey, "OPENAI_API_KEY="+settings.CodexAPIKey)
+			if profile == "api-key" {
+				env = append(env, "CODEX_API_KEY="+secret, "OPENAI_API_KEY="+secret)
 			} else if err := os.MkdirAll(hostHome, 0o700); err == nil {
 				authPath := filepath.Join(hostHome, "auth.json")
 				if current, err := os.ReadFile(authPath); err == nil && json.Valid(current) {
 					// Codex ротирует refresh-токены сам. После аварийного рестарта файл может
 					// быть новее БД — импортируем его до запуска и не затираем старой копией.
-					if err := r.store.SetCodexAuthJSON(ctx, sess.UserID, string(current)); err != nil {
+					if err := r.persistCodexAuth(ctx, sess, string(current)); err != nil {
 						log.Printf("session %s: persist recovered codex auth: %v", sess.ID, err)
 					}
-				} else if err := os.WriteFile(authPath, []byte(settings.CodexAuthJSON), 0o600); err != nil {
+				} else if err := os.WriteFile(authPath, []byte(secret), 0o600); err != nil {
 					log.Printf("session %s: write codex auth: %v", sess.ID, err)
 				}
 			}
@@ -1056,6 +1081,34 @@ func (r *Registry) agentEnv(ctx context.Context, sess store.Session, token strin
 	env = append(env, r.installMcpProject(ctx, sess)...)
 	r.chownCodexHome(sess)
 	return env
+}
+
+func (r *Registry) codexCredentials(ctx context.Context, sess store.Session) (string, string) {
+	if connection, err := r.store.GetAgentConnection(ctx, sess.UserID, sess.AuthProfile); err == nil {
+		return connection.AuthProfile, connection.Secret
+	}
+	if sess.AuthProfile != "" && sess.AuthProfile != "chatgpt" && sess.AuthProfile != "api-key" {
+		return "", ""
+	}
+	settings, err := r.store.GetUserSettings(ctx, sess.UserID)
+	if err != nil {
+		log.Printf("session %s: codex auth: %v", sess.ID, err)
+		return "", ""
+	}
+	if sess.AuthProfile == "api-key" {
+		return "api-key", settings.CodexAPIKey
+	}
+	return "chatgpt", settings.CodexAuthJSON
+}
+
+func (r *Registry) persistCodexAuth(ctx context.Context, sess store.Session, data string) error {
+	if _, err := r.store.GetAgentConnection(ctx, sess.UserID, sess.AuthProfile); err == nil {
+		return r.store.SetAgentConnectionSecret(ctx, sess.UserID, sess.AuthProfile, data)
+	}
+	if sess.AuthProfile != "" && sess.AuthProfile != "chatgpt" && sess.AuthProfile != "api-key" {
+		return errors.New("session: подключение Codex удалено")
+	}
+	return r.store.SetCodexAuthJSON(ctx, sess.UserID, data)
 }
 
 // chownCodexHome передаёт агенту созданные backend'ом CODEX_HOME и файлы внутри.
@@ -1990,12 +2043,13 @@ func (r *Registry) Delete(ctx context.Context, sessionID, userID string) error {
 }
 
 func (r *Registry) removeCodexAuth(sess store.Session) {
-	if agent.Get(sess.AgentType).ID != agent.Codex.ID || sess.AuthProfile != "chatgpt" {
+	profile, _ := r.codexCredentials(context.Background(), sess)
+	if agent.Get(sess.AgentType).ID != agent.Codex.ID || profile != "chatgpt" {
 		return
 	}
 	path := filepath.Join(r.hostCwd(sess), ".brigade", "codex-home", "auth.json")
 	if data, err := os.ReadFile(path); err == nil && json.Valid(data) {
-		if err := r.store.SetCodexAuthJSON(context.Background(), sess.UserID, string(data)); err != nil {
+		if err := r.persistCodexAuth(context.Background(), sess, string(data)); err != nil {
 			log.Printf("session %s: persist codex auth: %v", sess.ID, err)
 		}
 	}

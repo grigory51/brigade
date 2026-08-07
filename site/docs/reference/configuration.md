@@ -20,7 +20,7 @@ Brigade читает YAML и применяет поверх него перем
 | `memory.dir` | `BRIGADE_MEMORY__DIR` | Рабочие копии memory-репозиториев |
 | `telegram.mode` | `BRIGADE_TELEGRAM__MODE` | `poll` или `webhook` |
 
-`jwt.secret` должен оставаться стабильным: им зашифрованы agent tokens, MCP secrets, notification tokens и Telegram BotFather tokens.
+`jwt.secret` должен оставаться стабильным: им зашифрованы секреты подключений агентов, MCP, notification connections и Telegram BotFather tokens.
 
 ## TLS и reverse proxy
 

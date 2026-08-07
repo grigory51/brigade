@@ -63,6 +63,7 @@ message CodexLogin {
   string status = 2;
   string output = 3;
   string error = 4;
+  string connection_id = 5;
 }
 message GetCodexLoginRequest { string id = 1; }
 message CancelCodexLoginRequest { string id = 1; }

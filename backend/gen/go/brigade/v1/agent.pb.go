@@ -181,12 +181,273 @@ func (x *ListAgentTypesResponse) GetAgentTypes() []*AgentType {
 	return nil
 }
 
+type AgentConnection struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	AgentType     string                 `protobuf:"bytes,3,opt,name=agent_type,json=agentType,proto3" json:"agent_type,omitempty"`
+	AuthProfile   string                 `protobuf:"bytes,4,opt,name=auth_profile,json=authProfile,proto3" json:"auth_profile,omitempty"`
+	SecretSet     bool                   `protobuf:"varint,5,opt,name=secret_set,json=secretSet,proto3" json:"secret_set,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentConnection) Reset() {
+	*x = AgentConnection{}
+	mi := &file_brigade_v1_agent_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentConnection) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentConnection) ProtoMessage() {}
+
+func (x *AgentConnection) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_agent_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentConnection.ProtoReflect.Descriptor instead.
+func (*AgentConnection) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_agent_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *AgentConnection) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *AgentConnection) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *AgentConnection) GetAgentType() string {
+	if x != nil {
+		return x.AgentType
+	}
+	return ""
+}
+
+func (x *AgentConnection) GetAuthProfile() string {
+	if x != nil {
+		return x.AuthProfile
+	}
+	return ""
+}
+
+func (x *AgentConnection) GetSecretSet() bool {
+	if x != nil {
+		return x.SecretSet
+	}
+	return false
+}
+
+type ListAgentConnectionsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Connections   []*AgentConnection     `protobuf:"bytes,1,rep,name=connections,proto3" json:"connections,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAgentConnectionsResponse) Reset() {
+	*x = ListAgentConnectionsResponse{}
+	mi := &file_brigade_v1_agent_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAgentConnectionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAgentConnectionsResponse) ProtoMessage() {}
+
+func (x *ListAgentConnectionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_agent_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAgentConnectionsResponse.ProtoReflect.Descriptor instead.
+func (*ListAgentConnectionsResponse) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_agent_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ListAgentConnectionsResponse) GetConnections() []*AgentConnection {
+	if x != nil {
+		return x.Connections
+	}
+	return nil
+}
+
+type SaveAgentConnectionRequest struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Connection *AgentConnection       `protobuf:"bytes,1,opt,name=connection,proto3" json:"connection,omitempty"`
+	// Новый секрет. Пустое значение сохраняет прежний секрет существующего подключения.
+	Secret        string `protobuf:"bytes,2,opt,name=secret,proto3" json:"secret,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveAgentConnectionRequest) Reset() {
+	*x = SaveAgentConnectionRequest{}
+	mi := &file_brigade_v1_agent_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveAgentConnectionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveAgentConnectionRequest) ProtoMessage() {}
+
+func (x *SaveAgentConnectionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_agent_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveAgentConnectionRequest.ProtoReflect.Descriptor instead.
+func (*SaveAgentConnectionRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_agent_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *SaveAgentConnectionRequest) GetConnection() *AgentConnection {
+	if x != nil {
+		return x.Connection
+	}
+	return nil
+}
+
+func (x *SaveAgentConnectionRequest) GetSecret() string {
+	if x != nil {
+		return x.Secret
+	}
+	return ""
+}
+
+type AgentConnectionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentConnectionRequest) Reset() {
+	*x = AgentConnectionRequest{}
+	mi := &file_brigade_v1_agent_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentConnectionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentConnectionRequest) ProtoMessage() {}
+
+func (x *AgentConnectionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_agent_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentConnectionRequest.ProtoReflect.Descriptor instead.
+func (*AgentConnectionRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_agent_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *AgentConnectionRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type StartAgentCodexLoginRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Connection    *AgentConnection       `protobuf:"bytes,1,opt,name=connection,proto3" json:"connection,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartAgentCodexLoginRequest) Reset() {
+	*x = StartAgentCodexLoginRequest{}
+	mi := &file_brigade_v1_agent_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartAgentCodexLoginRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartAgentCodexLoginRequest) ProtoMessage() {}
+
+func (x *StartAgentCodexLoginRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_agent_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartAgentCodexLoginRequest.ProtoReflect.Descriptor instead.
+func (*StartAgentCodexLoginRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_agent_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *StartAgentCodexLoginRequest) GetConnection() *AgentConnection {
+	if x != nil {
+		return x.Connection
+	}
+	return nil
+}
+
 var File_brigade_v1_agent_proto protoreflect.FileDescriptor
 
 const file_brigade_v1_agent_proto_rawDesc = "" +
 	"\n" +
 	"\x16brigade/v1/agent.proto\x12\n" +
-	"brigade.v1\"\xa8\x01\n" +
+	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\xa8\x01\n" +
 	"\tAgentType\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12'\n" +
@@ -196,9 +457,34 @@ const file_brigade_v1_agent_proto_rawDesc = "" +
 	"\x15ListAgentTypesRequest\"P\n" +
 	"\x16ListAgentTypesResponse\x126\n" +
 	"\vagent_types\x18\x01 \x03(\v2\x15.brigade.v1.AgentTypeR\n" +
-	"agentTypes2i\n" +
+	"agentTypes\"\x96\x01\n" +
+	"\x0fAgentConnection\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1d\n" +
+	"\n" +
+	"agent_type\x18\x03 \x01(\tR\tagentType\x12!\n" +
+	"\fauth_profile\x18\x04 \x01(\tR\vauthProfile\x12\x1d\n" +
+	"\n" +
+	"secret_set\x18\x05 \x01(\bR\tsecretSet\"]\n" +
+	"\x1cListAgentConnectionsResponse\x12=\n" +
+	"\vconnections\x18\x01 \x03(\v2\x1b.brigade.v1.AgentConnectionR\vconnections\"q\n" +
+	"\x1aSaveAgentConnectionRequest\x12;\n" +
+	"\n" +
+	"connection\x18\x01 \x01(\v2\x1b.brigade.v1.AgentConnectionR\n" +
+	"connection\x12\x16\n" +
+	"\x06secret\x18\x02 \x01(\tR\x06secret\"(\n" +
+	"\x16AgentConnectionRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"Z\n" +
+	"\x1bStartAgentCodexLoginRequest\x12;\n" +
+	"\n" +
+	"connection\x18\x01 \x01(\v2\x1b.brigade.v1.AgentConnectionR\n" +
+	"connection2\xb7\x03\n" +
 	"\fAgentService\x12Y\n" +
-	"\x0eListAgentTypes\x12!.brigade.v1.ListAgentTypesRequest\x1a\".brigade.v1.ListAgentTypesResponse\"\x00B\xa7\x01\n" +
+	"\x0eListAgentTypes\x12!.brigade.v1.ListAgentTypesRequest\x1a\".brigade.v1.ListAgentTypesResponse\"\x00\x12P\n" +
+	"\x0fListConnections\x12\x11.brigade.v1.Empty\x1a(.brigade.v1.ListAgentConnectionsResponse\"\x00\x12W\n" +
+	"\x0eSaveConnection\x12&.brigade.v1.SaveAgentConnectionRequest\x1a\x1b.brigade.v1.AgentConnection\"\x00\x12K\n" +
+	"\x10DeleteConnection\x12\".brigade.v1.AgentConnectionRequest\x1a\x11.brigade.v1.Empty\"\x00\x12T\n" +
+	"\x0fStartCodexLogin\x12'.brigade.v1.StartAgentCodexLoginRequest\x1a\x16.brigade.v1.CodexLogin\"\x00B\xa7\x01\n" +
 	"\x0ecom.brigade.v1B\n" +
 	"AgentProtoP\x01Z@github.com/grigory51/brigade/backend/gen/go/brigade/v1;brigadev1\xa2\x02\x03BXX\xaa\x02\n" +
 	"Brigade.V1\xca\x02\n" +
@@ -216,21 +502,39 @@ func file_brigade_v1_agent_proto_rawDescGZIP() []byte {
 	return file_brigade_v1_agent_proto_rawDescData
 }
 
-var file_brigade_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_brigade_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_brigade_v1_agent_proto_goTypes = []any{
-	(*AgentType)(nil),              // 0: brigade.v1.AgentType
-	(*ListAgentTypesRequest)(nil),  // 1: brigade.v1.ListAgentTypesRequest
-	(*ListAgentTypesResponse)(nil), // 2: brigade.v1.ListAgentTypesResponse
+	(*AgentType)(nil),                    // 0: brigade.v1.AgentType
+	(*ListAgentTypesRequest)(nil),        // 1: brigade.v1.ListAgentTypesRequest
+	(*ListAgentTypesResponse)(nil),       // 2: brigade.v1.ListAgentTypesResponse
+	(*AgentConnection)(nil),              // 3: brigade.v1.AgentConnection
+	(*ListAgentConnectionsResponse)(nil), // 4: brigade.v1.ListAgentConnectionsResponse
+	(*SaveAgentConnectionRequest)(nil),   // 5: brigade.v1.SaveAgentConnectionRequest
+	(*AgentConnectionRequest)(nil),       // 6: brigade.v1.AgentConnectionRequest
+	(*StartAgentCodexLoginRequest)(nil),  // 7: brigade.v1.StartAgentCodexLoginRequest
+	(*Empty)(nil),                        // 8: brigade.v1.Empty
+	(*CodexLogin)(nil),                   // 9: brigade.v1.CodexLogin
 }
 var file_brigade_v1_agent_proto_depIdxs = []int32{
 	0, // 0: brigade.v1.ListAgentTypesResponse.agent_types:type_name -> brigade.v1.AgentType
-	1, // 1: brigade.v1.AgentService.ListAgentTypes:input_type -> brigade.v1.ListAgentTypesRequest
-	2, // 2: brigade.v1.AgentService.ListAgentTypes:output_type -> brigade.v1.ListAgentTypesResponse
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	3, // 1: brigade.v1.ListAgentConnectionsResponse.connections:type_name -> brigade.v1.AgentConnection
+	3, // 2: brigade.v1.SaveAgentConnectionRequest.connection:type_name -> brigade.v1.AgentConnection
+	3, // 3: brigade.v1.StartAgentCodexLoginRequest.connection:type_name -> brigade.v1.AgentConnection
+	1, // 4: brigade.v1.AgentService.ListAgentTypes:input_type -> brigade.v1.ListAgentTypesRequest
+	8, // 5: brigade.v1.AgentService.ListConnections:input_type -> brigade.v1.Empty
+	5, // 6: brigade.v1.AgentService.SaveConnection:input_type -> brigade.v1.SaveAgentConnectionRequest
+	6, // 7: brigade.v1.AgentService.DeleteConnection:input_type -> brigade.v1.AgentConnectionRequest
+	7, // 8: brigade.v1.AgentService.StartCodexLogin:input_type -> brigade.v1.StartAgentCodexLoginRequest
+	2, // 9: brigade.v1.AgentService.ListAgentTypes:output_type -> brigade.v1.ListAgentTypesResponse
+	4, // 10: brigade.v1.AgentService.ListConnections:output_type -> brigade.v1.ListAgentConnectionsResponse
+	3, // 11: brigade.v1.AgentService.SaveConnection:output_type -> brigade.v1.AgentConnection
+	8, // 12: brigade.v1.AgentService.DeleteConnection:output_type -> brigade.v1.Empty
+	9, // 13: brigade.v1.AgentService.StartCodexLogin:output_type -> brigade.v1.CodexLogin
+	9, // [9:14] is the sub-list for method output_type
+	4, // [4:9] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_brigade_v1_agent_proto_init() }
@@ -238,13 +542,14 @@ func file_brigade_v1_agent_proto_init() {
 	if File_brigade_v1_agent_proto != nil {
 		return
 	}
+	file_brigade_v1_auth_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_brigade_v1_agent_proto_rawDesc), len(file_brigade_v1_agent_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

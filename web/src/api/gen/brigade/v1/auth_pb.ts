@@ -526,6 +526,11 @@ export class CodexLogin extends Message<CodexLogin> {
    */
   error = "";
 
+  /**
+   * @generated from field: string connection_id = 5;
+   */
+  connectionId = "";
+
   constructor(data?: PartialMessage<CodexLogin>) {
     super();
     proto3.util.initPartial(data, this);
@@ -538,6 +543,7 @@ export class CodexLogin extends Message<CodexLogin> {
     { no: 2, name: "status", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "output", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 4, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "connection_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CodexLogin {

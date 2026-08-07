@@ -7,7 +7,7 @@ import {
   mcpClient,
   telegramClient,
 } from "@/api/client";
-import type { AgentType } from "@/api/gen/brigade/v1/agent_pb";
+import type { AgentConnection } from "@/api/gen/brigade/v1/agent_pb";
 import type { AgentImagesSettings } from "@/api/gen/brigade/v1/auth_pb";
 import type { McpServer } from "@/api/gen/brigade/v1/mcp_pb";
 import type { TelegramBot } from "@/api/gen/brigade/v1/telegram_pb";
@@ -66,10 +66,9 @@ export function TelegramSection({
 }) {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [token, setToken] = useState("");
-  const [agents, setAgents] = useState<AgentType[] | null>(null);
+  const [connections, setConnections] = useState<AgentConnection[] | null>(null);
   const [mcp, setMcp] = useState<McpServer[]>([]);
   const [images, setImages] = useState<AgentImagesSettings | null>(null);
-  const [codexProfiles, setCodexProfiles] = useState<string[]>([]);
   const [bindingURL, setBindingURL] = useState("");
   const [saving, setSaving] = useState(false);
   const [binding, setBinding] = useState(false);
@@ -78,25 +77,15 @@ export function TelegramSection({
   useEffect(() => {
     let alive = true;
     void Promise.all([
-      agentClient.listAgentTypes({}),
+      agentClient.listConnections({}),
       mcpClient.listServers({}),
       authClient.getAgentImages({}),
-      authClient.getCodexSettings({}),
-      authClient.getClaudeSettings({}),
-    ]).then(([agentResult, mcpResult, imageResult, codex, claude]) => {
+    ]).then(([agentResult, mcpResult, imageResult]) => {
       if (!alive) return;
-      const codexReady = codex.chatgptConnected || codex.apiKeySet;
-      setAgents(agentResult.agentTypes.filter((agent) =>
-        agent.supportedKinds.includes("acp") &&
-        (agent.id === "codex" ? codexReady : agent.id === "claude-code" ? claude.tokenSet : true),
-      ));
+      setConnections(agentResult.connections);
       setMcp(mcpResult.servers);
       setImages(imageResult);
-      setCodexProfiles([
-        ...(codex.chatgptConnected ? ["chatgpt"] : []),
-        ...(codex.apiKeySet ? ["api-key"] : []),
-      ]);
-    }).catch(() => alive && setAgents([]));
+    }).catch(() => alive && setConnections([]));
     return () => { alive = false; };
   }, []);
 
@@ -129,19 +118,12 @@ export function TelegramSection({
   }, [bots, selectedId, onSelect]);
 
   useEffect(() => {
-    if (!agents?.length || agents.some((agent) => agent.id === draft.agentType)) return;
-    setDraft((current) => ({ ...current, agentType: agents[0].id }));
-  }, [agents, draft.agentType]);
-
-  useEffect(() => {
-    if (draft.agentType === "codex") {
-      if (!codexProfiles.includes(draft.authProfile)) {
-        setDraft((current) => ({ ...current, authProfile: codexProfiles[0] ?? "" }));
-      }
-    } else if (draft.agentType && draft.authProfile !== "claude-token") {
-      setDraft((current) => ({ ...current, authProfile: "claude-token" }));
-    }
-  }, [draft.agentType, draft.authProfile, codexProfiles]);
+    if (!connections?.length || connections.some((connection) => connection.id === draft.authProfile)) return;
+    const connection = connections.find((item) =>
+      item.agentType === draft.agentType && item.authProfile === draft.authProfile,
+    ) ?? connections[0];
+    setDraft((current) => ({ ...current, agentType: connection.agentType, authProfile: connection.id }));
+  }, [connections, draft.agentType, draft.authProfile]);
 
   useEffect(() => {
     if (!bindingURL || selected?.ownerConnected) return;
@@ -153,7 +135,7 @@ export function TelegramSection({
     return () => window.clearInterval(timer);
   }, [bindingURL, selected?.ownerConnected, onChange]);
 
-  if (!bots || agents === null) return <Loading />;
+  if (!bots || connections === null) return <Loading />;
 
   const patch = (next: Partial<Draft>) => setDraft((current) => ({ ...current, ...next }));
 
@@ -247,28 +229,19 @@ export function TelegramSection({
         <SecretNote>Шифруется на сервере и обратно не отдаётся</SecretNote>
       </div>
 
-      <div className="grid grid-cols-2 gap-3.5">
+      <div className="flex flex-col gap-2">
         <div className="flex flex-col gap-2">
           <FieldLabel>Агент</FieldLabel>
-          <Select value={draft.agentType} onValueChange={(agentType) => patch({ agentType })}>
+          <Select value={draft.authProfile} onValueChange={(id) => {
+            const connection = connections.find((item) => item.id === id);
+            if (connection) patch({ agentType: connection.agentType, authProfile: connection.id });
+          }}>
             <SelectTrigger className="h-[41px] w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
-              {agents.map((agent) => <SelectItem key={agent.id} value={agent.id}>{agent.name}</SelectItem>)}
+              {connections.map((connection) => <SelectItem key={connection.id} value={connection.id}>{connection.name}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
-        {draft.agentType === "codex" && (
-          <div className="flex flex-col gap-2">
-            <FieldLabel>Авторизация</FieldLabel>
-            <Select value={draft.authProfile} onValueChange={(authProfile) => patch({ authProfile })}>
-              <SelectTrigger className="h-[41px] w-full"><SelectValue placeholder="Не настроена" /></SelectTrigger>
-              <SelectContent>
-                {codexProfiles.includes("chatgpt") && <SelectItem value="chatgpt">ChatGPT Plus</SelectItem>}
-                {codexProfiles.includes("api-key") && <SelectItem value="api-key">OpenAI API key</SelectItem>}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
       </div>
 
       {images && images.images.length > 0 && (

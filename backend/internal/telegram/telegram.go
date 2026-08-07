@@ -162,6 +162,13 @@ func (s *Service) Save(ctx context.Context, userID string, bot store.TelegramBot
 }
 
 func (s *Service) validateTemplate(ctx context.Context, bot *store.TelegramBot) error {
+	connectionFound := false
+	if connection, err := s.store.GetAgentConnection(ctx, bot.UserID, bot.AuthProfile); err == nil {
+		bot.AgentType = connection.AgentType
+		connectionFound = true
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return err
+	}
 	found := false
 	for _, candidate := range agent.List() {
 		if candidate.ID == bot.AgentType && candidate.CommandFor(store.SessionKindACP) != "" {
@@ -172,7 +179,9 @@ func (s *Service) validateTemplate(ctx context.Context, bot *store.TelegramBot) 
 	if !found {
 		return fmt.Errorf("telegram: agent %q does not support ACP", bot.AgentType)
 	}
-	if bot.AgentType == agent.Codex.ID {
+	if connectionFound {
+		// Новые шаблоны ссылаются на конкретное подключение; профиль хранится в нём.
+	} else if bot.AgentType == agent.Codex.ID {
 		if bot.AuthProfile != "chatgpt" && bot.AuthProfile != "api-key" {
 			return errors.New("telegram: Codex auth profile must be chatgpt or api-key")
 		}

@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package brigade.v1;
 
+import "brigade/v1/auth.proto";
+
 // AgentType — доступный тип кодинг-агента. Режим взаимодействия (CLI-терминал
 // или ACP) задаётся отдельно через SessionKind при создании сессии и не зависит
 // от агента: один агент поддерживает оба режима.
@@ -20,7 +22,32 @@ message ListAgentTypesResponse {
   repeated AgentType agent_types = 1;
 }
 
+message AgentConnection {
+  string id = 1;
+  string name = 2;
+  string agent_type = 3;
+  string auth_profile = 4;
+  bool secret_set = 5;
+}
+
+message ListAgentConnectionsResponse {
+  repeated AgentConnection connections = 1;
+}
+
+message SaveAgentConnectionRequest {
+  AgentConnection connection = 1;
+  // Новый секрет. Пустое значение сохраняет прежний секрет существующего подключения.
+  string secret = 2;
+}
+
+message AgentConnectionRequest { string id = 1; }
+message StartAgentCodexLoginRequest { AgentConnection connection = 1; }
+
 // AgentService — справочник доступных типов агентов.
 service AgentService {
   rpc ListAgentTypes(ListAgentTypesRequest) returns (ListAgentTypesResponse) {}
+  rpc ListConnections(Empty) returns (ListAgentConnectionsResponse) {}
+  rpc SaveConnection(SaveAgentConnectionRequest) returns (AgentConnection) {}
+  rpc DeleteConnection(AgentConnectionRequest) returns (Empty) {}
+  rpc StartCodexLogin(StartAgentCodexLoginRequest) returns (CodexLogin) {}
 }

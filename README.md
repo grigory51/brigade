@@ -25,8 +25,9 @@ native macOS app.
 
 ## Features
 
-- **Claude Code and Codex** — choose either agent for every session. Claude accepts a
-  subscription token; Codex supports ChatGPT device login and OpenAI API keys.
+- **Claude Code and Codex** — add multiple named agent connections, including several
+  accounts of the same provider, then choose a connection for each session. Claude
+  accepts a subscription token; Codex supports ChatGPT device login and OpenAI API keys.
 - **CLI or ACP chat** — use a full pty through xterm.js, or structured ACP → AG-UI chat
   with diffs, plans, permission controls, slash commands, model settings and live usage.
 - **Local or Docker runtime** — run agents as host processes or in Docker. ACP sessions
@@ -44,8 +45,8 @@ native macOS app.
 - **Personal memory and archive in git** — notes are searchable Markdown in your own
   private repository. Archiving a session commits its complete read-only chat under
   `archive/`; deleting a session removes it permanently.
-- **Telegram bots** — connect your own BotFather token and choose the ACP agent, auth
-  profile, image and MCP set. Direct chats and forum topics map to brigade sessions;
+- **Telegram bots** — connect your own BotFather token and choose an agent connection,
+  image and MCP set. Direct chats and forum topics map to brigade sessions;
   replies support formatted text, files and images. Instances use polling or webhooks;
   the desktop app always polls.
 - **Notifications** — connect multiple notification destinations per user. The backend
@@ -59,8 +60,9 @@ native macOS app.
 
 ## Quick start
 
-Choose at least one agent after signing in: a Claude subscription token, or Codex through
-ChatGPT device login / an OpenAI API key. Docker is only required for containerized
+Add at least one named agent connection after signing in: Claude with a subscription
+token, or Codex through ChatGPT device login / an OpenAI API key. You can keep multiple
+Claude and Codex accounts in one profile. Docker is only required for containerized
 sessions.
 
 ### Prebuilt binary
@@ -131,9 +133,9 @@ nested fields. Examples: `BRIGADE_MODE`, `BRIGADE_JWT__SECRET`,
 `BRIGADE_TELEGRAM__MODE`.
 
 See [`backend/config.example.yaml`](backend/config.example.yaml) for the annotated list.
-Runtime mode and Telegram polling/webhook transport belong to the instance. Agent auth,
-custom images, MCP servers, notification connections, Telegram bot tokens and memory
-remotes belong to individual users and are configured in the UI.
+Runtime mode and Telegram polling/webhook transport belong to the instance. Agent
+connections, custom images, MCP servers, notification connections, Telegram bot tokens
+and memory remotes belong to individual users and are configured in the UI.
 
 ## Architecture
 

@@ -11,11 +11,8 @@ import {
   Bot,
   Check,
   ChevronDown,
-  ChevronRight,
   Container,
   Copy,
-  Eye,
-  EyeOff,
   Info,
   KeyRound,
   Loader2,
@@ -28,7 +25,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { authClient, mcpClient, notificationClient, telegramClient } from "@/api/client";
+import { agentClient, authClient, mcpClient, notificationClient, telegramClient } from "@/api/client";
+import type { AgentConnection } from "@/api/gen/brigade/v1/agent_pb";
 import type { NotificationBackend } from "@/api/gen/brigade/v1/notification_pb";
 import type { TelegramBot } from "@/api/gen/brigade/v1/telegram_pb";
 import { Button } from "@/components/ui/button";
@@ -41,7 +39,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { TerminalOutput } from "@/features/terminal/TerminalView";
+import { AgentConnectionsSection } from "./AgentConnectionsSection";
 import { EnvironmentSection } from "./EnvironmentSection";
 import { McpSection } from "./McpSection";
 import { TelegramSection } from "./TelegramSection";
@@ -73,9 +71,9 @@ import {
  * в поле всегда пустой драфт, а состояние показывается флагом «задан».
  */
 
-type SectionId = "agents" | "claude" | "codex" | "mcp" | "profiles" | "env" | "memory" | "ssh" | "notifications" | "telegram";
+type SectionId = "agents" | "mcp" | "profiles" | "env" | "memory" | "ssh" | "notifications" | "telegram";
 
-const SECTIONS: SectionId[] = ["agents", "claude", "codex", "mcp", "profiles", "env", "memory", "ssh", "notifications", "telegram"];
+const SECTIONS: SectionId[] = ["agents", "mcp", "profiles", "env", "memory", "ssh", "notifications", "telegram"];
 
 const AGENTS_OPEN_KEY = "brigade.settings.agentsOpen";
 
@@ -85,6 +83,8 @@ export function SettingsPage() {
   const active =
     section === "ntfy"
       ? "notifications"
+      : section === "claude" || section === "codex"
+        ? "agents"
       : (SECTIONS as string[]).includes(section ?? "")
         ? (section as SectionId)
         : "agents";
@@ -93,6 +93,7 @@ export function SettingsPage() {
     () => localStorage.getItem(AGENTS_OPEN_KEY) !== "0",
   );
   const [notificationsOpen, setNotificationsOpen] = useState(true);
+  const [selectedAgent, setSelectedAgent] = useState("new");
   const [selectedNotification, setSelectedNotification] = useState("");
   const [integrationsOpen, setIntegrationsOpen] = useState(true);
   const [selectedTelegram, setSelectedTelegram] = useState("");
@@ -103,8 +104,7 @@ export function SettingsPage() {
   // Состояние всех разделов живёт здесь: точки в навигации показывают статус каждого
   // раздела, не открывая его. Статус считается от текущих значений формы — меняется
   // сразу, не дожидаясь сохранения.
-  const [claudeTokenSet, setClaudeTokenSet] = useState<boolean | null>(null);
-  const [codex, setCodex] = useState<{apiKeySet: boolean; chatgptConnected: boolean; defaultProfile: string} | null>(null);
+  const [agentConnections, setAgentConnections] = useState<AgentConnection[] | null>(null);
   const [remote, setRemote] = useState<string | null>(null);
   const [publicKey, setPublicKey] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationBackend[] | null>(null);
@@ -116,13 +116,9 @@ export function SettingsPage() {
 
   useEffect(() => {
     let alive = true;
-    void authClient
-      .getClaudeSettings({})
-      .then((r) => alive && setClaudeTokenSet(r.tokenSet))
-      .catch(() => alive && setClaudeTokenSet(false));
-    void authClient.getCodexSettings({})
-      .then((r) => alive && setCodex({apiKeySet: r.apiKeySet, chatgptConnected: r.chatgptConnected, defaultProfile: r.defaultProfile}))
-      .catch(() => alive && setCodex({apiKeySet: false, chatgptConnected: false, defaultProfile: ""}));
+    void agentClient.listConnections({})
+      .then((result) => alive && setAgentConnections(result.connections))
+      .catch(() => alive && setAgentConnections([]));
     void authClient
       .getMemorySettings({})
       .then((r) => alive && setRemote(r.remote))
@@ -184,40 +180,26 @@ export function SettingsPage() {
           />
           {agentsOpen && (
             <div className="ml-[19px] border-l pl-[11px]">
-              {claudeTokenSet && (
+              {agentConnections?.map((connection) => (
                 <button
+                  key={connection.id}
                   type="button"
-                  onClick={() => go("claude")}
+                  onClick={() => { setSelectedAgent(connection.id); go("agents"); }}
                   className={cn(
                     "flex w-full items-center gap-2 rounded-[7px] px-[9px] py-[7px] text-[12.5px] transition-colors",
-                    active === "claude"
-                      ? "bg-card text-foreground"
-                      : "text-[#e7e5df] hover:bg-card hover:text-foreground",
+                    active === "agents" && selectedAgent === connection.id ? "bg-card text-foreground" : "text-[#e7e5df] hover:bg-card hover:text-foreground",
                   )}
                 >
-                  <AgentMark agent="claude" />
-                  <span className="min-w-0 flex-1 truncate text-left">Claude Code</span>
+                  <AgentMark agent={connection.agentType === "codex" ? "codex" : "claude"} />
+                  <span className="min-w-0 flex-1 truncate text-left">{connection.name}</span>
                 </button>
-              )}
-              {(codex?.apiKeySet || codex?.chatgptConnected) && (
-                <button
-                  type="button"
-                  onClick={() => go("codex")}
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-[7px] px-[9px] py-[7px] text-[12.5px] transition-colors",
-                    active === "codex" ? "bg-card text-foreground" : "text-[#e7e5df] hover:bg-card hover:text-foreground",
-                  )}
-                >
-                  <AgentMark agent="codex" />
-                  <span className="min-w-0 flex-1 truncate text-left">Codex</span>
-                </button>
-              )}
+              ))}
               <button
                 type="button"
-                onClick={() => go("agents")}
+                onClick={() => { setSelectedAgent("new"); go("agents"); }}
                 className={cn(
                   "flex w-full items-center gap-2 rounded-[7px] px-[9px] py-[7px] text-[12.5px] transition-colors",
-                  active === "agents"
+                  active === "agents" && selectedAgent === "new"
                     ? "bg-card text-foreground"
                     : "text-muted-foreground hover:bg-card hover:text-foreground",
                 )}
@@ -365,20 +347,13 @@ export function SettingsPage() {
             className="mx-auto flex max-w-[680px] animate-[section-in_0.24s_cubic-bezier(0.2,0.8,0.2,1)] flex-col gap-[18px] px-[34px] pt-6 pb-[90px]"
           >
             {active === "agents" && (
-              <AgentSetupSection
-                claudeTokenSet={claudeTokenSet}
-                codex={codex}
-                onClaudeChange={setClaudeTokenSet}
-                onCodexChange={setCodex}
+              <AgentConnectionsSection
+                connections={agentConnections}
+                selectedId={selectedAgent}
+                onSelect={setSelectedAgent}
+                onChange={setAgentConnections}
               />
             )}
-            {active === "claude" && (
-              <ClaudeSection
-                tokenSet={claudeTokenSet}
-                onChange={setClaudeTokenSet}
-              />
-            )}
-            {active === "codex" && <CodexSection state={codex} onChange={setCodex} />}
             {active === "mcp" && <McpSection onCountChange={setMcpCount} />}
             {active === "profiles" && <ResponseProfilesSection />}
             {active === "env" && <EnvironmentSection />}
@@ -475,419 +450,6 @@ function AgentMark({
         </svg>
       )}
     </span>
-  );
-}
-
-function AgentSetupSection({
-  claudeTokenSet,
-  codex,
-  onClaudeChange,
-  onCodexChange,
-}: {
-  claudeTokenSet: boolean | null;
-  codex: CodexState | null;
-  onClaudeChange: (value: boolean) => void;
-  onCodexChange: (value: CodexState) => void;
-}) {
-  const [agent, setAgent] = useState<"claude" | "codex">(
-    claudeTokenSet ? "codex" : "claude",
-  );
-  const selector = (
-    <div className="flex flex-col gap-2">
-      <FieldLabel>Агент</FieldLabel>
-      <Select value={agent} onValueChange={(value) => setAgent(value as "claude" | "codex")}>
-        <SelectTrigger className="h-[41px] w-full"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="claude">Claude Code</SelectItem>
-          <SelectItem value="codex">Codex</SelectItem>
-        </SelectContent>
-      </Select>
-    </div>
-  );
-
-  return agent === "claude" ? (
-    <ClaudeSection tokenSet={claudeTokenSet} onChange={onClaudeChange} selector={selector} />
-  ) : (
-    <CodexSection state={codex} onChange={onCodexChange} selector={selector} />
-  );
-}
-
-// ─── Агенты → Claude Code ─────────────────────────────────────────────────────
-
-function ClaudeSection({
-  tokenSet,
-  onChange,
-  selector,
-}: {
-  tokenSet: boolean | null;
-  onChange: (v: boolean) => void;
-  selector?: ReactNode;
-}) {
-  const [draft, setDraft] = useState("");
-  const [reveal, setReveal] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  const save = useCallback(
-    async (token: string) => {
-      setSaving(true);
-      try {
-        const res = await authClient.setClaudeToken({ token });
-        onChange(res.tokenSet);
-        setDraft("");
-        setReveal(false);
-        toast.success(res.tokenSet ? "Токен Claude сохранён" : "Токен Claude очищен");
-      } catch (err) {
-        toast.error(errorText(err, "Не удалось сохранить токен"));
-      } finally {
-        setSaving(false);
-      }
-    },
-    [onChange],
-  );
-
-  if (tokenSet === null) return <Loading />;
-
-  return (
-    <>
-      <div className="flex items-center gap-1.5 text-[11.5px] text-[#7a776f]">
-        Агенты
-        <ChevronRight className="size-3" />
-        <span className="text-muted-foreground">Claude</span>
-      </div>
-
-      <div className="flex flex-col gap-[18px]">
-        <div className="flex items-center gap-3">
-          <AgentMark agent="claude" large />
-          <div className="min-w-0">
-            <div className="flex items-center gap-2.5">
-              <h2 className="text-[16.5px] font-semibold">Claude Code</h2>
-              <Badge on={tokenSet}>
-                {tokenSet ? "токен задан" : "токен не задан"}
-              </Badge>
-            </div>
-            {/* Техстрока: видно, что это обычный ACP-агент, а не особая сущность. */}
-            <div className="font-mono text-[11.5px] text-[#7a776f]">
-              acp · claude-code · подписочный токен
-            </div>
-          </div>
-        </div>
-
-        <Description>
-          Подписочный токен Claude Code — создаётся командой{" "}
-          <Code>claude setup-token</Code>. Используется для авторизации агента в ваших
-          сессиях.
-        </Description>
-
-        {selector}
-
-        <div className="flex flex-col gap-2">
-          <FieldLabel>{tokenSet ? "Новый токен" : "Токен"}</FieldLabel>
-          <div className="flex items-start gap-2">
-            <div className="relative flex-1">
-              <Input
-                type={reveal ? "text" : "password"}
-                placeholder="sk-ant-oat01-…"
-                autoComplete="off"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                className="h-[41px] bg-[#1c1b1a] pr-10 font-mono text-[12.5px] focus-visible:border-[#5a4034]"
-              />
-              <button
-                type="button"
-                onClick={() => setReveal((v) => !v)}
-                aria-label={reveal ? "Скрыть токен" : "Показать токен"}
-                className="absolute inset-y-0 right-0 flex w-[33px] items-center justify-center rounded-r-md text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
-              >
-                {reveal ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-              </button>
-            </div>
-            <Button
-              className="h-[41px]"
-              disabled={saving || !draft.trim()}
-              onClick={() => void save(draft.trim())}
-            >
-              {saving && <Loader2 className="size-4 animate-spin" />}
-              Сохранить
-            </Button>
-          </div>
-          <SecretNote>
-            Шифруется на сервере, после сохранения не отображается — только флаг «задан»
-          </SecretNote>
-        </div>
-
-        {tokenSet && (
-          <DangerZone
-            title="Отключить агента"
-            hint="Сессии с этим агентом перестанут создаваться"
-          >
-            <Button
-              variant="outline"
-              disabled={saving}
-              onClick={() => void save("")}
-            >
-              Очистить токен
-            </Button>
-          </DangerZone>
-        )}
-      </div>
-    </>
-  );
-}
-
-type CodexState = {
-  apiKeySet: boolean;
-  chatgptConnected: boolean;
-  defaultProfile: string;
-};
-
-function CodexSection({
-  state,
-  onChange,
-  selector,
-}: {
-  state: CodexState | null;
-  onChange: (state: CodexState) => void;
-  selector?: ReactNode;
-}) {
-  const [apiKey, setApiKey] = useState("");
-  const [authJSON, setAuthJSON] = useState("");
-  const [authMethod, setAuthMethod] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [loginId, setLoginId] = useState("");
-  const [loginOutput, setLoginOutput] = useState("");
-
-  const apply = (next: CodexState) =>
-    onChange({
-      apiKeySet: next.apiKeySet,
-      chatgptConnected: next.chatgptConnected,
-      defaultProfile: next.defaultProfile,
-    });
-
-  const startLogin = async () => {
-    setSaving(true);
-    setLoginOutput("Запускаем Codex device login…\r\n");
-    try {
-      const login = await authClient.startCodexLogin({});
-      setLoginId(login.id);
-      if (login.output) setLoginOutput(login.output);
-      toast.success("Device login запущен");
-    } catch (err) {
-      const message = errorText(err, "Не удалось запустить Codex login");
-      setLoginOutput(message);
-      toast.error(message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!loginId) return;
-    const timer = window.setInterval(() => {
-      void authClient
-        .getCodexLogin({ id: loginId })
-        .then(async (login) => {
-          setLoginOutput(login.output || login.error);
-          if (login.status === "completed") {
-            window.clearInterval(timer);
-            setLoginId("");
-            apply(await authClient.getCodexSettings({}));
-            toast.success("ChatGPT подключён");
-          } else if (login.status === "failed") {
-            window.clearInterval(timer);
-            setLoginId("");
-            toast.error(login.error || "Codex login завершился с ошибкой");
-          }
-        })
-        .catch((err) => {
-          window.clearInterval(timer);
-          setLoginId("");
-          toast.error(errorText(err, "Не удалось получить состояние Codex login"));
-        });
-    }, 700);
-    return () => window.clearInterval(timer);
-  }, [loginId]);
-
-  const run = async (work: () => Promise<CodexState>, message: string) => {
-    setSaving(true);
-    try {
-      apply(await work());
-      toast.success(message);
-    } catch (err) {
-      toast.error(errorText(err, "Не удалось сохранить настройки Codex"));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const save = async () => {
-    await run(async () => {
-      if (selectedMethod === "chatgpt" && authJSON.trim()) {
-        await authClient.setCodexChatGPTAuth({ authJson: authJSON.trim() });
-        setAuthJSON("");
-      } else if (selectedMethod === "api-key" && apiKey.trim()) {
-        await authClient.setCodexApiKey({ apiKey: apiKey.trim() });
-        setApiKey("");
-      }
-      return authClient.setCodexDefaultProfile({ profile: selectedMethod });
-    }, "Настройки Codex сохранены");
-  };
-
-  if (state === null) return <Loading />;
-  const profiles = [
-    state.chatgptConnected && "chatgpt",
-    state.apiKeySet && "api-key",
-  ].filter(Boolean) as string[];
-  const selectedMethod =
-    authMethod ||
-    (profiles.includes(state.defaultProfile)
-      ? state.defaultProfile
-      : profiles[0] || "chatgpt");
-  return (
-    <>
-      <div className="flex items-center gap-1.5 text-[11.5px] text-[#7a776f]">
-        Агенты
-        <ChevronRight className="size-3" />
-        <span className="text-muted-foreground">Codex</span>
-      </div>
-      <div className="flex flex-col gap-[18px]">
-        <div className="flex items-center gap-3">
-          <AgentMark agent="codex" large />
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h2 className="text-[16.5px] font-semibold">Codex</h2>
-              <Badge on={profiles.length > 0}>
-                {profiles.length > 0 ? "подключён" : "не настроен"}
-              </Badge>
-            </div>
-            <div className="font-mono text-[11.5px] text-[#7a776f]">
-              acp · codex · ChatGPT Plus / API
-            </div>
-          </div>
-        </div>
-        <Description>
-          Профиль авторизации закрепляется за сессией при создании. Секреты хранятся
-          зашифрованными и материализуются только для процесса Codex.
-        </Description>
-
-        {selector}
-
-        <div className="flex flex-col gap-2">
-          <FieldLabel>Способ авторизации</FieldLabel>
-          <Select
-            value={selectedMethod}
-            onValueChange={setAuthMethod}
-          >
-            <SelectTrigger className="h-[41px] w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="chatgpt">ChatGPT Plus</SelectItem>
-              <SelectItem value="api-key">OpenAI API Key</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {selectedMethod === "chatgpt" && <div className="flex flex-col gap-2">
-        <FieldLabel>ChatGPT Plus</FieldLabel>
-        <Description>
-          Device login откроет официальный поток Codex: перейдите по адресу из инструкции
-          и введите одноразовый код. Brigade не получает пароль ChatGPT.
-        </Description>
-        <div className="flex gap-2">
-          <Button
-            disabled={saving || Boolean(loginId)}
-            onClick={() => void startLogin()}
-          >
-            {(saving || loginId) && <Loader2 className="size-4 animate-spin" />}
-            Подключить ChatGPT
-          </Button>
-          {loginId && (
-            <Button
-              variant="outline"
-              onClick={() =>
-                void authClient
-                  .cancelCodexLogin({ id: loginId })
-                  .then(() => setLoginId(""))
-              }
-            >
-              Отмена
-            </Button>
-          )}
-        </div>
-        {loginOutput && <TerminalOutput content={loginOutput} />}
-        <Description>
-          Если device login недоступен на сервере, можно импортировать{" "}
-          <Code>~/.codex/auth.json</Code> с доверенной машины.
-        </Description>
-        <textarea
-          value={authJSON}
-          onChange={(e) => setAuthJSON(e.target.value)}
-          placeholder={'{"auth_mode":"chatgpt",…}'}
-          className="min-h-24 rounded-md border bg-[#1c1b1a] px-3 py-2 font-mono text-xs outline-none focus:border-[#5a4034]"
-          spellCheck={false}
-        />
-          <div className="flex gap-2">
-            {state.chatgptConnected && (
-              <Button
-                variant="outline"
-                disabled={saving}
-                onClick={() =>
-                  void run(
-                    () => authClient.disconnectCodexChatGPT({}),
-                    "ChatGPT отключён",
-                  )
-                }
-              >
-                Отключить
-              </Button>
-            )}
-          </div>
-          <SecretNote>
-            Файл принимается по защищённому соединению и сохраняется в vault; API никогда
-            не возвращает его содержимое
-          </SecretNote>
-        </div>}
-
-        {selectedMethod === "api-key" && <div className="flex flex-col gap-2">
-          <FieldLabel>OpenAI API key</FieldLabel>
-          <div className="flex gap-2">
-            <Input
-              type="password"
-              autoComplete="off"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="sk-…"
-              className="h-[41px] bg-[#1c1b1a] font-mono text-[12.5px]"
-            />
-            {state.apiKeySet && (
-              <Button
-                variant="outline"
-                disabled={saving}
-                onClick={() =>
-                  void run(
-                    () => authClient.setCodexApiKey({ apiKey: "" }),
-                    "API key удалён",
-                  )
-                }
-              >
-                Удалить
-              </Button>
-            )}
-          </div>
-        </div>}
-
-        <Button
-          className="self-start"
-          disabled={saving || (selectedMethod === "chatgpt"
-            ? !state.chatgptConnected && !authJSON.trim()
-            : !state.apiKeySet && !apiKey.trim())}
-          onClick={() => void save()}
-        >
-          {saving && <Loader2 className="size-4 animate-spin" />}
-          Сохранить
-        </Button>
-      </div>
-    </>
   );
 }
 

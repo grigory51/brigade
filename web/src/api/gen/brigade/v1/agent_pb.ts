@@ -141,3 +141,220 @@ export class ListAgentTypesResponse extends Message<ListAgentTypesResponse> {
   }
 }
 
+/**
+ * @generated from message brigade.v1.AgentConnection
+ */
+export class AgentConnection extends Message<AgentConnection> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name = "";
+
+  /**
+   * @generated from field: string agent_type = 3;
+   */
+  agentType = "";
+
+  /**
+   * @generated from field: string auth_profile = 4;
+   */
+  authProfile = "";
+
+  /**
+   * @generated from field: bool secret_set = 5;
+   */
+  secretSet = false;
+
+  constructor(data?: PartialMessage<AgentConnection>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.AgentConnection";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "agent_type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "auth_profile", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "secret_set", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): AgentConnection {
+    return new AgentConnection().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): AgentConnection {
+    return new AgentConnection().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): AgentConnection {
+    return new AgentConnection().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: AgentConnection | PlainMessage<AgentConnection> | undefined, b: AgentConnection | PlainMessage<AgentConnection> | undefined): boolean {
+    return proto3.util.equals(AgentConnection, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.ListAgentConnectionsResponse
+ */
+export class ListAgentConnectionsResponse extends Message<ListAgentConnectionsResponse> {
+  /**
+   * @generated from field: repeated brigade.v1.AgentConnection connections = 1;
+   */
+  connections: AgentConnection[] = [];
+
+  constructor(data?: PartialMessage<ListAgentConnectionsResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.ListAgentConnectionsResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "connections", kind: "message", T: AgentConnection, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ListAgentConnectionsResponse {
+    return new ListAgentConnectionsResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ListAgentConnectionsResponse {
+    return new ListAgentConnectionsResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ListAgentConnectionsResponse {
+    return new ListAgentConnectionsResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: ListAgentConnectionsResponse | PlainMessage<ListAgentConnectionsResponse> | undefined, b: ListAgentConnectionsResponse | PlainMessage<ListAgentConnectionsResponse> | undefined): boolean {
+    return proto3.util.equals(ListAgentConnectionsResponse, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.SaveAgentConnectionRequest
+ */
+export class SaveAgentConnectionRequest extends Message<SaveAgentConnectionRequest> {
+  /**
+   * @generated from field: brigade.v1.AgentConnection connection = 1;
+   */
+  connection?: AgentConnection;
+
+  /**
+   * Новый секрет. Пустое значение сохраняет прежний секрет существующего подключения.
+   *
+   * @generated from field: string secret = 2;
+   */
+  secret = "";
+
+  constructor(data?: PartialMessage<SaveAgentConnectionRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.SaveAgentConnectionRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "connection", kind: "message", T: AgentConnection },
+    { no: 2, name: "secret", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SaveAgentConnectionRequest {
+    return new SaveAgentConnectionRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SaveAgentConnectionRequest {
+    return new SaveAgentConnectionRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SaveAgentConnectionRequest {
+    return new SaveAgentConnectionRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SaveAgentConnectionRequest | PlainMessage<SaveAgentConnectionRequest> | undefined, b: SaveAgentConnectionRequest | PlainMessage<SaveAgentConnectionRequest> | undefined): boolean {
+    return proto3.util.equals(SaveAgentConnectionRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.AgentConnectionRequest
+ */
+export class AgentConnectionRequest extends Message<AgentConnectionRequest> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  constructor(data?: PartialMessage<AgentConnectionRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.AgentConnectionRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): AgentConnectionRequest {
+    return new AgentConnectionRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): AgentConnectionRequest {
+    return new AgentConnectionRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): AgentConnectionRequest {
+    return new AgentConnectionRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: AgentConnectionRequest | PlainMessage<AgentConnectionRequest> | undefined, b: AgentConnectionRequest | PlainMessage<AgentConnectionRequest> | undefined): boolean {
+    return proto3.util.equals(AgentConnectionRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.StartAgentCodexLoginRequest
+ */
+export class StartAgentCodexLoginRequest extends Message<StartAgentCodexLoginRequest> {
+  /**
+   * @generated from field: brigade.v1.AgentConnection connection = 1;
+   */
+  connection?: AgentConnection;
+
+  constructor(data?: PartialMessage<StartAgentCodexLoginRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.StartAgentCodexLoginRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "connection", kind: "message", T: AgentConnection },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): StartAgentCodexLoginRequest {
+    return new StartAgentCodexLoginRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): StartAgentCodexLoginRequest {
+    return new StartAgentCodexLoginRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): StartAgentCodexLoginRequest {
+    return new StartAgentCodexLoginRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: StartAgentCodexLoginRequest | PlainMessage<StartAgentCodexLoginRequest> | undefined, b: StartAgentCodexLoginRequest | PlainMessage<StartAgentCodexLoginRequest> | undefined): boolean {
+    return proto3.util.equals(StartAgentCodexLoginRequest, a, b);
+  }
+}
+

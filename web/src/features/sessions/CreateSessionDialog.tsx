@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ConnectError } from "@connectrpc/connect";
 import { Loader2 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import {
   agentClient,
@@ -9,7 +10,7 @@ import {
   responseProfileClient,
   sessionClient,
 } from "@/api/client";
-import { AgentType } from "@/api/gen/brigade/v1/agent_pb";
+import { AgentType, type AgentConnection } from "@/api/gen/brigade/v1/agent_pb";
 import type { AgentImagesSettings } from "@/api/gen/brigade/v1/auth_pb";
 import { McpServer } from "@/api/gen/brigade/v1/mcp_pb";
 import { Session, SessionKind } from "@/api/gen/brigade/v1/session_pb";
@@ -71,15 +72,10 @@ export function CreateSessionDialog({
   onCreated: (session: Session) => void;
 }) {
   const [agents, setAgents] = useState<AgentType[] | null>(null);
-  const [agentId, setAgentId] = useState("");
+  const [connections, setConnections] = useState<AgentConnection[] | null>(null);
+  const [connectionId, setConnectionId] = useState("");
   const [kind, setKind] = useState<SessionKind>(SessionKind.CLI);
   const [busy, setBusy] = useState(false);
-  // tokenSet — задан ли у пользователя токен Claude. ACP-сессия стартует агента сразу
-  // (non-interactive), поэтому без токена не поднимется — ACP-опцию дизейблим. CLI
-  // же можно авторизовать вручную в терминале (/login), поэтому доступен всегда.
-  const [tokenSet, setTokenSet] = useState<boolean | null>(null);
-  const [codexAuth, setCodexAuth] = useState<{apiKey: boolean; chatgpt: boolean; defaultProfile: string} | null>(null);
-  const [authProfile, setAuthProfile] = useState("");
   // MCP-серверы пользователя и выбранный набор. Выбор помнится между запусками: набор
   // инструментов у человека обычно постоянный, отмечать его заново каждый раз незачем.
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
@@ -113,23 +109,12 @@ export function CreateSessionDialog({
     };
   }, [open, agents]);
 
-  // Статус токена Claude перечитывается при каждом открытии диалога (мог измениться
-  // в настройках). Пока грузится — ACP-опция ещё не блокируется (tokenSet === null).
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    setTokenSet(null);
-    authClient
-      .getClaudeSettings({})
-      .then((res) => {
-        if (!cancelled) setTokenSet(res.tokenSet);
-      })
-      .catch(() => {
-        if (!cancelled) setTokenSet(false);
-      });
-    authClient.getCodexSettings({}).then((res) => {
-      if (!cancelled) setCodexAuth({apiKey: res.apiKeySet, chatgpt: res.chatgptConnected, defaultProfile: res.defaultProfile});
-    }).catch(() => { if (!cancelled) setCodexAuth({apiKey: false, chatgpt: false, defaultProfile: ""}); });
+    agentClient.listConnections({})
+      .then((result) => !cancelled && setConnections(result.connections))
+      .catch(() => !cancelled && setConnections([]));
     return () => {
       cancelled = true;
     };
@@ -188,40 +173,27 @@ export function CreateSessionDialog({
     };
   }, [open]);
 
-  const codexProfiles = codexAuth ? [codexAuth.chatgpt && "chatgpt", codexAuth.apiKey && "api-key"].filter(Boolean) as string[] : [];
-  const availableAgents = agents?.filter((agent) =>
-    agent.id === "codex"
-      ? codexProfiles.length > 0
-      : agent.id === "claude-code"
-        ? tokenSet === true
-        : true,
-  );
-  const selectedAgent = availableAgents?.find((agent) => agent.id === agentId);
+  const selectedConnection = connections?.find((connection) => connection.id === connectionId);
+  const selectedAgent = agents?.find((agent) => agent.id === selectedConnection?.agentType);
 
   useEffect(() => {
-    if (!availableAgents || availableAgents.some((agent) => agent.id === agentId)) return;
-    setAgentId(availableAgents[0]?.id ?? "");
-  }, [availableAgents, agentId]);
-
-  useEffect(() => {
-    if (agentId !== "codex") { setAuthProfile("claude-token"); return; }
-    const preferred = codexAuth?.defaultProfile;
-    setAuthProfile(preferred && codexProfiles.includes(preferred) ? preferred : (codexProfiles[0] ?? ""));
-  }, [agentId, codexAuth?.defaultProfile, codexAuth?.apiKey, codexAuth?.chatgpt]);
+    if (!connections || connections.some((connection) => connection.id === connectionId)) return;
+    setConnectionId(connections[0]?.id ?? "");
+  }, [connections, connectionId]);
 
   async function onSubmit() {
-    if (!agentId) return;
+    if (!selectedConnection) return;
     setBusy(true);
     try {
       saveMcpSelection(mcpSelected);
       localStorage.setItem(IMAGE_KEY, image);
       const res = await sessionClient.create({
-        agentType: agentId,
+        agentType: selectedConnection.agentType,
         kind,
         prompt: "",
         mcpServerIds: mcpSelected,
         image,
-        authProfile,
+        authProfile: selectedConnection.id,
         responseProfileId: kind === SessionKind.ACP ? responseProfileId : "default",
       });
       const session = res.session;
@@ -239,8 +211,8 @@ export function CreateSessionDialog({
     }
   }
 
-  const loading = agents === null || tokenSet === null || codexAuth === null;
-  const noAgents = !loading && availableAgents?.length === 0;
+  const loading = agents === null || connections === null;
+  const noAgents = !loading && connections.length === 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -257,21 +229,24 @@ export function CreateSessionDialog({
             <Loader2 className="size-5 animate-spin text-muted-foreground" />
           </div>
         ) : noAgents ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
-            Нет подключённых агентов.
-          </p>
+          <div className="flex flex-col items-center gap-3 py-6 text-center text-sm text-muted-foreground">
+            <p>Нет подключённых агентов.</p>
+            <Button asChild size="sm" onClick={() => onOpenChange(false)}>
+              <Link to="/settings/agents">Настроить агента</Link>
+            </Button>
+          </div>
         ) : (
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Агент</Label>
-              <Select value={agentId} onValueChange={setAgentId}>
+              <Select value={connectionId} onValueChange={setConnectionId}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Выберите агента" />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableAgents!.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>
-                      {a.name || a.id}
+                  {connections!.map((connection) => (
+                    <SelectItem key={connection.id} value={connection.id}>
+                      {connection.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -300,10 +275,6 @@ export function CreateSessionDialog({
                 </SelectContent>
               </Select>
             </div>
-
-            {agentId === "codex" && codexProfiles.length > 1 && (
-              <div className="space-y-2"><Label>Авторизация</Label><Select value={authProfile} onValueChange={setAuthProfile}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="chatgpt">ChatGPT Plus</SelectItem><SelectItem value="api-key">OpenAI API key</SelectItem></SelectContent></Select></div>
-            )}
 
             {kind === SessionKind.ACP && responseProfiles.length > 0 && (
               <div className="space-y-2">
@@ -392,7 +363,7 @@ export function CreateSessionDialog({
           </Button>
           <Button
             onClick={() => void onSubmit()}
-            disabled={busy || loading || noAgents || !agentId}
+            disabled={busy || loading || noAgents || !selectedConnection}
           >
             {busy && <Loader2 className="size-4 animate-spin" />}
             Создать

@@ -31,6 +31,7 @@ type Login struct{ ID, Status, Output, Error string }
 type attempt struct {
 	login  Login
 	userID string
+	save   func(context.Context, string) error
 	cancel context.CancelFunc
 	output bytes.Buffer
 }
@@ -64,6 +65,14 @@ func (LocalRunner) Run(ctx context.Context, _ string, output io.Writer) ([]byte,
 }
 
 func (s *Service) Start(userID string) Login {
+	return s.StartWithSave(userID, func(ctx context.Context, data string) error {
+		return s.store.SetCodexAuthJSON(ctx, userID, data)
+	})
+}
+
+// StartWithSave запускает тот же device login, но сохраняет результат в выбранное
+// подключение агента вместо legacy singleton-настроек пользователя.
+func (s *Service) StartWithSave(userID string, save func(context.Context, string) error) Login {
 	s.mu.Lock()
 	for _, current := range s.attempts {
 		if current.userID == userID && current.login.Status == "pending" {
@@ -73,7 +82,7 @@ func (s *Service) Start(userID string) Login {
 	// Device code живёт 15 минут. После этого ждать процесс бессмысленно, а вечный
 	// pending скрывает сетевые и runtime-сбои на удалённой инсталляции.
 	ctx, cancel := context.WithTimeout(context.Background(), 16*time.Minute)
-	a := &attempt{login: Login{ID: uuid.NewString(), Status: "pending"}, userID: userID, cancel: cancel}
+	a := &attempt{login: Login{ID: uuid.NewString(), Status: "pending"}, userID: userID, save: save, cancel: cancel}
 	s.attempts[a.login.ID] = a
 	s.mu.Unlock()
 	go s.run(ctx, userID, a)
@@ -114,7 +123,7 @@ func (s *Service) run(ctx context.Context, userID string, a *attempt) {
 		s.finish(a, "failed", err)
 		return
 	}
-	if err := s.store.SetCodexAuthJSON(context.Background(), userID, string(data)); err != nil {
+	if err := a.save(context.Background(), string(data)); err != nil {
 		log.Printf("codex login %s: persist failed: %v", a.login.ID, err)
 		s.finish(a, "failed", err)
 		return

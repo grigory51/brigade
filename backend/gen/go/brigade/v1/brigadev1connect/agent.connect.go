@@ -36,11 +36,27 @@ const (
 	// AgentServiceListAgentTypesProcedure is the fully-qualified name of the AgentService's
 	// ListAgentTypes RPC.
 	AgentServiceListAgentTypesProcedure = "/brigade.v1.AgentService/ListAgentTypes"
+	// AgentServiceListConnectionsProcedure is the fully-qualified name of the AgentService's
+	// ListConnections RPC.
+	AgentServiceListConnectionsProcedure = "/brigade.v1.AgentService/ListConnections"
+	// AgentServiceSaveConnectionProcedure is the fully-qualified name of the AgentService's
+	// SaveConnection RPC.
+	AgentServiceSaveConnectionProcedure = "/brigade.v1.AgentService/SaveConnection"
+	// AgentServiceDeleteConnectionProcedure is the fully-qualified name of the AgentService's
+	// DeleteConnection RPC.
+	AgentServiceDeleteConnectionProcedure = "/brigade.v1.AgentService/DeleteConnection"
+	// AgentServiceStartCodexLoginProcedure is the fully-qualified name of the AgentService's
+	// StartCodexLogin RPC.
+	AgentServiceStartCodexLoginProcedure = "/brigade.v1.AgentService/StartCodexLogin"
 )
 
 // AgentServiceClient is a client for the brigade.v1.AgentService service.
 type AgentServiceClient interface {
 	ListAgentTypes(context.Context, *connect.Request[v1.ListAgentTypesRequest]) (*connect.Response[v1.ListAgentTypesResponse], error)
+	ListConnections(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.ListAgentConnectionsResponse], error)
+	SaveConnection(context.Context, *connect.Request[v1.SaveAgentConnectionRequest]) (*connect.Response[v1.AgentConnection], error)
+	DeleteConnection(context.Context, *connect.Request[v1.AgentConnectionRequest]) (*connect.Response[v1.Empty], error)
+	StartCodexLogin(context.Context, *connect.Request[v1.StartAgentCodexLoginRequest]) (*connect.Response[v1.CodexLogin], error)
 }
 
 // NewAgentServiceClient constructs a client for the brigade.v1.AgentService service. By default, it
@@ -60,12 +76,40 @@ func NewAgentServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(agentServiceMethods.ByName("ListAgentTypes")),
 			connect.WithClientOptions(opts...),
 		),
+		listConnections: connect.NewClient[v1.Empty, v1.ListAgentConnectionsResponse](
+			httpClient,
+			baseURL+AgentServiceListConnectionsProcedure,
+			connect.WithSchema(agentServiceMethods.ByName("ListConnections")),
+			connect.WithClientOptions(opts...),
+		),
+		saveConnection: connect.NewClient[v1.SaveAgentConnectionRequest, v1.AgentConnection](
+			httpClient,
+			baseURL+AgentServiceSaveConnectionProcedure,
+			connect.WithSchema(agentServiceMethods.ByName("SaveConnection")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteConnection: connect.NewClient[v1.AgentConnectionRequest, v1.Empty](
+			httpClient,
+			baseURL+AgentServiceDeleteConnectionProcedure,
+			connect.WithSchema(agentServiceMethods.ByName("DeleteConnection")),
+			connect.WithClientOptions(opts...),
+		),
+		startCodexLogin: connect.NewClient[v1.StartAgentCodexLoginRequest, v1.CodexLogin](
+			httpClient,
+			baseURL+AgentServiceStartCodexLoginProcedure,
+			connect.WithSchema(agentServiceMethods.ByName("StartCodexLogin")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // agentServiceClient implements AgentServiceClient.
 type agentServiceClient struct {
-	listAgentTypes *connect.Client[v1.ListAgentTypesRequest, v1.ListAgentTypesResponse]
+	listAgentTypes   *connect.Client[v1.ListAgentTypesRequest, v1.ListAgentTypesResponse]
+	listConnections  *connect.Client[v1.Empty, v1.ListAgentConnectionsResponse]
+	saveConnection   *connect.Client[v1.SaveAgentConnectionRequest, v1.AgentConnection]
+	deleteConnection *connect.Client[v1.AgentConnectionRequest, v1.Empty]
+	startCodexLogin  *connect.Client[v1.StartAgentCodexLoginRequest, v1.CodexLogin]
 }
 
 // ListAgentTypes calls brigade.v1.AgentService.ListAgentTypes.
@@ -73,9 +117,33 @@ func (c *agentServiceClient) ListAgentTypes(ctx context.Context, req *connect.Re
 	return c.listAgentTypes.CallUnary(ctx, req)
 }
 
+// ListConnections calls brigade.v1.AgentService.ListConnections.
+func (c *agentServiceClient) ListConnections(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.ListAgentConnectionsResponse], error) {
+	return c.listConnections.CallUnary(ctx, req)
+}
+
+// SaveConnection calls brigade.v1.AgentService.SaveConnection.
+func (c *agentServiceClient) SaveConnection(ctx context.Context, req *connect.Request[v1.SaveAgentConnectionRequest]) (*connect.Response[v1.AgentConnection], error) {
+	return c.saveConnection.CallUnary(ctx, req)
+}
+
+// DeleteConnection calls brigade.v1.AgentService.DeleteConnection.
+func (c *agentServiceClient) DeleteConnection(ctx context.Context, req *connect.Request[v1.AgentConnectionRequest]) (*connect.Response[v1.Empty], error) {
+	return c.deleteConnection.CallUnary(ctx, req)
+}
+
+// StartCodexLogin calls brigade.v1.AgentService.StartCodexLogin.
+func (c *agentServiceClient) StartCodexLogin(ctx context.Context, req *connect.Request[v1.StartAgentCodexLoginRequest]) (*connect.Response[v1.CodexLogin], error) {
+	return c.startCodexLogin.CallUnary(ctx, req)
+}
+
 // AgentServiceHandler is an implementation of the brigade.v1.AgentService service.
 type AgentServiceHandler interface {
 	ListAgentTypes(context.Context, *connect.Request[v1.ListAgentTypesRequest]) (*connect.Response[v1.ListAgentTypesResponse], error)
+	ListConnections(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.ListAgentConnectionsResponse], error)
+	SaveConnection(context.Context, *connect.Request[v1.SaveAgentConnectionRequest]) (*connect.Response[v1.AgentConnection], error)
+	DeleteConnection(context.Context, *connect.Request[v1.AgentConnectionRequest]) (*connect.Response[v1.Empty], error)
+	StartCodexLogin(context.Context, *connect.Request[v1.StartAgentCodexLoginRequest]) (*connect.Response[v1.CodexLogin], error)
 }
 
 // NewAgentServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -91,10 +159,42 @@ func NewAgentServiceHandler(svc AgentServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(agentServiceMethods.ByName("ListAgentTypes")),
 		connect.WithHandlerOptions(opts...),
 	)
+	agentServiceListConnectionsHandler := connect.NewUnaryHandler(
+		AgentServiceListConnectionsProcedure,
+		svc.ListConnections,
+		connect.WithSchema(agentServiceMethods.ByName("ListConnections")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentServiceSaveConnectionHandler := connect.NewUnaryHandler(
+		AgentServiceSaveConnectionProcedure,
+		svc.SaveConnection,
+		connect.WithSchema(agentServiceMethods.ByName("SaveConnection")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentServiceDeleteConnectionHandler := connect.NewUnaryHandler(
+		AgentServiceDeleteConnectionProcedure,
+		svc.DeleteConnection,
+		connect.WithSchema(agentServiceMethods.ByName("DeleteConnection")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentServiceStartCodexLoginHandler := connect.NewUnaryHandler(
+		AgentServiceStartCodexLoginProcedure,
+		svc.StartCodexLogin,
+		connect.WithSchema(agentServiceMethods.ByName("StartCodexLogin")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/brigade.v1.AgentService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AgentServiceListAgentTypesProcedure:
 			agentServiceListAgentTypesHandler.ServeHTTP(w, r)
+		case AgentServiceListConnectionsProcedure:
+			agentServiceListConnectionsHandler.ServeHTTP(w, r)
+		case AgentServiceSaveConnectionProcedure:
+			agentServiceSaveConnectionHandler.ServeHTTP(w, r)
+		case AgentServiceDeleteConnectionProcedure:
+			agentServiceDeleteConnectionHandler.ServeHTTP(w, r)
+		case AgentServiceStartCodexLoginProcedure:
+			agentServiceStartCodexLoginHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -106,4 +206,20 @@ type UnimplementedAgentServiceHandler struct{}
 
 func (UnimplementedAgentServiceHandler) ListAgentTypes(context.Context, *connect.Request[v1.ListAgentTypesRequest]) (*connect.Response[v1.ListAgentTypesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AgentService.ListAgentTypes is not implemented"))
+}
+
+func (UnimplementedAgentServiceHandler) ListConnections(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.ListAgentConnectionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AgentService.ListConnections is not implemented"))
+}
+
+func (UnimplementedAgentServiceHandler) SaveConnection(context.Context, *connect.Request[v1.SaveAgentConnectionRequest]) (*connect.Response[v1.AgentConnection], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AgentService.SaveConnection is not implemented"))
+}
+
+func (UnimplementedAgentServiceHandler) DeleteConnection(context.Context, *connect.Request[v1.AgentConnectionRequest]) (*connect.Response[v1.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AgentService.DeleteConnection is not implemented"))
+}
+
+func (UnimplementedAgentServiceHandler) StartCodexLogin(context.Context, *connect.Request[v1.StartAgentCodexLoginRequest]) (*connect.Response[v1.CodexLogin], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AgentService.StartCodexLogin is not implemented"))
 }

@@ -201,7 +201,8 @@ func runServer(configPath string) {
 		// тот сразу шифруется в store — среда будущей сессии здесь не важна.
 		codexLoginRunner = codexlogin.LocalRunner{}
 	}
-	authService.SetCodexLogin(codexlogin.New(st, codexLoginRunner))
+	codexLoginSvc := codexlogin.New(st, codexLoginRunner)
+	authService.SetCodexLogin(codexLoginSvc)
 	mux.Handle(brigadev1connect.NewAuthServiceHandler(authService, interceptors))
 	mux.Handle(brigadev1connect.NewNotificationServiceHandler(connectsvc.NewNotificationService(st, notifySvc), interceptors))
 	mux.Handle(brigadev1connect.NewResponseProfileServiceHandler(connectsvc.NewResponseProfileService(st), interceptors))
@@ -213,7 +214,7 @@ func runServer(configPath string) {
 		mux.HandleFunc("/desktop/auth", authService.DesktopLoginHandler(cfg.Seed.Username))
 	}
 	mux.Handle(brigadev1connect.NewSessionServiceHandler(connectsvc.NewSessionService(registry, tickets, previewSvc, imagesSvc), interceptors))
-	mux.Handle(brigadev1connect.NewAgentServiceHandler(connectsvc.NewAgentService(), interceptors))
+	mux.Handle(brigadev1connect.NewAgentServiceHandler(connectsvc.NewAgentService(st, codexLoginSvc), interceptors))
 	// AcpService — управляющие вызовы ACP-чата (история/статус/workflow/отмена/опции/
 	// permission-ответ). JWT-авторизация, как у прочих пользовательских сервисов.
 	mux.Handle(brigadev1connect.NewAcpServiceHandler(connectsvc.NewAcpService(prov, prov, perms), interceptors))

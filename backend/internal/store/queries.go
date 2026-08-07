@@ -73,6 +73,78 @@ func (s *Store) GetUserSettings(ctx context.Context, userID string) (UserSetting
 	return settings, nil
 }
 
+func (s *Store) ListAgentConnections(ctx context.Context, userID string) ([]AgentConnection, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, user_id, name, agent_type, auth_profile, secret, created_at
+		FROM agent_connections WHERE user_id = ? ORDER BY created_at, id`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("store: list agent connections: %w", err)
+	}
+	defer rows.Close()
+	var out []AgentConnection
+	for rows.Next() {
+		var item AgentConnection
+		var created int64
+		if err := rows.Scan(&item.ID, &item.UserID, &item.Name, &item.AgentType, &item.AuthProfile, &item.Secret, &created); err != nil {
+			return nil, fmt.Errorf("store: scan agent connection: %w", err)
+		}
+		item.Secret = s.cipher.Decrypt(item.Secret)
+		item.CreatedAt = fromUnix(created)
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) GetAgentConnection(ctx context.Context, userID, id string) (AgentConnection, error) {
+	var item AgentConnection
+	var created int64
+	err := s.db.QueryRowContext(ctx, `SELECT id, user_id, name, agent_type, auth_profile, secret, created_at
+		FROM agent_connections WHERE user_id = ? AND id = ?`, userID, id).
+		Scan(&item.ID, &item.UserID, &item.Name, &item.AgentType, &item.AuthProfile, &item.Secret, &created)
+	if errors.Is(err, sql.ErrNoRows) {
+		return AgentConnection{}, ErrNotFound
+	}
+	if err != nil {
+		return AgentConnection{}, fmt.Errorf("store: get agent connection: %w", err)
+	}
+	item.Secret = s.cipher.Decrypt(item.Secret)
+	item.CreatedAt = fromUnix(created)
+	return item, nil
+}
+
+func (s *Store) SaveAgentConnection(ctx context.Context, item AgentConnection) error {
+	now := toUnix(time.Now())
+	res, err := s.db.ExecContext(ctx, `INSERT INTO agent_connections
+		(id, user_id, name, agent_type, auth_profile, secret, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET name=excluded.name, agent_type=excluded.agent_type,
+			auth_profile=excluded.auth_profile,
+			secret=CASE WHEN excluded.secret = '' THEN agent_connections.secret ELSE excluded.secret END,
+			updated_at=excluded.updated_at
+		WHERE agent_connections.user_id = excluded.user_id`,
+		item.ID, item.UserID, item.Name, item.AgentType, item.AuthProfile, s.cipher.Encrypt(item.Secret), now, now)
+	if err != nil {
+		return fmt.Errorf("store: save agent connection: %w", err)
+	}
+	return affectedOne(res, "save agent connection")
+}
+
+func (s *Store) SetAgentConnectionSecret(ctx context.Context, userID, id, secret string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE agent_connections SET secret = ?, updated_at = ? WHERE user_id = ? AND id = ?`,
+		s.cipher.Encrypt(secret), toUnix(time.Now()), userID, id)
+	if err != nil {
+		return fmt.Errorf("store: set agent connection secret: %w", err)
+	}
+	return affectedOne(res, "set agent connection secret")
+}
+
+func (s *Store) DeleteAgentConnection(ctx context.Context, userID, id string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM agent_connections WHERE user_id = ? AND id = ?`, userID, id)
+	if err != nil {
+		return fmt.Errorf("store: delete agent connection: %w", err)
+	}
+	return affectedOne(res, "delete agent connection")
+}
+
 // ListNotificationBackends возвращает все подключения уведомлений пользователя.
 func (s *Store) ListNotificationBackends(ctx context.Context, userID string) ([]NotificationBackend, error) {
 	rows, err := s.db.QueryContext(ctx,

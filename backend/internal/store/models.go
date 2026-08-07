@@ -55,6 +55,18 @@ type UserSettings struct {
 	AgentImages []string
 }
 
+// AgentConnection — отдельная учётная запись агента. Secret хранится зашифрованным и
+// возвращается только backend-коду, в API уходит лишь флаг его наличия.
+type AgentConnection struct {
+	ID          string
+	UserID      string
+	Name        string
+	AgentType   string
+	AuthProfile string
+	Secret      string
+	CreatedAt   time.Time
+}
+
 // NotificationBackend — именованное подключение транспорта уведомлений пользователя.
 // Config содержит несекретную конфигурацию реализации, Secret — расшифрованный секрет.
 type NotificationBackend struct {

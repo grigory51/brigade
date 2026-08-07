@@ -22,7 +22,7 @@ items:
     items:
       - name: Сессии
         href: guides/sessions.md
-      - name: Claude Code и Codex
+      - name: Подключения агентов
         href: guides/agents.md
       - name: Среда агента
         href: guides/environment.md

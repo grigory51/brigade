@@ -3,8 +3,9 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ListAgentTypesRequest, ListAgentTypesResponse } from "./agent_pb.js";
+import { AgentConnection, AgentConnectionRequest, ListAgentConnectionsResponse, ListAgentTypesRequest, ListAgentTypesResponse, SaveAgentConnectionRequest, StartAgentCodexLoginRequest } from "./agent_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
+import { CodexLogin, Empty } from "./auth_pb.js";
 
 /**
  * AgentService — справочник доступных типов агентов.
@@ -21,6 +22,42 @@ export const AgentService = {
       name: "ListAgentTypes",
       I: ListAgentTypesRequest,
       O: ListAgentTypesResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.AgentService.ListConnections
+     */
+    listConnections: {
+      name: "ListConnections",
+      I: Empty,
+      O: ListAgentConnectionsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.AgentService.SaveConnection
+     */
+    saveConnection: {
+      name: "SaveConnection",
+      I: SaveAgentConnectionRequest,
+      O: AgentConnection,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.AgentService.DeleteConnection
+     */
+    deleteConnection: {
+      name: "DeleteConnection",
+      I: AgentConnectionRequest,
+      O: Empty,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.AgentService.StartCodexLogin
+     */
+    startCodexLogin: {
+      name: "StartCodexLogin",
+      I: StartAgentCodexLoginRequest,
+      O: CodexLogin,
       kind: MethodKind.Unary,
     },
   }
