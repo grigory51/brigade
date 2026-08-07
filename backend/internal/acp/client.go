@@ -2,7 +2,6 @@ package acp
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -52,11 +51,6 @@ type Options struct {
 	// thread нотификациями session/update и история чата восстанавливается. Используется
 	// при восстановлении сессий после рестарта бэкенда.
 	ResumeSessionID string
-	// ForkFromSessionID — идентификатор ACP-сессии, от которой создаётся ветка
-	// (session/fork): агент клонирует сессию с её историей в новую, независимую.
-	// Взаимоисключим с ResumeSessionID; при отсутствии у агента capability fork —
-	// ошибка (тихий откат в пустую сессию обманул бы пользователя).
-	ForkFromSessionID string
 	// SpawnProc порождает процесс adapter'а. nil — локальный subprocess
 	// claude-agent-acp; docker-режим передаёт сюда фабрику контейнерного процесса
 	// (см. spawn.DockerACPSpawner).
@@ -146,12 +140,6 @@ type Client struct {
 	// (см. emit/SessionUpdate). Permission-запросы в историю не пишутся: их повторный
 	// показ после ответа некорректен (см. emit).
 	history []agui.Event
-	// baseline — снимок ленты РОДИТЕЛЯ, засеянный при создании форк-сессии. session/fork (в
-	// отличие от session/load) историю НЕ реплеит — агент новую сессию сообщениями не наполняет,
-	// поэтому без засева ledger ветки пуст и GetHistory возвращает пустой чат. Разворачивается
-	// в начало Messages(); живой history ветки дописывается поверх (ветка расходится). См.
-	// Registry.Fork и SeedMessages.
-	baseline []Message
 	// lastUsage — последнее событие расхода контекста. Хранится отдельно от history,
 	// потому что usage_update приходит высокочастотно (на каждый прирост токенов): в
 	// ленте важно лишь актуальное значение, а не вся последовательность. Реплеится в
@@ -163,7 +151,7 @@ type Client struct {
 	// Bind. nil, пока агент не прислал список команд.
 	lastCommands *agui.Event
 	// configOptions — текущие конфигурационные опции сессии (модель, режим прав,
-	// усилие): снимок из session/new|load|fork, обновляется ConfigOptionUpdate и
+	// усилие): снимок из session/new|load, обновляется ConfigOptionUpdate и
 	// ответами session/set_config_option. Отдаётся фронту вместе с историей
 	// (history-endpoint); изменение — SetConfigOption. Доступ — под mu.
 	configOptions []acpsdk.SessionConfigOption
@@ -267,29 +255,6 @@ func (c *Client) handshake(ctx context.Context) error {
 	// Сохраняем возможности агента: по ним при остановке решаем, слать ли session/close.
 	c.agentCaps = initResp.AgentCapabilities
 
-	// Ветка сессии: session/fork клонирует исходную сессию агента (с историей) в новую
-	// независимую. Ошибка не маскируется — вызывающий (registry.Fork) откатывает
-	// создание ветки целиком.
-	if c.opts.ForkFromSessionID != "" {
-		if initResp.AgentCapabilities.SessionCapabilities.Fork == nil {
-			return fmt.Errorf("acp: agent does not support session/fork")
-		}
-		forkResp, err := c.conn.UnstableForkSession(ctx, acpsdk.UnstableForkSessionRequest{
-			SessionId:  acpsdk.SessionId(c.opts.ForkFromSessionID),
-			Cwd:        c.opts.Cwd,
-			McpServers: toUnstableMcpServers(c.opts.McpServers),
-			Meta:       sessionMeta(c.opts.PluginDirs, c.opts.SystemPrompt),
-		})
-		if err != nil {
-			return fmt.Errorf("acp: fork session %s: %w", c.opts.ForkFromSessionID, err)
-		}
-		c.sessionID = forkResp.SessionId
-		// Unstable-вариант типа опций структурно идентичен стабильному (одинаковый
-		// wire-формат) — конвертируем через JSON, чтобы не дублировать union-логику.
-		c.configOptions = convertConfigOptions(forkResp.ConfigOptions)
-		return c.disableNestedSandbox(ctx)
-	}
-
 	// Resume через session/load: агент реплеит прошлый thread нотификациями
 	// session/update, которые наполняют историю для воспроизведения в Bind. Id при
 	// load известен заранее, новый не выдаётся. Ранний return — только при успехе;
@@ -381,23 +346,6 @@ func selectHasValue(options acpsdk.SessionConfigSelectOptions, value string) boo
 		}
 	}
 	return false
-}
-
-// convertConfigOptions приводит unstable-вариант опций (session/fork) к стабильному
-// типу через JSON: wire-формат обоих идентичен.
-func convertConfigOptions(in []acpsdk.UnstableSessionConfigOption) []acpsdk.SessionConfigOption {
-	if len(in) == 0 {
-		return nil
-	}
-	raw, err := json.Marshal(in)
-	if err != nil {
-		return nil
-	}
-	var out []acpsdk.SessionConfigOption
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil
-	}
-	return out
 }
 
 // ConfigOptions возвращает текущие конфигурационные опции сессии (модель, режим
@@ -507,9 +455,7 @@ func (c *Client) Messages() []Message {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Ветка форка стартует со снимка родителя (baseline), поверх которого разворачивается её
-	// собственная живая история. Пусто у обычных сессий.
-	out := append([]Message(nil), c.baseline...)
+	var out []Message
 	idx := make(map[string]int)     // messageId → позиция в out (текстовые сообщения)
 	toolIdx := make(map[string]int) // toolCallId → позиция в out (карточки инструментов)
 	for _, evt := range c.history {
@@ -553,15 +499,6 @@ func (c *Client) Messages() []Message {
 		}
 	}
 	return out
-}
-
-// SeedMessages засеивает ленту снимком (обычно родителя при fork): Messages() вернёт его
-// перед живой историей ветки. Вызывается один раз сразу после создания форк-клиента, до
-// первого turn'а. См. Registry.Fork.
-func (c *Client) SeedMessages(msgs []Message) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.baseline = msgs
 }
 
 // backgroundIdleWindow — окно тишины, после которого фоновый turn считается

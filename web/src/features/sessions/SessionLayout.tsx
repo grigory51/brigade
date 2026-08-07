@@ -1,4 +1,5 @@
 import {
+  Fragment,
   createContext,
   useCallback,
   useContext,
@@ -19,7 +20,6 @@ import { ConnectError } from "@connectrpc/connect";
 import {
   Archive,
   CircleArrowUp,
-  GitBranch,
   Loader2,
   LogOut,
   MessagesSquare,
@@ -116,9 +116,8 @@ export function SessionLayout() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [state, setState] = useState<LoadState>("loading");
   const [createOpen, setCreateOpen] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  // deletingIds — сессии, удаление которых сейчас выполняется на сервере. Отдельно от
-  // busyId (fork): teardown контейнера/процесса занимает до ~15 секунд, и без индикации
+  // deletingIds — сессии, удаление которых сейчас выполняется на сервере. Teardown
+  // контейнера/процесса занимает до ~15 секунд, и без индикации
   // клик выглядит проигнорированным (а повторные клики порождали параллельные
   // удаления). Блокируется только сама удаляемая сессия (пункт списка + её контент,
   // если она открыта) — остальной UI живёт, можно перейти к другой сессии.
@@ -214,30 +213,6 @@ export function SessionLayout() {
     [sessions],
   );
 
-  const onFork = useCallback(
-    async (id: string) => {
-      setBusyId(id);
-      try {
-        const res = await sessionClient.fork({ sessionId: id });
-        const branch = res.session;
-        if (branch) {
-          // Ветка добавляется в список и открывается сразу — как при создании сессии.
-          setSessions((prev) => [branch, ...prev.filter((p) => p.id !== branch.id)]);
-          navigate(sessionRoute(branch.id));
-        }
-      } catch (err) {
-        toast.error(
-          err instanceof ConnectError
-            ? err.rawMessage
-            : "Не удалось создать ветку",
-        );
-      } finally {
-        setBusyId(null);
-      }
-    },
-    [navigate],
-  );
-
   const onArchive = useCallback(
     async (id: string) => {
       // Архивация зовёт агента за recap (несколько секунд) и останавливает контейнер —
@@ -295,29 +270,25 @@ export function SessionLayout() {
     activeId !== undefined &&
     sessions.find((s) => s.id === activeId)?.kind === SessionKind.ACP;
 
-  // Дерево веток в сайдбаре: корневые сессии в исходном порядке (новые сверху), после
-  // каждой — её ветки с отступом. Ветка с удалённым родителем показывается как корневая.
-  const ordered = useMemo(() => {
-    const byParent = new Map<string, Session[]>();
-    const ids = new Set(sessions.map((s) => s.id));
-    const roots: Session[] = [];
+  // Первая (самая новая) сессия определяет положение группы, внутри порядок тоже остаётся
+  // от новых к старым. Сессии без подписи остаются самостоятельными строками.
+  const groups = useMemo(() => {
+    const out: { label: string; sessions: Session[] }[] = [];
+    const byLabel = new Map<string, Session[]>();
     for (const s of sessions) {
-      if (s.parentId && ids.has(s.parentId)) {
-        const list = byParent.get(s.parentId) ?? [];
-        list.push(s);
-        byParent.set(s.parentId, list);
-      } else {
-        roots.push(s);
+      if (!s.groupLabel) {
+        out.push({ label: "", sessions: [s] });
+        continue;
       }
+      const existing = byLabel.get(s.groupLabel);
+      if (existing) {
+        existing.push(s);
+        continue;
+      }
+      const grouped = [s];
+      byLabel.set(s.groupLabel, grouped);
+      out.push({ label: s.groupLabel, sessions: grouped });
     }
-    const out: { session: Session; depth: number }[] = [];
-    const walk = (s: Session, depth: number) => {
-      out.push({ session: s, depth });
-      for (const child of byParent.get(s.id) ?? []) {
-        walk(child, depth + 1);
-      }
-    };
-    roots.forEach((s) => walk(s, 0));
     return out;
   }, [sessions]);
 
@@ -419,28 +390,38 @@ export function SessionLayout() {
                       </div>
                     )}
 
-                    {state === "ready" &&
-                      ordered.map(({ session: s, depth }) => (
-                        <SessionItem
-                          key={s.id}
-                          session={s}
-                          depth={depth}
-                          busy={
-                            busyId === s.id ||
-                            deletingIds.has(s.id) ||
-                            archivingIds.has(s.id) ||
-                            reloadingId === s.id
-                          }
-                          deleting={deletingIds.has(s.id)}
-                          archiving={archivingIds.has(s.id)}
-                          onOpen={() => navigate(sessionRoute(s.id))}
-                          onDelete={() => void onDelete(s.id)}
-                          onRename={(name) => void onRename(s.id, name)}
-                          onFork={() => void onFork(s.id)}
-                          onArchive={() => void onArchive(s.id)}
-                          onReloadAgent={() => void onReloadAgent(s.id)}
-                        />
-                      ))}
+                    {state === "ready" && groups.map((group) => (
+                      <Fragment key={group.label || group.sessions[0].id}>
+                        {group.label && (
+                          <SidebarMenuItem>
+                            <div className="mx-1 mt-1 flex h-7 items-center gap-2 rounded-[8px] bg-sidebar-accent/60 px-2 text-[12px] font-medium text-sidebar-foreground/75 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+                              <MessagesSquare className="size-3.5 shrink-0" />
+                              <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">{group.label}</span>
+                              <span className="text-[10px] tabular-nums text-sidebar-foreground/45 group-data-[collapsible=icon]:hidden">{group.sessions.length}</span>
+                            </div>
+                          </SidebarMenuItem>
+                        )}
+                        {group.sessions.map((s) => (
+                          <SessionItem
+                            key={s.id}
+                            session={s}
+                            grouped={Boolean(group.label)}
+                            busy={
+                              deletingIds.has(s.id) ||
+                              archivingIds.has(s.id) ||
+                              reloadingId === s.id
+                            }
+                            deleting={deletingIds.has(s.id)}
+                            archiving={archivingIds.has(s.id)}
+                            onOpen={() => navigate(sessionRoute(s.id))}
+                            onDelete={() => void onDelete(s.id)}
+                            onRename={(name) => void onRename(s.id, name)}
+                            onArchive={() => void onArchive(s.id)}
+                            onReloadAgent={() => void onReloadAgent(s.id)}
+                          />
+                        ))}
+                      </Fragment>
+                    ))}
                   </SidebarMenu>
                 </SidebarGroupContent>
               </SidebarGroup>
@@ -561,7 +542,7 @@ export function SessionLayout() {
 
 // SidebarAutoClose закрывает выезжающее меню на мобильном при смене маршрута: выбрал
 // сессию — меню ушло, второй тап по затемнению не нужен. Реагируем на маршрут, а не на
-// каждый обработчик: в меню полдюжины пунктов навигации (сессии, ветки, заметки, архив,
+// каждый обработчик: в меню полдюжины пунктов навигации (сессии, заметки, архив,
 // настройки, логотип), и переход из любого должен закрывать панель.
 function SidebarAutoClose() {
   const { isMobile, setOpenMobile } = useSidebar();
@@ -586,26 +567,24 @@ function withName(s: Session, id: string, name: string): Session {
 
 function SessionItem({
   session,
-  depth = 0,
+  grouped = false,
   busy,
   deleting = false,
   archiving = false,
   onOpen,
   onDelete,
   onRename,
-  onFork,
   onArchive,
   onReloadAgent,
 }: {
   session: Session;
-  depth?: number;
+  grouped?: boolean;
   busy: boolean;
   deleting?: boolean;
   archiving?: boolean;
   onOpen: () => void;
   onDelete: () => void;
   onRename: (name: string) => void;
-  onFork: () => void;
   onArchive: () => void;
   onReloadAgent: () => void;
 }) {
@@ -617,10 +596,16 @@ function SessionItem({
   const KindIcon = session.kind === SessionKind.ACP ? MessagesSquare : Terminal;
   // Производная подпись, если пользователь не задал имя.
   const fallback = `${session.agentType} · ${kindLabel(session.kind)}`;
-  const label = session.name || fallback;
+  const fullLabel = session.name || fallback;
+  const groupPrefix = `${session.groupLabel} · `;
+  const label = grouped && fullLabel === session.groupLabel
+    ? "Личный чат"
+    : grouped && fullLabel.startsWith(groupPrefix)
+      ? fullLabel.slice(groupPrefix.length)
+      : fullLabel;
 
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(label);
+  const [draft, setDraft] = useState(fullLabel);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const startEdit = useCallback(() => {
@@ -646,7 +631,7 @@ function SessionItem({
 
   if (editing) {
     return (
-      <SidebarMenuItem>
+      <SidebarMenuItem className={grouped ? "pl-3" : undefined}>
         <input
           ref={inputRef}
           value={draft}
@@ -669,7 +654,7 @@ function SessionItem({
   }
 
   return (
-    <SidebarMenuItem>
+    <SidebarMenuItem className={grouped ? "pl-3" : undefined}>
       <SidebarMenuButton
         isActive={active}
         // Сессию в необратимой операции не открываем: её контент уже блокирован оверлеем.
@@ -682,7 +667,7 @@ function SessionItem({
         // Правый паддинг под ряд hover-иконок применяем ТОЛЬКО при наведении/фокусе (как и
         // появление самих иконок): иконки абсолютные (вне потока), поэтому ширину имени задаёт
         // лишь padding — постоянный отступ вечно сжимал бы название. На hover имя ужимается,
-        // освобождая место иконкам (ACP их 5, CLI — 2). important (trailing `!`) перебивает
+        // освобождая место иконкам (ACP их 4, CLI — 2). important (trailing `!`) перебивает
         // базовый `group-has-[menu-action]:pr-8` из sidebarMenuButtonVariants.
         //
         // Подсветку строки вешаем на group-hover/menu-item (весь <li>), а не на :hover самой
@@ -691,18 +676,12 @@ function SessionItem({
         // мгновенному появлению иконок (иначе имя доанимировалось бы уже после их показа).
         className={`rounded-[8px] text-[13px] transition-none! group-hover/menu-item:bg-sidebar-accent group-hover/menu-item:text-sidebar-accent-foreground ${
           session.kind === SessionKind.ACP
-            ? "group-hover/menu-item:pr-36! group-focus-within/menu-item:pr-36!"
+            ? "group-hover/menu-item:pr-28! group-focus-within/menu-item:pr-28!"
             : "group-hover/menu-item:pr-16! group-focus-within/menu-item:pr-16!"
         }${locked ? " opacity-60" : ""}`}
-        // Ветки визуально вкладываются под родителя (см. ordered в SessionLayout).
-        style={depth > 0 ? { paddingLeft: `${8 + depth * 16}px` } : undefined}
       >
         <span className="relative shrink-0">
-          {depth > 0 ? (
-            <GitBranch className="size-4" />
-          ) : (
-            <KindIcon className="size-4" />
-          )}
+          <KindIcon className="size-4" />
           <StatusDot status={session.status} />
         </span>
         <span className="truncate">{label}</span>
@@ -717,7 +696,7 @@ function SessionItem({
           }}
           aria-label="Перезапустить агента на актуальном окружении"
           title="Перезапустить агента на актуальном окружении"
-          className="right-[7rem] text-sidebar-foreground/60 hover:text-sidebar-foreground"
+          className="right-[5.25rem] text-sidebar-foreground/60 hover:text-sidebar-foreground"
         >
           <RefreshCw className="size-4" />
         </SidebarMenuAction>
@@ -734,8 +713,8 @@ function SessionItem({
           // showOnHover прячет кнопку без наведения — на время архивации спиннер виден.
           className={
             archiving
-              ? "right-[5.25rem] text-sidebar-foreground/60 opacity-100"
-              : "right-[5.25rem] text-sidebar-foreground/60 hover:text-sidebar-foreground"
+              ? "right-14 text-sidebar-foreground/60 opacity-100"
+              : "right-14 text-sidebar-foreground/60 hover:text-sidebar-foreground"
           }
         >
           {archiving ? (
@@ -743,20 +722,6 @@ function SessionItem({
           ) : (
             <Archive className="size-4" />
           )}
-        </SidebarMenuAction>
-      )}
-      {session.kind === SessionKind.ACP && (
-        <SidebarMenuAction
-          showOnHover
-          disabled={busy}
-          onClick={(e) => {
-            e.stopPropagation();
-            onFork();
-          }}
-          aria-label="Создать ветку"
-          className="right-14 text-sidebar-foreground/60 hover:text-sidebar-foreground"
-        >
-          <GitBranch className="size-4" />
         </SidebarMenuAction>
       )}
       <SidebarMenuAction

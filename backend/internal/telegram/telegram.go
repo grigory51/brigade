@@ -848,7 +848,7 @@ func (s *Service) session(bot store.TelegramBot, in inbound) (string, error) {
 		instructionProfile = session.InstructionProfileTelegramGuest
 	}
 	created, err := s.registry.Create(s.ctx, bot.UserID, store.SessionKindACP, bot.AgentType,
-		bot.AuthProfile, "", "", bot.McpServers, bot.Image, instructionProfile, "default")
+		bot.AuthProfile, "", "", bot.McpServers, bot.Image, instructionProfile, "default", telegramSessionGroupLabel(bot))
 	if err != nil {
 		return "", err
 	}
@@ -876,6 +876,13 @@ func telegramSessionName(bot store.TelegramBot, in inbound) string {
 		name += fmt.Sprintf(" · %d", in.threadID)
 	}
 	return name
+}
+
+func telegramSessionGroupLabel(bot store.TelegramBot) string {
+	if bot.Username != "" {
+		return "Telegram · @" + bot.Username
+	}
+	return "Telegram"
 }
 
 func (s *Service) newSession(bot store.TelegramBot, in inbound) {

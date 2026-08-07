@@ -65,7 +65,8 @@
     .srow.active { background: var(--card); }
     .srow .sd { width: 7px; height: 7px; border-radius: 50%; flex: none; }
     .srow .sd.on { background: #4ade80; } .srow .sd.run { background: var(--primary); } .srow .sd.idle { background: #56534e; }
-    .side-fork { margin-left: 16px; }
+    .side-group { margin-top: 4px; background: var(--card); color: var(--muted-fg); font-size: 11.5px; }
+    .side-child { margin-left: 14px; }
     .main { padding: 20px 22px; display: flex; flex-direction: column; gap: 16px; }
     .prompt { font-family: var(--mono); font-size: 13.5px; color: #e9e7e0; display: flex; gap: 10px; align-items: baseline; }
     .prompt .chev { color: var(--primary); font-weight: 700; }
@@ -204,9 +205,9 @@
           <div class="side">
             <div class="lbl">Sessions</div>
             <div class="srow active"><i class="sd run"></i> deploy-landing</div>
-            <div class="srow"><i class="sd on"></i> refactor-auth</div>
-            <div class="srow side-fork"><i class="sd on"></i> ↳ jwt-rotation</div>
-            <div class="srow"><i class="sd idle"></i> nightly-tests</div>
+            <div class="srow side-group">Telegram · @brigade</div>
+            <div class="srow side-child"><i class="sd on"></i> release chat</div>
+            <div class="srow side-child"><i class="sd idle"></i> support topic</div>
           </div>
           <div class="main">
             <div class="prompt"><span class="chev">&gt;</span> ship the landing page<span class="caret"></span></div>
@@ -320,25 +321,24 @@
         <div class="feat">
           <div class="feat-top">
             <div class="ic"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg></div>
-            <div><h3>Your agent in Telegram</h3><p>Connect your own bot and choose its ACP agent, auth, image and MCP set. Direct chats and forum topics become persistent sessions with formatted replies, images and files.</p></div>
+            <div><h3>Your agent in Telegram</h3><p>Connect your own bot and choose an agent connection, image and MCP set. Direct chats and forum topics become grouped persistent sessions with formatted replies, images and files.</p></div>
           </div>
         </div>
 
-        <!-- Session tree -->
+        <!-- Session groups -->
         <div class="feat">
           <div class="feat-top">
-            <div class="ic"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="9" r="2.5"/><path d="M6 8.5v7M8.5 6H14a2 2 0 0 1 2 2v-.5"/></svg></div>
-            <div><h3>Session tree</h3><p>Fork any chat into an independent branch — full history carried over — and explore two directions without losing the first.</p></div>
+            <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="2"/><path d="M7 13h14M7 18h14"/><circle cx="4" cy="13" r="1"/><circle cx="4" cy="18" r="1"/></svg></div>
+            <div><h3>Grouped sessions</h3><p>Related sessions share one label in the sidebar. Telegram topics are grouped by bot, while independent sessions stay exactly where you expect them.</p></div>
           </div>
           <div class="schema">
-            <svg class="sv" viewBox="0 0 300 132" role="img" aria-label="a session forking into a branch">
-              <path class="s-acc" d="M20 96 H280"/>
-              <circle class="s-accf" cx="60" cy="96" r="6"/><circle class="s-accf" cx="140" cy="96" r="6"/><circle class="s-accf" cx="240" cy="96" r="6"/>
-              <path class="s-l" d="M140 96 C180 96 180 44 220 44"/>
-              <circle class="s-accf2" cx="220" cy="44" r="6"/><circle class="s-accf2" cx="270" cy="44" r="6"/>
-              <path class="s-l" d="M220 44 H270"/>
-              <text x="150" y="40" font-size="10">fork · branch</text>
-              <text x="20" y="120" font-size="10">main session</text>
+            <svg class="sv" viewBox="0 0 300 132" role="img" aria-label="three sessions grouped under one Telegram bot">
+              <rect class="s-box" x="36" y="12" width="228" height="30" rx="8"/>
+              <text x="54" y="31" class="s-tb" font-size="11">Telegram · @brigade</text>
+              <path class="s-l" d="M58 42 V112"/>
+              <circle class="s-accf" cx="58" cy="62" r="4"/><text x="76" y="66" font-size="10">release chat</text>
+              <circle class="s-accf2" cx="58" cy="86" r="4"/><text x="76" y="90" font-size="10">support topic</text>
+              <circle class="s-accf" cx="58" cy="110" r="4"/><text x="76" y="114" font-size="10">private chat</text>
             </svg>
           </div>
         </div>

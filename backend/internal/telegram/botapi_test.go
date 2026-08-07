@@ -44,6 +44,9 @@ func TestGuestCallerAndMessageSplit(t *testing.T) {
 		t.Fatalf("unexpected guest route: %+v", in)
 	}
 	bot := store.TelegramBot{Username: "brigade_bot"}
+	if got := telegramSessionGroupLabel(bot); got != "Telegram · @brigade_bot" {
+		t.Fatalf("telegram group label: %q", got)
+	}
 	in.message.Chat = telegramChat{ID: 77, Type: "private", Username: "alice"}
 	in.chatID = 77
 	if got := telegramSessionName(bot, in); got != "Telegram · @alice" {

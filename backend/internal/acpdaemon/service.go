@@ -22,15 +22,14 @@ type service struct {
 
 func (s *service) Configure(ctx context.Context, req *connect.Request[v1.DaemonConfigureRequest]) (*connect.Response[v1.DaemonConfigureResponse], error) {
 	sid, err := s.d.configure(ctx, &v1ConfigureRequest{
-		OauthToken:        req.Msg.OauthToken,
-		ExtraEnv:          req.Msg.ExtraEnv,
-		AdapterCommand:    req.Msg.AdapterCommand,
-		Cwd:               req.Msg.Cwd,
-		ResumeSessionId:   req.Msg.ResumeSessionId,
-		ForkFromSessionId: req.Msg.ForkFromSessionId,
-		PluginDirs:        req.Msg.PluginDirs,
-		McpServersJson:    req.Msg.McpServersJson,
-		SystemPrompt:      req.Msg.SystemPrompt,
+		OauthToken:      req.Msg.OauthToken,
+		ExtraEnv:        req.Msg.ExtraEnv,
+		AdapterCommand:  req.Msg.AdapterCommand,
+		Cwd:             req.Msg.Cwd,
+		ResumeSessionId: req.Msg.ResumeSessionId,
+		PluginDirs:      req.Msg.PluginDirs,
+		McpServersJson:  req.Msg.McpServersJson,
+		SystemPrompt:    req.Msg.SystemPrompt,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)

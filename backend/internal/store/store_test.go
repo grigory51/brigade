@@ -19,7 +19,7 @@ func TestOpenReadOnly(t *testing.T) {
 	}
 	if err := rw.CreateSession(context.Background(), Session{
 		ID: "s1", UserID: "u1", Mode: SessionModeDocker, Kind: SessionKindACP,
-		AgentType: "codex", Status: SessionStatusRunning, CreatedAt: time.Now(),
+		AgentType: "codex", Status: SessionStatusRunning, GroupLabel: "Telegram · @bot", CreatedAt: time.Now(),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -29,8 +29,10 @@ func TestOpenReadOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ro.Close()
-	if _, err := ro.GetSession(context.Background(), "s1"); err != nil {
+	if sess, err := ro.GetSession(context.Background(), "s1"); err != nil {
 		t.Fatalf("read: %v", err)
+	} else if sess.GroupLabel != "Telegram · @bot" {
+		t.Fatalf("group label = %q", sess.GroupLabel)
 	}
 	if err := ro.UpdateSessionName(context.Background(), "s1", "changed"); err == nil {
 		t.Fatal("read-only store accepted a write")

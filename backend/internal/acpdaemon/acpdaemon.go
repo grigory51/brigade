@@ -145,14 +145,13 @@ func (d *Daemon) configure(ctx context.Context, req *v1ConfigureRequest) (string
 		OAuthToken: req.OauthToken,
 		// sshEnv добавляет SSH_AUTH_SOCK: агент подписывает git-операции ключом из памяти
 		// демона, не имея самого ключа.
-		ExtraEnv:          append(append([]string{}, req.ExtraEnv...), d.sshEnvLocked()...),
-		AdapterCommand:    req.AdapterCommand,
-		ResumeSessionID:   req.ResumeSessionId,
-		ForkFromSessionID: req.ForkFromSessionId,
-		McpServers:        mcp,
-		PluginDirs:        req.PluginDirs,
-		SystemPrompt:      req.SystemPrompt,
-		ContainerSandbox:  true,
+		ExtraEnv:         append(append([]string{}, req.ExtraEnv...), d.sshEnvLocked()...),
+		AdapterCommand:   req.AdapterCommand,
+		ResumeSessionID:  req.ResumeSessionId,
+		McpServers:       mcp,
+		PluginDirs:       req.PluginDirs,
+		SystemPrompt:     req.SystemPrompt,
+		ContainerSandbox: true,
 		// SpawnProc nil → локальный subprocess адаптера внутри контейнера.
 	})
 	if err != nil {
@@ -264,15 +263,14 @@ func (d *Daemon) Close() {
 // v1ConfigureRequest — локальный алиас полей DaemonConfigureRequest (чтобы service.go не
 // тащил gen-типы в сигнатуру configure). Заполняется в хендлере.
 type v1ConfigureRequest struct {
-	OauthToken        string
-	ExtraEnv          []string
-	AdapterCommand    string
-	Cwd               string
-	ResumeSessionId   string
-	ForkFromSessionId string
-	PluginDirs        []string
-	McpServersJson    []byte
-	SystemPrompt      string
+	OauthToken      string
+	ExtraEnv        []string
+	AdapterCommand  string
+	Cwd             string
+	ResumeSessionId string
+	PluginDirs      []string
+	McpServersJson  []byte
+	SystemPrompt    string
 }
 
 // --- entrypoint ---

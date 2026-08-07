@@ -150,9 +150,6 @@ type acpSession interface {
 	Cancel(ctx context.Context) error
 	FinishStreams()
 	Messages() []acp.Message
-	// SeedMessages засеивает ленту снимком родителя при fork (session/fork историю не
-	// реплеит — без засева чат ветки пуст). Разворачивается в начало Messages().
-	SeedMessages(msgs []acp.Message)
 	Commands() []agui.AvailableCommand
 	ConfigOptions() []acpsdk.SessionConfigOption
 	SetConfigOption(ctx context.Context, configID, value string) ([]acpsdk.SessionConfigOption, error)
@@ -538,7 +535,7 @@ func (r *Registry) endTeardown(sessionID string) {
 // и сохраняет resume-поля. Режим спавна берётся у инстанса (r.mode), не выбирается
 // пользователем. agentType — тип агента; cwd пустой означает дефолт workDir; prompt
 // передаётся ACP-агенту первым ходом (для CLI игнорируется — ввод идёт по WS).
-func (r *Registry) Create(ctx context.Context, userID string, kind store.SessionKind, agentType, authProfile, cwd, prompt string, mcpServerIDs []string, image, instructionProfile, responseProfileID string) (store.Session, error) {
+func (r *Registry) Create(ctx context.Context, userID string, kind store.SessionKind, agentType, authProfile, cwd, prompt string, mcpServerIDs []string, image, instructionProfile, responseProfileID, groupLabel string) (store.Session, error) {
 	at := agent.Get(agentType)
 	connection, connectionErr := r.store.GetAgentConnection(ctx, userID, authProfile)
 	if connectionErr != nil && !errors.Is(connectionErr, store.ErrNotFound) {
@@ -633,6 +630,7 @@ func (r *Registry) Create(ctx context.Context, userID string, kind store.Session
 		Cwd:                cwd,
 		CreatedAt:          time.Now(),
 		Name:               autoName(prompt),
+		GroupLabel:         groupLabel,
 		McpServers:         mcpServerIDs,
 		Image:              image,
 		AuthProfile:        authProfile,
@@ -746,7 +744,7 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 		if sess.Mode == store.SessionModeDocker {
 			// docker: durable-демон (`brigade acp-agent`) в контейнере сессии владеет
 			// адаптером и переживает рестарт brigade; brigade — acpremote-клиент к нему.
-			return r.spawnACPDaemon(ctx, sess, token, prompt, "", "")
+			return r.spawnACPDaemon(ctx, sess, token, prompt, "")
 		}
 		// local: acp.New сам поднимает adapter-subprocess в процессе brigade (без демона —
 		// он умрёт с brigade, restore пере-спавнит через session/load).
@@ -813,16 +811,12 @@ func (r *Registry) setACPHooks(sess store.Session, client acpSession) {
 // через Configure — в env контейнера их НЕТ (не видны из /ws/shell docker exec).
 // resumeSessionID непуст → session/load существующей ACP-сессии (restore после смерти
 // контейнера при живом volume).
-func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token, prompt, resumeSessionID, forkFromSessionID string) (*live, string, string, error) {
+func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token, prompt, resumeSessionID string) (*live, string, string, error) {
 	ds, ok := r.spawner.(*spawn.DockerSpawner)
 	if !ok {
 		return nil, "", "", fmt.Errorf("session: docker-режим без DockerSpawner")
 	}
-	stateID, err := r.rootID(ctx, sess)
-	if err != nil {
-		return nil, "", "", err
-	}
-	addr, err := ds.ACP().StartDaemon(ctx, r.agentSpec(ctx, sess), stateID, r.previews.DaemonPublicKey())
+	addr, err := ds.ACP().StartDaemon(ctx, r.agentSpec(ctx, sess), sess.ID, r.previews.DaemonPublicKey())
 	if err != nil {
 		return nil, "", "", fmt.Errorf("session: start acp daemon: %w", err)
 	}
@@ -831,15 +825,14 @@ func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token
 	r.setACPHooks(sess, rc)
 	r.loadAgentSSHKey(ctx, sess.UserID, rc.SetSSHKey)
 	sid, err := rc.Configure(ctx, acpremote.ConfigureOptions{
-		OAuthToken:        token,
-		ExtraEnv:          r.agentEnv(ctx, sess, token), // auth и preview — только процессу адаптера
-		AdapterCommand:    agent.Get(sess.AgentType).CommandFor(store.SessionKindACP),
-		Cwd:               sess.Cwd,
-		ResumeSessionID:   resumeSessionID,
-		ForkFromSessionID: forkFromSessionID,
-		McpServers:        r.mcpServers(ctx, sess),
-		PluginDirs:        r.acpPluginDirs(sess),
-		SystemPrompt:      instructionPrompt(sess.InstructionProfile, sess.ResponseInstructions),
+		OAuthToken:      token,
+		ExtraEnv:        r.agentEnv(ctx, sess, token), // auth и preview — только процессу адаптера
+		AdapterCommand:  agent.Get(sess.AgentType).CommandFor(store.SessionKindACP),
+		Cwd:             sess.Cwd,
+		ResumeSessionID: resumeSessionID,
+		McpServers:      r.mcpServers(ctx, sess),
+		PluginDirs:      r.acpPluginDirs(sess),
+		SystemPrompt:    instructionPrompt(sess.InstructionProfile, sess.ResponseInstructions),
 	})
 	if err != nil {
 		return nil, "", "", fmt.Errorf("session: configure acp daemon: %w", err)
@@ -934,9 +927,9 @@ func (r *Registry) acpPluginDirs(sess store.Session) []string {
 
 // acpLocalOptions — общие опции local-адаптера ACP (acp.New): cwd, токен, preview-env, набор
 // MCP-серверов и каталог плагина со скиллами. ЕДИНАЯ точка, чтобы ВСЕ пути (создание, restore,
-// respawn, reload, fork) поднимали адаптер с одинаковым набором — иначе часть путей теряет
-// --plugin-dir/MCP и скиллы (/note) либо render_ui пропадают. Resume/Fork вызывающий
-// доставляет сам поверх.
+// respawn, reload) поднимали адаптер с одинаковым набором — иначе часть путей теряет
+// --plugin-dir/MCP и скиллы (/note) либо render_ui пропадают. Resume вызывающий доставляет
+// сам поверх.
 func (r *Registry) acpLocalOptions(ctx context.Context, sess store.Session, token string) acp.Options {
 	return acp.Options{
 		Cwd:            sess.Cwd,
@@ -1290,22 +1283,6 @@ func (r *Registry) provisionAgentSSH(_ context.Context, sess store.Session) {
 	}
 }
 
-// rootID возвращает идентификатор корневой сессии дерева (подъём по parent_id).
-// Ветки монтируют volume состояния корня: форкнутый агент читает исходную сессию из
-// общего хранилища. Родитель, удалённый из store, обрывает подъём — корнем считается
-// последняя достижимая сессия.
-func (r *Registry) rootID(ctx context.Context, sess store.Session) (string, error) {
-	cur := sess
-	for cur.ParentID != "" {
-		parent, err := r.store.GetSession(ctx, cur.ParentID)
-		if err != nil {
-			break
-		}
-		cur = parent
-	}
-	return cur.ID, nil
-}
-
 // watchExit блокируется до завершения процесса агента CLI-сессии и затем
 // фиксирует остановку: помечает сессию stopped в store и убирает её живой объект
 // из реестра. Без этого после выхода агента (например, по /quit) сессия осталась
@@ -1590,7 +1567,7 @@ func (r *Registry) reviveACP(ctx context.Context, sess store.Session) (*live, er
 	}
 	token := r.agentToken(ctx, sess)
 	if sess.Mode == store.SessionModeDocker {
-		lv, sid, _, err := r.spawnACPDaemon(ctx, sess, token, "", sess.AgentSessionID, "")
+		lv, sid, _, err := r.spawnACPDaemon(ctx, sess, token, "", sess.AgentSessionID)
 		if err != nil {
 			return nil, err
 		}
@@ -1871,110 +1848,6 @@ func (r *Registry) OpenWorkspaceFile(ctx context.Context, sessionID, userID, nam
 	return f, nil
 }
 
-// Fork создаёт ветку ACP-сессии: агент клонирует исходную сессию с историей
-// (session/fork), brigade регистрирует новую запись с parent_id и живым клиентом.
-// Ветка продолжается независимо от родителя. Только ACP-сессии: CLI (pty) ветвлению не
-// подлежит. Чужая сессия трактуется как ненайденная (см. Get).
-func (r *Registry) Fork(ctx context.Context, sessionID, userID string) (store.Session, error) {
-	src, err := r.Get(ctx, sessionID, userID)
-	if err != nil {
-		return store.Session{}, err
-	}
-	if src.Kind != store.SessionKindACP {
-		return store.Session{}, fmt.Errorf("session: fork поддержан только для acp-сессий")
-	}
-	if src.AgentSessionID == "" {
-		return store.Session{}, fmt.Errorf("session: исходная сессия не имеет agent_session_id")
-	}
-
-	name := src.Name
-	if name == "" {
-		name = src.AgentType
-	}
-	sess := store.Session{
-		ID:        uuid.NewString(),
-		UserID:    userID,
-		Mode:      src.Mode,
-		Kind:      store.SessionKindACP,
-		AgentType: src.AgentType,
-		Status:    store.SessionStatusRunning,
-		Cwd:       src.Cwd,
-		CreatedAt: time.Now(),
-		Name:      name + " · ветка",
-		ParentID:  src.ID,
-		// Ветка продолжает ту же работу — набор инструментов и образ наследуются от
-		// родителя.
-		McpServers:           src.McpServers,
-		Image:                src.Image,
-		AuthProfile:          src.AuthProfile,
-		InstructionProfile:   src.InstructionProfile,
-		ResponseProfileID:    src.ResponseProfileID,
-		ResponseProfileName:  src.ResponseProfileName,
-		ResponseInstructions: src.ResponseInstructions,
-	}
-	sess, _, err = r.resolveResponseProfile(ctx, sess)
-	if err != nil {
-		return store.Session{}, err
-	}
-	if err := r.store.CreateSession(ctx, sess); err != nil {
-		return store.Session{}, err
-	}
-	r.installSkill(sess)
-	r.provisionAgentSSH(ctx, sess)
-
-	// Как и в Create: жизнь агента равна жизни сессии, спавн отвязывается от ctx запроса.
-	token := r.agentToken(ctx, sess)
-	var lv *live
-	var sid string
-	if sess.Mode == store.SessionModeDocker {
-		// docker: ветка тоже через durable-демон (session/fork в Configure).
-		l, s, _, err := r.spawnACPDaemon(context.WithoutCancel(ctx), sess, token, "", "", src.AgentSessionID)
-		if err != nil {
-			_ = r.store.DeleteSession(ctx, sess.ID)
-			return store.Session{}, fmt.Errorf("session: fork acp: %w", err)
-		}
-		lv, sid = l, s
-	} else {
-		opts := r.acpLocalOptions(ctx, sess, token)
-		opts.ForkFromSessionID = src.AgentSessionID
-		client, err := acp.New(context.WithoutCancel(ctx), opts)
-		if err != nil {
-			// Ветка не создалась — запись убираем целиком, полусозданное состояние хуже ошибки.
-			_ = r.store.DeleteSession(ctx, sess.ID)
-			return store.Session{}, fmt.Errorf("session: fork acp: %w", err)
-		}
-		r.setACPHooks(sess, client)
-		lv, sid = &live{owner: userID, kind: sess.Kind, mode: sess.Mode, client: client}, client.SessionID()
-	}
-
-	if err := r.store.UpdateSessionResume(ctx, sess.ID, sid, ""); err != nil {
-		_ = lv.client.Close()
-		_ = r.store.DeleteSession(ctx, sess.ID)
-		return store.Session{}, err
-	}
-	sess.AgentSessionID = sid
-
-	// session/fork (в отличие от session/load) историю НЕ реплеит — агент новую сессию
-	// сообщениями не наполняет, поэтому ledger ветки пуст и её чат открывается пустым.
-	// Засеиваем ветку снимком ленты родителя, который brigade уже держит в памяти (тот же
-	// источник, что кормит GetHistory). Родитель не в памяти (напр. не открыт после рестарта) —
-	// baseline пустой; допустимая деградация, т.к. форкают обычно открытую сессию.
-	r.mu.Lock()
-	srcLive := r.live[src.ID]
-	r.mu.Unlock()
-	if srcLive != nil && srcLive.client != nil {
-		lv.client.SeedMessages(srcLive.client.Messages())
-	}
-
-	r.mu.Lock()
-	r.live[sess.ID] = lv
-	r.mu.Unlock()
-
-	log.Printf("session: forked %s -> %s (agent %s -> %s)",
-		src.ID, sess.ID, src.AgentSessionID, sess.AgentSessionID)
-	return sess, nil
-}
-
 // Rename меняет отображаемое имя сессии пользователя и возвращает обновлённую запись.
 // Чужая сессия трактуется как ненайденная (см. Get).
 func (r *Registry) Rename(ctx context.Context, sessionID, userID, name string) (store.Session, error) {
@@ -2139,7 +2012,6 @@ func (r *Registry) Archive(ctx context.Context, sessionID, userID string) (memor
 		Name:      sess.Name,
 		AgentType: sess.AgentType,
 		Kind:      string(sess.Kind),
-		ParentID:  sess.ParentID,
 		Summary:   summary,
 		Created:   sess.CreatedAt,
 		Archived:  time.Now(),
@@ -2322,7 +2194,7 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 				}
 			}
 			if rc == nil {
-				lv, newSid, _, err := r.spawnACPDaemon(ctx, sess, token, "", sess.AgentSessionID, "")
+				lv, newSid, _, err := r.spawnACPDaemon(ctx, sess, token, "", sess.AgentSessionID)
 				if err != nil {
 					return fmt.Errorf("restore acp daemon: %w", err)
 				}

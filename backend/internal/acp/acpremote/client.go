@@ -45,11 +45,6 @@ type Client struct {
 	// pendingPermissions — последний снимок ожиданий durable-демона из Status.
 	// GetStatus фронта читает его без второго RPC.
 	pendingPermissions [][]byte
-	// baseline — снимок ленты родителя, засеянный при fork. Демон форк-сессии историю не
-	// реплеит (session/fork ≠ session/load), поэтому его GetMessages пуст — разворачиваем
-	// baseline перед лентой демона в Messages(). См. Registry.Fork.
-	baseline []acp.Message
-
 	// promptMu сериализует turn'ы, как acp.Client.promptMu: brigade допускает параллельные
 	// /run в один тред, а привязка sink нового прогона (onTurnStart) должна происходить
 	// строго между turn'ами.
@@ -74,15 +69,14 @@ func New(baseURL, sessionID string, signToken func() (string, error)) *Client {
 
 // ConfigureOptions — параметры Configure (спавн адаптера в демоне).
 type ConfigureOptions struct {
-	OAuthToken        string
-	ExtraEnv          []string
-	AdapterCommand    string
-	Cwd               string
-	ResumeSessionID   string
-	ForkFromSessionID string
-	PluginDirs        []string
-	McpServers        []acpsdk.McpServer
-	SystemPrompt      string
+	OAuthToken      string
+	ExtraEnv        []string
+	AdapterCommand  string
+	Cwd             string
+	ResumeSessionID string
+	PluginDirs      []string
+	McpServers      []acpsdk.McpServer
+	SystemPrompt    string
 }
 
 // Configure просит демон (пере)поднять адаптер (секреты — здесь, не в env контейнера).
@@ -93,15 +87,14 @@ func (c *Client) Configure(ctx context.Context, opts ConfigureOptions) (string, 
 		mcpJSON, _ = json.Marshal(opts.McpServers)
 	}
 	resp, err := c.RPC.Configure(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonConfigureRequest{
-		OauthToken:        opts.OAuthToken,
-		ExtraEnv:          opts.ExtraEnv,
-		AdapterCommand:    opts.AdapterCommand,
-		Cwd:               opts.Cwd,
-		ResumeSessionId:   opts.ResumeSessionID,
-		ForkFromSessionId: opts.ForkFromSessionID,
-		PluginDirs:        opts.PluginDirs,
-		McpServersJson:    mcpJSON,
-		SystemPrompt:      opts.SystemPrompt,
+		OauthToken:      opts.OAuthToken,
+		ExtraEnv:        opts.ExtraEnv,
+		AdapterCommand:  opts.AdapterCommand,
+		Cwd:             opts.Cwd,
+		ResumeSessionId: opts.ResumeSessionID,
+		PluginDirs:      opts.PluginDirs,
+		McpServersJson:  mcpJSON,
+		SystemPrompt:    opts.SystemPrompt,
 	}))
 	if err != nil {
 		return "", err
@@ -287,26 +280,15 @@ func (c *Client) waitDelivered(target int64, timeout time.Duration) {
 	}
 }
 
-// Messages → проекция истории из демона (с baseline родителя впереди, если это форк).
+// Messages → проекция истории из демона.
 func (c *Client) Messages() []acp.Message {
-	c.mu.Lock()
-	out := append([]acp.Message(nil), c.baseline...)
-	c.mu.Unlock()
 	resp, err := c.RPC.GetMessages(context.Background(), daemonrpc.Req(c.Sign(), &v1.Empty{}))
 	if err != nil {
-		return out
+		return nil
 	}
-	var live []acp.Message
-	_ = json.Unmarshal(resp.Msg.Json, &live)
-	return append(out, live...)
-}
-
-// SeedMessages засеивает ленту снимком родителя при fork: демон форка историю не реплеит,
-// поэтому baseline разворачивается перед его лентой. Вызывается один раз при создании форка.
-func (c *Client) SeedMessages(msgs []acp.Message) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.baseline = msgs
+	var out []acp.Message
+	_ = json.Unmarshal(resp.Msg.Json, &out)
+	return out
 }
 
 // Commands → последний список slash-команд из демона.

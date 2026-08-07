@@ -41,8 +41,6 @@ const (
 	SessionServiceGetProcedure = "/brigade.v1.SessionService/Get"
 	// SessionServiceUpdateProcedure is the fully-qualified name of the SessionService's Update RPC.
 	SessionServiceUpdateProcedure = "/brigade.v1.SessionService/Update"
-	// SessionServiceForkProcedure is the fully-qualified name of the SessionService's Fork RPC.
-	SessionServiceForkProcedure = "/brigade.v1.SessionService/Fork"
 	// SessionServiceStopProcedure is the fully-qualified name of the SessionService's Stop RPC.
 	SessionServiceStopProcedure = "/brigade.v1.SessionService/Stop"
 	// SessionServiceDeleteProcedure is the fully-qualified name of the SessionService's Delete RPC.
@@ -75,7 +73,6 @@ type SessionServiceClient interface {
 	List(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
 	Get(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error)
 	Update(context.Context, *connect.Request[v1.UpdateSessionRequest]) (*connect.Response[v1.UpdateSessionResponse], error)
-	Fork(context.Context, *connect.Request[v1.ForkSessionRequest]) (*connect.Response[v1.ForkSessionResponse], error)
 	Stop(context.Context, *connect.Request[v1.StopSessionRequest]) (*connect.Response[v1.Empty], error)
 	Delete(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.Empty], error)
 	// ReloadAgent перезапускает ACP-агента сессии на актуальном окружении, сохраняя диалог
@@ -130,12 +127,6 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+SessionServiceUpdateProcedure,
 			connect.WithSchema(sessionServiceMethods.ByName("Update")),
-			connect.WithClientOptions(opts...),
-		),
-		fork: connect.NewClient[v1.ForkSessionRequest, v1.ForkSessionResponse](
-			httpClient,
-			baseURL+SessionServiceForkProcedure,
-			connect.WithSchema(sessionServiceMethods.ByName("Fork")),
 			connect.WithClientOptions(opts...),
 		),
 		stop: connect.NewClient[v1.StopSessionRequest, v1.Empty](
@@ -201,7 +192,6 @@ type sessionServiceClient struct {
 	list                      *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
 	get                       *connect.Client[v1.GetSessionRequest, v1.GetSessionResponse]
 	update                    *connect.Client[v1.UpdateSessionRequest, v1.UpdateSessionResponse]
-	fork                      *connect.Client[v1.ForkSessionRequest, v1.ForkSessionResponse]
 	stop                      *connect.Client[v1.StopSessionRequest, v1.Empty]
 	delete                    *connect.Client[v1.DeleteSessionRequest, v1.Empty]
 	reloadAgent               *connect.Client[v1.ReloadAgentRequest, v1.Empty]
@@ -231,11 +221,6 @@ func (c *sessionServiceClient) Get(ctx context.Context, req *connect.Request[v1.
 // Update calls brigade.v1.SessionService.Update.
 func (c *sessionServiceClient) Update(ctx context.Context, req *connect.Request[v1.UpdateSessionRequest]) (*connect.Response[v1.UpdateSessionResponse], error) {
 	return c.update.CallUnary(ctx, req)
-}
-
-// Fork calls brigade.v1.SessionService.Fork.
-func (c *sessionServiceClient) Fork(ctx context.Context, req *connect.Request[v1.ForkSessionRequest]) (*connect.Response[v1.ForkSessionResponse], error) {
-	return c.fork.CallUnary(ctx, req)
 }
 
 // Stop calls brigade.v1.SessionService.Stop.
@@ -289,7 +274,6 @@ type SessionServiceHandler interface {
 	List(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
 	Get(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error)
 	Update(context.Context, *connect.Request[v1.UpdateSessionRequest]) (*connect.Response[v1.UpdateSessionResponse], error)
-	Fork(context.Context, *connect.Request[v1.ForkSessionRequest]) (*connect.Response[v1.ForkSessionResponse], error)
 	Stop(context.Context, *connect.Request[v1.StopSessionRequest]) (*connect.Response[v1.Empty], error)
 	Delete(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.Empty], error)
 	// ReloadAgent перезапускает ACP-агента сессии на актуальном окружении, сохраняя диалог
@@ -340,12 +324,6 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		SessionServiceUpdateProcedure,
 		svc.Update,
 		connect.WithSchema(sessionServiceMethods.ByName("Update")),
-		connect.WithHandlerOptions(opts...),
-	)
-	sessionServiceForkHandler := connect.NewUnaryHandler(
-		SessionServiceForkProcedure,
-		svc.Fork,
-		connect.WithSchema(sessionServiceMethods.ByName("Fork")),
 		connect.WithHandlerOptions(opts...),
 	)
 	sessionServiceStopHandler := connect.NewUnaryHandler(
@@ -412,8 +390,6 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 			sessionServiceGetHandler.ServeHTTP(w, r)
 		case SessionServiceUpdateProcedure:
 			sessionServiceUpdateHandler.ServeHTTP(w, r)
-		case SessionServiceForkProcedure:
-			sessionServiceForkHandler.ServeHTTP(w, r)
 		case SessionServiceStopProcedure:
 			sessionServiceStopHandler.ServeHTTP(w, r)
 		case SessionServiceDeleteProcedure:
@@ -455,10 +431,6 @@ func (UnimplementedSessionServiceHandler) Get(context.Context, *connect.Request[
 
 func (UnimplementedSessionServiceHandler) Update(context.Context, *connect.Request[v1.UpdateSessionRequest]) (*connect.Response[v1.UpdateSessionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.Update is not implemented"))
-}
-
-func (UnimplementedSessionServiceHandler) Fork(context.Context, *connect.Request[v1.ForkSessionRequest]) (*connect.Response[v1.ForkSessionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.Fork is not implemented"))
 }
 
 func (UnimplementedSessionServiceHandler) Stop(context.Context, *connect.Request[v1.StopSessionRequest]) (*connect.Response[v1.Empty], error) {

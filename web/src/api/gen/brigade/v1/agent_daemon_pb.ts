@@ -367,13 +367,6 @@ export class DaemonConfigureRequest extends Message<DaemonConfigureRequest> {
   mcpServersJson = new Uint8Array(0);
 
   /**
-   * fork_from_session_id — непусто → session/fork (ветка сессии). Взаимоисключимо с resume.
-   *
-   * @generated from field: string fork_from_session_id = 8;
-   */
-  forkFromSessionId = "";
-
-  /**
    * system_prompt — дополнение стандартного system prompt; не попадает в user history.
    *
    * @generated from field: string system_prompt = 9;
@@ -395,7 +388,6 @@ export class DaemonConfigureRequest extends Message<DaemonConfigureRequest> {
     { no: 5, name: "resume_session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 6, name: "plugin_dirs", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 7, name: "mcp_servers_json", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
-    { no: 8, name: "fork_from_session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 9, name: "system_prompt", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 

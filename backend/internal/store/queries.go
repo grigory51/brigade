@@ -401,10 +401,10 @@ func (s *Store) DeleteTelegramConversation(ctx context.Context, botID, scope str
 func (s *Store) CreateSession(ctx context.Context, sess Session) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO sessions
-		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name, parent_id, mcp_servers, image, auth_profile, instruction_profile, response_profile_id, response_profile_name, response_instructions)
+		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name, group_label, mcp_servers, image, auth_profile, instruction_profile, response_profile_id, response_profile_name, response_instructions)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		sess.ID, sess.UserID, string(sess.Mode), string(sess.Kind), sess.AgentType,
-		sess.AgentSessionID, sess.ContainerLabel, string(sess.Status), sess.Cwd, toUnix(sess.CreatedAt), sess.Name, sess.ParentID,
+		sess.AgentSessionID, sess.ContainerLabel, string(sess.Status), sess.Cwd, toUnix(sess.CreatedAt), sess.Name, sess.GroupLabel,
 		strings.Join(sess.McpServers, ","), sess.Image, sess.AuthProfile, sess.InstructionProfile,
 		sess.ResponseProfileID, sess.ResponseProfileName, sess.ResponseInstructions,
 	)
@@ -486,7 +486,7 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 }
 
 const sessionSelect = `SELECT id, user_id, mode, kind, agent_type, agent_session_id,
-	container_label, status, cwd, created_at, name, parent_id, mcp_servers, image, auth_profile, instruction_profile,
+	container_label, status, cwd, created_at, name, group_label, mcp_servers, image, auth_profile, instruction_profile,
 	response_profile_id, response_profile_name, response_instructions FROM sessions`
 
 func (s *Store) querySessions(ctx context.Context, query string, args ...any) ([]Session, error) {
@@ -529,7 +529,7 @@ func scanSessionRow(r rowScanner) (Session, error) {
 	var mode, kind, status, mcp string
 	var createdAt int64
 	err := r.Scan(&sess.ID, &sess.UserID, &mode, &kind, &sess.AgentType,
-		&sess.AgentSessionID, &sess.ContainerLabel, &status, &sess.Cwd, &createdAt, &sess.Name, &sess.ParentID, &mcp, &sess.Image, &sess.AuthProfile, &sess.InstructionProfile,
+		&sess.AgentSessionID, &sess.ContainerLabel, &status, &sess.Cwd, &createdAt, &sess.Name, &sess.GroupLabel, &mcp, &sess.Image, &sess.AuthProfile, &sess.InstructionProfile,
 		&sess.ResponseProfileID, &sess.ResponseProfileName, &sess.ResponseInstructions)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

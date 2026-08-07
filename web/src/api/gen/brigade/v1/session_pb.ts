@@ -169,13 +169,6 @@ export class Session extends Message<Session> {
   name = "";
 
   /**
-   * parent_id — сессия-родитель для веток (Fork). Пустое — корневая сессия.
-   *
-   * @generated from field: string parent_id = 12;
-   */
-  parentId = "";
-
-  /**
    * archived — сессия в архиве (контейнер остановлен, чат — только для чтения из снимка
    * истории). Архивные сессии не показываются в основном списке (List).
    *
@@ -223,6 +216,13 @@ export class Session extends Message<Session> {
    */
   responseProfileName = "";
 
+  /**
+   * group_label — общая подпись связанных сессий для группировки в списке.
+   *
+   * @generated from field: string group_label = 20;
+   */
+  groupLabel = "";
+
   constructor(data?: PartialMessage<Session>) {
     super();
     proto3.util.initPartial(data, this);
@@ -242,7 +242,6 @@ export class Session extends Message<Session> {
     { no: 9, name: "cwd", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 10, name: "created_at", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
     { no: 11, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 12, name: "parent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 13, name: "archived", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 14, name: "summary", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 15, name: "mcp_server_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
@@ -250,6 +249,7 @@ export class Session extends Message<Session> {
     { no: 17, name: "auth_profile", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 18, name: "response_profile_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 19, name: "response_profile_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 20, name: "group_label", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Session {
@@ -533,83 +533,6 @@ export class GetSessionResponse extends Message<GetSessionResponse> {
 
   static equals(a: GetSessionResponse | PlainMessage<GetSessionResponse> | undefined, b: GetSessionResponse | PlainMessage<GetSessionResponse> | undefined): boolean {
     return proto3.util.equals(GetSessionResponse, a, b);
-  }
-}
-
-/**
- * Fork создаёт ветку сессии: агент клонирует свою сессию (ACP session/fork), brigade
- * заводит новую запись с parent_id = исходная. Ветка продолжается независимо.
- *
- * @generated from message brigade.v1.ForkSessionRequest
- */
-export class ForkSessionRequest extends Message<ForkSessionRequest> {
-  /**
-   * @generated from field: string session_id = 1;
-   */
-  sessionId = "";
-
-  constructor(data?: PartialMessage<ForkSessionRequest>) {
-    super();
-    proto3.util.initPartial(data, this);
-  }
-
-  static readonly runtime: typeof proto3 = proto3;
-  static readonly typeName = "brigade.v1.ForkSessionRequest";
-  static readonly fields: FieldList = proto3.util.newFieldList(() => [
-    { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-  ]);
-
-  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ForkSessionRequest {
-    return new ForkSessionRequest().fromBinary(bytes, options);
-  }
-
-  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ForkSessionRequest {
-    return new ForkSessionRequest().fromJson(jsonValue, options);
-  }
-
-  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ForkSessionRequest {
-    return new ForkSessionRequest().fromJsonString(jsonString, options);
-  }
-
-  static equals(a: ForkSessionRequest | PlainMessage<ForkSessionRequest> | undefined, b: ForkSessionRequest | PlainMessage<ForkSessionRequest> | undefined): boolean {
-    return proto3.util.equals(ForkSessionRequest, a, b);
-  }
-}
-
-/**
- * @generated from message brigade.v1.ForkSessionResponse
- */
-export class ForkSessionResponse extends Message<ForkSessionResponse> {
-  /**
-   * @generated from field: brigade.v1.Session session = 1;
-   */
-  session?: Session;
-
-  constructor(data?: PartialMessage<ForkSessionResponse>) {
-    super();
-    proto3.util.initPartial(data, this);
-  }
-
-  static readonly runtime: typeof proto3 = proto3;
-  static readonly typeName = "brigade.v1.ForkSessionResponse";
-  static readonly fields: FieldList = proto3.util.newFieldList(() => [
-    { no: 1, name: "session", kind: "message", T: Session },
-  ]);
-
-  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ForkSessionResponse {
-    return new ForkSessionResponse().fromBinary(bytes, options);
-  }
-
-  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ForkSessionResponse {
-    return new ForkSessionResponse().fromJson(jsonValue, options);
-  }
-
-  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ForkSessionResponse {
-    return new ForkSessionResponse().fromJsonString(jsonString, options);
-  }
-
-  static equals(a: ForkSessionResponse | PlainMessage<ForkSessionResponse> | undefined, b: ForkSessionResponse | PlainMessage<ForkSessionResponse> | undefined): boolean {
-    return proto3.util.equals(ForkSessionResponse, a, b);
   }
 }
 

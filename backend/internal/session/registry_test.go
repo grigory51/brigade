@@ -139,7 +139,6 @@ func (f *fakeACPSession) PromptAutoApprove(context.Context, string, func()) (str
 func (f *fakeACPSession) Cancel(context.Context) error                { f.cancelled = true; return nil }
 func (f *fakeACPSession) FinishStreams()                              {}
 func (f *fakeACPSession) Messages() []acp.Message                     { return f.messages }
-func (f *fakeACPSession) SeedMessages([]acp.Message)                  {}
 func (f *fakeACPSession) Commands() []agui.AvailableCommand           { return nil }
 func (f *fakeACPSession) ConfigOptions() []acpsdk.SessionConfigOption { return nil }
 func (f *fakeACPSession) SetConfigOption(context.Context, string, string) ([]acpsdk.SessionConfigOption, error) {

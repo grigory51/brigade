@@ -46,7 +46,7 @@ func (s *SessionService) Create(ctx context.Context, req *connect.Request[v1.Cre
 
 	sess, err := s.registry.Create(ctx, userID,
 		kindFromProto(req.Msg.Kind),
-		req.Msg.AgentType, req.Msg.AuthProfile, req.Msg.Cwd, req.Msg.Prompt, req.Msg.McpServerIds, image, "", req.Msg.ResponseProfileId)
+		req.Msg.AgentType, req.Msg.AuthProfile, req.Msg.Cwd, req.Msg.Prompt, req.Msg.McpServerIds, image, "", req.Msg.ResponseProfileId, "")
 	if err != nil {
 		if errors.Is(err, session.ErrClaudeTokenRequired) {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
@@ -91,21 +91,6 @@ func (s *SessionService) Get(ctx context.Context, req *connect.Request[v1.GetSes
 		return nil, sessionError(err)
 	}
 	return connect.NewResponse(&v1.GetSessionResponse{Session: sessionToProto(sess)}), nil
-}
-
-// Fork создаёт ветку сессии: агент клонирует свою сессию с историей, brigade заводит
-// новую запись с parent_id. Ветка живёт и продолжается независимо от родителя.
-func (s *SessionService) Fork(ctx context.Context, req *connect.Request[v1.ForkSessionRequest]) (*connect.Response[v1.ForkSessionResponse], error) {
-	userID, err := requireUser(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	sess, err := s.registry.Fork(ctx, req.Msg.SessionId, userID)
-	if err != nil {
-		return nil, sessionError(err)
-	}
-	return connect.NewResponse(&v1.ForkSessionResponse{Session: sessionToProto(sess)}), nil
 }
 
 // Update меняет отображаемое имя сессии пользователя.

@@ -121,8 +121,8 @@ message DaemonConfigureRequest {
   repeated string plugin_dirs = 6;
   // mcp_servers_json — JSON []acpsdk.McpServer (stdio MCP-серверы кастомных UI-тулов).
   bytes mcp_servers_json = 7;
-  // fork_from_session_id — непусто → session/fork (ветка сессии). Взаимоисключимо с resume.
-  string fork_from_session_id = 8;
+  reserved 8;
+  reserved "fork_from_session_id";
   // system_prompt — дополнение стандартного system prompt; не попадает в user history.
   string system_prompt = 9;
 }

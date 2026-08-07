@@ -27,7 +27,7 @@ func SetLocalMCPServerPath(p string) { localMCPServerPath = p }
 // одновременно, но хостовый путь внутри контейнера не существует.
 func LocalMCPServerPath() string { return localMCPServerPath }
 
-// BrigadeMCPServer собирает конфиг stdio MCP-сервера brigade для session/new (и load/fork).
+// BrigadeMCPServer собирает конфиг stdio MCP-сервера brigade для session/new и load.
 // Имя "brigade" задаёт префикс имён инструментов — модель видит mcp__brigade__render_ui, по
 // нему их и матчит web-клиент (см. ToolFallback). Stdio-транспорт обязан поддерживаться
 // всеми ACP-агентами (в отличие от http/sse, зависящих от capability).
@@ -53,7 +53,7 @@ func mcpServersOrEmpty(servers []acpsdk.McpServer) []acpsdk.McpServer {
 	return servers
 }
 
-// sessionMeta собирает расширения Claude ACP для session/new|load|fork: локальные плагины
+// sessionMeta собирает расширения Claude ACP для session/new|load: локальные плагины
 // и дополнение стандартного system prompt. Другие ACP-агенты игнорируют неизвестный _meta.
 func sessionMeta(pluginDirs []string, systemPrompt string) map[string]any {
 	if len(pluginDirs) == 0 && systemPrompt == "" {
@@ -73,26 +73,4 @@ func sessionMeta(pluginDirs []string, systemPrompt string) map[string]any {
 		meta["systemPrompt"] = map[string]any{"append": systemPrompt}
 	}
 	return meta
-}
-
-// toUnstableMcpServers оборачивает стабильные McpServer в unstable-вариант для session/fork.
-// Stdio-тип общий для обоих вариантов, http/sse описаны отдельными (структурно совпадающими)
-// типами — переносим поле в поле, иначе ветка теряет пользовательские http/sse-серверы.
-func toUnstableMcpServers(servers []acpsdk.McpServer) []acpsdk.UnstableMcpServer {
-	out := make([]acpsdk.UnstableMcpServer, 0, len(servers))
-	for _, s := range servers {
-		u := acpsdk.UnstableMcpServer{Stdio: s.Stdio}
-		if s.Http != nil {
-			u.Http = &acpsdk.UnstableMcpServerHttp{
-				Name: s.Http.Name, Url: s.Http.Url, Headers: s.Http.Headers, Type: "http",
-			}
-		}
-		if s.Sse != nil {
-			u.Sse = &acpsdk.UnstableMcpServerSse{
-				Name: s.Sse.Name, Url: s.Sse.Url, Headers: s.Sse.Headers, Type: "sse",
-			}
-		}
-		out = append(out, u)
-	}
-	return out
 }

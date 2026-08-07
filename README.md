@@ -33,9 +33,8 @@ native macOS app.
 - **Local or Docker runtime** — run agents as host processes or in Docker. ACP sessions
   get isolated containers; CLI sessions share one long-lived container per user. Custom
   user images are supported, while brigade injects its runtime separately.
-- **Live session controls** — fork ACP sessions, reload the agent runtime, open a movable
-  side terminal, jump through long chats with Time Machine, and collect links emitted by
-  the agent.
+- **Live session controls** — reload the agent runtime, open a movable side terminal,
+  jump through long chats with Time Machine, and collect links emitted by the agent.
 - **Per-user MCP** — add stdio, HTTP or SSE servers, select them when creating a session,
   and enable or disable them in a running ACP session. Secret environment variables and
   headers use references to values stored in brigade's encrypted server-side vault.
@@ -47,8 +46,8 @@ native macOS app.
   `archive/`; deleting a session removes it permanently.
 - **Telegram bots** — connect your own BotFather token and choose an agent connection,
   image and MCP set. Direct chats and forum topics map to brigade sessions;
-  replies support formatted text, files and images. Instances use polling or webhooks;
-  the desktop app always polls.
+  sessions from one bot are grouped in the sidebar, and replies support formatted text,
+  files and images. Instances use polling or webhooks; the desktop app always polls.
 - **Notifications** — connect multiple notification destinations per user. The backend
   supports multiple providers and connections; ntfy is the first implemented provider.
 - **Preview proxy** — expose an agent's dev server through a per-session URL using the

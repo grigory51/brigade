@@ -41,7 +41,6 @@ type ArchivedSession struct {
 	Name      string
 	AgentType string
 	Kind      string
-	ParentID  string
 	Summary   string
 	Created   time.Time
 	Archived  time.Time
@@ -53,7 +52,6 @@ type archiveFrontmatter struct {
 	Name      string    `yaml:"name,omitempty"`
 	AgentType string    `yaml:"agent_type,omitempty"`
 	Kind      string    `yaml:"kind,omitempty"`
-	ParentID  string    `yaml:"parent_id,omitempty"`
 	Created   time.Time `yaml:"created"`
 	Archived  time.Time `yaml:"archived"`
 }
@@ -185,7 +183,7 @@ func (s *Service) DeleteArchivedSession(ctx context.Context, userID, sessionID s
 func renderArchive(sess ArchivedSession) []byte {
 	head, _ := yaml.Marshal(archiveFrontmatter{
 		ID: sess.ID, Name: sess.Name, AgentType: sess.AgentType, Kind: sess.Kind,
-		ParentID: sess.ParentID, Created: sess.Created, Archived: sess.Archived,
+		Created: sess.Created, Archived: sess.Archived,
 	})
 	var b bytes.Buffer
 	b.Write(fmDelim)
@@ -216,7 +214,6 @@ func parseArchive(data []byte) (ArchivedSession, bool) {
 		Name:      fm.Name,
 		AgentType: fm.AgentType,
 		Kind:      fm.Kind,
-		ParentID:  fm.ParentID,
 		Summary:   strings.TrimSpace(string(rest[end+len(fmDelim):])),
 		Created:   fm.Created,
 		Archived:  fm.Archived,
