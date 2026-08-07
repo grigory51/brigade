@@ -5,7 +5,11 @@ Brigade.app — однопользовательское desktop-приложе�
 - **Local** — агенты запускаются процессами на Mac;
 - **Docker** — сессии запускаются через выбранный Docker context.
 
-Сейчас приложение собирается из исходников на Apple Silicon:
+Скачайте `Brigade-<version>-arm64.dmg` из [последнего релиза](https://github.com/grigory51/brigade/releases/latest), откройте образ и перетащите Brigade в Applications.
+
+Приложение пока не подписано Developer ID. При первом запуске macOS может потребовать открыть его через контекстное меню **Открыть** или разрешить в системных настройках безопасности.
+
+Сборка из исходников:
 
 ```bash
 git clone https://github.com/grigory51/brigade.git
@@ -14,6 +18,4 @@ make app
 open dist/Brigade.app
 ```
 
-Нужны Xcode Command Line Tools. Сборка включает web UI, Node.js, Claude/Codex ACP-адаптеры и встроенный MCP Brigade. Данные находятся в `~/Library/Application Support/Brigade`.
-
-При первом неподписанном запуске macOS может потребовать разрешить приложение в системных настройках безопасности.
+Нужны Xcode Command Line Tools. Сборка включает web UI, Node.js, npm и встроенный MCP Brigade. При первом запуске приложение устанавливает Claude Code, Codex и ACP-адаптеры в `~/Library/Application Support/Brigade/agent-runtime`; при следующих запусках проверяет обновления. Если сеть временно недоступна, уже установленный runtime продолжает работать.

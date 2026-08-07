@@ -4,23 +4,45 @@ package main
 
 /*
 #cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework Cocoa
+#cgo LDFLAGS: -framework Cocoa -framework WebKit
 #import <Cocoa/Cocoa.h>
+#import <WebKit/WebKit.h>
+
+@interface BrigadeMenuTarget : NSObject
+@property(nonatomic, assign) NSWindow *window;
+@end
+
+@implementation BrigadeMenuTarget
+- (void)openSettings:(id)sender {
+	WKWebView *webview = (WKWebView *)[self.window contentView];
+	[webview evaluateJavaScript:@"window.location.assign('/settings')" completionHandler:nil];
+	[self.window makeKeyAndOrderFront:nil];
+}
+@end
+
+static BrigadeMenuTarget *menuTarget;
 
 // installAppMenu ставит стандартное меню приложения (App + Edit) с системными key-equivalents.
 // Без него окно webview не реагирует на cmd+C/V/X/A/Z и cmd+Q: на macOS эти сочетания
 // маршрутизируются через пункты ГЛАВНОГО меню (селекторы copy:/paste:/cut:/selectAll:/undo:
 // у first responder — им становится сфокусированное поле WebKit), а минимальная обёртка webview
 // главное меню не создаёт. Пункты нацелены на nil → AppKit шлёт их по цепочке responder'ов.
-static void installAppMenu(void) {
+static void installAppMenu(void *window) {
 	NSApplication *app = [NSApplication sharedApplication];
 	NSMenu *menubar = [[NSMenu alloc] init];
 	[app setMainMenu:menubar];
 
-	// App-меню (первый пункт панели): Quit (cmd+Q).
+	// App-меню: About, Settings (cmd+,), Quit (cmd+Q).
 	NSMenuItem *appItem = [[NSMenuItem alloc] init];
 	[menubar addItem:appItem];
 	NSMenu *appMenu = [[NSMenu alloc] init];
+	[appMenu addItemWithTitle:@"About Brigade" action:@selector(orderFrontStandardAboutPanel:) keyEquivalent:@""];
+	[appMenu addItem:[NSMenuItem separatorItem]];
+	menuTarget = [[BrigadeMenuTarget alloc] init];
+	menuTarget.window = (NSWindow *)window;
+	NSMenuItem *settings = [appMenu addItemWithTitle:@"Settings…" action:@selector(openSettings:) keyEquivalent:@","];
+	[settings setTarget:menuTarget];
+	[appMenu addItem:[NSMenuItem separatorItem]];
 	[appMenu addItemWithTitle:@"Quit Brigade" action:@selector(terminate:) keyEquivalent:@"q"];
 	[appItem setSubmenu:appMenu];
 
@@ -56,7 +78,7 @@ func showWindow(url, title string) {
 	defer w.Destroy()
 	// Меню ставим после webview.New (создаёт NSApplication) и до Run: без него не работают
 	// cmd+C/V/X/A/Z и cmd+Q в окне.
-	C.installAppMenu()
+	C.installAppMenu(w.Window())
 	// Внешние ссылки (другой origin) открываем в системном браузере, а не навигируем окно:
 	// у webview нет кнопки «назад», иначе клик по ссылке уводит из приложения без возврата.
 	_ = w.Bind("brigadeOpenExternal", func(u string) { _ = exec.Command("open", u).Start() })

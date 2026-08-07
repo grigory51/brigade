@@ -16,7 +16,7 @@ Multiplatform client lives alongside the main application.
 - `proto/brigade/v1/` is the only source of truth for API contracts.
   `backend/gen/go/` and `web/src/api/gen/` are generated; never edit them manually.
 - `mobile/` contains the KMP shared client and application shells.
-- `docker/`, `packaging/`, `site/`, and `docs/` contain deployment and presentation
+- `packaging/`, `site/`, and `docs/` contain deployment and presentation
   assets.
 
 ## Build and Development

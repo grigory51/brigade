@@ -88,7 +88,9 @@ cp backend/config.example.yaml backend/config.yaml
 make run
 ```
 
-`make app` also produces the self-contained macOS `Brigade.app`. In the desktop UI,
+Each [GitHub release](https://github.com/grigory51/brigade/releases/latest) includes an
+Apple Silicon DMG. `make app` builds the same macOS `Brigade.app` from source. It bundles
+Node and installs or updates the Claude/Codex runtime in the user's application data on launch. In the desktop UI,
 **Settings → Agent environment** can switch between local processes and a Docker context.
 
 ### Docker
@@ -118,7 +120,7 @@ The published agent image is the default runtime and the donor for custom user i
 To build it locally instead:
 
 ```sh
-docker build -t brigade/agent:latest -f docker/agent/Dockerfile .
+docker build -t brigade/agent:latest -f packaging/docker/agent/Dockerfile .
 ```
 
 ## Configuration

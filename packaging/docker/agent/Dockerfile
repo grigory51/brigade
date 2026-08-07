@@ -1,10 +1,10 @@
 # Образ агента brigade: runtime-компоненты (демон, node, Claude Code CLI, ACP-адаптер,
 # MCP-сервер brigade) плюс базовое окружение для работы агента.
 #
-#   docker build -t brigade/agent:latest -f docker/agent/Dockerfile .
+#   docker build -t brigade/agent:latest -f packaging/docker/agent/Dockerfile .
 #
 # ВАЖНО: контекст сборки — КОРЕНЬ репо (нужен backend/ для бинаря brigade), поэтому пути
-# COPY даны от корня (docker/agent/...). CI собирает образ с context: "." .
+# COPY даны от корня (packaging/docker/agent/...). CI собирает образ с context: "." .
 #
 # Один образ обслуживает оба режима сессий:
 #   - CLI: контейнер запускает `claude` в TTY (durable-терминал per-user демона);
@@ -94,7 +94,7 @@ RUN npm install -g --prefix /opt/brigade-runtime/claude-cli @anthropic-ai/claude
 # игнорирует кастомный _meta, но пробрасывает ACP mcpServers в Claude Agent SDK; SDK
 # стартует этот сервер как stdio-subprocess. Зависимости ставятся рядом со скриптом, чтобы
 # резолв @modelcontextprotocol/sdk не зависел от cwd сессии.
-COPY docker/agent/mcp/ /opt/brigade-runtime/brigade-mcp/
+COPY packaging/docker/agent/mcp/ /opt/brigade-runtime/brigade-mcp/
 RUN cd /opt/brigade-runtime/brigade-mcp \
     && npm install --omit=dev \
     && npm cache clean --force

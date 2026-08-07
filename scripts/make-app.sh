@@ -1,9 +1,8 @@
 #!/bin/bash
 # Собирает Brigade.app из готового darwin-бинаря brigade. Кроме бинаря и иконки бандл включает
-# САМОДОСТАТОЧНЫЙ агент-рантайм (node + claude-agent-acp + claude-code, пиннутые как в
-# docker-образе), чтобы local-режим не зависел от глобального npm хоста. Иконка генерируется
-# встроенными sips + iconutil; node и npm-пакеты тянутся из сети на этапе сборки и кешируются
-# между сборками (см. CACHE ниже).
+# Node + npm и манифест агент-рантайма. Claude, Codex и ACP-адаптеры ставятся в каталог
+# данных приложения при первом запуске и обновляются на следующих — не раздувают каждый
+# Brigade.app. Иконка генерируется встроенными sips + iconutil.
 #
 #   scripts/make-app.sh <путь-к-бинарю> <выходной-.app>
 #
@@ -15,7 +14,7 @@ OUT="${2:?usage: make-app.sh <binary> <output.app>}"
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 PKG="$REPO/packaging/macos"
-AGENT_DOCKERFILE="$REPO/docker/agent/Dockerfile"
+AGENT_DOCKERFILE="$REPO/packaging/docker/agent/Dockerfile"
 
 # Версии агент-рантайма. Версию адаптера НЕ дублируем: единственный источник —
 # `ARG ACP_ADAPTER_VERSION` в образе агента, иначе .app и контейнер тихо разъезжаются
@@ -26,16 +25,11 @@ if [ -z "$ADAPTER_VERSION" ]; then
   echo "make-app: не нашёл ARG ACP_ADAPTER_VERSION в $AGENT_DOCKERFILE" >&2
   exit 1
 fi
-ADAPTER_SPEC="@agentclientprotocol/claude-agent-acp@${ADAPTER_VERSION}"
-CLAUDE_SPEC="@anthropic-ai/claude-code@latest"
 CODEX_VERSION="$(sed -n 's/^ARG CODEX_ACP_VERSION=//p' "$AGENT_DOCKERFILE")"
 if [ -z "$CODEX_VERSION" ]; then
   echo "make-app: не нашёл ARG CODEX_ACP_VERSION в $AGENT_DOCKERFILE" >&2
   exit 1
 fi
-CODEX_SPEC="@agentclientprotocol/codex-acp@${CODEX_VERSION}"
-CODEX_CLI_SPEC="@openai/codex@latest"
-
 if [ ! -f "$BIN" ]; then
   echo "make-app: бинарь не найден: $BIN" >&2
   exit 1
@@ -73,9 +67,7 @@ for sz in 16 32 128 256 512; do
 done
 iconutil -c icns "$ICONSET" -o "$OUT/Contents/Resources/AppIcon.icns"
 
-# --- Самодостаточный агент-рантайм: node + claude-agent-acp + claude-code внутри бандла. ---
-# Local-режим brigade спавнит claude-agent-acp / claude из PATH; runDesktop ставит эти каталоги
-# первыми, поэтому используются встроенные версии, а не глобальный npm хоста.
+# --- Node + npm для устанавливаемого при первом старте агент-рантайма. ---
 RES="$OUT/Contents/Resources"
 DL="$(mktemp -d)"
 
@@ -107,9 +99,28 @@ else
 fi
 tar xzf "$NODE_CACHED" -C "$DL"
 NODE_SRC="$DL/${NODE_TARBALL%.tar.gz}"
-# Рантайму нужен только бинарь node (самодостаточен, ICU внутри); npm/lib в бандл не кладём.
-mkdir -p "$RES/node/bin"
+# npm нужен desktop-приложению для первой установки и обновления агентов. Копируем его из
+# того же официального дистрибутива Node, чтобы не зависеть от npm на машине пользователя.
+mkdir -p "$RES/node/bin" "$RES/node/lib/node_modules"
 cp "$NODE_SRC/bin/node" "$RES/node/bin/node"
+cp -R "$NODE_SRC/lib/node_modules/npm" "$RES/node/lib/node_modules/npm"
+ln -s ../lib/node_modules/npm/bin/npm-cli.js "$RES/node/bin/npm"
+ln -s ../lib/node_modules/npm/bin/npx-cli.js "$RES/node/bin/npx"
+
+# Пакеты не входят в .app. Манифест — единственный вход ensureDesktopAgentRuntime: pinned
+# версии адаптеров остаются синхронизированы с Dockerfile, CLI обновляются по тегу latest.
+cat > "$RES/agent-package.json" <<EOF
+{
+  "name": "brigade-agent-runtime",
+  "private": true,
+  "dependencies": {
+    "@agentclientprotocol/claude-agent-acp": "${ADAPTER_VERSION}",
+    "@agentclientprotocol/codex-acp": "${CODEX_VERSION}",
+    "@anthropic-ai/claude-code": "latest",
+    "@openai/codex": "latest"
+  }
+}
+EOF
 
 # npm_cached <подкаталог-кеша> <куда-в-бандл> [specs…] — ставит пакеты в ПЕРСИСТЕНТНОЕ дерево
 # в кеше и клонирует готовое в бандл. Свежий node_modules каждой сборки перекачивал сотни
@@ -126,24 +137,14 @@ npm_cached() {
   cp -Rc "$dir/." "$dest/" 2>/dev/null || cp -R "$dir/." "$dest/"
 }
 
-# Агент-пакеты ставим ХОСТОВЫМ npm: node_modules портативен (JS + prebuilt darwin-arm64
-# бинарники, нативных ABI-аддонов нет), поэтому сборка любым npm, а рантайм — встроенным node.
-# Specs передаём прямо в npm install — он сам впишет их в package.json (потому и создаём
-# манифест только при первой сборке: дальше в нём уже стоят разрешённые версии).
-echo "make-app: ставлю агент-пакеты ($ADAPTER_SPEC, $CLAUDE_SPEC, $CODEX_SPEC, $CODEX_CLI_SPEC)…"
-mkdir -p "$CACHE/agent"
-[ -f "$CACHE/agent/package.json" ] \
-  || echo '{ "name": "brigade-agent-bundle", "private": true }' > "$CACHE/agent/package.json"
-npm_cached agent "$RES/agent" "$CLAUDE_SPEC" "$ADAPTER_SPEC" "$CODEX_SPEC" "$CODEX_CLI_SPEC"
-
 # MCP-сервер brigade (render_ui/show_choice) — в docker он в /opt/brigade-mcp; в бандле кладём в
 # Resources/brigade-mcp с зависимостями (@modelcontextprotocol/sdk), чтобы local-режим тоже
 # показывал A2UI-карточки (напр. черновик заметки в /note). Путь бинарю задаёт prependBundledTools.
 # Манифест и скрипт кладём в кеш из репо: правка в репозитории переустановит зависимости.
 echo "make-app: ставлю MCP-сервер brigade (render_ui)…"
 mkdir -p "$CACHE/brigade-mcp"
-cp "$REPO/docker/agent/mcp/brigade-tools.mjs" \
-   "$REPO/docker/agent/mcp/package.json" "$CACHE/brigade-mcp/"
+cp "$REPO/packaging/docker/agent/mcp/brigade-tools.mjs" \
+   "$REPO/packaging/docker/agent/mcp/package.json" "$CACHE/brigade-mcp/"
 npm_cached brigade-mcp "$RES/brigade-mcp"
 
-echo "make-app: собрано $OUT (self-contained: node + Claude + Codex + mcp)"
+echo "make-app: собрано $OUT (node + npm + mcp; агенты установятся при первом запуске)"

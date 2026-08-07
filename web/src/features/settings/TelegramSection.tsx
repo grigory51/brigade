@@ -45,8 +45,8 @@ type Draft = {
 
 const emptyDraft = (): Draft => ({
   id: "",
-  agentType: "claude-code",
-  authProfile: "claude-token",
+  agentType: "",
+  authProfile: "",
   image: "",
   mcpServerIds: [],
 });
@@ -70,7 +70,6 @@ export function TelegramSection({
   const [mcp, setMcp] = useState<McpServer[]>([]);
   const [images, setImages] = useState<AgentImagesSettings | null>(null);
   const [codexProfiles, setCodexProfiles] = useState<string[]>([]);
-  const [claudeReady, setClaudeReady] = useState(false);
   const [bindingURL, setBindingURL] = useState("");
   const [saving, setSaving] = useState(false);
   const [binding, setBinding] = useState(false);
@@ -86,14 +85,17 @@ export function TelegramSection({
       authClient.getClaudeSettings({}),
     ]).then(([agentResult, mcpResult, imageResult, codex, claude]) => {
       if (!alive) return;
-      setAgents(agentResult.agentTypes.filter((agent) => agent.supportedKinds.includes("acp")));
+      const codexReady = codex.chatgptConnected || codex.apiKeySet;
+      setAgents(agentResult.agentTypes.filter((agent) =>
+        agent.supportedKinds.includes("acp") &&
+        (agent.id === "codex" ? codexReady : agent.id === "claude-code" ? claude.tokenSet : true),
+      ));
       setMcp(mcpResult.servers);
       setImages(imageResult);
       setCodexProfiles([
         ...(codex.chatgptConnected ? ["chatgpt"] : []),
         ...(codex.apiKeySet ? ["api-key"] : []),
       ]);
-      setClaudeReady(claude.tokenSet);
     }).catch(() => alive && setAgents([]));
     return () => { alive = false; };
   }, []);
@@ -127,11 +129,16 @@ export function TelegramSection({
   }, [bots, selectedId, onSelect]);
 
   useEffect(() => {
+    if (!agents?.length || agents.some((agent) => agent.id === draft.agentType)) return;
+    setDraft((current) => ({ ...current, agentType: agents[0].id }));
+  }, [agents, draft.agentType]);
+
+  useEffect(() => {
     if (draft.agentType === "codex") {
       if (!codexProfiles.includes(draft.authProfile)) {
         setDraft((current) => ({ ...current, authProfile: codexProfiles[0] ?? "" }));
       }
-    } else if (draft.authProfile !== "claude-token") {
+    } else if (draft.agentType && draft.authProfile !== "claude-token") {
       setDraft((current) => ({ ...current, authProfile: "claude-token" }));
     }
   }, [draft.agentType, draft.authProfile, codexProfiles]);
@@ -149,7 +156,6 @@ export function TelegramSection({
   if (!bots || agents === null) return <Loading />;
 
   const patch = (next: Partial<Draft>) => setDraft((current) => ({ ...current, ...next }));
-  const agentReady = draft.agentType === "codex" ? Boolean(draft.authProfile) : claudeReady;
 
   const save = async () => {
     setSaving(true);
@@ -305,14 +311,8 @@ export function TelegramSection({
         </div>
       )}
 
-      {!agentReady && (
-        <p className="text-[12px] text-destructive">
-          Сначала настройте авторизацию выбранного агента.
-        </p>
-      )}
-
       <div className="flex items-center gap-2">
-        <Button disabled={saving || !agentReady || (!draft.id && !token.trim())} onClick={() => void save()}>
+        <Button disabled={saving || !draft.agentType || (!draft.id && !token.trim())} onClick={() => void save()}>
           {saving && <Loader2 className="size-4 animate-spin" />}
           Сохранить
         </Button>

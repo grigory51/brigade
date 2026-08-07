@@ -1,7 +1,9 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/grigory51/brigade/backend/internal/config"
@@ -27,12 +29,10 @@ func TestEnsureDesktopConfig(t *testing.T) {
 	if cfg.JWT.Secret == "" {
 		t.Error("jwt.secret пустой")
 	}
-	// Пути должны быть абсолютными (иначе БД потеряется при запуске из Finder).
 	if !filepath.IsAbs(cfg.SQLitePath) {
 		t.Errorf("sqlite_path не абсолютный: %q", cfg.SQLitePath)
 	}
 
-	// Идемпотентность: повторный вызов не перезаписывает файл (секрет стабилен).
 	secret := cfg.JWT.Secret
 	if err := ensureDesktopConfig(dir, cfgPath); err != nil {
 		t.Fatalf("ensureDesktopConfig (2): %v", err)
@@ -44,4 +44,53 @@ func TestEnsureDesktopConfig(t *testing.T) {
 	if cfg2.JWT.Secret != secret {
 		t.Error("секрет изменился при повторном вызове — нестабилен")
 	}
+}
+
+func TestEnsureDesktopAgentRuntimeRequiresToolsOnFirstInstallFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a shell script")
+	}
+	appDir, resources := brokenDesktopRuntime(t)
+	if err := ensureDesktopAgentRuntime(appDir, resources); err == nil {
+		t.Fatal("expected first install failure")
+	}
+}
+
+func TestEnsureDesktopAgentRuntimeKeepsCompleteRuntimeOnUpdateFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a shell script")
+	}
+	appDir, resources := brokenDesktopRuntime(t)
+	binDir := filepath.Join(appDir, "agent-runtime", "node_modules", ".bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"claude", "claude-agent-acp", "codex", "codex-acp"} {
+		if err := os.WriteFile(filepath.Join(binDir, name), []byte(""), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := ensureDesktopAgentRuntime(appDir, resources); err != nil {
+		t.Fatalf("existing runtime must survive update failure: %v", err)
+	}
+}
+
+func brokenDesktopRuntime(t *testing.T) (string, string) {
+	t.Helper()
+	root := t.TempDir()
+	resources := filepath.Join(root, "Resources")
+	nodeBin := filepath.Join(resources, "node", "bin")
+	if err := os.MkdirAll(filepath.Join(resources, "node", "lib", "node_modules", "npm", "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(nodeBin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(resources, "agent-package.json"), []byte(`{"dependencies":{"example":"latest"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nodeBin, "node"), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return filepath.Join(root, "data"), resources
 }

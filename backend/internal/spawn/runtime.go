@@ -231,7 +231,7 @@ func (s *DockerSpawner) ensureRuntimeVolume(ctx context.Context, name, layer str
 	if err != nil {
 		_ = s.cli.VolumeRemove(context.WithoutCancel(ctx), name, true)
 		if strings.TrimSpace(out) == "" {
-			return fmt.Errorf("spawn: в образе %s нет runtime-слоя %q — пересоберите образ агента: docker build -t %s -f docker/agent/Dockerfile .",
+			return fmt.Errorf("spawn: в образе %s нет runtime-слоя %q — пересоберите образ агента: docker build -t %s -f packaging/docker/agent/Dockerfile .",
 				s.baseImage, layer, s.baseImage)
 		}
 		return fmt.Errorf("spawn: наполнить runtime-слой %q из образа %s: %s: %w",

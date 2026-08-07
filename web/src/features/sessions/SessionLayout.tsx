@@ -18,6 +18,7 @@ import {
 import { ConnectError } from "@connectrpc/connect";
 import {
   Archive,
+  CircleArrowUp,
   GitBranch,
   Loader2,
   LogOut,
@@ -101,6 +102,7 @@ export function useSessionShell() {
  */
 export function SessionLayout() {
   const navigate = useNavigate();
+  const { desktop } = useAuth();
   // activeId — сессия, открытая сейчас в области контента (/s/:sessionId). Нужна, чтобы
   // удаление текущей сессии увело с её (теперь несуществующего) маршрута на пустой экран.
   const location = useLocation();
@@ -472,11 +474,14 @@ export function SessionLayout() {
                   </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroup>
+              <UpdateAvailable />
             </SidebarContent>
 
-            <SidebarFooter>
-              <UserMenu />
-            </SidebarFooter>
+            {!desktop && (
+              <SidebarFooter>
+                <UserMenu />
+              </SidebarFooter>
+            )}
             <SidebarRail />
           </Sidebar>
 
@@ -808,32 +813,66 @@ function StatusDot({ status }: { status: SessionStatus }) {
   return null;
 }
 
-// UserMenu — подвал sidebar. В десктопе (Brigade.app) учётной записи как понятия нет:
-// вход выполняется автоматически, выходить и переключать пользователя некуда, а версию
-// показывает системное меню «О программе». Поэтому там остаётся один пункт — настройки.
-function UserMenu() {
-  const { user, logout, desktop } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const initial = user?.username?.[0]?.toUpperCase() ?? "?";
+type GitHubRelease = {
+  tag_name: string;
+  html_url: string;
+};
 
-  if (desktop) {
-    return (
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            onClick={() => navigate("/settings")}
-            isActive={location.pathname.startsWith("/settings")}
-            tooltip="Настройки"
-            className="rounded-[8px] text-[13px] text-sidebar-foreground/70"
-          >
-            <Settings className="size-4" />
-            Настройки
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
-    );
+function UpdateAvailable() {
+  const current = import.meta.env.VITE_APP_VERSION ?? "dev";
+  const [release, setRelease] = useState<GitHubRelease | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("https://api.github.com/repos/grigory51/brigade/releases/latest", {
+      headers: { Accept: "application/vnd.github+json" },
+      signal: controller.signal,
+    })
+      .then((response) => response.ok ? response.json() as Promise<GitHubRelease> : null)
+      .then((latest) => {
+        if (latest && isNewerVersion(current, latest.tag_name)) setRelease(latest);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [current]);
+
+  if (!release) return null;
+  return (
+    <div className="mx-3 mb-3 flex shrink-0 flex-col gap-2 rounded-lg border border-primary/25 bg-primary/5 p-3 text-xs group-data-[collapsible=icon]:hidden">
+      <div className="flex items-center justify-between gap-2 text-muted-foreground">
+        <span>Brigade</span>
+        <span className="font-medium text-foreground">{current}</span>
+      </div>
+      <a
+        href={release.html_url}
+        target="_blank"
+        rel="noreferrer"
+        className="flex items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1.5 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+      >
+        <CircleArrowUp className="size-3.5" />
+        Доступна {release.tag_name}
+      </a>
+    </div>
+  );
+}
+
+function isNewerVersion(current: string, latest: string): boolean {
+  const parse = (version: string) => /^v?(\d+)\.(\d+)\.(\d+)$/.exec(version)?.slice(1).map(Number);
+  const installed = parse(current);
+  const available = parse(latest);
+  if (!installed || !available) return false;
+  for (let i = 0; i < 3; i += 1) {
+    if (available[i] !== installed[i]) return available[i] > installed[i];
   }
+  return false;
+}
+
+// UserMenu — меню пользователя в серверной web-версии. В Brigade.app SidebarFooter не
+// рендерится: настройки и версия находятся в стандартном системном меню приложения.
+function UserMenu() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const initial = user?.username?.[0]?.toUpperCase() ?? "?";
 
   return (
     <SidebarMenu>

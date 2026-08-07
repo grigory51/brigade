@@ -37,12 +37,12 @@ const (
 const dockerStopTimeoutSeconds = 5
 
 // DefaultImage — образ контейнера агента по умолчанию: собирается локально из
-// docker/agent/Dockerfile. Серверная инсталляция обычно переопределяет его
+// packaging/docker/agent/Dockerfile. Серверная инсталляция обычно переопределяет его
 // опубликованным образом (config: agent_image), десктопная — тянет его же из ghcr.
 const DefaultImage = "brigade/agent:latest"
 
 // AgentUID/AgentGID — uid/gid пользователя agent в образе (зафиксированы в
-// docker/agent/Dockerfile). brigade chown'ит персональный ~/.claude на них,
+// packaging/docker/agent/Dockerfile). brigade chown'ит персональный ~/.claude на них,
 // чтобы bind-mount был writable агентом (иначе root-owned mount → EACCES).
 const (
 	AgentUID = 1001

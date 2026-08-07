@@ -37,7 +37,7 @@ RUN apk add --no-cache ca-certificates git openssh-client \
     && mkdir -p /data/workspace /root/.ssh \
     && chmod 700 /root/.ssh
 COPY --from=build /out/brigade /usr/local/bin/brigade
-COPY docker/config.container.yaml /etc/brigade/config.yaml
+COPY packaging/docker/config.container.yaml /etc/brigade/config.yaml
 
 # /data — состояние (SQLite) и дефолтный workspace; jwt.secret и токен Claude
 # задаются через env (BRIGADE_JWT__SECRET, BRIGADE_CLAUDE_CODE_OAUTH_TOKEN).

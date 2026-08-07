@@ -104,8 +104,6 @@ export function CreateSessionDialog({
       .then((res) => {
         if (cancelled) return;
         setAgents(res.agentTypes);
-        const first = res.agentTypes[0];
-        if (first) setAgentId(first.id);
       })
       .catch(() => {
         if (!cancelled) setAgents([]);
@@ -190,18 +188,20 @@ export function CreateSessionDialog({
     };
   }, [open]);
 
-  // Если токен не задан, а выбран ACP (например, статус догрузился после выбора) —
-  // откатываем на CLI, чтобы нельзя было создать заведомо нерабочую ACP-сессию.
-  const selectedAgent = agents?.find((agent) => agent.id === agentId);
   const codexProfiles = codexAuth ? [codexAuth.chatgpt && "chatgpt", codexAuth.apiKey && "api-key"].filter(Boolean) as string[] : [];
-  const authReady = agentId === "codex" ? codexProfiles.length > 0 : tokenSet !== false;
-  const canCreate = agentId === "codex" ? authReady : kind === SessionKind.CLI || authReady;
+  const availableAgents = agents?.filter((agent) =>
+    agent.id === "codex"
+      ? codexProfiles.length > 0
+      : agent.id === "claude-code"
+        ? tokenSet === true
+        : true,
+  );
+  const selectedAgent = availableAgents?.find((agent) => agent.id === agentId);
 
   useEffect(() => {
-    if (!authReady && kind === SessionKind.ACP) {
-      setKind(SessionKind.CLI);
-    }
-  }, [authReady, kind]);
+    if (!availableAgents || availableAgents.some((agent) => agent.id === agentId)) return;
+    setAgentId(availableAgents[0]?.id ?? "");
+  }, [availableAgents, agentId]);
 
   useEffect(() => {
     if (agentId !== "codex") { setAuthProfile("claude-token"); return; }
@@ -239,8 +239,8 @@ export function CreateSessionDialog({
     }
   }
 
-  const loading = agents === null;
-  const noAgents = agents !== null && agents.length === 0;
+  const loading = agents === null || tokenSet === null || codexAuth === null;
+  const noAgents = !loading && availableAgents?.length === 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -258,7 +258,7 @@ export function CreateSessionDialog({
           </div>
         ) : noAgents ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
-            Нет доступных типов агентов.
+            Нет подключённых агентов.
           </p>
         ) : (
           <div className="space-y-4">
@@ -269,7 +269,7 @@ export function CreateSessionDialog({
                   <SelectValue placeholder="Выберите агента" />
                 </SelectTrigger>
                 <SelectContent>
-                  {agents!.map((a) => (
+                  {availableAgents!.map((a) => (
                     <SelectItem key={a.id} value={a.id}>
                       {a.name || a.id}
                     </SelectItem>
@@ -291,22 +291,14 @@ export function CreateSessionDialog({
                   <SelectItem value={String(SessionKind.CLI)}>
                     CLI (терминал)
                   </SelectItem>
-                  {/* ACP стартует агента сразу и без токена не поднимется; пока
-                      статус токена грузится (tokenSet === null) не блокируем. */}
                   <SelectItem
                     value={String(SessionKind.ACP)}
-                    disabled={!authReady || (selectedAgent?.supportedKinds.length ? !selectedAgent.supportedKinds.includes("acp") : false)}
+                    disabled={selectedAgent?.supportedKinds.length ? !selectedAgent.supportedKinds.includes("acp") : false}
                   >
                     ACP (чат)
                   </SelectItem>
                 </SelectContent>
               </Select>
-              {!authReady && (
-                <p className="text-xs text-muted-foreground">
-                  Агент не настроен — добавьте авторизацию в{" "}
-                  <span className="font-medium">Настройки → {agentId === "codex" ? "Codex" : "Claude"}</span>.
-                </p>
-              )}
             </div>
 
             {agentId === "codex" && codexProfiles.length > 1 && (
@@ -400,7 +392,7 @@ export function CreateSessionDialog({
           </Button>
           <Button
             onClick={() => void onSubmit()}
-            disabled={busy || loading || noAgents || !agentId || !canCreate}
+            disabled={busy || loading || noAgents || !agentId}
           >
             {busy && <Loader2 className="size-4 animate-spin" />}
             Создать

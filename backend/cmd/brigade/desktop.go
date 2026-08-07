@@ -3,12 +3,14 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -55,19 +57,24 @@ func runDesktop() {
 	// Подхватывает и существующие config.yaml, созданные до появления agent_home_dir.
 	_ = os.Setenv("BRIGADE_AGENT_HOME_DIR", filepath.Join(appDir, "agent-home"))
 	enrichPATH()
-	prependBundledTools()
 
 	// Стартуем с /desktop/auth: ручка ставит сессионные cookie сид-пользователя и редиректит на
 	// SPA — приложение открывается сразу залогиненным, без экрана входа (локальный однопользоват.).
 	url := "http://" + desktopAddr + "/desktop/auth"
 	desktopMode = true
-	// Если порт уже слушают (уже запущенный инстанс) — второй сервер не поднимаем, просто
-	// открываем окно к нему. Иначе стартуем сервер в фоне и ждём готовности.
-	if !addrInUse(desktopAddr) {
-		go runServer(cfgPath)
-		if !waitReady(desktopAddr, 15*time.Second) {
-			log.Fatalf("brigade desktop: сервер не поднялся за отведённое время")
-		}
+	// Если порт уже слушают, не запускаем параллельный npm update из второго app-процесса.
+	if addrInUse(desktopAddr) {
+		showWindow(url, "Brigade")
+		return
+	}
+	resources := bundledResources()
+	if err := ensureDesktopAgentRuntime(appDir, resources); err != nil {
+		log.Fatalf("brigade desktop: agent runtime: %v", err)
+	}
+	prependBundledTools(appDir, resources)
+	go runServer(cfgPath)
+	if !waitReady(desktopAddr, 15*time.Second) {
+		log.Fatalf("brigade desktop: сервер не поднялся за отведённое время")
 	}
 	showWindow(url, "Brigade")
 }
@@ -183,27 +190,95 @@ func enrichPATH() {
 	_ = os.Setenv("PATH", strings.Join(uniq, ":"))
 }
 
-// prependBundledTools ставит встроенные в .app каталоги агент-рантайма (node + claude-agent-acp
-// + claude) ПЕРЕД остальным PATH, чтобы local-режим использовал самодостаточные версии из
-// бандла, а не глобальный npm хоста (тот дрейфует по версиям). No-op, если бинарь запущен не из
-// .app (dev-режим) — тогда используется хостовый PATH.
-func prependBundledTools() {
+func bundledResources() string {
 	exe, err := os.Executable()
 	if err != nil {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(exe), "..", "Resources")
+}
+
+// ensureDesktopAgentRuntime ставит и обновляет Claude, Codex и ACP-адаптеры в каталоге
+// данных пользователя. При ошибке обновления существующий полный runtime остаётся доступен;
+// первый запуск без всех четырёх команд завершается ошибкой.
+func ensureDesktopAgentRuntime(appDir, resources string) error {
+	if resources == "" {
+		return nil
+	}
+	manifestPath := filepath.Join(resources, "agent-package.json")
+	manifest, err := os.ReadFile(manifestPath)
+	if os.IsNotExist(err) {
+		return nil // dev-бинарь вне Brigade.app использует инструменты из PATH хоста
+	}
+	if err != nil {
+		return err
+	}
+	var pkg struct {
+		Dependencies map[string]string `json:"dependencies"`
+	}
+	if err := json.Unmarshal(manifest, &pkg); err != nil {
+		return fmt.Errorf("parse %s: %w", manifestPath, err)
+	}
+	names := make([]string, 0, len(pkg.Dependencies))
+	for name := range pkg.Dependencies {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	runtimeDir := filepath.Join(appDir, "agent-runtime")
+	if err := os.MkdirAll(runtimeDir, 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(runtimeDir, "package.json"), manifest, 0o644); err != nil {
+		return err
+	}
+	npmCLI := filepath.Join(resources, "node", "lib", "node_modules", "npm", "bin", "npm-cli.js")
+	args := []string{npmCLI, "install", "--omit=dev", "--no-audit", "--no-fund", "--package-lock=false", "--loglevel=error", "--cache", filepath.Join(appDir, "npm-cache")}
+	for _, name := range names {
+		args = append(args, name+"@"+pkg.Dependencies[name])
+	}
+	cmd := exec.Command(filepath.Join(resources, "node", "bin", "node"), args...)
+	cmd.Dir = runtimeDir
+	cmd.Env = append(os.Environ(), "PATH="+filepath.Join(resources, "node", "bin")+":"+os.Getenv("PATH"))
+	output, installErr := cmd.CombinedOutput()
+	if installErr != nil {
+		if desktopAgentRuntimeReady(runtimeDir) {
+			log.Printf("brigade desktop: agent runtime update failed, keeping installed version: %v: %s", installErr, strings.TrimSpace(string(output)))
+			return nil
+		}
+		return fmt.Errorf("npm install: %w: %s", installErr, strings.TrimSpace(string(output)))
+	}
+	if !desktopAgentRuntimeReady(runtimeDir) {
+		return fmt.Errorf("npm install completed without required agent commands")
+	}
+	return nil
+}
+
+func desktopAgentRuntimeReady(runtimeDir string) bool {
+	for _, name := range []string{"claude", "claude-agent-acp", "codex", "codex-acp"} {
+		if _, err := os.Stat(filepath.Join(runtimeDir, "node_modules", ".bin", name)); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
+// prependBundledTools ставит Node из .app и установленный per-user agent runtime перед PATH.
+// No-op для dev-бинаря вне Brigade.app: там используются инструменты хоста.
+func prependBundledTools(appDir, resources string) {
+	if resources == "" {
 		return
 	}
-	// exe: <Brigade.app>/Contents/MacOS/brigade-bin → Resources рядом с MacOS.
-	res := filepath.Join(filepath.Dir(exe), "..", "Resources")
 	// Встроенный MCP-сервер brigade (render_ui/show_choice) лежит в Resources/brigade-mcp с
 	// установленными зависимостями. В docker путь контейнерный (этот вызов не при чём). Без него
 	// local-режим не показывал бы A2UI-карточки (напр. черновик заметки в /note).
-	mcp := filepath.Join(res, "brigade-mcp", "brigade-tools.mjs")
+	mcp := filepath.Join(resources, "brigade-mcp", "brigade-tools.mjs")
 	if _, err := os.Stat(mcp); err == nil {
 		acp.SetLocalMCPServerPath(mcp)
 	}
 	dirs := []string{
-		filepath.Join(res, "node", "bin"),
-		filepath.Join(res, "agent", "node_modules", ".bin"),
+		filepath.Join(resources, "node", "bin"),
+		filepath.Join(appDir, "agent-runtime", "node_modules", ".bin"),
 	}
 	for _, d := range dirs {
 		if _, err := os.Stat(d); err != nil {
