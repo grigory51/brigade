@@ -23,6 +23,26 @@ type botAPI struct {
 	baseURL string
 }
 
+type botAPIError struct {
+	code        int
+	method      string
+	description string
+}
+
+func (e *botAPIError) Error() string {
+	return fmt.Sprintf("telegram: %s: %s", e.method, e.description)
+}
+
+func isPermanentBotAPIError(err error) bool {
+	var apiErr *botAPIError
+	return errors.As(err, &apiErr) && apiErr.code >= 400 && apiErr.code < 500 && apiErr.code != http.StatusTooManyRequests
+}
+
+func isMissingMessageThread(err error) bool {
+	var apiErr *botAPIError
+	return errors.As(err, &apiErr) && strings.EqualFold(apiErr.description, "Bad Request: message thread not found")
+}
+
 func newBotAPI() *botAPI {
 	return &botAPI{http: &http.Client{Timeout: 40 * time.Second}, baseURL: telegramAPI}
 }
@@ -138,6 +158,7 @@ func (a *botAPI) do(req *http.Request, method string, out any) error {
 	}
 	var envelope struct {
 		OK          bool            `json:"ok"`
+		ErrorCode   int             `json:"error_code"`
 		Description string          `json:"description"`
 		Result      json.RawMessage `json:"result"`
 	}
@@ -145,7 +166,7 @@ func (a *botAPI) do(req *http.Request, method string, out any) error {
 		return fmt.Errorf("telegram: decode %s: %w", method, err)
 	}
 	if !envelope.OK {
-		return fmt.Errorf("telegram: %s: %s", method, envelope.Description)
+		return &botAPIError{code: envelope.ErrorCode, method: method, description: envelope.Description}
 	}
 	if out != nil && len(envelope.Result) > 0 {
 		if err := json.Unmarshal(envelope.Result, out); err != nil {
@@ -273,7 +294,7 @@ func (a *botAPI) sendMessage(ctx context.Context, token string, chatID, threadID
 	if text == "" {
 		text = "Агент не вернул текстовый ответ."
 	}
-	if len([]rune(text)) <= 32768 {
+	if hasRichMarkdown(text) && len([]rune(text)) <= 32768 {
 		in := map[string]any{
 			"chat_id":      chatID,
 			"rich_message": map[string]any{"markdown": text},
@@ -332,23 +353,28 @@ func (a *botAPI) answerGuest(ctx context.Context, token, queryID, text string) (
 	if len([]rune(text)) > 32768 {
 		text = string([]rune(text)[:32752]) + "\n\n…"
 	}
-	rich := map[string]any{
-		"guest_query_id": queryID,
-		"result": map[string]any{
-			"type": "article", "id": "brigade", "title": "Brigade",
-			"input_message_content": map[string]any{
-				"rich_message": map[string]any{"markdown": text},
+	if hasRichMarkdown(text) {
+		rich := map[string]any{
+			"guest_query_id": queryID,
+			"result": map[string]any{
+				"type": "article", "id": "brigade", "title": "Brigade",
+				"input_message_content": map[string]any{
+					"rich_message": map[string]any{"markdown": text},
+				},
 			},
-		},
+		}
+		var sent struct {
+			InlineMessageID string `json:"inline_message_id"`
+		}
+		if err := a.call(ctx, token, "answerGuestQuery", rich, &sent); err == nil {
+			if sent.InlineMessageID == "" {
+				return "", errors.New("telegram: answerGuestQuery returned no inline message id")
+			}
+			return sent.InlineMessageID, nil
+		}
 	}
 	var sent struct {
 		InlineMessageID string `json:"inline_message_id"`
-	}
-	if err := a.call(ctx, token, "answerGuestQuery", rich, &sent); err == nil {
-		if sent.InlineMessageID == "" {
-			return "", errors.New("telegram: answerGuestQuery returned no inline message id")
-		}
-		return sent.InlineMessageID, nil
 	}
 	plainText := text
 	if len([]rune(plainText)) > 4096 {
@@ -378,11 +404,13 @@ func (a *botAPI) editGuest(ctx context.Context, token, inlineMessageID, text str
 	if len([]rune(text)) > 32768 {
 		text = string([]rune(text)[:32752]) + "\n\n…"
 	}
-	if err := a.call(ctx, token, "editMessageText", map[string]any{
-		"inline_message_id": inlineMessageID,
-		"rich_message":      map[string]any{"markdown": text},
-	}, nil); err == nil {
-		return nil
+	if hasRichMarkdown(text) {
+		if err := a.call(ctx, token, "editMessageText", map[string]any{
+			"inline_message_id": inlineMessageID,
+			"rich_message":      map[string]any{"markdown": text},
+		}, nil); err == nil {
+			return nil
+		}
 	}
 	if len([]rune(text)) > 4096 {
 		text = string([]rune(text)[:4080]) + "\n\n…"
@@ -433,4 +461,28 @@ func splitMessage(text string, limit int) []string {
 	}
 	out = append(out, strings.TrimSpace(string(runes)))
 	return out
+}
+
+func hasRichMarkdown(text string) bool {
+	for _, marker := range []string{"**", "__", "~~", "```", "](", "!["} {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		heading := strings.TrimLeft(line, "#")
+		if (heading != line && strings.HasPrefix(heading, " ")) ||
+			strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "* ") || strings.HasPrefix(line, "+ ") ||
+			strings.HasPrefix(line, "> ") || strings.Count(line, "|") >= 2 ||
+			strings.Count(line, "`") >= 2 || strings.Count(line, "*") >= 2 {
+			return true
+		}
+		if dot := strings.Index(line, ". "); dot > 0 {
+			if _, err := strconv.Atoi(line[:dot]); err == nil {
+				return true
+			}
+		}
+	}
+	return false
 }

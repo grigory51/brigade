@@ -426,6 +426,16 @@ func (s *Service) deliverReady(bot store.TelegramBot) bool {
 		in := inboundFrom(update)
 		if err := s.reply(s.ctx, bot, in, stored.Response); err != nil {
 			log.Printf("telegram: deliver @%s update=%d: %v", bot.Username, stored.UpdateID, err)
+			if isPermanentBotAPIError(err) {
+				if isMissingMessageThread(err) {
+					_ = s.store.DeleteTelegramConversation(s.ctx, bot.ID, in.scope, in.chatID, in.threadID)
+				}
+				if !in.guest {
+					_ = s.api.setReaction(s.ctx, bot.Token, in.chatID, in.message.MessageID, "")
+				}
+				_ = s.store.DeleteTelegramUpdate(s.ctx, bot.ID, stored.UpdateID)
+				continue
+			}
 			return false
 		}
 		if !in.guest {

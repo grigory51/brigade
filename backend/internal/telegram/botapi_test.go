@@ -7,10 +7,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/grigory51/brigade/backend/internal/session"
 	"github.com/grigory51/brigade/backend/internal/store"
@@ -86,9 +87,9 @@ func TestReplyPreservesAssistantMessagesAndTracksConversation(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(requests) != 2 ||
-		!strings.Contains(requests[0], `"markdown":"Первое"`) ||
+		!strings.Contains(requests[0], `"text":"Первое"`) ||
 		!strings.Contains(requests[0], `"reply_parameters":{"message_id":10}`) ||
-		!strings.Contains(requests[1], `"markdown":"Второе"`) ||
+		!strings.Contains(requests[1], `"text":"Второе"`) ||
 		strings.Contains(requests[1], `"reply_parameters"`) {
 		t.Fatalf("unexpected replies: %#v", requests)
 	}
@@ -151,19 +152,20 @@ func TestMessageFilesIncludesNestedAndLiveMedia(t *testing.T) {
 }
 
 func TestDownloadFile(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	api := newBotAPI()
+	api.baseURL = "https://telegram.test"
+	api.http.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		var body string
 		switch request.URL.Path {
 		case "/bottoken/getFile":
-			_, _ = io.WriteString(writer, `{"ok":true,"result":{"file_id":"photo","file_size":3,"file_path":"photos/photo.jpg"}}`)
+			body = `{"ok":true,"result":{"file_id":"photo","file_size":3,"file_path":"photos/photo.jpg"}}`
 		case "/file/bottoken/photos/photo.jpg":
-			_, _ = writer.Write([]byte("jpg"))
+			body = "jpg"
 		default:
-			http.NotFound(writer, request)
+			t.Fatalf("unexpected path: %s", request.URL.Path)
 		}
-	}))
-	defer server.Close()
-	api := newBotAPI()
-	api.baseURL = server.URL
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}, nil
+	})
 	data, name, err := api.downloadFile(t.Context(), "token", "photo", 20<<20)
 	if err != nil || string(data) != "jpg" || name != "photo.jpg" {
 		t.Fatalf("downloadFile: data=%q name=%q err=%v", data, name, err)
@@ -230,5 +232,92 @@ func TestRepliesUseRichMarkdown(t *testing.T) {
 		!strings.Contains(requests[5], `{"message_id":9}`) ||
 		!strings.Contains(requests[6], `"media":[{"id":"image0","media":{"media":"large","type":"photo"}}]`) {
 		t.Fatalf("unexpected rich requests: %#v", requests)
+	}
+}
+
+func TestPlainRepliesSkipRichMessage(t *testing.T) {
+	api := newBotAPI()
+	var requests []string
+	api.http.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		body, _ := io.ReadAll(request.Body)
+		requests = append(requests, request.URL.Path+" "+string(body))
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"ok":true,"result":{"message_id":21,"inline_message_id":"guest-inline"}}`)),
+		}, nil
+	})
+	if _, err := api.sendMessage(t.Context(), "token", 42, 0, 0, "Смотрю…"); err != nil {
+		t.Fatal(err)
+	}
+	inlineID, err := api.answerGuest(t.Context(), "token", "query", "Смотрю…")
+	if err != nil || inlineID != "guest-inline" {
+		t.Fatal(err)
+	}
+	if err := api.editGuest(t.Context(), "token", inlineID, "Готово."); err != nil {
+		t.Fatal(err)
+	}
+	if len(requests) != 3 ||
+		!strings.Contains(requests[0], "/sendMessage ") || strings.Contains(requests[0], "rich_message") ||
+		!strings.Contains(requests[1], `"message_text":"Смотрю…"`) || strings.Contains(requests[1], "rich_message") ||
+		!strings.Contains(requests[2], `"text":"Готово."`) || strings.Contains(requests[2], "rich_message") {
+		t.Fatalf("unexpected plain requests: %#v", requests)
+	}
+}
+
+func TestBotAPIErrorClassification(t *testing.T) {
+	permanent := fmt.Errorf("deliver: %w", &botAPIError{code: 400, method: "sendMessage", description: "Bad Request: message thread not found"})
+	if !isPermanentBotAPIError(permanent) || !isMissingMessageThread(permanent) {
+		t.Fatal("message thread error must be permanent")
+	}
+	if isPermanentBotAPIError(&botAPIError{code: 429, method: "sendMessage", description: "Too Many Requests"}) {
+		t.Fatal("rate limit must remain retryable")
+	}
+}
+
+func TestPermanentDeliveryErrorDoesNotBlockBot(t *testing.T) {
+	ctx := t.Context()
+	st, err := store.Open(filepath.Join(t.TempDir(), "brigade.db"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if _, err := st.DB().Exec(`INSERT INTO users (id, username, password_hash, created_at) VALUES ('u1', 'user', '', 0)`); err != nil {
+		t.Fatal(err)
+	}
+	bot := store.TelegramBot{ID: "bot", UserID: "u1", Token: "token", TelegramID: 1, Username: "brigade", Name: "Brigade", CreatedAt: time.Now()}
+	if err := st.SaveTelegramBot(ctx, bot); err != nil {
+		t.Fatal(err)
+	}
+	payload := `{"update_id":7,"message":{"message_id":9,"message_thread_id":11,"from":{"id":123},"chat":{"id":42,"type":"private"},"text":"hello"}}`
+	if _, err := st.InsertTelegramUpdate(ctx, bot.ID, 7, payload); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetTelegramUpdateState(ctx, bot.ID, 7, "ready", "answer", ""); err != nil {
+		t.Fatal(err)
+	}
+	conversation := store.TelegramConversation{BotID: bot.ID, Scope: "chat", ChatID: 42, ThreadID: 11, SessionID: "session"}
+	if err := st.SetTelegramConversation(ctx, conversation); err != nil {
+		t.Fatal(err)
+	}
+
+	service := New(st, nil, nil, "poll", "", nil)
+	defer service.Close()
+	service.api.http.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		response := `{"ok":true,"result":true}`
+		if strings.HasSuffix(request.URL.Path, "/sendMessage") {
+			response = `{"ok":false,"error_code":400,"description":"Bad Request: message thread not found"}`
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(response))}, nil
+	})
+
+	if !service.deliverReady(bot) {
+		t.Fatal("permanent delivery error blocked the bot")
+	}
+	if updates, err := st.ListTelegramUpdates(ctx, bot.ID, "ready"); err != nil || len(updates) != 0 {
+		t.Fatalf("ready updates = %v, err = %v", updates, err)
+	}
+	if _, err := st.TelegramConversation(ctx, bot.ID, "chat", 42, 11); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("stale conversation was not removed: %v", err)
 	}
 }
