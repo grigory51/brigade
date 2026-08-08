@@ -3,6 +3,7 @@ import { Link2, Plug, SquareTerminal } from "lucide-react";
 import { useAuiState } from "@assistant-ui/react";
 import { sessionClient } from "@/api/client";
 import { usePreviews } from "@/features/sessions/PreviewLinks";
+import { SessionDesktopTools } from "@/features/desktop/SessionDesktopTools";
 import { cn } from "@/lib/utils";
 import { extractLinks } from "./links";
 import { LinksWindow } from "./LinksWindow";
@@ -49,6 +50,7 @@ export function SessionDock({
   const previews = usePreviews(readonly ? "" : sessionId);
   // Набор MCP-серверов сессии: нужен чипу для счётчика и окну как исходное состояние.
   const [mcpEnabled, setMcpEnabled] = useState<string[]>([]);
+  const [sessionName, setSessionName] = useState(sessionId);
 
   useEffect(() => {
     if (readonly) return;
@@ -56,7 +58,10 @@ export function SessionDock({
     sessionClient
       .get({ sessionId })
       .then((res) => {
-        if (!cancelled) setMcpEnabled(res.session?.mcpServerIds ?? []);
+        if (!cancelled) {
+          setMcpEnabled(res.session?.mcpServerIds ?? []);
+          setSessionName(res.session?.name || sessionId);
+        }
       })
       .catch(() => {
         // Набор не загрузился — чип покажет ноль, окно откроет актуальный список сам.
@@ -87,6 +92,7 @@ export function SessionDock({
 
       {/* right-[66px] — правее шкалы навигации; там, где её нет, чипы прижимаются к краю. */}
       <div className="absolute top-3.5 right-3 z-30 flex animate-[chip-in_0.3s_ease] gap-2 lg:right-[66px]">
+        {!readonly && <SessionDesktopTools sessionId={sessionId} sessionName={sessionName} />}
         <Chip
           icon={Link2}
           label="Ссылки"
@@ -183,7 +189,7 @@ function Chip({
       )}
     >
       <Icon className="size-3.5" />
-      {label}
+      <span className="hidden sm:inline">{label}</span>
       {children}
     </button>
   );

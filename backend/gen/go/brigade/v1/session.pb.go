@@ -1278,8 +1278,10 @@ func (x *ListPreviewsResponse) GetPreviews() []*Preview {
 // Тикет — короткоживущий одноразовый токен для авторизации WebSocket-подключения
 // (браузер не отправляет кастомные заголовки при апгрейде).
 type IssueStreamTicketRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// scope ограничивает назначение тикета. Пусто — terminal/shell для старых клиентов.
+	Scope         string `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1317,6 +1319,13 @@ func (*IssueStreamTicketRequest) Descriptor() ([]byte, []int) {
 func (x *IssueStreamTicketRequest) GetSessionId() string {
 	if x != nil {
 		return x.SessionId
+	}
+	return ""
+}
+
+func (x *IssueStreamTicketRequest) GetScope() string {
+	if x != nil {
+		return x.Scope
 	}
 	return ""
 }
@@ -1564,10 +1573,11 @@ const file_brigade_v1_session_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\"G\n" +
 	"\x14ListPreviewsResponse\x12/\n" +
-	"\bpreviews\x18\x01 \x03(\v2\x13.brigade.v1.PreviewR\bpreviews\"9\n" +
+	"\bpreviews\x18\x01 \x03(\v2\x13.brigade.v1.PreviewR\bpreviews\"O\n" +
 	"\x18IssueStreamTicketRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"R\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x14\n" +
+	"\x05scope\x18\x02 \x01(\tR\x05scope\"R\n" +
 	"\x19IssueStreamTicketResponse\x12\x16\n" +
 	"\x06ticket\x18\x01 \x01(\tR\x06ticket\x12\x1d\n" +
 	"\n" +

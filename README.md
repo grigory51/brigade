@@ -93,6 +93,8 @@ Each [GitHub release](https://github.com/grigory51/brigade/releases/latest) incl
 Apple Silicon DMG. `make app` builds the same macOS `Brigade.app` from source. It bundles
 Node and installs or updates the Claude/Codex runtime in the user's application data on launch. In the desktop UI,
 **Settings → Agent environment** can switch between local processes and a Docker context.
+Brigade.app can also connect to remote Brigade instances, forward session ports to local
+`127.0.0.1`, and mount remote workspaces read-write through FUSE-T.
 
 ### Docker
 

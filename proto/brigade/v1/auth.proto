@@ -151,6 +151,19 @@ message SetAgentImagesRequest {
 // авто-логин сид-пользователя, поэтому ни входа, ни выхода, ни смены пользователя нет.
 message ServerInfo {
   bool desktop = 1;
+  // version — версия backend из git-тега. Пусто у dev-сборок и старых серверов.
+  string version = 2;
+  // capabilities — расширяемые возможности инстанса. Неизвестные значения клиент игнорирует.
+  repeated string capabilities = 3;
+  // auth_methods позволяет desktop-клиенту выбрать способ входа. Сейчас сервер объявляет
+  // password; формат заранее допускает OAuth/OIDC без изменения модели окружения.
+  repeated AuthMethod auth_methods = 4;
+}
+
+message AuthMethod {
+  string id = 1;
+  string kind = 2;
+  string name = 3;
 }
 
 // AuthService — логин/пароль с JWT (TTL), refresh-токеном и per-user настройками Claude.

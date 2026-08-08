@@ -1106,6 +1106,28 @@ export class ServerInfo extends Message<ServerInfo> {
    */
   desktop = false;
 
+  /**
+   * version — версия backend из git-тега. Пусто у dev-сборок и старых серверов.
+   *
+   * @generated from field: string version = 2;
+   */
+  version = "";
+
+  /**
+   * capabilities — расширяемые возможности инстанса. Неизвестные значения клиент игнорирует.
+   *
+   * @generated from field: repeated string capabilities = 3;
+   */
+  capabilities: string[] = [];
+
+  /**
+   * auth_methods позволяет desktop-клиенту выбрать способ входа. Сейчас сервер объявляет
+   * password; формат заранее допускает OAuth/OIDC без изменения модели окружения.
+   *
+   * @generated from field: repeated brigade.v1.AuthMethod auth_methods = 4;
+   */
+  authMethods: AuthMethod[] = [];
+
   constructor(data?: PartialMessage<ServerInfo>) {
     super();
     proto3.util.initPartial(data, this);
@@ -1115,6 +1137,9 @@ export class ServerInfo extends Message<ServerInfo> {
   static readonly typeName = "brigade.v1.ServerInfo";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "desktop", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 2, name: "version", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "capabilities", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 4, name: "auth_methods", kind: "message", T: AuthMethod, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ServerInfo {
@@ -1131,6 +1156,55 @@ export class ServerInfo extends Message<ServerInfo> {
 
   static equals(a: ServerInfo | PlainMessage<ServerInfo> | undefined, b: ServerInfo | PlainMessage<ServerInfo> | undefined): boolean {
     return proto3.util.equals(ServerInfo, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.AuthMethod
+ */
+export class AuthMethod extends Message<AuthMethod> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  /**
+   * @generated from field: string kind = 2;
+   */
+  kind = "";
+
+  /**
+   * @generated from field: string name = 3;
+   */
+  name = "";
+
+  constructor(data?: PartialMessage<AuthMethod>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.AuthMethod";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "kind", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): AuthMethod {
+    return new AuthMethod().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): AuthMethod {
+    return new AuthMethod().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): AuthMethod {
+    return new AuthMethod().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: AuthMethod | PlainMessage<AuthMethod> | undefined, b: AuthMethod | PlainMessage<AuthMethod> | undefined): boolean {
+    return proto3.util.equals(AuthMethod, a, b);
   }
 }
 

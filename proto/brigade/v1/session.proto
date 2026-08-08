@@ -173,6 +173,8 @@ message ListPreviewsResponse {
 // (браузер не отправляет кастомные заголовки при апгрейде).
 message IssueStreamTicketRequest {
   string session_id = 1;
+  // scope ограничивает назначение тикета. Пусто — terminal/shell для старых клиентов.
+  string scope = 2;
 }
 
 message IssueStreamTicketResponse {

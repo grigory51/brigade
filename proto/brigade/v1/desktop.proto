@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package brigade.v1;
+
+import "brigade/v1/auth.proto";
+
+message DesktopEnvironment {
+  string id = 1;
+  string name = 2;
+  string kind = 3;
+  string base_url = 4;
+  bool active = 5;
+  bool connected = 6;
+  string username = 7;
+  string version = 8;
+  repeated string capabilities = 9;
+  repeated AuthMethod auth_methods = 10;
+  string error = 11;
+  repeated DesktopPortForward port_forwards = 12;
+  repeated DesktopMount mounts = 13;
+}
+
+message DesktopPortForward {
+  string id = 1;
+  string session_id = 2;
+  int32 remote_port = 3;
+  int32 local_port = 4;
+  string status = 5;
+  string error = 6;
+}
+
+message AddDesktopPortForwardRequest {
+  string session_id = 1;
+  int32 remote_port = 2;
+  int32 local_port = 3;
+}
+
+message DesktopResourceRequest { string id = 1; }
+
+message DesktopMount {
+  string id = 1;
+  string session_id = 2;
+  string path = 3;
+  string status = 4;
+  string error = 5;
+}
+
+message AddDesktopMountRequest {
+  string session_id = 1;
+  string session_name = 2;
+}
+
+message ListDesktopEnvironmentsResponse {
+  repeated DesktopEnvironment environments = 1;
+  string active_id = 2;
+  bool needs_setup = 3;
+}
+
+message AddDesktopEnvironmentRequest {
+  string name = 1;
+  string base_url = 2;
+}
+
+message DesktopEnvironmentRequest { string id = 1; }
+
+message UpdateDesktopEnvironmentRequest {
+  string id = 1;
+  string name = 2;
+  string base_url = 3;
+}
+
+message LoginDesktopEnvironmentRequest {
+  string id = 1;
+  string username = 2;
+  string password = 3;
+}
+
+// DesktopService существует только внутри Brigade.app. Он управляет доверенной локальной
+// оболочкой; удалённые инстансы этот API не публикуют.
+service DesktopService {
+  rpc ListEnvironments(Empty) returns (ListDesktopEnvironmentsResponse) {}
+  rpc AddEnvironment(AddDesktopEnvironmentRequest) returns (DesktopEnvironment) {}
+  rpc UpdateEnvironment(UpdateDesktopEnvironmentRequest) returns (DesktopEnvironment) {}
+  rpc DeleteEnvironment(DesktopEnvironmentRequest) returns (Empty) {}
+  rpc SelectEnvironment(DesktopEnvironmentRequest) returns (DesktopEnvironment) {}
+  rpc LoginEnvironment(LoginDesktopEnvironmentRequest) returns (DesktopEnvironment) {}
+  rpc LogoutEnvironment(DesktopEnvironmentRequest) returns (DesktopEnvironment) {}
+  rpc AddPortForward(AddDesktopPortForwardRequest) returns (DesktopPortForward) {}
+  rpc RemovePortForward(DesktopResourceRequest) returns (Empty) {}
+  rpc MountWorkspace(AddDesktopMountRequest) returns (DesktopMount) {}
+  rpc UnmountWorkspace(DesktopResourceRequest) returns (Empty) {}
+}

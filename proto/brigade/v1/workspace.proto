@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package brigade.v1;
+
+import "brigade/v1/auth.proto";
+
+message WorkspacePath {
+  string session_id = 1;
+  string path = 2;
+}
+
+message WorkspaceEntry {
+  string name = 1;
+  string path = 2;
+  uint32 mode = 3;
+  int64 size = 4;
+  int64 modified_at = 5;
+  bool directory = 6;
+  bool symlink = 7;
+}
+
+message WorkspaceStatResponse { WorkspaceEntry entry = 1; }
+message WorkspaceListResponse { repeated WorkspaceEntry entries = 1; }
+
+message WorkspaceReadRequest {
+  string session_id = 1;
+  string path = 2;
+  int64 offset = 3;
+  int32 size = 4;
+}
+message WorkspaceReadResponse { bytes content = 1; }
+
+message WorkspaceWriteRequest {
+  string session_id = 1;
+  string path = 2;
+  int64 offset = 3;
+  bytes content = 4;
+}
+message WorkspaceWriteResponse { int32 written = 1; }
+
+message WorkspaceMkdirRequest {
+  string session_id = 1;
+  string path = 2;
+  uint32 mode = 3;
+}
+message WorkspaceRemoveRequest {
+  string session_id = 1;
+  string path = 2;
+  bool directory = 3;
+}
+message WorkspaceRenameRequest {
+  string session_id = 1;
+  string old_path = 2;
+  string new_path = 3;
+}
+message WorkspaceTruncateRequest {
+  string session_id = 1;
+  string path = 2;
+  int64 size = 3;
+}
+message WorkspaceChmodRequest {
+  string session_id = 1;
+  string path = 2;
+  uint32 mode = 3;
+}
+message WorkspaceChtimesRequest {
+  string session_id = 1;
+  string path = 2;
+  int64 accessed_at = 3;
+  int64 modified_at = 4;
+}
+message WorkspaceSymlinkRequest {
+  string session_id = 1;
+  string target = 2;
+  string path = 3;
+}
+message WorkspaceReadlinkResponse { string target = 1; }
+
+service WorkspaceService {
+  rpc Stat(WorkspacePath) returns (WorkspaceStatResponse) {}
+  rpc List(WorkspacePath) returns (WorkspaceListResponse) {}
+  rpc Read(WorkspaceReadRequest) returns (WorkspaceReadResponse) {}
+  rpc Write(WorkspaceWriteRequest) returns (WorkspaceWriteResponse) {}
+  rpc Mkdir(WorkspaceMkdirRequest) returns (Empty) {}
+  rpc Remove(WorkspaceRemoveRequest) returns (Empty) {}
+  rpc Rename(WorkspaceRenameRequest) returns (Empty) {}
+  rpc Truncate(WorkspaceTruncateRequest) returns (Empty) {}
+  rpc Chmod(WorkspaceChmodRequest) returns (Empty) {}
+  rpc Chtimes(WorkspaceChtimesRequest) returns (Empty) {}
+  rpc Symlink(WorkspaceSymlinkRequest) returns (Empty) {}
+  rpc Readlink(WorkspacePath) returns (WorkspaceReadlinkResponse) {}
+}

@@ -29,6 +29,20 @@ func TestTicketIssueRedeem(t *testing.T) {
 	}
 }
 
+func TestTicketScope(t *testing.T) {
+	ts := NewTicketStore()
+	token, err := ts.IssueScoped("user-1", "session-1", "tunnel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := ts.Redeem(token, "session-1"); ok {
+		t.Fatal("scoped ticket accepted by legacy stream")
+	}
+	if userID, ok := ts.RedeemScoped(token, "session-1", "tunnel"); !ok || userID != "user-1" {
+		t.Fatalf("RedeemScoped = %q, %v", userID, ok)
+	}
+}
+
 // TestTicketWrongSession проверяет привязку тикета к session_id: предъявление
 // для чужой сессии отклоняется, но не «сжигает» валидный тикет.
 func TestTicketWrongSession(t *testing.T) {

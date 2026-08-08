@@ -22,6 +22,7 @@ type AuthService struct {
 	images     *agentimage.Service
 	runtime    *runtimecfg.Service
 	desktop    bool
+	version    string
 	codexLogin *codexlogin.Service
 }
 
@@ -31,8 +32,8 @@ func (s *AuthService) SetCodexLogin(service *codexlogin.Service) { s.codexLogin 
 // уведомлений недоступна, остальные методы работают. images — образы контейнера агента
 // (в local-режиме сервис отвечает «недоступно»); runtime — режим исполнения сессий.
 // desktop — локальный однопользовательский запуск (см. ServerInfo).
-func NewAuthService(svc *auth.Service, images *agentimage.Service, runtime *runtimecfg.Service, desktop bool) *AuthService {
-	return &AuthService{svc: svc, images: images, runtime: runtime, desktop: desktop}
+func NewAuthService(svc *auth.Service, images *agentimage.Service, runtime *runtimecfg.Service, desktop bool, version string) *AuthService {
+	return &AuthService{svc: svc, images: images, runtime: runtime, desktop: desktop, version: version}
 }
 
 // GetAgentRuntime возвращает режим исполнения сессий и доступные docker-контексты.
@@ -119,7 +120,12 @@ func imagesToProto(s agentimage.Settings) *v1.AgentImagesSettings {
 // GetServerInfo сообщает клиенту режим работы сервера. Авторизация не требуется по сути
 // вопроса, но метод проходит общий интерсептор — клиент зовёт его после проверки сессии.
 func (s *AuthService) GetServerInfo(_ context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.ServerInfo], error) {
-	return connect.NewResponse(&v1.ServerInfo{Desktop: s.desktop}), nil
+	return connect.NewResponse(&v1.ServerInfo{
+		Desktop:      s.desktop,
+		Version:      s.version,
+		Capabilities: []string{"workspace-rw-v1", "tcp-tunnel-v1"},
+		AuthMethods:  []*v1.AuthMethod{{Id: "password", Kind: "password", Name: "Логин и пароль"}},
+	}), nil
 }
 
 // Login проверяет учётные данные, выпускает пару токенов и для web-клиента выставляет

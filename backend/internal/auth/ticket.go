@@ -13,6 +13,7 @@ const ticketTTL = 30 * time.Second
 type ticket struct {
 	userID    string
 	sessionID string
+	scope     string
 	expiresAt time.Time
 }
 
@@ -41,6 +42,11 @@ func NewTicketStore() *TicketStore {
 
 // Issue выпускает одноразовый тикет для пользователя и сессии.
 func (t *TicketStore) Issue(userID, sessionID string) (string, error) {
+	return t.IssueScoped(userID, sessionID, "")
+}
+
+// IssueScoped выпускает тикет, пригодный только для указанного вида потока.
+func (t *TicketStore) IssueScoped(userID, sessionID, scope string) (string, error) {
 	token, err := randomToken()
 	if err != nil {
 		return "", err
@@ -52,6 +58,7 @@ func (t *TicketStore) Issue(userID, sessionID string) (string, error) {
 	t.tickets[token] = ticket{
 		userID:    userID,
 		sessionID: sessionID,
+		scope:     scope,
 		expiresAt: t.now().Add(ticketTTL),
 	}
 	return token, nil
@@ -60,6 +67,11 @@ func (t *TicketStore) Issue(userID, sessionID string) (string, error) {
 // Redeem проверяет тикет, привязку к сессии и срок годности, после чего удаляет
 // его (одноразовость). Возвращает id пользователя и ok=false при любой ошибке.
 func (t *TicketStore) Redeem(token, sessionID string) (userID string, ok bool) {
+	return t.RedeemScoped(token, sessionID, "")
+}
+
+// RedeemScoped проверяет также назначение тикета.
+func (t *TicketStore) RedeemScoped(token, sessionID, scope string) (userID string, ok bool) {
 	if token == "" {
 		return "", false
 	}
@@ -74,7 +86,7 @@ func (t *TicketStore) Redeem(token, sessionID string) (userID string, ok bool) {
 	// Тикет инвалидируется только при успешном предъявлении (верная сессия и
 	// неистёкший срок). Иначе попытка с неверной session_id «сожгла» бы валидный
 	// тикет; несовпавшие тикеты доживают до TTL и вычищаются в evictExpiredLocked.
-	if t.now().After(tk.expiresAt) || tk.sessionID != sessionID {
+	if t.now().After(tk.expiresAt) || tk.sessionID != sessionID || tk.scope != scope {
 		return "", false
 	}
 	delete(t.tickets, token)

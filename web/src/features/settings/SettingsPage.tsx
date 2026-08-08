@@ -21,11 +21,13 @@ import {
   Plus,
   Plug,
   RefreshCw,
+  Server,
   Send,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { agentClient, authClient, mcpClient, notificationClient, telegramClient } from "@/api/client";
+import { useAuth } from "@/features/auth/AuthContext";
 import type { AgentConnection } from "@/api/gen/brigade/v1/agent_pb";
 import type { NotificationBackend } from "@/api/gen/brigade/v1/notification_pb";
 import type { TelegramBot } from "@/api/gen/brigade/v1/telegram_pb";
@@ -41,6 +43,7 @@ import {
 import { cn } from "@/lib/utils";
 import { AgentConnectionsSection } from "./AgentConnectionsSection";
 import { EnvironmentSection } from "./EnvironmentSection";
+import { DesktopEnvironmentsSection } from "./DesktopEnvironmentsSection";
 import { McpSection } from "./McpSection";
 import { TelegramSection } from "./TelegramSection";
 import { ResponseProfilesSection } from "./ResponseProfilesSection";
@@ -71,13 +74,14 @@ import {
  * в поле всегда пустой драфт, а состояние показывается флагом «задан».
  */
 
-type SectionId = "agents" | "mcp" | "profiles" | "env" | "memory" | "ssh" | "notifications" | "telegram";
+type SectionId = "agents" | "mcp" | "profiles" | "environments" | "env" | "memory" | "ssh" | "notifications" | "telegram";
 
-const SECTIONS: SectionId[] = ["agents", "mcp", "profiles", "env", "memory", "ssh", "notifications", "telegram"];
+const SECTIONS: SectionId[] = ["agents", "mcp", "profiles", "environments", "env", "memory", "ssh", "notifications", "telegram"];
 
 const AGENTS_OPEN_KEY = "brigade.settings.agentsOpen";
 
 export function SettingsPage() {
+  const { desktop } = useAuth();
   const { section } = useParams<{ section: string }>();
   const navigate = useNavigate();
   const active =
@@ -222,6 +226,14 @@ export function SettingsPage() {
             active={active === "profiles"}
             onClick={() => go("profiles")}
           />
+          {desktop && (
+            <NavRow
+              icon={Server}
+              label="Окружения"
+              active={active === "environments"}
+              onClick={() => go("environments")}
+            />
+          )}
           <NavRow
             icon={Container}
             label="Среда агента"
@@ -356,6 +368,7 @@ export function SettingsPage() {
             )}
             {active === "mcp" && <McpSection onCountChange={setMcpCount} />}
             {active === "profiles" && <ResponseProfilesSection />}
+            {active === "environments" && <DesktopEnvironmentsSection />}
             {active === "env" && <EnvironmentSection />}
             {active === "memory" && (
               <MemorySection

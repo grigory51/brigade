@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -15,6 +17,7 @@ import (
 	"time"
 
 	"github.com/grigory51/brigade/backend/internal/acp"
+	"github.com/grigory51/brigade/backend/internal/desktopenv"
 )
 
 // Десктоп-режим: `brigade desktop` — «в один клик» на локальной машине. Готовит
@@ -29,6 +32,7 @@ const desktopAddr = "127.0.0.1:8787"
 // desktopMode включает десктоп-специфику в runServer (авто-логин сид-пользователя через
 // /desktop/auth). Выставляется runDesktop до старта сервера; в серверном режиме остаётся false.
 var desktopMode bool
+var desktopEnvironments *desktopenv.Manager
 
 // desktopRuntimePath — файл настроек режима исполнения сессий (local|docker и
 // docker-контекст), который правится из интерфейса приложения. Пуст в серверной
@@ -48,8 +52,14 @@ func runDesktop() {
 		log.Fatalf("brigade desktop: app dir: %v", err)
 	}
 	cfgPath := filepath.Join(appDir, "config.yaml")
+	_, configErr := os.Stat(cfgPath)
+	newInstall := errors.Is(configErr, os.ErrNotExist)
 	if err := ensureDesktopConfig(appDir, cfgPath); err != nil {
 		log.Fatalf("brigade desktop: config: %v", err)
+	}
+	desktopEnvironments, err = desktopenv.New(filepath.Join(appDir, "environments.json"), newInstall)
+	if err != nil {
+		log.Fatalf("brigade desktop: environments: %v", err)
 	}
 	// Режим исполнения сессий правится из настроек приложения — отдельным файлом, чтобы не
 	// переписывать пользовательский config.yaml (и не терять его комментарии).
@@ -76,6 +86,7 @@ func runDesktop() {
 	if !waitReady(desktopAddr, 15*time.Second) {
 		log.Fatalf("brigade desktop: сервер не поднялся за отведённое время")
 	}
+	go desktopEnvironments.Restore(context.Background())
 	showWindow(url, "Brigade")
 }
 

@@ -26,6 +26,8 @@ items:
         href: guides/agents.md
       - name: Среда агента
         href: guides/environment.md
+      - name: Удалённые окружения в Brigade.app
+        href: guides/remote-environments.md
       - name: MCP и секреты
         href: guides/mcp.md
       - name: Профили ответов

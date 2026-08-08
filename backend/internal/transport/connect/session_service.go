@@ -222,7 +222,10 @@ func (s *SessionService) IssueStreamTicket(ctx context.Context, req *connect.Req
 		return nil, sessionError(err)
 	}
 
-	token, err := s.tickets.Issue(userID, req.Msg.SessionId)
+	if req.Msg.Scope != "" && req.Msg.Scope != "tunnel" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("unknown stream scope"))
+	}
+	token, err := s.tickets.IssueScoped(userID, req.Msg.SessionId, req.Msg.Scope)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

@@ -1039,6 +1039,13 @@ export class IssueStreamTicketRequest extends Message<IssueStreamTicketRequest> 
    */
   sessionId = "";
 
+  /**
+   * scope ограничивает назначение тикета. Пусто — terminal/shell для старых клиентов.
+   *
+   * @generated from field: string scope = 2;
+   */
+  scope = "";
+
   constructor(data?: PartialMessage<IssueStreamTicketRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -1048,6 +1055,7 @@ export class IssueStreamTicketRequest extends Message<IssueStreamTicketRequest> 
   static readonly typeName = "brigade.v1.IssueStreamTicketRequest";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "scope", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): IssueStreamTicketRequest {

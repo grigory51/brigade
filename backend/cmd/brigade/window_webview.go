@@ -82,6 +82,7 @@ func showWindow(url, title string) {
 	// Внешние ссылки (другой origin) открываем в системном браузере, а не навигируем окно:
 	// у webview нет кнопки «назад», иначе клик по ссылке уводит из приложения без возврата.
 	_ = w.Bind("brigadeOpenExternal", func(u string) { _ = exec.Command("open", u).Start() })
+	_ = w.Bind("brigadeRevealFile", func(path string) { _ = exec.Command("open", path).Start() })
 	w.Init(externalLinksJS)
 	w.SetTitle(title)
 	w.SetSize(1200, 800, webview.HintNone)

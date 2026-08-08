@@ -70,6 +70,7 @@ import {
 } from "@/components/ui/sidebar";
 import { ShellPanel } from "@/features/terminal/ShellPanel";
 import { CreateSessionDialog } from "./CreateSessionDialog";
+import { EnvironmentSwitcher } from "@/features/desktop/EnvironmentSwitcher";
 import {
   SessionHeaderProvider,
   useSessionHeaderSlot,
@@ -316,6 +317,7 @@ export function SessionLayout() {
                 </Link>
                 <SidebarTrigger className="group-data-[collapsible=icon]:hidden" />
               </div>
+              {desktop && <EnvironmentSwitcher />}
               <Button
                 onClick={openCreate}
                 className="h-auto justify-start gap-2 rounded-[9px] py-[9px] text-[13px] font-medium group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"

@@ -1816,23 +1816,15 @@ func (r *Registry) Get(ctx context.Context, sessionID, userID string) (store.Ses
 // OpenWorkspaceFile открывает обычный файл внутри workspace сессии её владельцу.
 // os.Root не позволяет пути и симлинкам выйти за границы workspace.
 func (r *Registry) OpenWorkspaceFile(ctx context.Context, sessionID, userID, name string) (*os.File, error) {
-	sess, err := r.Get(ctx, sessionID, userID)
-	if err != nil {
-		return nil, err
-	}
-	name = filepath.FromSlash(name)
-	if !filepath.IsLocal(name) {
-		return nil, os.ErrNotExist
-	}
-	rootPath := r.hostCwd(sess)
-	if rootPath == "" {
-		return nil, os.ErrNotExist
-	}
-	root, err := os.OpenRoot(rootPath)
+	root, err := r.OpenWorkspaceRoot(ctx, sessionID, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer root.Close()
+	name = filepath.FromSlash(name)
+	if !filepath.IsLocal(name) {
+		return nil, os.ErrNotExist
+	}
 	f, err := root.Open(name)
 	if err != nil {
 		return nil, err
@@ -1846,6 +1838,20 @@ func (r *Registry) OpenWorkspaceFile(ctx context.Context, sessionID, userID, nam
 		return nil, os.ErrNotExist
 	}
 	return f, nil
+}
+
+// OpenWorkspaceRoot открывает безопасный rooted-доступ к workspace сессии её владельца.
+// Вызывающий обязан закрыть Root.
+func (r *Registry) OpenWorkspaceRoot(ctx context.Context, sessionID, userID string) (*os.Root, error) {
+	sess, err := r.Get(ctx, sessionID, userID)
+	if err != nil {
+		return nil, err
+	}
+	rootPath := r.hostCwd(sess)
+	if rootPath == "" {
+		return nil, os.ErrNotExist
+	}
+	return os.OpenRoot(rootPath)
 }
 
 // Rename меняет отображаемое имя сессии пользователя и возвращает обновлённую запись.

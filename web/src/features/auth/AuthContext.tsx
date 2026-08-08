@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { ConnectError, Code } from "@connectrpc/connect";
-import { authClient } from "@/api/client";
+import { authClient, desktopClient } from "@/api/client";
 import type { User } from "@/api/gen/brigade/v1/auth_pb";
 
 type AuthState = {
@@ -35,14 +35,27 @@ const AuthCtx = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
+  const [desktop, setDesktop] = useState(false);
+  const activeRemoteRef = useRef<string | null>(null);
   // access-JWT хранится в памяти (не в state): он не влияет на рендер, но нужен
   // для Bearer-заголовка AG-UI-запросов. Login кладёт его сюда, Logout очищает.
   const accessTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    authClient
-      .me({})
+    const bootstrap = async () => {
+      try {
+        const state = await desktopClient.listEnvironments({});
+        if (!cancelled) {
+          setDesktop(true);
+          activeRemoteRef.current = state.environments.find((environment) => environment.active && environment.kind === "remote")?.id ?? null;
+        }
+      } catch {
+        // DesktopService отсутствует в web/server-режиме.
+      }
+      return authClient.me({});
+    };
+    bootstrap()
       .then((u) => {
         if (!cancelled) setUser(u);
       })
@@ -67,6 +80,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (username: string, password: string) => {
+    if (activeRemoteRef.current) {
+      await desktopClient.loginEnvironment({ id: activeRemoteRef.current, username, password });
+      window.location.assign("/sessions");
+      return;
+    }
     const res = await authClient.login({ username, password });
     // access-токен бэкенд кладёт в httpOnly-cookie (для Connect-вызовов) и в тело
     // ответа: тело используем как Bearer для AG-UI-эндпоинта, не читающего cookie.
@@ -85,11 +103,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const getAccessToken = useCallback(() => accessTokenRef.current, []);
 
-  // Режим сервера спрашиваем после появления пользователя: метод проходит общий
-  // интерсептор авторизации, а до логина ответ всё равно ни на что не влияет.
-  const [desktop, setDesktop] = useState(false);
+  // В обычном браузере desktop определяется сервером. В Brigade.app он уже установлен
+  // успешным вызовом локального DesktopService и не зависит от выбранного remote env.
   useEffect(() => {
-    if (!user) return;
+    if (!user || desktop) return;
     let cancelled = false;
     void authClient
       .getServerInfo({})
@@ -100,7 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, desktop]);
 
   const value = useMemo<AuthState>(
     () => ({ user, ready, login, logout, getAccessToken, desktop }),

@@ -15,6 +15,7 @@ import { MemoryPage } from "./features/memory/MemoryPage";
 import { TopicPage } from "./features/memory/TopicPage";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { RouteSpinner } from "./lib/RouteSpinner";
+import { DesktopSetup } from "./features/desktop/DesktopSetup";
 
 // Гейт для защищённых маршрутов. Пока идёт первичная проверка сессии (ready ===
 // false), показываем нейтральный экран загрузки, иначе уже залогиненного
@@ -46,6 +47,7 @@ export function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <DesktopSetup />
         <Routes>
           <Route
             path="/login"

@@ -35,6 +35,7 @@ import (
 	connectsvc "github.com/grigory51/brigade/backend/internal/transport/connect"
 	"github.com/grigory51/brigade/backend/internal/transport/filedownload"
 	"github.com/grigory51/brigade/backend/internal/transport/termws"
+	"github.com/grigory51/brigade/backend/internal/transport/tunnel"
 	"github.com/grigory51/brigade/backend/internal/web"
 )
 
@@ -183,6 +184,11 @@ func runServer(configPath string) {
 	}
 
 	mux := http.NewServeMux()
+	var containerIPs preview.ContainerIPs
+	if ds, ok := spawner.(*spawn.DockerSpawner); ok {
+		containerIPs = ds
+	}
+	previewResolver := preview.NewResolver(st, containerIPs)
 
 	// ConnectRPC — основной API-слой brigade (типизированные unary-вызовы). Interceptor
 	// кладёт пользователя в контекст из Bearer или cookie; обязательность авторизации
@@ -193,7 +199,7 @@ func runServer(configPath string) {
 	// AcpService.ResolvePermission (доставляет решение) — создаётся здесь.
 	perms := aguitransport.NewPermissionStore()
 
-	authService := connectsvc.NewAuthService(authSvc, imagesSvc, runtimeSvc, desktopMode)
+	authService := connectsvc.NewAuthService(authSvc, imagesSvc, runtimeSvc, desktopMode, buildVersion)
 	var codexLoginRunner codexlogin.Runner = registry
 	if desktopMode {
 		// Desktop наследует host DNS/VPN; Docker VM может обходить split-tunnel.
@@ -212,8 +218,10 @@ func runServer(configPath string) {
 	// webview стартует именно с него (см. runDesktop). В серверном режиме ручка не подключается.
 	if desktopMode {
 		mux.HandleFunc("/desktop/auth", authService.DesktopLoginHandler(cfg.Seed.Username))
+		mux.Handle(brigadev1connect.NewDesktopServiceHandler(connectsvc.NewDesktopService(desktopEnvironments), interceptors))
 	}
 	mux.Handle(brigadev1connect.NewSessionServiceHandler(connectsvc.NewSessionService(registry, tickets, previewSvc, imagesSvc), interceptors))
+	mux.Handle(brigadev1connect.NewWorkspaceServiceHandler(connectsvc.NewWorkspaceService(registry), interceptors))
 	mux.Handle(brigadev1connect.NewAgentServiceHandler(connectsvc.NewAgentService(st, codexLoginSvc), interceptors))
 	// AcpService — управляющие вызовы ACP-чата (история/статус/workflow/отмена/опции/
 	// permission-ответ). JWT-авторизация, как у прочих пользовательских сервисов.
@@ -237,6 +245,7 @@ func runServer(configPath string) {
 	// WS вспомогательного шелла: параллельный терминал рядом с любой сессией (осмотр
 	// рабочей директории руками). Шелл спавнится на подключение и живёт до его разрыва.
 	mux.Handle("/ws/shell/{sessionId}", termws.ShellHandler(tickets, registry))
+	mux.Handle("/ws/tunnel/{sessionId}/{port}", tunnel.Handler(tickets, previewResolver))
 
 	// AG-UI потоковый turn: POST /api/ag-ui/run по SSE в формате стороннего @ag-ui/client.
 	// Единственная сырая HTTP-ручка ACP — Connect не выражает этот потоковый протокол;
@@ -260,11 +269,10 @@ func runServer(configPath string) {
 	// проксируются к dev-серверу сессии, остальные обслуживает mux.
 	var handler http.Handler = mux
 	if cfg.Preview.Enabled {
-		var ips preview.ContainerIPs
-		if ds, ok := spawner.(*spawn.DockerSpawner); ok {
-			ips = ds
-		}
-		handler = preview.Wrap(previewSvc.Config(), preview.NewResolver(st, ips), mux)
+		handler = preview.Wrap(previewSvc.Config(), previewResolver, mux)
+	}
+	if desktopEnvironments != nil {
+		handler = desktopEnvironments.Proxy(handler)
 	}
 
 	// Встроенная TLS-терминация: отдельный HTTPS-listener с тем же handler'ом.
