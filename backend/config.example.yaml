@@ -20,7 +20,27 @@ jwt:
   access_ttl: "15m"
   refresh_ttl: "720h"
 
+# Способы входа. Пароль можно отключить после проверки OIDC — тогда экран входа
+# показывает только кнопку провайдера.
+auth:
+  password_enabled: true
+  oidc:
+    # OIDC issuer; discovery читается из /.well-known/openid-configuration.
+    issuer: ""
+    client_id: ""
+    # В проде задавайте через BRIGADE_AUTH__OIDC__CLIENT_SECRET.
+    client_secret: ""
+    redirect_url: "https://brigade.example.com/auth/oidc/callback"
+    name: "ZITADEL"
+    required_role: "brigade:user"
+    # Дефолты ниже подходят ZITADEL; переопределите их для другого провайдера.
+    role_claim: "urn:zitadel:iam:org:project:roles"
+    username_claim: "preferred_username"
+    # Пустой список включает openid/profile/email и scope требуемой ZITADEL-роли.
+    scopes: []
+
 # Сид-пользователь создаётся при первом запуске, если таблица users пуста.
+# При auth.password_enabled=false seed можно оставить пустым.
 seed:
   username: "admin"
   password: "admin"

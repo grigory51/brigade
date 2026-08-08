@@ -38,6 +38,7 @@ type Config struct {
 
 	JWT  JWTConfig  `koanf:"jwt"`
 	Seed SeedConfig `koanf:"seed"`
+	Auth AuthConfig `koanf:"auth"`
 
 	// WorkDir — корневая рабочая директория; для docker-сессий её подпапки
 	// bind-mount'ятся в контейнеры.
@@ -140,6 +141,25 @@ type JWTConfig struct {
 	RefreshTTL time.Duration `koanf:"refresh_ttl"`
 }
 
+type AuthConfig struct {
+	PasswordEnabled bool       `koanf:"password_enabled"`
+	OIDC            OIDCConfig `koanf:"oidc"`
+}
+
+type OIDCConfig struct {
+	Issuer        string   `koanf:"issuer"`
+	ClientID      string   `koanf:"client_id"`
+	ClientSecret  string   `koanf:"client_secret"`
+	RedirectURL   string   `koanf:"redirect_url"`
+	Name          string   `koanf:"name"`
+	Scopes        []string `koanf:"scopes"`
+	RoleClaim     string   `koanf:"role_claim"`
+	RequiredRole  string   `koanf:"required_role"`
+	UsernameClaim string   `koanf:"username_claim"`
+}
+
+func (c OIDCConfig) Enabled() bool { return c.Issuer != "" }
+
 // SeedConfig — стартовый пользователь, создаётся при первом запуске, если БД пуста.
 type SeedConfig struct {
 	Username string `koanf:"username"`
@@ -165,7 +185,7 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("config: load env: %w", err)
 	}
 
-	var cfg Config
+	cfg := Config{Auth: AuthConfig{PasswordEnabled: true}}
 	if err := k.Unmarshal("", &cfg); err != nil {
 		return nil, fmt.Errorf("config: unmarshal: %w", err)
 	}
@@ -245,11 +265,51 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("config: jwt.refresh_ttl (%s) должен быть больше jwt.access_ttl (%s)", c.JWT.RefreshTTL, c.JWT.AccessTTL)
 	}
 
-	if c.Seed.Username == "" {
-		return fmt.Errorf("config: seed.username не задан")
+	if c.Auth.PasswordEnabled {
+		if c.Seed.Username == "" {
+			return fmt.Errorf("config: seed.username не задан")
+		}
+		if c.Seed.Password == "" {
+			return fmt.Errorf("config: seed.password не задан")
+		}
 	}
-	if c.Seed.Password == "" {
-		return fmt.Errorf("config: seed.password не задан")
+	if !c.Auth.PasswordEnabled && !c.Auth.OIDC.Enabled() {
+		return fmt.Errorf("config: хотя бы один способ входа должен быть включён")
+	}
+	if c.Auth.OIDC.Enabled() {
+		oidc := &c.Auth.OIDC
+		if oidc.ClientID == "" || oidc.RedirectURL == "" || oidc.RequiredRole == "" {
+			return fmt.Errorf("config: auth.oidc требует client_id, redirect_url и required_role")
+		}
+		issuer, err := url.Parse(oidc.Issuer)
+		if err != nil || issuer.Scheme != "https" || issuer.Host == "" || issuer.RawQuery != "" || issuer.Fragment != "" {
+			return fmt.Errorf("config: auth.oidc.issuer должен быть HTTPS origin")
+		}
+		oidc.Issuer = strings.TrimSuffix(oidc.Issuer, "/")
+		redirect, err := url.Parse(oidc.RedirectURL)
+		if err != nil || redirect.Host == "" || (redirect.Scheme != "https" && !(redirect.Scheme == "http" && redirect.Hostname() == "127.0.0.1")) {
+			return fmt.Errorf("config: auth.oidc.redirect_url должен быть HTTPS URL")
+		}
+		if oidc.Name == "" {
+			oidc.Name = issuer.Hostname()
+		}
+		if oidc.RoleClaim == "" {
+			oidc.RoleClaim = "urn:zitadel:iam:org:project:roles"
+		}
+		if oidc.UsernameClaim == "" {
+			oidc.UsernameClaim = "preferred_username"
+		}
+		if len(oidc.Scopes) == 0 {
+			oidc.Scopes = []string{"openid", "profile", "email", "urn:zitadel:iam:org:project:role:" + oidc.RequiredRole}
+		} else {
+			openid := false
+			for _, scope := range oidc.Scopes {
+				openid = openid || scope == "openid"
+			}
+			if !openid {
+				return fmt.Errorf("config: auth.oidc.scopes должен содержать openid")
+			}
+		}
 	}
 
 	if c.Preview.Enabled {

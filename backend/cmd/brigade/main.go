@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
@@ -108,6 +109,17 @@ func runServer(configPath string) {
 	if err := authSvc.EnsureSeedUser(ctx, cfg.Seed.Username, cfg.Seed.Password); err != nil {
 		log.Fatalf("brigade: seed user: %v", err)
 	}
+	var oidcLogin *auth.OIDC
+	if cfg.Auth.OIDC.Enabled() {
+		oidcLogin, err = auth.NewOIDC(ctx, authSvc, auth.OIDCConfig{
+			Issuer: cfg.Auth.OIDC.Issuer, ClientID: cfg.Auth.OIDC.ClientID, ClientSecret: cfg.Auth.OIDC.ClientSecret,
+			RedirectURL: cfg.Auth.OIDC.RedirectURL, Scopes: cfg.Auth.OIDC.Scopes, RoleClaim: cfg.Auth.OIDC.RoleClaim,
+			RequiredRole: cfg.Auth.OIDC.RequiredRole, UsernameClaim: cfg.Auth.OIDC.UsernameClaim,
+		})
+		if err != nil {
+			log.Fatalf("brigade: OIDC: %v", err)
+		}
+	}
 	tickets := auth.NewTicketStore()
 
 	// Режим исполнения сессий: в серверной инсталляции — из конфига, в десктопной поверх
@@ -199,7 +211,7 @@ func runServer(configPath string) {
 	// AcpService.ResolvePermission (доставляет решение) — создаётся здесь.
 	perms := aguitransport.NewPermissionStore()
 
-	authService := connectsvc.NewAuthService(authSvc, imagesSvc, runtimeSvc, desktopMode, buildVersion)
+	authService := connectsvc.NewAuthService(authSvc, imagesSvc, runtimeSvc, desktopMode, buildVersion, cfg.Auth.PasswordEnabled, cfg.Auth.OIDC.Name, oidcLogin, strings.HasPrefix(cfg.Auth.OIDC.RedirectURL, "https://"))
 	var codexLoginRunner codexlogin.Runner = registry
 	if desktopMode {
 		// Desktop наследует host DNS/VPN; Docker VM может обходить split-tunnel.
@@ -210,6 +222,10 @@ func runServer(configPath string) {
 	codexLoginSvc := codexlogin.New(st, codexLoginRunner)
 	authService.SetCodexLogin(codexLoginSvc)
 	mux.Handle(brigadev1connect.NewAuthServiceHandler(authService, interceptors))
+	if oidcLogin != nil {
+		mux.HandleFunc("GET /auth/oidc/start", authService.OIDCStartHandler)
+		mux.HandleFunc("GET /auth/oidc/callback", authService.OIDCCallbackHandler)
+	}
 	mux.Handle(brigadev1connect.NewNotificationServiceHandler(connectsvc.NewNotificationService(st, notifySvc), interceptors))
 	mux.Handle(brigadev1connect.NewResponseProfileServiceHandler(connectsvc.NewResponseProfileService(st), interceptors))
 	mux.Handle(brigadev1connect.NewTelegramServiceHandler(connectsvc.NewTelegramService(telegramSvc), interceptors))
@@ -218,6 +234,8 @@ func runServer(configPath string) {
 	// webview стартует именно с него (см. runDesktop). В серверном режиме ручка не подключается.
 	if desktopMode {
 		mux.HandleFunc("/desktop/auth", authService.DesktopLoginHandler(cfg.Seed.Username))
+		mux.HandleFunc("GET /desktop/oidc/start", desktopEnvironments.OIDCStartHandler)
+		mux.HandleFunc("GET /desktop/oidc/callback", desktopEnvironments.OIDCCallbackHandler)
 		mux.Handle(brigadev1connect.NewDesktopServiceHandler(connectsvc.NewDesktopService(desktopEnvironments), interceptors))
 	}
 	mux.Handle(brigadev1connect.NewSessionServiceHandler(connectsvc.NewSessionService(registry, tickets, previewSvc, imagesSvc), interceptors))

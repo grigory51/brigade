@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -33,7 +34,7 @@ type Environment struct {
 	Username     string           `json:"username,omitempty"`
 	Version      string           `json:"version,omitempty"`
 	Capabilities []string         `json:"capabilities,omitempty"`
-	AuthMethods  []*v1.AuthMethod `json:"-"`
+	AuthMethods  []*v1.AuthMethod `json:"auth_methods,omitempty"`
 	PortForwards []PortForward    `json:"port_forwards,omitempty"`
 	Mounts       []Mount          `json:"mounts,omitempty"`
 	Error        string           `json:"-"`
@@ -126,6 +127,38 @@ func (m *Manager) List() ([]Environment, string, bool) {
 		out = append(out, *environment)
 	}
 	return out, m.config.ActiveID, m.config.NeedsSetup
+}
+
+// RefreshInfo синхронизирует способы входа после изменения конфигурации remote-инстанса.
+func (m *Manager) RefreshInfo(ctx context.Context) {
+	m.mu.Lock()
+	remotes := make(map[string]string)
+	for _, environment := range m.config.Environments {
+		if environment.Kind == "remote" {
+			remotes[environment.ID] = environment.BaseURL
+		}
+	}
+	m.mu.Unlock()
+	var wait sync.WaitGroup
+	for id, baseURL := range remotes {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			info, err := m.serverInfo(ctx, baseURL)
+			if err != nil {
+				return
+			}
+			m.mu.Lock()
+			if environment := m.findLocked(id); environment != nil {
+				environment.AuthMethods = info.AuthMethods
+				environment.Version = info.Version
+				environment.Capabilities = info.Capabilities
+				_ = m.saveLocked()
+			}
+			m.mu.Unlock()
+		}()
+	}
+	wait.Wait()
 }
 
 func normalizeRemoteURL(raw string) (string, error) {
@@ -292,19 +325,89 @@ func (m *Manager) Login(ctx context.Context, id, username, password string) (Env
 	if err != nil {
 		return Environment{}, err
 	}
-	if err := m.tokens.Set(id, response.Msg.RefreshToken); err != nil {
+	return m.storeLogin(id, response.Msg)
+}
+
+func (m *Manager) storeLogin(id string, login *v1.LoginResponse) (Environment, error) {
+	if err := m.tokens.Set(id, login.RefreshToken); err != nil {
 		return Environment{}, fmt.Errorf("keychain: %w", err)
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	environment = m.findLocked(id)
-	environment.Username = response.Msg.User.GetUsername()
+	environment := m.findLocked(id)
+	if environment == nil || environment.Kind != "remote" {
+		return Environment{}, errors.New("удалённое окружение не найдено")
+	}
+	environment.Username = login.User.GetUsername()
 	environment.Error = ""
-	m.access[id] = tokenState{access: response.Msg.AccessToken, expires: tokenExpiry(response.Msg.AccessToken)}
+	m.access[id] = tokenState{access: login.AccessToken, expires: tokenExpiry(login.AccessToken)}
 	if err := m.saveLocked(); err != nil {
 		return Environment{}, err
 	}
 	return *environment, nil
+}
+
+func (m *Manager) OIDCStartHandler(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("environment_id")
+	m.mu.Lock()
+	environment := m.findLocked(id)
+	if environment == nil || environment.Kind != "remote" {
+		m.mu.Unlock()
+		http.Error(w, "environment not found", http.StatusNotFound)
+		return
+	}
+	baseURL := environment.BaseURL
+	m.mu.Unlock()
+
+	callback := &url.URL{Scheme: "http", Host: "127.0.0.1:8787", Path: "/desktop/oidc/callback"}
+	callbackQuery := callback.Query()
+	callbackQuery.Set("environment_id", id)
+	callbackQuery.Set("return_to", safeLocalReturn(r.URL.Query().Get("return_to")))
+	callback.RawQuery = callbackQuery.Encode()
+	start, _ := url.Parse(baseURL + "/auth/oidc/start")
+	query := start.Query()
+	query.Set("desktop_callback", callback.String())
+	start.RawQuery = query.Encode()
+	http.Redirect(w, r, start.String(), http.StatusFound)
+}
+
+func (m *Manager) OIDCCallbackHandler(w http.ResponseWriter, r *http.Request) {
+	returnTo := safeLocalReturn(r.URL.Query().Get("return_to"))
+	if r.URL.Query().Get("error") != "" {
+		http.Redirect(w, r, "/login?error=oidc", http.StatusFound)
+		return
+	}
+	id := r.URL.Query().Get("environment_id")
+	m.mu.Lock()
+	environment := m.findLocked(id)
+	if environment == nil || environment.Kind != "remote" {
+		m.mu.Unlock()
+		http.Error(w, "environment not found", http.StatusNotFound)
+		return
+	}
+	baseURL := environment.BaseURL
+	m.mu.Unlock()
+	client := brigadev1connect.NewAuthServiceClient(m.http, baseURL)
+	response, err := client.ExchangeOIDC(r.Context(), connect.NewRequest(&v1.ExchangeOIDCRequest{Code: r.URL.Query().Get("code")}))
+	if err != nil {
+		log.Printf("desktop environments: exchange OIDC: %v", err)
+		http.Redirect(w, r, "/login?error=oidc", http.StatusFound)
+		return
+	}
+	if _, err := m.storeLogin(id, response.Msg); err != nil {
+		log.Printf("desktop environments: store OIDC login: %v", err)
+		http.Error(w, "store OIDC login failed", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, returnTo, http.StatusFound)
+}
+
+func safeLocalReturn(value string) string {
+	parsed, err := url.Parse(value)
+	if err != nil || value == "" || !strings.HasPrefix(value, "/") || strings.HasPrefix(value, "//") || parsed.IsAbs() || parsed.Host != "" {
+		return "/sessions"
+	}
+	return value
 }
 
 func (m *Manager) Logout(id string) (Environment, error) {

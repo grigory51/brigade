@@ -260,6 +260,43 @@ export class RefreshResponse extends Message<RefreshResponse> {
 }
 
 /**
+ * @generated from message brigade.v1.ExchangeOIDCRequest
+ */
+export class ExchangeOIDCRequest extends Message<ExchangeOIDCRequest> {
+  /**
+   * @generated from field: string code = 1;
+   */
+  code = "";
+
+  constructor(data?: PartialMessage<ExchangeOIDCRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.ExchangeOIDCRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "code", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ExchangeOIDCRequest {
+    return new ExchangeOIDCRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ExchangeOIDCRequest {
+    return new ExchangeOIDCRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ExchangeOIDCRequest {
+    return new ExchangeOIDCRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: ExchangeOIDCRequest | PlainMessage<ExchangeOIDCRequest> | undefined, b: ExchangeOIDCRequest | PlainMessage<ExchangeOIDCRequest> | undefined): boolean {
+    return proto3.util.equals(ExchangeOIDCRequest, a, b);
+  }
+}
+
+/**
  * ClaudeSettings — состояние Claude-настроек пользователя. Само значение токена
  * наружу НЕ отдаётся никогда: только флаг «задан ли токен».
  *

@@ -1,8 +1,10 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ConnectError } from "@connectrpc/connect";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "./AuthContext";
+import { authClient, desktopClient } from "@/api/client";
+import type { AuthMethod } from "@/api/gen/brigade/v1/auth_pb";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -22,10 +24,58 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [methods, setMethods] = useState<AuthMethod[] | null>(null);
+  const [remoteEnvironmentId, setRemoteEnvironmentId] = useState("");
 
   // Куда вернуть после логина: исходный защищённый маршрут или список сессий.
   const from =
     (location.state as { from?: string } | null)?.from ?? "/sessions";
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const desktop = await desktopClient.listEnvironments({});
+        const remote = desktop.environments.find(
+          (environment) => environment.active && environment.kind === "remote",
+        );
+        if (remote) {
+          if (!cancelled) {
+            setRemoteEnvironmentId(remote.id);
+            setMethods(remote.authMethods);
+          }
+          return;
+        }
+      } catch {
+        // Обычный web-инстанс не предоставляет DesktopService.
+      }
+      const info = await authClient.getServerInfo({});
+      if (!cancelled) setMethods(info.authMethods);
+    };
+    void load().catch(() => {
+      if (!cancelled) {
+        setMethods([]);
+        setError("Не удалось получить способы входа.");
+      }
+    });
+    if (new URLSearchParams(location.search).has("error")) {
+      setError("Не удалось войти через OIDC.");
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [location.search]);
+
+  const startOIDC = () => {
+    const path = remoteEnvironmentId ? "/desktop/oidc/start" : "/auth/oidc/start";
+    const query = new URLSearchParams({ return_to: from });
+    if (remoteEnvironmentId) query.set("environment_id", remoteEnvironmentId);
+    window.location.assign(`${path}?${query}`);
+  };
+
+  const passwordEnabled =
+    methods?.some((method) => method.kind === "password") ?? false;
+  const oidcMethods = methods?.filter((method) => method.kind === "oidc") ?? [];
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -63,45 +113,79 @@ export function LoginPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <form onSubmit={onSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">Логин</Label>
-              <Input
-                id="username"
-                autoComplete="username"
-                autoFocus
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-              />
+          {methods === null ? (
+            <div className="flex h-10 items-center justify-center">
+              <Loader2 className="size-4 animate-spin" />
             </div>
+          ) : (
+            <div className="space-y-4">
+              {oidcMethods.map((method) => (
+                <Button
+                  key={method.id}
+                  type="button"
+                  className="w-full"
+                  onClick={startOIDC}
+                >
+                  Войти через {method.name}
+                </Button>
+              ))}
+              {passwordEnabled && (
+                <form onSubmit={onSubmit} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="username">Логин</Label>
+                    <Input
+                      id="username"
+                      autoComplete="username"
+                      autoFocus
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      required
+                    />
+                  </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Пароль</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Пароль</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      autoComplete="current-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  {error && (
+                    <p role="alert" className="text-sm text-destructive">
+                      {error}
+                    </p>
+                  )}
+
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={busy || !username || !password}
+                  >
+                    {busy ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      "Войти"
+                    )}
+                  </Button>
+                </form>
+              )}
+              {!passwordEnabled && error && (
+                <p role="alert" className="text-sm text-destructive">
+                  {error}
+                </p>
+              )}
+              {methods.length === 0 && !error && (
+                <p role="alert" className="text-sm text-destructive">
+                  На сервере не настроен способ входа.
+                </p>
+              )}
             </div>
-
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
-
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={busy || !username || !password}
-            >
-              {busy ? <Loader2 className="size-4 animate-spin" /> : "Войти"}
-            </Button>
-          </form>
+          )}
         </CardContent>
       </Card>
     </div>

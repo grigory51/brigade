@@ -28,6 +28,8 @@ items:
         href: guides/environment.md
       - name: Удалённые окружения в Brigade.app
         href: guides/remote-environments.md
+      - name: Вход через OIDC
+        href: guides/authentication.md
       - name: MCP и секреты
         href: guides/mcp.md
       - name: Профили ответов

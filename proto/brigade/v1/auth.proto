@@ -33,6 +33,8 @@ message RefreshResponse {
   string refresh_token = 2;
 }
 
+message ExchangeOIDCRequest { string code = 1; }
+
 // ClaudeSettings — состояние Claude-настроек пользователя. Само значение токена
 // наружу НЕ отдаётся никогда: только флаг «задан ли токен».
 message ClaudeSettings {
@@ -169,6 +171,8 @@ message AuthMethod {
 // AuthService — логин/пароль с JWT (TTL), refresh-токеном и per-user настройками Claude.
 service AuthService {
   rpc Login(LoginRequest) returns (LoginResponse) {}
+  // ExchangeOIDC погашает одноразовый код, выданный callback'ом для Brigade.app.
+  rpc ExchangeOIDC(ExchangeOIDCRequest) returns (LoginResponse) {}
   rpc Refresh(RefreshRequest) returns (RefreshResponse) {}
   // Me возвращает текущего пользователя по access-токену (из cookie или Bearer).
   rpc Me(Empty) returns (User) {}

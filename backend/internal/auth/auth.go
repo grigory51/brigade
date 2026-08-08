@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -138,6 +139,52 @@ func (s *Service) IssueForUser(ctx context.Context, username string) (TokenPair,
 		return TokenPair{}, err
 	}
 	return s.issuePair(ctx, User{ID: id, Username: username})
+}
+
+// LoginExternal находит или создаёт локального пользователя по стабильной паре
+// issuer+subject. Совпадение отображаемого username намеренно не связывает учётные записи:
+// это позволило бы внешнему провайдеру захватить существующий password-аккаунт.
+func (s *Service) LoginExternal(ctx context.Context, provider, subject, username string) (TokenPair, error) {
+	if provider == "" || subject == "" {
+		return TokenPair{}, ErrInvalidCredentials
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return TokenPair{}, fmt.Errorf("auth: begin external login: %w", err)
+	}
+	defer tx.Rollback()
+
+	var user User
+	err = tx.QueryRowContext(ctx, `SELECT u.id, u.username FROM auth_identities i JOIN users u ON u.id = i.user_id WHERE i.provider = ? AND i.subject = ?`, provider, subject).Scan(&user.ID, &user.Username)
+	if errors.Is(err, sql.ErrNoRows) {
+		username = strings.TrimSpace(username)
+		if runes := []rune(username); len(runes) > 128 {
+			username = string(runes[:128])
+		}
+		if username == "" {
+			username = "oidc-" + hashToken(provider + "\x00" + subject)[:8]
+		}
+		var exists int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE username = ?`, username).Scan(&exists); err != nil {
+			return TokenPair{}, fmt.Errorf("auth: check external username: %w", err)
+		}
+		if exists != 0 {
+			username += "-" + hashToken(provider + "\x00" + subject)[:8]
+		}
+		user = User{ID: newID(), Username: username}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO users (id, username, password_hash, created_at) VALUES (?, ?, '', ?)`, user.ID, user.Username, s.now().Unix()); err != nil {
+			return TokenPair{}, fmt.Errorf("auth: insert external user: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO auth_identities (provider, subject, user_id, created_at) VALUES (?, ?, ?, ?)`, provider, subject, user.ID, s.now().Unix()); err != nil {
+			return TokenPair{}, fmt.Errorf("auth: insert identity: %w", err)
+		}
+	} else if err != nil {
+		return TokenPair{}, fmt.Errorf("auth: query identity: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return TokenPair{}, fmt.Errorf("auth: commit external login: %w", err)
+	}
+	return s.issuePair(ctx, user)
 }
 
 // Refresh обменивает действительный refresh-токен на новую пару токенов.

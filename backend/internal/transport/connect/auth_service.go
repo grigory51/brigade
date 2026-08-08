@@ -3,7 +3,9 @@ package connectsvc
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -23,6 +25,10 @@ type AuthService struct {
 	runtime    *runtimecfg.Service
 	desktop    bool
 	version    string
+	password   bool
+	oidcName   string
+	oidc       *auth.OIDC
+	secure     bool
 	codexLogin *codexlogin.Service
 }
 
@@ -32,8 +38,8 @@ func (s *AuthService) SetCodexLogin(service *codexlogin.Service) { s.codexLogin 
 // уведомлений недоступна, остальные методы работают. images — образы контейнера агента
 // (в local-режиме сервис отвечает «недоступно»); runtime — режим исполнения сессий.
 // desktop — локальный однопользовательский запуск (см. ServerInfo).
-func NewAuthService(svc *auth.Service, images *agentimage.Service, runtime *runtimecfg.Service, desktop bool, version string) *AuthService {
-	return &AuthService{svc: svc, images: images, runtime: runtime, desktop: desktop, version: version}
+func NewAuthService(svc *auth.Service, images *agentimage.Service, runtime *runtimecfg.Service, desktop bool, version string, password bool, oidcName string, oidcLogin *auth.OIDC, secure bool) *AuthService {
+	return &AuthService{svc: svc, images: images, runtime: runtime, desktop: desktop, version: version, password: password, oidcName: oidcName, oidc: oidcLogin, secure: secure}
 }
 
 // GetAgentRuntime возвращает режим исполнения сессий и доступные docker-контексты.
@@ -120,17 +126,26 @@ func imagesToProto(s agentimage.Settings) *v1.AgentImagesSettings {
 // GetServerInfo сообщает клиенту режим работы сервера. Авторизация не требуется по сути
 // вопроса, но метод проходит общий интерсептор — клиент зовёт его после проверки сессии.
 func (s *AuthService) GetServerInfo(_ context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.ServerInfo], error) {
-	return connect.NewResponse(&v1.ServerInfo{
+	info := &v1.ServerInfo{
 		Desktop:      s.desktop,
 		Version:      s.version,
 		Capabilities: []string{"workspace-rw-v1", "tcp-tunnel-v1"},
-		AuthMethods:  []*v1.AuthMethod{{Id: "password", Kind: "password", Name: "Логин и пароль"}},
-	}), nil
+	}
+	if s.password {
+		info.AuthMethods = append(info.AuthMethods, &v1.AuthMethod{Id: "password", Kind: "password", Name: "Логин и пароль"})
+	}
+	if s.oidc != nil {
+		info.AuthMethods = append(info.AuthMethods, &v1.AuthMethod{Id: "oidc", Kind: "oidc", Name: s.oidcName})
+	}
+	return connect.NewResponse(info), nil
 }
 
 // Login проверяет учётные данные, выпускает пару токенов и для web-клиента выставляет
 // access-токен httpOnly-cookie (mobile использует access_token из тела как Bearer).
 func (s *AuthService) Login(ctx context.Context, req *connect.Request[v1.LoginRequest]) (*connect.Response[v1.LoginResponse], error) {
+	if !s.password {
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("вход по паролю отключён"))
+	}
 	pair, err := s.svc.Login(ctx, req.Msg.Username, req.Msg.Password)
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidCredentials) {
@@ -144,9 +159,20 @@ func (s *AuthService) Login(ctx context.Context, req *connect.Request[v1.LoginRe
 		RefreshToken: pair.RefreshToken,
 		User:         userToProto(pair.User),
 	})
-	setAccessCookie(resp.Header(), pair.AccessToken, pair.AccessExpiresAt)
-	setRefreshCookie(resp.Header(), pair.RefreshToken, pair.RefreshExpiresAt)
+	setAccessCookie(resp.Header(), pair.AccessToken, pair.AccessExpiresAt, s.secure)
+	setRefreshCookie(resp.Header(), pair.RefreshToken, pair.RefreshExpiresAt, s.secure)
 	return resp, nil
+}
+
+func (s *AuthService) ExchangeOIDC(_ context.Context, req *connect.Request[v1.ExchangeOIDCRequest]) (*connect.Response[v1.LoginResponse], error) {
+	if s.oidc == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("OIDC отключён"))
+	}
+	pair, err := s.oidc.ExchangeHandoff(req.Msg.Code)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	return connect.NewResponse(loginResponse(pair)), nil
 }
 
 // Refresh обменивает refresh-токен на новую пару и обновляет cookie web-клиента.
@@ -171,8 +197,8 @@ func (s *AuthService) Refresh(ctx context.Context, req *connect.Request[v1.Refre
 		AccessToken:  pair.AccessToken,
 		RefreshToken: pair.RefreshToken,
 	})
-	setAccessCookie(resp.Header(), pair.AccessToken, pair.AccessExpiresAt)
-	setRefreshCookie(resp.Header(), pair.RefreshToken, pair.RefreshExpiresAt)
+	setAccessCookie(resp.Header(), pair.AccessToken, pair.AccessExpiresAt, s.secure)
+	setRefreshCookie(resp.Header(), pair.RefreshToken, pair.RefreshExpiresAt, s.secure)
 	return resp, nil
 }
 
@@ -197,8 +223,8 @@ func (s *AuthService) Logout(ctx context.Context, _ *connect.Request[v1.Empty]) 
 	}
 
 	resp := connect.NewResponse(&v1.Empty{})
-	clearAccessCookie(resp.Header())
-	clearRefreshCookie(resp.Header())
+	clearAccessCookie(resp.Header(), s.secure)
+	clearRefreshCookie(resp.Header(), s.secure)
 	return resp, nil
 }
 
@@ -390,6 +416,76 @@ func userToProto(u auth.User) *v1.User {
 	return &v1.User{Id: u.ID, Username: u.Username}
 }
 
+func loginResponse(pair auth.TokenPair) *v1.LoginResponse {
+	return &v1.LoginResponse{AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken, User: userToProto(pair.User)}
+}
+
+func (s *AuthService) OIDCStartHandler(w http.ResponseWriter, r *http.Request) {
+	if s.oidc == nil {
+		http.NotFound(w, r)
+		return
+	}
+	returnTo := safeReturnTo(r.URL.Query().Get("return_to"))
+	desktopCallback := r.URL.Query().Get("desktop_callback")
+	if desktopCallback != "" && !validDesktopCallback(desktopCallback) {
+		http.Error(w, "invalid desktop callback", http.StatusBadRequest)
+		return
+	}
+	authorizationURL, err := s.oidc.Start(returnTo, desktopCallback)
+	if err != nil {
+		log.Printf("auth: start OIDC: %v", err)
+		http.Error(w, "OIDC start failed", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, authorizationURL, http.StatusFound)
+}
+
+func (s *AuthService) OIDCCallbackHandler(w http.ResponseWriter, r *http.Request) {
+	pair, returnTo, desktopCallback, err := s.oidc.Complete(r.Context(), r.URL.Query().Get("state"), r.URL.Query().Get("code"))
+	if err != nil {
+		log.Printf("auth: complete OIDC: %v", err)
+		if desktopCallback != "" {
+			redirectWithQuery(w, r, desktopCallback, "error", "oidc")
+			return
+		}
+		http.Redirect(w, r, "/login?error=oidc", http.StatusFound)
+		return
+	}
+	if desktopCallback != "" {
+		code, err := s.oidc.CreateHandoff(pair)
+		if err != nil {
+			redirectWithQuery(w, r, desktopCallback, "error", "oidc")
+			return
+		}
+		redirectWithQuery(w, r, desktopCallback, "code", code)
+		return
+	}
+	setAccessCookie(w.Header(), pair.AccessToken, pair.AccessExpiresAt, s.secure)
+	setRefreshCookie(w.Header(), pair.RefreshToken, pair.RefreshExpiresAt, s.secure)
+	http.Redirect(w, r, safeReturnTo(returnTo), http.StatusFound)
+}
+
+func safeReturnTo(value string) string {
+	parsed, err := url.Parse(value)
+	if err != nil || value == "" || !strings.HasPrefix(value, "/") || strings.HasPrefix(value, "//") || parsed.IsAbs() || parsed.Host != "" {
+		return "/sessions"
+	}
+	return value
+}
+
+func validDesktopCallback(value string) bool {
+	parsed, err := url.Parse(value)
+	return err == nil && parsed.Scheme == "http" && parsed.Host == "127.0.0.1:8787" && parsed.Path == "/desktop/oidc/callback" && parsed.User == nil && parsed.Fragment == ""
+}
+
+func redirectWithQuery(w http.ResponseWriter, r *http.Request, destination, key, value string) {
+	parsed, _ := url.Parse(destination)
+	query := parsed.Query()
+	query.Set(key, value)
+	parsed.RawQuery = query.Encode()
+	http.Redirect(w, r, parsed.String(), http.StatusFound)
+}
+
 // DesktopLoginHandler — HTTP-обработчик авто-логина для десктоп-режима: выпускает сессию
 // сид-пользователя (без пароля) и ставит те же httpOnly-cookie, что и обычный Login, затем
 // редиректит на SPA. Приложение локальное и однопользовательское (127.0.0.1), экран логина в
@@ -401,34 +497,36 @@ func (s *AuthService) DesktopLoginHandler(username string) http.HandlerFunc {
 			http.Error(w, "desktop auto-login failed: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		setAccessCookie(w.Header(), pair.AccessToken, pair.AccessExpiresAt)
-		setRefreshCookie(w.Header(), pair.RefreshToken, pair.RefreshExpiresAt)
+		setAccessCookie(w.Header(), pair.AccessToken, pair.AccessExpiresAt, false)
+		setRefreshCookie(w.Header(), pair.RefreshToken, pair.RefreshExpiresAt, false)
 		http.Redirect(w, r, "/", http.StatusFound)
 	}
 }
 
 // setAccessCookie добавляет в ответ Set-Cookie с access-токеном (httpOnly) для web.
 // SameSite=Lax и Path=/ покрывают и unary-вызовы, и WS-апгрейд того же origin.
-func setAccessCookie(h http.Header, token string, expiresAt time.Time) {
+func setAccessCookie(h http.Header, token string, expiresAt time.Time, secure bool) {
 	c := &http.Cookie{
 		Name:     auth.AccessCookieName,
 		Value:    token,
 		Path:     "/",
 		Expires:  expiresAt,
 		HttpOnly: true,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	}
 	h.Add("Set-Cookie", c.String())
 }
 
 // clearAccessCookie добавляет Set-Cookie, удаляющий access-cookie (logout).
-func clearAccessCookie(h http.Header) {
+func clearAccessCookie(h http.Header, secure bool) {
 	c := &http.Cookie{
 		Name:     auth.AccessCookieName,
 		Value:    "",
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	}
 	h.Add("Set-Cookie", c.String())
@@ -437,26 +535,28 @@ func clearAccessCookie(h http.Header) {
 // setRefreshCookie добавляет в ответ Set-Cookie с refresh-токеном (httpOnly) для web.
 // Долгоживущая cookie (TTL = refresh_ttl) переживает перезагрузку страницы и закрытие
 // вкладки, давая фронту тихо обновлять короткий access-токен через Refresh.
-func setRefreshCookie(h http.Header, token string, expiresAt time.Time) {
+func setRefreshCookie(h http.Header, token string, expiresAt time.Time, secure bool) {
 	c := &http.Cookie{
 		Name:     auth.RefreshCookieName,
 		Value:    token,
 		Path:     "/",
 		Expires:  expiresAt,
 		HttpOnly: true,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	}
 	h.Add("Set-Cookie", c.String())
 }
 
 // clearRefreshCookie добавляет Set-Cookie, удаляющий refresh-cookie (logout).
-func clearRefreshCookie(h http.Header) {
+func clearRefreshCookie(h http.Header, secure bool) {
 	c := &http.Cookie{
 		Name:     auth.RefreshCookieName,
 		Value:    "",
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	}
 	h.Add("Set-Cookie", c.String())

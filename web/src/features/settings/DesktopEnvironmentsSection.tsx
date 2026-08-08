@@ -40,6 +40,11 @@ export function DesktopEnvironmentsSection() {
     finally { setBusy(false); }
   };
 
+  const loginOIDC = (environmentId: string) => {
+    const query = new URLSearchParams({ environment_id: environmentId, return_to: "/settings/environments" });
+    window.location.assign(`/desktop/oidc/start?${query}`);
+  };
+
   const select = async (id: string) => {
     await desktopClient.selectEnvironment({ id });
     window.location.assign("/sessions");
@@ -82,9 +87,20 @@ export function DesktopEnvironmentsSection() {
             </div>
             {loginId === environment.id && (
               <div className="mt-3 grid grid-cols-2 gap-2 border-t pt-3">
-                <Input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Логин" />
-                <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Пароль" />
-                <Button className="col-span-2" disabled={busy || !username || !password} onClick={() => void login()}>{busy ? <Loader2 className="size-4 animate-spin" /> : "Подключить"}</Button>
+                {environment.authMethods
+                  .filter((method) => method.kind === "oidc")
+                  .map((method) => (
+                    <Button key={method.id} className="col-span-2" onClick={() => loginOIDC(environment.id)}>
+                      Войти через {method.name}
+                    </Button>
+                  ))}
+                {environment.authMethods.some((method) => method.kind === "password") && (
+                  <>
+                    <Input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Логин" />
+                    <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Пароль" />
+                    <Button className="col-span-2" disabled={busy || !username || !password} onClick={() => void login()}>{busy ? <Loader2 className="size-4 animate-spin" /> : "Подключить"}</Button>
+                  </>
+                )}
               </div>
             )}
             {editId === environment.id && (

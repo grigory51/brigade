@@ -165,8 +165,9 @@ it is not currently shipped as a supported mobile application.
 ## Status
 
 Early and moving fast. Interfaces may change without notice. Run brigade behind a VPN or
-on a trusted network; preview URLs are intentionally public when the preview proxy is
-enabled. Replace the default seed credentials and JWT secret before exposing an instance.
+configure OIDC with a required role; preview URLs are intentionally public when the preview
+proxy is enabled. Replace the default seed credentials and JWT secret before exposing an
+instance.
 
 ## License
 

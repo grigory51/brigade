@@ -35,6 +35,9 @@ const (
 const (
 	// AuthServiceLoginProcedure is the fully-qualified name of the AuthService's Login RPC.
 	AuthServiceLoginProcedure = "/brigade.v1.AuthService/Login"
+	// AuthServiceExchangeOIDCProcedure is the fully-qualified name of the AuthService's ExchangeOIDC
+	// RPC.
+	AuthServiceExchangeOIDCProcedure = "/brigade.v1.AuthService/ExchangeOIDC"
 	// AuthServiceRefreshProcedure is the fully-qualified name of the AuthService's Refresh RPC.
 	AuthServiceRefreshProcedure = "/brigade.v1.AuthService/Refresh"
 	// AuthServiceMeProcedure is the fully-qualified name of the AuthService's Me RPC.
@@ -103,6 +106,8 @@ const (
 // AuthServiceClient is a client for the brigade.v1.AuthService service.
 type AuthServiceClient interface {
 	Login(context.Context, *connect.Request[v1.LoginRequest]) (*connect.Response[v1.LoginResponse], error)
+	// ExchangeOIDC погашает одноразовый код, выданный callback'ом для Brigade.app.
+	ExchangeOIDC(context.Context, *connect.Request[v1.ExchangeOIDCRequest]) (*connect.Response[v1.LoginResponse], error)
 	Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error)
 	// Me возвращает текущего пользователя по access-токену (из cookie или Bearer).
 	Me(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.User], error)
@@ -161,6 +166,12 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+AuthServiceLoginProcedure,
 			connect.WithSchema(authServiceMethods.ByName("Login")),
+			connect.WithClientOptions(opts...),
+		),
+		exchangeOIDC: connect.NewClient[v1.ExchangeOIDCRequest, v1.LoginResponse](
+			httpClient,
+			baseURL+AuthServiceExchangeOIDCProcedure,
+			connect.WithSchema(authServiceMethods.ByName("ExchangeOIDC")),
 			connect.WithClientOptions(opts...),
 		),
 		refresh: connect.NewClient[v1.RefreshRequest, v1.RefreshResponse](
@@ -301,6 +312,7 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 // authServiceClient implements AuthServiceClient.
 type authServiceClient struct {
 	login                  *connect.Client[v1.LoginRequest, v1.LoginResponse]
+	exchangeOIDC           *connect.Client[v1.ExchangeOIDCRequest, v1.LoginResponse]
 	refresh                *connect.Client[v1.RefreshRequest, v1.RefreshResponse]
 	me                     *connect.Client[v1.Empty, v1.User]
 	getServerInfo          *connect.Client[v1.Empty, v1.ServerInfo]
@@ -328,6 +340,11 @@ type authServiceClient struct {
 // Login calls brigade.v1.AuthService.Login.
 func (c *authServiceClient) Login(ctx context.Context, req *connect.Request[v1.LoginRequest]) (*connect.Response[v1.LoginResponse], error) {
 	return c.login.CallUnary(ctx, req)
+}
+
+// ExchangeOIDC calls brigade.v1.AuthService.ExchangeOIDC.
+func (c *authServiceClient) ExchangeOIDC(ctx context.Context, req *connect.Request[v1.ExchangeOIDCRequest]) (*connect.Response[v1.LoginResponse], error) {
+	return c.exchangeOIDC.CallUnary(ctx, req)
 }
 
 // Refresh calls brigade.v1.AuthService.Refresh.
@@ -443,6 +460,8 @@ func (c *authServiceClient) RegenerateSSHKey(ctx context.Context, req *connect.R
 // AuthServiceHandler is an implementation of the brigade.v1.AuthService service.
 type AuthServiceHandler interface {
 	Login(context.Context, *connect.Request[v1.LoginRequest]) (*connect.Response[v1.LoginResponse], error)
+	// ExchangeOIDC погашает одноразовый код, выданный callback'ом для Brigade.app.
+	ExchangeOIDC(context.Context, *connect.Request[v1.ExchangeOIDCRequest]) (*connect.Response[v1.LoginResponse], error)
 	Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error)
 	// Me возвращает текущего пользователя по access-токену (из cookie или Bearer).
 	Me(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.User], error)
@@ -497,6 +516,12 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		AuthServiceLoginProcedure,
 		svc.Login,
 		connect.WithSchema(authServiceMethods.ByName("Login")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceExchangeOIDCHandler := connect.NewUnaryHandler(
+		AuthServiceExchangeOIDCProcedure,
+		svc.ExchangeOIDC,
+		connect.WithSchema(authServiceMethods.ByName("ExchangeOIDC")),
 		connect.WithHandlerOptions(opts...),
 	)
 	authServiceRefreshHandler := connect.NewUnaryHandler(
@@ -635,6 +660,8 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		switch r.URL.Path {
 		case AuthServiceLoginProcedure:
 			authServiceLoginHandler.ServeHTTP(w, r)
+		case AuthServiceExchangeOIDCProcedure:
+			authServiceExchangeOIDCHandler.ServeHTTP(w, r)
 		case AuthServiceRefreshProcedure:
 			authServiceRefreshHandler.ServeHTTP(w, r)
 		case AuthServiceMeProcedure:
@@ -690,6 +717,10 @@ type UnimplementedAuthServiceHandler struct{}
 
 func (UnimplementedAuthServiceHandler) Login(context.Context, *connect.Request[v1.LoginRequest]) (*connect.Response[v1.LoginResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.Login is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) ExchangeOIDC(context.Context, *connect.Request[v1.ExchangeOIDCRequest]) (*connect.Response[v1.LoginResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.ExchangeOIDC is not implemented"))
 }
 
 func (UnimplementedAuthServiceHandler) Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error) {

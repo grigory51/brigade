@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AgentImagesSettings, AgentRuntimeSettings, CancelCodexLoginRequest, ClaudeSettings, CodexLogin, CodexSettings, Empty, GetCodexLoginRequest, LoginRequest, LoginResponse, MemorySettings, RefreshRequest, RefreshResponse, ServerInfo, SetAgentImagesRequest, SetAgentRuntimeRequest, SetClaudeTokenRequest, SetCodexApiKeyRequest, SetCodexChatGPTAuthRequest, SetCodexDefaultProfileRequest, SetMemorySettingsRequest, SSHSettings, User } from "./auth_pb.js";
+import { AgentImagesSettings, AgentRuntimeSettings, CancelCodexLoginRequest, ClaudeSettings, CodexLogin, CodexSettings, Empty, ExchangeOIDCRequest, GetCodexLoginRequest, LoginRequest, LoginResponse, MemorySettings, RefreshRequest, RefreshResponse, ServerInfo, SetAgentImagesRequest, SetAgentRuntimeRequest, SetClaudeTokenRequest, SetCodexApiKeyRequest, SetCodexChatGPTAuthRequest, SetCodexDefaultProfileRequest, SetMemorySettingsRequest, SSHSettings, User } from "./auth_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -20,6 +20,17 @@ export const AuthService = {
     login: {
       name: "Login",
       I: LoginRequest,
+      O: LoginResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * ExchangeOIDC погашает одноразовый код, выданный callback'ом для Brigade.app.
+     *
+     * @generated from rpc brigade.v1.AuthService.ExchangeOIDC
+     */
+    exchangeOIDC: {
+      name: "ExchangeOIDC",
+      I: ExchangeOIDCRequest,
       O: LoginResponse,
       kind: MethodKind.Unary,
     },

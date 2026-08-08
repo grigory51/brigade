@@ -94,6 +94,7 @@ func (s *DesktopService) ListEnvironments(ctx context.Context, _ *connect.Reques
 	if err := s.require(ctx); err != nil {
 		return nil, err
 	}
+	s.environments.RefreshInfo(ctx)
 	environments, activeID, needsSetup := s.environments.List()
 	response := &v1.ListDesktopEnvironmentsResponse{ActiveId: activeID, NeedsSetup: needsSetup, Environments: make([]*v1.DesktopEnvironment, 0, len(environments))}
 	for _, environment := range environments {
