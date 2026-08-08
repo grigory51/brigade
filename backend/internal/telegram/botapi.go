@@ -310,6 +310,7 @@ func (a *botAPI) sendMessage(ctx context.Context, token string, chatID, threadID
 			return sent, nil
 		}
 	}
+	text = plainTelegramText(text)
 	chunks := splitMessage(text, 4096)
 	var sent telegramMessage
 	for index, chunk := range chunks {
@@ -376,7 +377,7 @@ func (a *botAPI) answerGuest(ctx context.Context, token, queryID, text string) (
 	var sent struct {
 		InlineMessageID string `json:"inline_message_id"`
 	}
-	plainText := text
+	plainText := plainTelegramText(text)
 	if len([]rune(plainText)) > 4096 {
 		plainText = string([]rune(plainText)[:4080]) + "\n\n…"
 	}
@@ -412,6 +413,7 @@ func (a *botAPI) editGuest(ctx context.Context, token, inlineMessageID, text str
 			return nil
 		}
 	}
+	text = plainTelegramText(text)
 	if len([]rune(text)) > 4096 {
 		text = string([]rune(text)[:4080]) + "\n\n…"
 	}
@@ -464,7 +466,7 @@ func splitMessage(text string, limit int) []string {
 }
 
 func hasRichMarkdown(text string) bool {
-	for _, marker := range []string{"**", "__", "~~", "```", "](", "!["} {
+	for _, marker := range []string{"```", "](", "!["} {
 		if strings.Contains(text, marker) {
 			return true
 		}
@@ -475,7 +477,7 @@ func hasRichMarkdown(text string) bool {
 		if (heading != line && strings.HasPrefix(heading, " ")) ||
 			strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "* ") || strings.HasPrefix(line, "+ ") ||
 			strings.HasPrefix(line, "> ") || strings.Count(line, "|") >= 2 ||
-			strings.Count(line, "`") >= 2 || strings.Count(line, "*") >= 2 {
+			strings.Count(line, "`") >= 2 {
 			return true
 		}
 		if dot := strings.Index(line, ". "); dot > 0 {
@@ -485,4 +487,8 @@ func hasRichMarkdown(text string) bool {
 		}
 	}
 	return false
+}
+
+func plainTelegramText(text string) string {
+	return strings.NewReplacer("**", "", "__", "", "~~", "").Replace(text)
 }
