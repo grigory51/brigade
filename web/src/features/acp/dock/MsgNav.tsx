@@ -4,11 +4,11 @@ import { messagePlainText } from "./links";
 import { jumpToMessage } from "./jumpToMessage";
 
 /**
- * MsgNav — вертикальная шкала навигации по ленте («Time Machine»): по пилюле на серию
- * реплик, прижаты к правому краю чата и центрированы по высоте. Шкала непрерывно следует
- * за прокруткой: положение в ленте даёт ДРОБНЫЙ фокус, вокруг которого пилюли плавно
- * растут и светлеют, а вдали — мельчают и сгущаются. Клик прыгает к серии, ховер даёт
- * магнификацию соседей (как док macOS) и тултип с началом реплики.
+ * MsgNav — вертикальная шкала навигации по ленте («Time Machine»): по пилюле на каждое
+ * сообщение пользователя, прижаты к правому краю чата и центрированы по высоте. Шкала
+ * непрерывно следует за прокруткой: положение в ленте даёт ДРОБНЫЙ фокус, вокруг которого
+ * пилюли плавно растут и светлеют, а вдали — мельчают и сгущаются. Клик прыгает к
+ * сообщению, ховер даёт магнификацию соседей (как док macOS) и тултип с его началом.
  *
  * Высота шкалы не зависит ни от фокуса, ни от ховера: строки делят фиксированную высоту
  * контейнера через flex-grow, а пилюля центрируется внутри своей строки. Иначе рост пилюль
@@ -48,35 +48,26 @@ export function MsgNav() {
 
   useEffect(() => () => clearTimeout(releaseTimer.current), []);
 
-  // Пилюля — не сообщение, а СЕРИЯ подряд идущих реплик одной стороны, с якорем на первой
-  // из них. На один запрос агент выдаёт десяток сообщений (текст, вызовы инструментов,
-  // системные уведомления), и пилюля на каждое превращала бы шкалу в сплошную гребёнку,
-  // где все пилюли ведут в одно и то же место ленты.
-  const pills = useMemo(() => {
-    const series: { id: string; isUser: boolean; text: string }[] = [];
-    for (const m of messages) {
-      const isUser = m.role === "user";
-      const text = messagePlainText(m);
-      const last = series[series.length - 1];
-      if (last && last.isUser === isUser) {
-        // Первое непустое: серия часто начинается сообщением из одних tool-call'ов.
-        if (!last.text) last.text = text;
-        continue;
-      }
-      series.push({ id: m.id, isUser, text });
-    }
-    // Кто говорит, видно по цвету пилюли — в подписи остаётся только текст реплики.
-    return series.map((s) => ({
-      id: s.id,
-      isUser: s.isUser,
-      label:
-        s.text.length > LABEL_MAX ? `${s.text.slice(0, LABEL_MAX)}…` : s.text,
-    }));
-  }, [messages]);
+  const pills = useMemo(
+    () =>
+      messages
+        .filter((message) => message.role === "user")
+        .map((message) => {
+          const text = messagePlainText(message);
+          return {
+            id: message.id,
+            label:
+              text.length > LABEL_MAX
+                ? `${text.slice(0, LABEL_MAX)}…`
+                : text,
+          };
+        }),
+    [messages],
+  );
 
   const n = pills.length;
 
-  // focus — ДРОБНАЯ позиция прокрутки в шкале серий (2.4 = чуть ниже начала третьей).
+  // focus — ДРОБНАЯ позиция прокрутки в шкале сообщений (2.4 = чуть ниже начала третьего).
   // Считаем сами по якорям в DOM: у рантайма нет события «докуда доскроллено», а плавность
   // возможна только на непрерывной величине — индекс видимого сообщения давал бы рывки.
   const [focus, setFocus] = useState(n - 1);
@@ -139,7 +130,7 @@ export function MsgNav() {
   // Пока курсор на шкале, раскладка считается от ЗАМОРОЖЕННОГО фокуса. Иначе клик по
   // пилюле уводил бы её из-под курсора: прыжок меняет фокус, фокус — доли строк, и под
   // мышью оказывается уже соседняя пилюля. Заморожена только геометрия — подсветка
-  // текущей серии продолжает жить, так что видно, куда именно перепрыгнули.
+  // текущего сообщения продолжает жить, так что видно, куда именно перепрыгнули.
   const layoutCur = pinned ?? cur;
   const layoutSpan = Math.max(layoutCur, n - 1 - layoutCur, 1);
   // Возраст пилюли — близость к фокусу. Когда лента прокручена в конец (фокус = n-1),
@@ -205,12 +196,10 @@ export function MsgNav() {
           const width = Math.round(14 + t * 14 + s * 26);
           const height = Math.round(4 + proximity * 2 + s * 4);
           const opacity = Math.min(1, 0.4 + t * 0.5 + s * 0.6);
-          const alpha = p.isUser ? 0.65 + s * 0.35 : 0.5 + s * 0.5;
+          const alpha = 0.65 + s * 0.35;
           const background = active
             ? "linear-gradient(180deg,#e08464,#c96442)"
-            : p.isUser
-              ? `linear-gradient(180deg,rgba(224,132,100,${alpha}),rgba(201,100,66,${alpha}))`
-              : `linear-gradient(180deg,rgba(160,157,148,${alpha}),rgba(110,107,99,${alpha}))`;
+            : `linear-gradient(180deg,rgba(224,132,100,${alpha}),rgba(201,100,66,${alpha}))`;
 
           return (
             <div
