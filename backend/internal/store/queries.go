@@ -40,6 +40,27 @@ func (s *Store) scanUser(row *sql.Row) (User, error) {
 	return u, nil
 }
 
+func (s *Store) ListUsers(ctx context.Context) ([]UserSummary, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT u.id, u.username, u.password_hash <> '',
+		COALESCE(group_concat(i.provider, ', '), '')
+		FROM users u LEFT JOIN auth_identities i ON i.user_id = u.id
+		GROUP BY u.id, u.username, u.password_hash, u.created_at
+		ORDER BY u.created_at, u.username`)
+	if err != nil {
+		return nil, fmt.Errorf("store: list users: %w", err)
+	}
+	defer rows.Close()
+	var users []UserSummary
+	for rows.Next() {
+		var user UserSummary
+		if err := rows.Scan(&user.ID, &user.Username, &user.Password, &user.Providers); err != nil {
+			return nil, fmt.Errorf("store: scan user summary: %w", err)
+		}
+		users = append(users, user)
+	}
+	return users, rows.Err()
+}
+
 // GetUserSettings возвращает настройки пользователя. Отсутствие строки — не ошибка:
 // возвращаются дефолтные настройки (пустой токен).
 func (s *Store) GetUserSettings(ctx context.Context, userID string) (UserSettings, error) {

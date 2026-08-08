@@ -15,9 +15,12 @@ Brigade читает YAML и применяет поверх него перем
 | `auth.password_enabled` | `BRIGADE_AUTH__PASSWORD_ENABLED` | Показывать вход по логину и паролю |
 | `auth.oidc.issuer` | `BRIGADE_AUTH__OIDC__ISSUER` | OIDC issuer; пустое значение отключает OIDC |
 | `auth.oidc.client_id` | `BRIGADE_AUTH__OIDC__CLIENT_ID` | Client ID приложения |
-| `auth.oidc.client_secret` | `BRIGADE_AUTH__OIDC__CLIENT_SECRET` | Client secret приложения |
+| `auth.oidc.client_secret` | `BRIGADE_AUTH__OIDC__CLIENT_SECRET` | Client secret приложения; необязателен для PKCE-only |
 | `auth.oidc.redirect_url` | `BRIGADE_AUTH__OIDC__REDIRECT_URL` | Callback URL Brigade |
 | `auth.oidc.required_role` | `BRIGADE_AUTH__OIDC__REQUIRED_ROLE` | Обязательная роль пользователя |
+| `auth.oidc.role_claim` | `BRIGADE_AUTH__OIDC__ROLE_CLAIM` | Claim с ролями; по умолчанию ZITADEL claim |
+| `auth.oidc.username_claim` | `BRIGADE_AUTH__OIDC__USERNAME_CLAIM` | Claim для имени пользователя |
+| `auth.oidc.scopes` | — | OAuth scopes; без значения используются ZITADEL defaults |
 | `work_dir` | `BRIGADE_WORK_DIR` | Рабочие каталоги сессий |
 | `agent_home_dir` | `BRIGADE_AGENT_HOME_DIR` | Персональные home агентов |
 | `agent_image` | `BRIGADE_AGENT_IMAGE` | Базовый runtime-образ |
@@ -28,7 +31,9 @@ Brigade читает YAML и применяет поверх него перем
 
 `jwt.secret` должен оставаться стабильным: им зашифрованы секреты подключений агентов, MCP, notification connections и Telegram BotFather tokens.
 
-OIDC настраивается по [отдельной инструкции](../guides/authentication.md). Отключайте
+OIDC настраивается по [отдельной инструкции](../guides/authentication.md). Для ZITADEL
+`issuer` — публичный HTTPS origin инстанса, а не URL discovery. Для другого провайдера
+используйте точное значение `issuer` из discovery. Отключайте
 `auth.password_enabled` только после проверки входа через провайдера.
 
 ## TLS и reverse proxy

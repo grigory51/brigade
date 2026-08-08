@@ -115,7 +115,8 @@ docker run -d --name brigade --restart unless-stopped \
   -e BRIGADE_AGENT_HOME_DIR=/srv/brigade/agent-home \
   -e BRIGADE_MEMORY__DIR=/srv/brigade/memory \
   -e BRIGADE_AGENT_IMAGE=ghcr.io/grigory51/brigade-agent:latest \
-  -e BRIGADE_JWT__SECRET=change-me \
+  -e BRIGADE_JWT__SECRET='replace-with-a-stable-random-secret' \
+  -e BRIGADE_SEED__PASSWORD='replace-this-password' \
   ghcr.io/grigory51/brigade:latest
 ```
 
@@ -134,6 +135,7 @@ nested fields. Examples: `BRIGADE_MODE`, `BRIGADE_JWT__SECRET`,
 `BRIGADE_TELEGRAM__MODE`.
 
 See [`backend/config.example.yaml`](backend/config.example.yaml) for the annotated list.
+For production sign-in through an identity provider, see the [OIDC guide](https://grigory51.github.io/brigade/docs/guides/authentication.html).
 Runtime mode and Telegram polling/webhook transport belong to the instance. Agent
 connections, custom images, MCP servers, notification connections, Telegram bot tokens
 and memory remotes belong to individual users and are configured in the UI.

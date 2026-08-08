@@ -39,6 +39,14 @@ type User struct {
 	CreatedAt    time.Time
 }
 
+// UserSummary содержит только данные, нужные административному списку пользователей.
+type UserSummary struct {
+	ID        string
+	Username  string
+	Password  bool
+	Providers string
+}
+
 // UserSettings — персональные настройки пользователя. ClaudeToken — подписочный
 // токен Claude Code; MemoryRemote — git-репо личной памяти (доступ к git@-remote идёт по
 // SSH-ключу агента, см. auth.EnsureAgentSSHKey). Секреты в БД шифруются, наружу (в API)
