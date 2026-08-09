@@ -1,6 +1,8 @@
 # Конфигурация
 
 Brigade читает YAML и применяет поверх него переменные окружения. Префикс — `BRIGADE_`, вложенность — двойное подчёркивание: `jwt.secret` превращается в `BRIGADE_JWT__SECRET`.
+Путь к YAML задаётся флагом `--config` или переменной `BRIGADE_CONFIG`; флаг имеет
+приоритет. В Docker-образе `BRIGADE_CONFIG=/etc/brigade/config.yaml` задан автоматически.
 
 Полный аннотированный пример находится в [`backend/config.example.yaml`](https://github.com/grigory51/brigade/blob/main/backend/config.example.yaml).
 
@@ -19,7 +21,7 @@ Brigade читает YAML и применяет поверх него перем
 | `auth.oidc.redirect_url` | `BRIGADE_AUTH__OIDC__REDIRECT_URL` | Callback URL Brigade |
 | `auth.oidc.required_role` | `BRIGADE_AUTH__OIDC__REQUIRED_ROLE` | Обязательная роль пользователя |
 | `auth.oidc.role_claim` | `BRIGADE_AUTH__OIDC__ROLE_CLAIM` | Claim с ролями; по умолчанию ZITADEL claim |
-| `auth.oidc.username_claim` | `BRIGADE_AUTH__OIDC__USERNAME_CLAIM` | Claim для имени пользователя |
+| `auth.oidc.username_claim` | `BRIGADE_AUTH__OIDC__USERNAME_CLAIM` | Claim для имени пользователя; по умолчанию `name` |
 | `auth.oidc.scopes` | — | OAuth scopes; без значения используются ZITADEL defaults |
 | `work_dir` | `BRIGADE_WORK_DIR` | Рабочие каталоги сессий |
 | `agent_home_dir` | `BRIGADE_AGENT_HOME_DIR` | Персональные home агентов |

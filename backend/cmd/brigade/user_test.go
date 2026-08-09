@@ -26,3 +26,14 @@ func TestMoveUserDirectories(t *testing.T) {
 		t.Fatalf("data=%q err=%v", data, err)
 	}
 }
+
+func TestDefaultConfigPathUsesEnvironment(t *testing.T) {
+	t.Setenv("BRIGADE_CONFIG", "/etc/brigade/config.yaml")
+	if got := defaultConfigPath(); got != "/etc/brigade/config.yaml" {
+		t.Fatalf("defaultConfigPath=%q", got)
+	}
+	t.Setenv("BRIGADE_CONFIG", "")
+	if got := defaultConfigPath(); got != "config.yaml" {
+		t.Fatalf("defaultConfigPath without env=%q", got)
+	}
+}

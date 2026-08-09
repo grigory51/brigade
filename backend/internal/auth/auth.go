@@ -157,10 +157,7 @@ func (s *Service) LoginExternal(ctx context.Context, provider, subject, username
 	var user User
 	err = tx.QueryRowContext(ctx, `SELECT u.id, u.username FROM auth_identities i JOIN users u ON u.id = i.user_id WHERE i.provider = ? AND i.subject = ?`, provider, subject).Scan(&user.ID, &user.Username)
 	if errors.Is(err, sql.ErrNoRows) {
-		username = strings.TrimSpace(username)
-		if runes := []rune(username); len(runes) > 128 {
-			username = string(runes[:128])
-		}
+		username = externalUsername(username)
 		if username == "" {
 			username = "oidc-" + hashToken(provider + "\x00" + subject)[:8]
 		}
@@ -180,11 +177,31 @@ func (s *Service) LoginExternal(ctx context.Context, provider, subject, username
 		}
 	} else if err != nil {
 		return TokenPair{}, fmt.Errorf("auth: query identity: %w", err)
+	} else if updated := externalUsername(username); updated != "" && updated != user.Username {
+		var exists int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE username = ? AND id <> ?`, updated, user.ID).Scan(&exists); err != nil {
+			return TokenPair{}, fmt.Errorf("auth: check updated external username: %w", err)
+		}
+		if exists != 0 {
+			updated += "-" + hashToken(provider + "\x00" + subject)[:8]
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE users SET username = ? WHERE id = ?`, updated, user.ID); err != nil {
+			return TokenPair{}, fmt.Errorf("auth: update external username: %w", err)
+		}
+		user.Username = updated
 	}
 	if err := tx.Commit(); err != nil {
 		return TokenPair{}, fmt.Errorf("auth: commit external login: %w", err)
 	}
 	return s.issuePair(ctx, user)
+}
+
+func externalUsername(username string) string {
+	username = strings.TrimSpace(username)
+	if runes := []rune(username); len(runes) > 128 {
+		return string(runes[:128])
+	}
+	return username
 }
 
 // Refresh обменивает действительный refresh-токен на новую пару токенов.

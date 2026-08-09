@@ -17,6 +17,7 @@ import (
 )
 
 func newUserCommand(configPath *string) *cobra.Command {
+	var confirmDelete bool
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "показать пользователей и способы входа",
@@ -33,9 +34,52 @@ func newUserCommand(configPath *string) *cobra.Command {
 			return migrateUser(cmd.Context(), cmd, *configPath, args[0], args[1])
 		},
 	}
+	remove := &cobra.Command{
+		Use:   "delete <id>",
+		Short: "удалить пользователя без сессий",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !confirmDelete {
+				return errors.New("user delete: подтвердите удаление флагом --yes")
+			}
+			return deleteUser(cmd.Context(), cmd, *configPath, args[0])
+		},
+	}
+	remove.Flags().BoolVar(&confirmDelete, "yes", false, "подтвердить необратимое удаление")
 	user := &cobra.Command{Use: "user", Short: "управление пользователями"}
-	user.AddCommand(list, migrate)
+	user.AddCommand(list, migrate, remove)
 	return user
+}
+
+func deleteUser(ctx context.Context, cmd *cobra.Command, configPath, userID string) error {
+	if filepath.Base(userID) != userID {
+		return errors.New("user delete: некорректный user id")
+	}
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return err
+	}
+	st, err := store.Open(cfg.SQLitePath, secret.NewCipher(cfg.JWT.Secret))
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	user, err := st.GetUserByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("user delete: пользователь %q: %w", userID, err)
+	}
+	if err := st.DeleteUser(ctx, userID); err != nil {
+		return err
+	}
+	for _, root := range []string{cfg.Memory.Dir, cfg.AgentHomeDir} {
+		if root != "" {
+			if err := os.RemoveAll(filepath.Join(root, userID)); err != nil {
+				return fmt.Errorf("user delete: пользователь удалён из БД, удалить каталог %q: %w", filepath.Join(root, userID), err)
+			}
+		}
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Пользователь %s (%s) удалён. Перезапустите Brigade.\n", user.Username, user.ID)
+	return nil
 }
 
 func listUsers(ctx context.Context, cmd *cobra.Command, configPath string) error {

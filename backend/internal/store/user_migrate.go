@@ -93,6 +93,50 @@ func (s *Store) MigrateUser(ctx context.Context, oldID, newID string) error {
 	return nil
 }
 
+// DeleteUser удаляет пользователя без сессий и все связанные с ним настройки.
+func (s *Store) DeleteUser(ctx context.Context, userID string) error {
+	if userID == "" {
+		return errors.New("store: delete user: user id не задан")
+	}
+	if _, err := s.db.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
+		return fmt.Errorf("store: delete user: enable foreign keys: %w", err)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: delete user: begin: %w", err)
+	}
+	defer tx.Rollback()
+
+	var sessions int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM sessions WHERE user_id = ?`, userID).Scan(&sessions); err != nil {
+		return fmt.Errorf("store: delete user: check sessions: %w", err)
+	}
+	if sessions != 0 {
+		return fmt.Errorf("store: delete user: у пользователя есть сессии (%d)", sessions)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM refresh_tokens WHERE user_id = ?`, userID); err != nil {
+		return fmt.Errorf("store: delete user: refresh tokens: %w", err)
+	}
+	result, err := tx.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, userID)
+	if err != nil {
+		return fmt.Errorf("store: delete user: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("store: delete user: affected rows: %w", err)
+	}
+	if affected != 1 {
+		return fmt.Errorf("store: delete user: пользователь %q не найден", userID)
+	}
+	if err := foreignKeyCheck(ctx, tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("store: delete user: commit: %w", err)
+	}
+	return nil
+}
+
 func foreignKeyCheck(ctx context.Context, tx *sql.Tx) error {
 	rows, err := tx.QueryContext(ctx, `PRAGMA foreign_key_check`)
 	if err != nil {

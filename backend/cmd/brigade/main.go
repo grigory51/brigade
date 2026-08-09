@@ -44,7 +44,7 @@ import (
 var buildVersion = "dev"
 
 func main() {
-	var configPath string
+	configPath := defaultConfigPath()
 	root := &cobra.Command{
 		Use:          "brigade",
 		Short:        "brigade — запуск кодинг-агентов в сессиях (сервер + встроенный фронтенд)",
@@ -55,7 +55,7 @@ func main() {
 			return nil
 		},
 	}
-	root.PersistentFlags().StringVar(&configPath, "config", "config.yaml", "path to the YAML config file")
+	root.PersistentFlags().StringVar(&configPath, "config", configPath, "path to the YAML config file")
 	root.AddCommand(newDumpCommand(&configPath))
 	root.AddCommand(newUserCommand(&configPath))
 
@@ -84,6 +84,13 @@ func main() {
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+func defaultConfigPath() string {
+	if path := os.Getenv("BRIGADE_CONFIG"); path != "" {
+		return path
+	}
+	return "config.yaml"
 }
 
 // runServer запускает основной сервис brigade: конфиг → SQLite → домены → HTTP-сервер

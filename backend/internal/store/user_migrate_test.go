@@ -79,3 +79,23 @@ func TestMigrateUserRejectsTargetWithSessions(t *testing.T) {
 		t.Fatal("migration accepted target with sessions")
 	}
 }
+
+func TestDeleteUserRejectsSessionsAndCascadesSettings(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+	_, _ = st.DB().Exec(`INSERT INTO auth_identities (provider, subject, user_id, created_at) VALUES ('https://id.example', 'sub', 'u1', 0)`)
+	_, _ = st.DB().Exec(`INSERT INTO sessions (id, user_id, mode, kind, agent_type, status, created_at) VALUES ('s1', 'u1', 'docker', 'acp', 'codex', 'stopped', 0)`)
+	if err := st.DeleteUser(ctx, "u1"); err == nil {
+		t.Fatal("delete accepted user with sessions")
+	}
+	_, _ = st.DB().Exec(`DELETE FROM sessions WHERE id = 's1'`)
+	if err := st.DeleteUser(ctx, "u1"); err != nil {
+		t.Fatal(err)
+	}
+	var users, identities int
+	_ = st.DB().QueryRow(`SELECT count(*) FROM users WHERE id = 'u1'`).Scan(&users)
+	_ = st.DB().QueryRow(`SELECT count(*) FROM auth_identities WHERE user_id = 'u1'`).Scan(&identities)
+	if users != 0 || identities != 0 {
+		t.Fatalf("users=%d identities=%d", users, identities)
+	}
+}

@@ -35,7 +35,7 @@ auth:
     required_role: "brigade:user"
     # Дефолты ниже подходят ZITADEL; переопределите их для другого провайдера.
     role_claim: "urn:zitadel:iam:org:project:roles"
-    username_claim: "preferred_username"
+    username_claim: "name"
     # Пустой список включает openid/profile/email и scope требуемой ZITADEL-роли.
     scopes: []
 

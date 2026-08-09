@@ -129,7 +129,7 @@ func (o *OIDC) Complete(ctx context.Context, state, code string) (TokenPair, str
 	}
 	username, _ := claims[o.config.UsernameClaim].(string)
 	if username == "" {
-		for _, key := range []string{"preferred_username", "email", "name"} {
+		for _, key := range []string{"name", "preferred_username", "email"} {
 			if value, ok := claims[key].(string); ok && value != "" {
 				username = value
 				break

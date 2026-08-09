@@ -9,7 +9,7 @@ import (
 	"github.com/grigory51/brigade/backend/internal/store"
 )
 
-func TestLoginExternalKeepsIdentityStableAndDoesNotLinkByUsername(t *testing.T) {
+func TestLoginExternalKeepsIdentityStableUpdatesNameAndDoesNotLinkByUsername(t *testing.T) {
 	st, err := store.Open(filepath.Join(t.TempDir(), "auth.db"), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -28,11 +28,14 @@ func TestLoginExternalKeepsIdentityStableAndDoesNotLinkByUsername(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.User.ID != second.User.ID || first.User.Username != second.User.Username {
+	if first.User.ID != second.User.ID {
 		t.Fatalf("identity changed: %#v -> %#v", first.User, second.User)
 	}
 	if first.User.Username == "grisha" {
 		t.Fatal("external identity linked to password username")
+	}
+	if second.User.Username != "renamed" {
+		t.Fatalf("external username was not updated: %#v", second.User)
 	}
 }
 

@@ -45,7 +45,7 @@ seed:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.Auth.PasswordEnabled || config.Auth.OIDC.RoleClaim == "" || len(config.Auth.OIDC.Scopes) == 0 {
+	if config.Auth.PasswordEnabled || config.Auth.OIDC.RoleClaim == "" || config.Auth.OIDC.UsernameClaim != "name" || len(config.Auth.OIDC.Scopes) == 0 {
 		t.Fatalf("unexpected OIDC defaults: %#v", config.Auth)
 	}
 }

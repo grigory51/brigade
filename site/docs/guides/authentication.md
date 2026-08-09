@@ -66,7 +66,7 @@ auth:
     name: "ZITADEL"
     required_role: "brigade:user"
     role_claim: "urn:zitadel:iam:org:project:roles"
-    username_claim: "preferred_username"
+    username_claim: "name"
     scopes:
       - "openid"
       - "profile"
@@ -100,7 +100,7 @@ BRIGADE_AUTH__OIDC__REDIRECT_URL=https://brigade.example.com/auth/oidc/callback
 BRIGADE_AUTH__OIDC__NAME=ZITADEL
 BRIGADE_AUTH__OIDC__REQUIRED_ROLE=brigade:user
 BRIGADE_AUTH__OIDC__ROLE_CLAIM=urn:zitadel:iam:org:project:roles
-BRIGADE_AUTH__OIDC__USERNAME_CLAIM=preferred_username
+BRIGADE_AUTH__OIDC__USERNAME_CLAIM=name
 ```
 
 ## Безопасное включение
@@ -120,9 +120,8 @@ BRIGADE_AUTH__OIDC__USERNAME_CLAIM=preferred_username
 созданного OIDC-пользователя, сначала сделайте резервную копию, затем выполните:
 
 ```bash
-docker exec brigade brigade user list --config /etc/brigade/config.yaml
-docker exec brigade brigade user migrate <OLD_USER_ID> <OIDC_USER_ID> \
-  --config /etc/brigade/config.yaml
+docker exec brigade brigade user list
+docker exec brigade brigade user migrate <OLD_USER_ID> <OIDC_USER_ID>
 docker restart brigade
 ```
 
@@ -130,6 +129,13 @@ docker restart brigade
 отзывает refresh tokens старого пользователя и удаляет его. У целевого пользователя не
 должно быть сессий. Если его каталог памяти или agent home уже существует, команда
 остановится до изменения БД.
+
+Лишнего пользователя без сессий можно удалить отдельно:
+
+```bash
+docker exec brigade brigade user delete <USER_ID> --yes
+docker restart brigade
+```
 
 ## Docker и reverse proxy
 

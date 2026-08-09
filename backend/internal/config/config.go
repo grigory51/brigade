@@ -297,7 +297,7 @@ func (c *Config) Validate() error {
 			oidc.RoleClaim = "urn:zitadel:iam:org:project:roles"
 		}
 		if oidc.UsernameClaim == "" {
-			oidc.UsernameClaim = "preferred_username"
+			oidc.UsernameClaim = "name"
 		}
 		if len(oidc.Scopes) == 0 {
 			oidc.Scopes = []string{"openid", "profile", "email", "urn:zitadel:iam:org:project:role:" + oidc.RequiredRole}

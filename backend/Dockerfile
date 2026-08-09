@@ -27,6 +27,7 @@ RUN go build -trimpath -ldflags="-s -w" -o /brigade ./cmd/brigade
 # --- Этап 3: минимальный рантайм ---
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /brigade /brigade
+ENV BRIGADE_CONFIG=/etc/brigade/config.yaml
 EXPOSE 8080
 ENTRYPOINT ["/brigade"]
 CMD ["-config", "/etc/brigade/config.yaml"]
