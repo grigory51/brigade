@@ -33,6 +33,7 @@ import (
 	"github.com/grigory51/brigade/backend/internal/agentauth"
 	"github.com/grigory51/brigade/backend/internal/agui"
 	"github.com/grigory51/brigade/backend/internal/eventlog"
+	"github.com/grigory51/brigade/backend/internal/httpaccess"
 	"github.com/grigory51/brigade/backend/internal/sshagent"
 )
 
@@ -320,7 +321,7 @@ func Main(version string) int {
 
 	addr := ":" + port
 	log.Printf("acpdaemon: session=%s listening on %s log=%s", sessionID, addr, logPath)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := http.ListenAndServe(addr, httpaccess.Wrap("acp-agent", mux)); err != nil {
 		log.Printf("acpdaemon: server: %v", err)
 		return 1
 	}

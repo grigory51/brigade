@@ -22,6 +22,7 @@ import (
 	"github.com/grigory51/brigade/backend/internal/auth"
 	"github.com/grigory51/brigade/backend/internal/codexlogin"
 	"github.com/grigory51/brigade/backend/internal/config"
+	"github.com/grigory51/brigade/backend/internal/httpaccess"
 	"github.com/grigory51/brigade/backend/internal/linkpreview"
 	"github.com/grigory51/brigade/backend/internal/memory"
 	"github.com/grigory51/brigade/backend/internal/notify"
@@ -293,6 +294,7 @@ func runServer(configPath string) {
 	if desktopEnvironments != nil {
 		handler = desktopEnvironments.Proxy(handler)
 	}
+	handler = httpaccess.Wrap("brigade", handler)
 
 	// Встроенная TLS-терминация: отдельный HTTPS-listener с тем же handler'ом.
 	// Plain-listener на Addr продолжает работать (локальный доступ, API для агентов).
