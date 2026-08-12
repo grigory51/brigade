@@ -1042,9 +1042,19 @@ func (r *Registry) agentEnv(ctx context.Context, sess store.Session, token strin
 		env = append(env, "CLAUDE_CODE_OAUTH_TOKEN="+token)
 	}
 	if agent.Get(sess.AgentType).ID == agent.Codex.ID {
+		config := map[string]any{}
 		if instructions := instructionPrompt(sess.InstructionProfile, sess.ResponseInstructions); instructions != "" {
-			config, _ := json.Marshal(map[string]string{"developer_instructions": instructions})
-			env = append(env, "CODEX_CONFIG="+string(config))
+			config["developer_instructions"] = instructions
+		}
+		if sess.Mode == store.SessionModeDocker {
+			// Среду уже ограничивает per-session Docker-контейнер. Запрещаем Codex
+			// запускать дополнительный bwrap внутри него: user namespaces обычно
+			// недоступны под стандартным Docker seccomp.
+			config["features"] = map[string]bool{"use_linux_sandbox_bwrap": false}
+		}
+		if len(config) > 0 {
+			data, _ := json.Marshal(config)
+			env = append(env, "CODEX_CONFIG="+string(data))
 		}
 		profile, secret := r.codexCredentials(ctx, sess)
 		if secret != "" {

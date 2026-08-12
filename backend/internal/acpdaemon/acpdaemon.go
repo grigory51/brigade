@@ -146,13 +146,13 @@ func (d *Daemon) configure(ctx context.Context, req *v1ConfigureRequest) (string
 		OAuthToken: req.OauthToken,
 		// sshEnv добавляет SSH_AUTH_SOCK: агент подписывает git-операции ключом из памяти
 		// демона, не имея самого ключа.
-		ExtraEnv:         append(append([]string{}, req.ExtraEnv...), d.sshEnvLocked()...),
-		AdapterCommand:   req.AdapterCommand,
-		ResumeSessionID:  req.ResumeSessionId,
-		McpServers:       mcp,
-		PluginDirs:       req.PluginDirs,
-		SystemPrompt:     req.SystemPrompt,
-		ContainerSandbox: true,
+		ExtraEnv:          append(append([]string{}, req.ExtraEnv...), d.sshEnvLocked()...),
+		AdapterCommand:    req.AdapterCommand,
+		ResumeSessionID:   req.ResumeSessionId,
+		McpServers:        mcp,
+		PluginDirs:        req.PluginDirs,
+		SystemPrompt:      req.SystemPrompt,
+		DefaultFullAccess: true,
 		// SpawnProc nil → локальный subprocess адаптера внутри контейнера.
 	})
 	if err != nil {

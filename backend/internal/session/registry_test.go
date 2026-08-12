@@ -82,6 +82,20 @@ func TestTelegramGuestInstructions(t *testing.T) {
 	}
 }
 
+func TestDockerCodexDisablesNestedBwrap(t *testing.T) {
+	r := newTestRegistry(t)
+	sess := store.Session{
+		ID: "docker", UserID: "u1", Mode: store.SessionModeDocker, Kind: store.SessionKindACP,
+		AgentType: "codex", Cwd: "/home/agent/workspace/docker",
+	}
+	for _, value := range r.agentEnv(context.Background(), sess, "") {
+		if strings.HasPrefix(value, "CODEX_CONFIG=") && strings.Contains(value, `"use_linux_sandbox_bwrap":false`) {
+			return
+		}
+	}
+	t.Fatal("Docker Codex CODEX_CONFIG does not disable nested bwrap")
+}
+
 func TestResolveResponseProfileKeepsDeletedSnapshot(t *testing.T) {
 	r := newTestRegistry(t)
 	ctx := context.Background()

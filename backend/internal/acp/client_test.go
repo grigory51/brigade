@@ -23,37 +23,14 @@ func TestSessionMetaAppendsSystemPrompt(t *testing.T) {
 	}
 }
 
-func TestContainerSandboxHidesMode(t *testing.T) {
+func TestSelectHasFullAccessValues(t *testing.T) {
 	values := acpsdk.SessionConfigSelectOptionsUngrouped{
 		{Name: "Agent", Value: "agent"},
 		{Name: "Agent full access", Value: "agent-full-access"},
 	}
-	mode := acpsdk.SessionConfigOption{Select: &acpsdk.SessionConfigOptionSelect{
-		Id: "mode", CurrentValue: "agent-full-access",
-		Options: acpsdk.SessionConfigSelectOptions{Ungrouped: &values},
-	}}
-	model := acpsdk.SessionConfigOption{Select: &acpsdk.SessionConfigOptionSelect{Id: "model"}}
-	c := &Client{opts: Options{ContainerSandbox: true}, configOptions: []acpsdk.SessionConfigOption{mode, model}}
-	if !selectHasValue(mode.Select.Options, "agent-full-access") {
-		t.Fatal("agent-full-access не найден среди значений mode")
-	}
-	got := c.ConfigOptions()
-	if len(got) != 1 || got[0].Select == nil || got[0].Select.Id != "model" {
-		t.Fatalf("ConfigOptions = %+v, want only model", got)
-	}
-}
-
-func TestContainerSandboxHidesModeFromUpdates(t *testing.T) {
-	mode := acpsdk.SessionConfigOption{Select: &acpsdk.SessionConfigOptionSelect{Id: "mode"}}
-	model := acpsdk.SessionConfigOption{Select: &acpsdk.SessionConfigOptionSelect{Id: "model"}}
-	c := &Client{opts: Options{ContainerSandbox: true}}
-
-	events := c.translateUpdate(acpsdk.SessionUpdate{ConfigOptionUpdate: &acpsdk.SessionConfigOptionUpdate{
-		ConfigOptions: []acpsdk.SessionConfigOption{mode, model},
-	}})
-	options := events[0].Value.([]acpsdk.SessionConfigOption)
-	if len(options) != 1 || options[0].Select == nil || options[0].Select.Id != "model" {
-		t.Fatalf("config_options event = %+v, want only model", options)
+	options := acpsdk.SessionConfigSelectOptions{Ungrouped: &values}
+	if !selectHasValue(options, "agent-full-access") || selectHasValue(options, "bypassPermissions") {
+		t.Fatalf("unexpected full-access options: %+v", options)
 	}
 }
 
@@ -67,6 +44,26 @@ func TestSessionInfoUpdatePublishesMeaningfulTitle(t *testing.T) {
 	untitled := "Untitled"
 	if got := c.translateUpdate(acpsdk.SessionUpdate{SessionInfoUpdate: &acpsdk.SessionSessionInfoUpdate{Title: &untitled}}); len(got) != 0 {
 		t.Fatalf("Untitled опубликован: %+v", got)
+	}
+}
+
+func TestFallbackTitleDoesNotReplaceAgentTitle(t *testing.T) {
+	c := &Client{}
+	c.publishFallbackTitle("  Первый вопрос  ")
+	if got := c.SessionTitle(); got != "Первый вопрос" {
+		t.Fatalf("fallback title = %q", got)
+	}
+	c.publishFallbackTitle("Второй вопрос")
+	if got := c.SessionTitle(); got != "Первый вопрос" {
+		t.Fatalf("fallback title replaced = %q", got)
+	}
+
+	agentTitle := "Название от агента"
+	c = &Client{}
+	c.translateUpdate(acpsdk.SessionUpdate{SessionInfoUpdate: &acpsdk.SessionSessionInfoUpdate{Title: &agentTitle}})
+	c.publishFallbackTitle("Первый вопрос")
+	if got := c.SessionTitle(); got != agentTitle {
+		t.Fatalf("agent title replaced = %q", got)
 	}
 }
 
