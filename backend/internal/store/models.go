@@ -151,6 +151,8 @@ type Session struct {
 	Name string
 	// GroupLabel объединяет связанные сессии в боковом списке.
 	GroupLabel string
+	// Unread выставляется после завершения turn и снимается при просмотре сессии.
+	Unread bool
 	// McpServers — идентификаторы MCP-серверов пользователя, включённых в этой сессии
 	// (только ACP). В БД лежат CSV-строкой.
 	McpServers []string

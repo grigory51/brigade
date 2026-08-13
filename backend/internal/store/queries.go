@@ -439,10 +439,10 @@ func (s *Store) DeleteTelegramConversation(ctx context.Context, botID, scope str
 func (s *Store) CreateSession(ctx context.Context, sess Session) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO sessions
-		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name, group_label, mcp_servers, image, auth_profile, instruction_profile, response_profile_id, response_profile_name, response_instructions)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name, group_label, unread, mcp_servers, image, auth_profile, instruction_profile, response_profile_id, response_profile_name, response_instructions)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		sess.ID, sess.UserID, string(sess.Mode), string(sess.Kind), sess.AgentType,
-		sess.AgentSessionID, sess.ContainerLabel, string(sess.Status), sess.Cwd, toUnix(sess.CreatedAt), sess.Name, sess.GroupLabel,
+		sess.AgentSessionID, sess.ContainerLabel, string(sess.Status), sess.Cwd, toUnix(sess.CreatedAt), sess.Name, sess.GroupLabel, sess.Unread,
 		strings.Join(sess.McpServers, ","), sess.Image, sess.AuthProfile, sess.InstructionProfile,
 		sess.ResponseProfileID, sess.ResponseProfileName, sess.ResponseInstructions,
 	)
@@ -501,6 +501,22 @@ func (s *Store) UpdateSessionNameIfEmpty(ctx context.Context, id, name string) (
 	return n > 0, nil
 }
 
+func (s *Store) MarkSessionUnread(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE sessions SET unread = 1 WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("store: mark session unread: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) MarkSessionRead(ctx context.Context, id, userID string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE sessions SET unread = 0 WHERE id = ? AND user_id = ?`, id, userID)
+	if err != nil {
+		return fmt.Errorf("store: mark session read: %w", err)
+	}
+	return affectedOne(res, "mark session read")
+}
+
 // UpdateSessionResume сохраняет данные для восстановления (agent_session_id для
 // `claude --resume`, container_label для re-attach в docker). Заполняются после
 // фактического спавна агента, когда идентификаторы становятся известны.
@@ -524,7 +540,7 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 }
 
 const sessionSelect = `SELECT id, user_id, mode, kind, agent_type, agent_session_id,
-	container_label, status, cwd, created_at, name, group_label, mcp_servers, image, auth_profile, instruction_profile,
+	container_label, status, cwd, created_at, name, group_label, unread, mcp_servers, image, auth_profile, instruction_profile,
 	response_profile_id, response_profile_name, response_instructions FROM sessions`
 
 func (s *Store) querySessions(ctx context.Context, query string, args ...any) ([]Session, error) {
@@ -567,7 +583,7 @@ func scanSessionRow(r rowScanner) (Session, error) {
 	var mode, kind, status, mcp string
 	var createdAt int64
 	err := r.Scan(&sess.ID, &sess.UserID, &mode, &kind, &sess.AgentType,
-		&sess.AgentSessionID, &sess.ContainerLabel, &status, &sess.Cwd, &createdAt, &sess.Name, &sess.GroupLabel, &mcp, &sess.Image, &sess.AuthProfile, &sess.InstructionProfile,
+		&sess.AgentSessionID, &sess.ContainerLabel, &status, &sess.Cwd, &createdAt, &sess.Name, &sess.GroupLabel, &sess.Unread, &mcp, &sess.Image, &sess.AuthProfile, &sess.InstructionProfile,
 		&sess.ResponseProfileID, &sess.ResponseProfileName, &sess.ResponseInstructions)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

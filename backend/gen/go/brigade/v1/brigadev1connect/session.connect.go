@@ -41,6 +41,8 @@ const (
 	SessionServiceGetProcedure = "/brigade.v1.SessionService/Get"
 	// SessionServiceUpdateProcedure is the fully-qualified name of the SessionService's Update RPC.
 	SessionServiceUpdateProcedure = "/brigade.v1.SessionService/Update"
+	// SessionServiceMarkReadProcedure is the fully-qualified name of the SessionService's MarkRead RPC.
+	SessionServiceMarkReadProcedure = "/brigade.v1.SessionService/MarkRead"
 	// SessionServiceStopProcedure is the fully-qualified name of the SessionService's Stop RPC.
 	SessionServiceStopProcedure = "/brigade.v1.SessionService/Stop"
 	// SessionServiceDeleteProcedure is the fully-qualified name of the SessionService's Delete RPC.
@@ -73,6 +75,7 @@ type SessionServiceClient interface {
 	List(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
 	Get(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error)
 	Update(context.Context, *connect.Request[v1.UpdateSessionRequest]) (*connect.Response[v1.UpdateSessionResponse], error)
+	MarkRead(context.Context, *connect.Request[v1.MarkSessionReadRequest]) (*connect.Response[v1.Empty], error)
 	Stop(context.Context, *connect.Request[v1.StopSessionRequest]) (*connect.Response[v1.Empty], error)
 	Delete(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.Empty], error)
 	// ReloadAgent перезапускает ACP-агента сессии на актуальном окружении, сохраняя диалог
@@ -127,6 +130,12 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+SessionServiceUpdateProcedure,
 			connect.WithSchema(sessionServiceMethods.ByName("Update")),
+			connect.WithClientOptions(opts...),
+		),
+		markRead: connect.NewClient[v1.MarkSessionReadRequest, v1.Empty](
+			httpClient,
+			baseURL+SessionServiceMarkReadProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("MarkRead")),
 			connect.WithClientOptions(opts...),
 		),
 		stop: connect.NewClient[v1.StopSessionRequest, v1.Empty](
@@ -192,6 +201,7 @@ type sessionServiceClient struct {
 	list                      *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
 	get                       *connect.Client[v1.GetSessionRequest, v1.GetSessionResponse]
 	update                    *connect.Client[v1.UpdateSessionRequest, v1.UpdateSessionResponse]
+	markRead                  *connect.Client[v1.MarkSessionReadRequest, v1.Empty]
 	stop                      *connect.Client[v1.StopSessionRequest, v1.Empty]
 	delete                    *connect.Client[v1.DeleteSessionRequest, v1.Empty]
 	reloadAgent               *connect.Client[v1.ReloadAgentRequest, v1.Empty]
@@ -221,6 +231,11 @@ func (c *sessionServiceClient) Get(ctx context.Context, req *connect.Request[v1.
 // Update calls brigade.v1.SessionService.Update.
 func (c *sessionServiceClient) Update(ctx context.Context, req *connect.Request[v1.UpdateSessionRequest]) (*connect.Response[v1.UpdateSessionResponse], error) {
 	return c.update.CallUnary(ctx, req)
+}
+
+// MarkRead calls brigade.v1.SessionService.MarkRead.
+func (c *sessionServiceClient) MarkRead(ctx context.Context, req *connect.Request[v1.MarkSessionReadRequest]) (*connect.Response[v1.Empty], error) {
+	return c.markRead.CallUnary(ctx, req)
 }
 
 // Stop calls brigade.v1.SessionService.Stop.
@@ -274,6 +289,7 @@ type SessionServiceHandler interface {
 	List(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
 	Get(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error)
 	Update(context.Context, *connect.Request[v1.UpdateSessionRequest]) (*connect.Response[v1.UpdateSessionResponse], error)
+	MarkRead(context.Context, *connect.Request[v1.MarkSessionReadRequest]) (*connect.Response[v1.Empty], error)
 	Stop(context.Context, *connect.Request[v1.StopSessionRequest]) (*connect.Response[v1.Empty], error)
 	Delete(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.Empty], error)
 	// ReloadAgent перезапускает ACP-агента сессии на актуальном окружении, сохраняя диалог
@@ -324,6 +340,12 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		SessionServiceUpdateProcedure,
 		svc.Update,
 		connect.WithSchema(sessionServiceMethods.ByName("Update")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceMarkReadHandler := connect.NewUnaryHandler(
+		SessionServiceMarkReadProcedure,
+		svc.MarkRead,
+		connect.WithSchema(sessionServiceMethods.ByName("MarkRead")),
 		connect.WithHandlerOptions(opts...),
 	)
 	sessionServiceStopHandler := connect.NewUnaryHandler(
@@ -390,6 +412,8 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 			sessionServiceGetHandler.ServeHTTP(w, r)
 		case SessionServiceUpdateProcedure:
 			sessionServiceUpdateHandler.ServeHTTP(w, r)
+		case SessionServiceMarkReadProcedure:
+			sessionServiceMarkReadHandler.ServeHTTP(w, r)
 		case SessionServiceStopProcedure:
 			sessionServiceStopHandler.ServeHTTP(w, r)
 		case SessionServiceDeleteProcedure:
@@ -431,6 +455,10 @@ func (UnimplementedSessionServiceHandler) Get(context.Context, *connect.Request[
 
 func (UnimplementedSessionServiceHandler) Update(context.Context, *connect.Request[v1.UpdateSessionRequest]) (*connect.Response[v1.UpdateSessionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.Update is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) MarkRead(context.Context, *connect.Request[v1.MarkSessionReadRequest]) (*connect.Response[v1.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.MarkRead is not implemented"))
 }
 
 func (UnimplementedSessionServiceHandler) Stop(context.Context, *connect.Request[v1.StopSessionRequest]) (*connect.Response[v1.Empty], error) {

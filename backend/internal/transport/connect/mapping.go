@@ -71,6 +71,7 @@ func sessionToProto(s store.Session) *v1.Session {
 		CreatedAt:           s.CreatedAt.Unix(),
 		Name:                s.Name,
 		GroupLabel:          s.GroupLabel,
+		Unread:              s.Unread,
 		McpServerIds:        s.McpServers,
 		Image:               s.Image,
 		AuthProfile:         s.AuthProfile,

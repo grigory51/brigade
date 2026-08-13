@@ -28,7 +28,6 @@ import {
   Plus,
   RefreshCw,
   Settings,
-  Terminal,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -36,7 +35,6 @@ import { sessionClient } from "@/api/client";
 import {
   Session,
   SessionKind,
-  SessionStatus,
 } from "@/api/gen/brigade/v1/session_pb";
 import { useAuth } from "@/features/auth/AuthContext";
 import { kindLabel, sessionRoute } from "@/lib/term/format";
@@ -143,13 +141,36 @@ export function SessionLayout() {
       setSessions(sorted);
       setState("ready");
     } catch {
-      setState("error");
+      if (!silent) setState("error");
     }
   }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load(true);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [load]);
+
+  useEffect(() => {
+    if (!activeId) return;
+    return () => { void sessionClient.markRead({ sessionId: activeId }); };
+  }, [activeId]);
+
+  useEffect(() => {
+    if (!activeId || !sessions.some((session) => session.id === activeId && session.unread)) return;
+    setSessions((prev) => prev.map((session) => {
+      if (session.id !== activeId || !session.unread) return session;
+      const copy = session.clone();
+      copy.unread = false;
+      return copy;
+    }));
+    void sessionClient.markRead({ sessionId: activeId });
+  }, [activeId, sessions]);
 
   useEffect(() => {
     const onSessionTitle = (event: Event) => {
@@ -457,7 +478,6 @@ export function SessionLayout() {
                   </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroup>
-              <UpdateAvailable />
             </SidebarContent>
 
             {!desktop && (
@@ -555,8 +575,8 @@ function SidebarAutoClose() {
   return null;
 }
 
-// SessionItem — пункт списка сессий: иконка типа, подпись (агент + тип), точка
-// статуса, действие удаления и подсветка активной сессии по совпадению с :sessionId.
+// SessionItem — пункт списка сессий: подпись, непрочитанность, действия и подсветка
+// активной сессии по совпадению с :sessionId.
 // withName возвращает копию сессии с новым именем, если её id совпадает с целевым,
 // иначе исходную. Session — protobuf-класс (@bufbuild Message), поэтому клонируем
 // через clone(), а не spread, чтобы сохранить прототип и методы.
@@ -595,7 +615,6 @@ function SessionItem({
   const locked = deleting || archiving;
   const { sessionId } = useParams<{ sessionId: string }>();
   const active = sessionId === session.id;
-  const KindIcon = session.kind === SessionKind.ACP ? MessagesSquare : Terminal;
   // Производная подпись, если пользователь не задал имя.
   const fallback = `${session.agentType} · ${kindLabel(session.kind)}`;
   const fullLabel = session.name || fallback;
@@ -682,11 +701,16 @@ function SessionItem({
             : "group-hover/menu-item:pr-16! group-focus-within/menu-item:pr-16!"
         }${locked ? " opacity-60" : ""}`}
       >
-        <span className="relative shrink-0">
-          <KindIcon className="size-4" />
-          <StatusDot status={session.status} />
+        <span className="hidden size-4 shrink-0 items-center justify-center text-[10px] font-medium uppercase group-data-[collapsible=icon]:flex">
+          {label[0]}
         </span>
-        <span className="truncate">{label}</span>
+        <span className="truncate group-data-[collapsible=icon]:hidden">{label}</span>
+        {session.unread && !active && (
+          <span
+            title="Есть непрочитанный ответ"
+            className="absolute top-1.5 right-2 size-2 rounded-full bg-primary transition-opacity group-hover/menu-item:opacity-0 group-focus-within/menu-item:opacity-0 group-data-[collapsible=icon]:top-1 group-data-[collapsible=icon]:right-1"
+          />
+        )}
       </SidebarMenuButton>
       {session.kind === SessionKind.ACP && (
         <SidebarMenuAction
@@ -764,28 +788,12 @@ function SessionItem({
   );
 }
 
-// StatusDot — маленький индикатор состояния у иконки сессии: зелёный для running,
-// красный для failed; для остальных состояний не показывается.
-function StatusDot({ status }: { status: SessionStatus }) {
-  if (status === SessionStatus.RUNNING) {
-    return (
-      <span className="absolute -right-0.5 -bottom-0.5 size-2 rounded-full bg-success ring-2 ring-sidebar" />
-    );
-  }
-  if (status === SessionStatus.FAILED) {
-    return (
-      <span className="absolute -right-0.5 -bottom-0.5 size-2 rounded-full bg-destructive ring-2 ring-sidebar" />
-    );
-  }
-  return null;
-}
-
 type GitHubRelease = {
   tag_name: string;
   html_url: string;
 };
 
-function UpdateAvailable() {
+function VersionInfo() {
   const current = import.meta.env.VITE_APP_VERSION ?? "dev";
   const [release, setRelease] = useState<GitHubRelease | null>(null);
 
@@ -803,22 +811,23 @@ function UpdateAvailable() {
     return () => controller.abort();
   }, [current]);
 
-  if (!release) return null;
   return (
-    <div className="mx-3 mb-3 flex shrink-0 flex-col gap-2 rounded-lg border border-primary/25 bg-primary/5 p-3 text-xs group-data-[collapsible=icon]:hidden">
+    <div className="px-2 py-1 text-[11px] text-muted-foreground">
       <div className="flex items-center justify-between gap-2 text-muted-foreground">
-        <span>Brigade</span>
+        <span>brigade</span>
         <span className="font-medium text-foreground">{current}</span>
       </div>
-      <a
-        href={release.html_url}
-        target="_blank"
-        rel="noreferrer"
-        className="flex items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1.5 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-      >
-        <CircleArrowUp className="size-3.5" />
-        Доступна {release.tag_name}
-      </a>
+      {release && (
+        <a
+          href={release.html_url}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-0.5 flex items-center gap-1 text-primary/80 hover:text-primary"
+        >
+          <CircleArrowUp className="size-3" />
+          Доступна {release.tag_name}
+        </a>
+      )}
     </div>
   );
 }
@@ -870,9 +879,7 @@ function UserMenu() {
               Выйти
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <div className="px-2 py-1 text-[11px] text-muted-foreground">
-              brigade {import.meta.env.VITE_APP_VERSION ?? "dev"}
-            </div>
+            <VersionInfo />
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>

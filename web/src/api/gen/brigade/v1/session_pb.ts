@@ -223,6 +223,13 @@ export class Session extends Message<Session> {
    */
   groupLabel = "";
 
+  /**
+   * unread — агент завершил turn после последнего просмотра сессии пользователем.
+   *
+   * @generated from field: bool unread = 21;
+   */
+  unread = false;
+
   constructor(data?: PartialMessage<Session>) {
     super();
     proto3.util.initPartial(data, this);
@@ -250,6 +257,7 @@ export class Session extends Message<Session> {
     { no: 18, name: "response_profile_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 19, name: "response_profile_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 20, name: "group_label", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 21, name: "unread", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Session {
@@ -726,6 +734,43 @@ export class ReloadAgentRequest extends Message<ReloadAgentRequest> {
 
   static equals(a: ReloadAgentRequest | PlainMessage<ReloadAgentRequest> | undefined, b: ReloadAgentRequest | PlainMessage<ReloadAgentRequest> | undefined): boolean {
     return proto3.util.equals(ReloadAgentRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.MarkSessionReadRequest
+ */
+export class MarkSessionReadRequest extends Message<MarkSessionReadRequest> {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId = "";
+
+  constructor(data?: PartialMessage<MarkSessionReadRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.MarkSessionReadRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): MarkSessionReadRequest {
+    return new MarkSessionReadRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): MarkSessionReadRequest {
+    return new MarkSessionReadRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): MarkSessionReadRequest {
+    return new MarkSessionReadRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: MarkSessionReadRequest | PlainMessage<MarkSessionReadRequest> | undefined, b: MarkSessionReadRequest | PlainMessage<MarkSessionReadRequest> | undefined): boolean {
+    return proto3.util.equals(MarkSessionReadRequest, a, b);
   }
 }
 

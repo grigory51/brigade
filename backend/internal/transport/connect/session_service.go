@@ -107,6 +107,17 @@ func (s *SessionService) Update(ctx context.Context, req *connect.Request[v1.Upd
 	return connect.NewResponse(&v1.UpdateSessionResponse{Session: sessionToProto(sess)}), nil
 }
 
+func (s *SessionService) MarkRead(ctx context.Context, req *connect.Request[v1.MarkSessionReadRequest]) (*connect.Response[v1.Empty], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.registry.MarkRead(ctx, req.Msg.SessionId, userID); err != nil {
+		return nil, sessionError(err)
+	}
+	return connect.NewResponse(&v1.Empty{}), nil
+}
+
 // Stop останавливает сессию пользователя (агент завершается, статус → stopped).
 func (s *SessionService) Stop(ctx context.Context, req *connect.Request[v1.StopSessionRequest]) (*connect.Response[v1.Empty], error) {
 	userID, err := requireUser(ctx)

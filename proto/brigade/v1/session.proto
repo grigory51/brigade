@@ -65,6 +65,8 @@ message Session {
   string response_profile_name = 19;
   // group_label — общая подпись связанных сессий для группировки в списке.
   string group_label = 20;
+  // unread — агент завершил turn после последнего просмотра сессии пользователем.
+  bool unread = 21;
 }
 
 message CreateSessionRequest {
@@ -124,6 +126,10 @@ message DeleteSessionRequest {
 }
 
 message ReloadAgentRequest {
+  string session_id = 1;
+}
+
+message MarkSessionReadRequest {
   string session_id = 1;
 }
 
@@ -189,6 +195,7 @@ service SessionService {
   rpc List(ListSessionsRequest) returns (ListSessionsResponse) {}
   rpc Get(GetSessionRequest) returns (GetSessionResponse) {}
   rpc Update(UpdateSessionRequest) returns (UpdateSessionResponse) {}
+  rpc MarkRead(MarkSessionReadRequest) returns (Empty) {}
   rpc Stop(StopSessionRequest) returns (Empty) {}
   rpc Delete(DeleteSessionRequest) returns (Empty) {}
   // ReloadAgent перезапускает ACP-агента сессии на актуальном окружении, сохраняя диалог

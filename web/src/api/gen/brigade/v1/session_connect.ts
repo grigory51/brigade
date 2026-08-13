@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ArchiveSessionRequest, ArchiveSessionResponse, CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, ReloadAgentRequest, SetSessionMcpServersRequest, SetSessionResponseProfileRequest, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse, UploadFileRequest, UploadFileResponse } from "./session_pb.js";
+import { ArchiveSessionRequest, ArchiveSessionResponse, CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, MarkSessionReadRequest, ReloadAgentRequest, SetSessionMcpServersRequest, SetSessionResponseProfileRequest, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse, UploadFileRequest, UploadFileResponse } from "./session_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { Empty } from "./auth_pb.js";
 
@@ -49,6 +49,15 @@ export const SessionService = {
       name: "Update",
       I: UpdateSessionRequest,
       O: UpdateSessionResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.SessionService.MarkRead
+     */
+    markRead: {
+      name: "MarkRead",
+      I: MarkSessionReadRequest,
+      O: Empty,
       kind: MethodKind.Unary,
     },
     /**

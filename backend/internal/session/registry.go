@@ -776,12 +776,16 @@ func (r *Registry) daemonTokenFn(sessionID string) func() (string, error) {
 // turn'а шлёт владельцу push-уведомление (ntfy) в фоне, чтобы доставка не тормозила turn.
 // nil, если уведомления не сконфигурированы (r.notify == nil) — тогда клиент хук не вешает.
 func (r *Registry) turnEndHook(sess store.Session) func(string, error) {
-	if r.notify == nil {
-		return nil
-	}
 	userID, label := sess.UserID, sess.Name
 	return func(stopReason string, turnErr error) {
-		go r.notify.TurnEnded(context.Background(), userID, label, stopReason, turnErr)
+		go func() {
+			if err := r.store.MarkSessionUnread(context.Background(), sess.ID); err != nil {
+				log.Printf("session %s: mark unread: %v", sess.ID, err)
+			}
+			if r.notify != nil {
+				r.notify.TurnEnded(context.Background(), userID, label, stopReason, turnErr)
+			}
+		}()
 	}
 }
 
@@ -1825,6 +1829,10 @@ func (r *Registry) reinit(ctx context.Context, lv *live, sess store.Session, ref
 // List возвращает сессии пользователя из store (включая остановленные/упавшие).
 func (r *Registry) List(ctx context.Context, userID string) ([]store.Session, error) {
 	return r.store.ListSessionsByUser(ctx, userID)
+}
+
+func (r *Registry) MarkRead(ctx context.Context, sessionID, userID string) error {
+	return r.store.MarkSessionRead(ctx, sessionID, userID)
 }
 
 // Get возвращает сессию пользователя по идентификатору. Чужая сессия трактуется как

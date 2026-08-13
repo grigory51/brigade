@@ -23,6 +23,18 @@ func TestOpenReadOnly(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if err := rw.MarkSessionUnread(context.Background(), "s1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := rw.MarkSessionRead(context.Background(), "s1", "other"); err == nil {
+		t.Fatal("another user marked session read")
+	}
+	if sess, err := rw.GetSession(context.Background(), "s1"); err != nil || !sess.Unread {
+		t.Fatalf("unread session=%+v err=%v", sess, err)
+	}
+	if err := rw.MarkSessionRead(context.Background(), "s1", "u1"); err != nil {
+		t.Fatal(err)
+	}
 
 	ro, err := OpenReadOnly(path)
 	if err != nil {
@@ -33,6 +45,8 @@ func TestOpenReadOnly(t *testing.T) {
 		t.Fatalf("read: %v", err)
 	} else if sess.GroupLabel != "Telegram · @bot" {
 		t.Fatalf("group label = %q", sess.GroupLabel)
+	} else if sess.Unread {
+		t.Fatal("session remained unread")
 	}
 	if err := ro.UpdateSessionName(context.Background(), "s1", "changed"); err == nil {
 		t.Fatal("read-only store accepted a write")
