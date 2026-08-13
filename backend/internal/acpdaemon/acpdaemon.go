@@ -59,6 +59,8 @@ type Daemon struct {
 	// ssh — ssh-agent с ключом пользователя в памяти (nil, пока ключ не загружен).
 	// Приватный ключ на диск среды не пишется.
 	ssh *sshagent.Agent
+	// credential синхронизирует ротируемый credential-файл с зашифрованным store Brigade.
+	credential *credentialSync
 	// lastConfig — последняя попытка смены опции через daemon RPC. Нужна dump-команде,
 	// чтобы отличить неотправленный UI-вызов от ошибки или отката адаптера.
 	lastConfig configChangeDebug
@@ -141,6 +143,17 @@ func (d *Daemon) configure(ctx context.Context, req *v1ConfigureRequest) (string
 		_ = d.log.Reset()
 	}
 
+	// Сначала сверяем credential с Brigade, затем запускаем адаптер. Иначе адаптер мог
+	// использовать устаревший refresh token ещё до первого Prompt.
+	d.credential = newCredentialSync(req.CredentialFile, req.ExtraEnv)
+	if d.credential != nil {
+		if err := d.credential.sync(ctx, true); err != nil {
+			// При старте Brigade listener ещё может не принимать callback (RestoreAll идёт
+			// раньше ListenAndServe). Перед первым Prompt синхронизация повторится.
+			log.Printf("acpdaemon: initial agent credential sync: %v", err)
+		}
+	}
+
 	client, err := acp.New(ctx, acp.Options{
 		Cwd:        req.Cwd,
 		OAuthToken: req.OauthToken,
@@ -156,6 +169,8 @@ func (d *Daemon) configure(ctx context.Context, req *v1ConfigureRequest) (string
 		// SpawnProc nil → локальный subprocess адаптера внутри контейнера.
 	})
 	if err != nil {
+		d.credential.close()
+		d.credential = nil
 		return "", err
 	}
 	// Постоянная привязка: sink журналит, resolver обслуживает permission. В отличие от
@@ -253,8 +268,11 @@ func (d *Daemon) Close() {
 	}
 	d.mu.Lock()
 	a := d.ssh
+	credential := d.credential
 	d.ssh = nil
+	d.credential = nil
 	d.mu.Unlock()
+	credential.close()
 	if a != nil {
 		a.Close()
 	}
@@ -272,6 +290,7 @@ type v1ConfigureRequest struct {
 	PluginDirs      []string
 	McpServersJson  []byte
 	SystemPrompt    string
+	CredentialFile  string
 }
 
 // --- entrypoint ---

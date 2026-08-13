@@ -280,6 +280,110 @@ func (x *CreateMemoryNoteResponse) GetCommitSha() string {
 	return ""
 }
 
+type SyncCredentialRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Previous      []byte                 `protobuf:"bytes,2,opt,name=previous,proto3" json:"previous,omitempty"`
+	Current       []byte                 `protobuf:"bytes,3,opt,name=current,proto3" json:"current,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncCredentialRequest) Reset() {
+	*x = SyncCredentialRequest{}
+	mi := &file_brigade_v1_agent_bridge_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncCredentialRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncCredentialRequest) ProtoMessage() {}
+
+func (x *SyncCredentialRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_agent_bridge_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncCredentialRequest.ProtoReflect.Descriptor instead.
+func (*SyncCredentialRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_agent_bridge_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *SyncCredentialRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *SyncCredentialRequest) GetPrevious() []byte {
+	if x != nil {
+		return x.Previous
+	}
+	return nil
+}
+
+func (x *SyncCredentialRequest) GetCurrent() []byte {
+	if x != nil {
+		return x.Current
+	}
+	return nil
+}
+
+type SyncCredentialResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Current       []byte                 `protobuf:"bytes,1,opt,name=current,proto3" json:"current,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncCredentialResponse) Reset() {
+	*x = SyncCredentialResponse{}
+	mi := &file_brigade_v1_agent_bridge_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncCredentialResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncCredentialResponse) ProtoMessage() {}
+
+func (x *SyncCredentialResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_agent_bridge_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncCredentialResponse.ProtoReflect.Descriptor instead.
+func (*SyncCredentialResponse) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_agent_bridge_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *SyncCredentialResponse) GetCurrent() []byte {
+	if x != nil {
+		return x.Current
+	}
+	return nil
+}
+
 var File_brigade_v1_agent_bridge_proto protoreflect.FileDescriptor
 
 const file_brigade_v1_agent_bridge_proto_rawDesc = "" +
@@ -306,10 +410,18 @@ const file_brigade_v1_agent_bridge_proto_rawDesc = "" +
 	"\x18CreateMemoryNoteResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
-	"commit_sha\x18\x02 \x01(\tR\tcommitSha2\xd3\x01\n" +
+	"commit_sha\x18\x02 \x01(\tR\tcommitSha\"l\n" +
+	"\x15SyncCredentialRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1a\n" +
+	"\bprevious\x18\x02 \x01(\fR\bprevious\x12\x18\n" +
+	"\acurrent\x18\x03 \x01(\fR\acurrent\"2\n" +
+	"\x16SyncCredentialResponse\x12\x18\n" +
+	"\acurrent\x18\x01 \x01(\fR\acurrent2\xae\x02\n" +
 	"\x12AgentBridgeService\x12\\\n" +
 	"\x0fRegisterPreview\x12\".brigade.v1.RegisterPreviewRequest\x1a#.brigade.v1.RegisterPreviewResponse\"\x00\x12_\n" +
-	"\x10CreateMemoryNote\x12#.brigade.v1.CreateMemoryNoteRequest\x1a$.brigade.v1.CreateMemoryNoteResponse\"\x00B\xad\x01\n" +
+	"\x10CreateMemoryNote\x12#.brigade.v1.CreateMemoryNoteRequest\x1a$.brigade.v1.CreateMemoryNoteResponse\"\x00\x12Y\n" +
+	"\x0eSyncCredential\x12!.brigade.v1.SyncCredentialRequest\x1a\".brigade.v1.SyncCredentialResponse\"\x00B\xad\x01\n" +
 	"\x0ecom.brigade.v1B\x10AgentBridgeProtoP\x01Z@github.com/grigory51/brigade/backend/gen/go/brigade/v1;brigadev1\xa2\x02\x03BXX\xaa\x02\n" +
 	"Brigade.V1\xca\x02\n" +
 	"Brigade\\V1\xe2\x02\x16Brigade\\V1\\GPBMetadata\xea\x02\vBrigade::V1b\x06proto3"
@@ -326,20 +438,24 @@ func file_brigade_v1_agent_bridge_proto_rawDescGZIP() []byte {
 	return file_brigade_v1_agent_bridge_proto_rawDescData
 }
 
-var file_brigade_v1_agent_bridge_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_brigade_v1_agent_bridge_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_brigade_v1_agent_bridge_proto_goTypes = []any{
 	(*RegisterPreviewRequest)(nil),   // 0: brigade.v1.RegisterPreviewRequest
 	(*RegisterPreviewResponse)(nil),  // 1: brigade.v1.RegisterPreviewResponse
 	(*CreateMemoryNoteRequest)(nil),  // 2: brigade.v1.CreateMemoryNoteRequest
 	(*CreateMemoryNoteResponse)(nil), // 3: brigade.v1.CreateMemoryNoteResponse
+	(*SyncCredentialRequest)(nil),    // 4: brigade.v1.SyncCredentialRequest
+	(*SyncCredentialResponse)(nil),   // 5: brigade.v1.SyncCredentialResponse
 }
 var file_brigade_v1_agent_bridge_proto_depIdxs = []int32{
 	0, // 0: brigade.v1.AgentBridgeService.RegisterPreview:input_type -> brigade.v1.RegisterPreviewRequest
 	2, // 1: brigade.v1.AgentBridgeService.CreateMemoryNote:input_type -> brigade.v1.CreateMemoryNoteRequest
-	1, // 2: brigade.v1.AgentBridgeService.RegisterPreview:output_type -> brigade.v1.RegisterPreviewResponse
-	3, // 3: brigade.v1.AgentBridgeService.CreateMemoryNote:output_type -> brigade.v1.CreateMemoryNoteResponse
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
+	4, // 2: brigade.v1.AgentBridgeService.SyncCredential:input_type -> brigade.v1.SyncCredentialRequest
+	1, // 3: brigade.v1.AgentBridgeService.RegisterPreview:output_type -> brigade.v1.RegisterPreviewResponse
+	3, // 4: brigade.v1.AgentBridgeService.CreateMemoryNote:output_type -> brigade.v1.CreateMemoryNoteResponse
+	5, // 5: brigade.v1.AgentBridgeService.SyncCredential:output_type -> brigade.v1.SyncCredentialResponse
+	3, // [3:6] is the sub-list for method output_type
+	0, // [0:3] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -356,7 +472,7 @@ func file_brigade_v1_agent_bridge_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_brigade_v1_agent_bridge_proto_rawDesc), len(file_brigade_v1_agent_bridge_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

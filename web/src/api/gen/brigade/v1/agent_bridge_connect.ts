@@ -3,13 +3,13 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CreateMemoryNoteRequest, CreateMemoryNoteResponse, RegisterPreviewRequest, RegisterPreviewResponse } from "./agent_bridge_pb.js";
+import { CreateMemoryNoteRequest, CreateMemoryNoteResponse, RegisterPreviewRequest, RegisterPreviewResponse, SyncCredentialRequest, SyncCredentialResponse } from "./agent_bridge_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
  * AgentBridgeService — вызовы ИЗ сессии в brigade: их делает агент/скилл изнутри
  * контейнера сессии, а не веб-клиент пользователя. Авторизация — per-session HMAC-токен
- * (BRIGADE_PREVIEW_TOKEN в окружении агента), не пользовательский JWT, поэтому сервис
+ * (BRIGADE_SESSION_TOKEN в окружении агента), не пользовательский JWT, поэтому сервис
  * регистрируется без JWT-интерсептора и проверяет токен сам.
  *
  * Вызывается обычным curl'ом по Connect-протоколу (POST /brigade.v1.AgentBridgeService/
@@ -43,6 +43,18 @@ export const AgentBridgeService = {
       name: "CreateMemoryNote",
       I: CreateMemoryNoteRequest,
       O: CreateMemoryNoteResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * SyncCredential сохраняет изменённый credential-файл агента и возвращает актуальную
+     * версию. previous защищает от перезаписи более свежего секрета другой сессией.
+     *
+     * @generated from rpc brigade.v1.AgentBridgeService.SyncCredential
+     */
+    syncCredential: {
+      name: "SyncCredential",
+      I: SyncCredentialRequest,
+      O: SyncCredentialResponse,
       kind: MethodKind.Unary,
     },
   }

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	acpsdk "github.com/coder/acp-go-sdk"
+	"github.com/google/uuid"
 
 	"github.com/grigory51/brigade/backend/internal/a2ui"
 	"github.com/grigory51/brigade/backend/internal/agui"
@@ -58,7 +59,11 @@ type toolCallState struct {
 func (c *Client) translateUpdate(u acpsdk.SessionUpdate) []agui.Event {
 	switch {
 	case u.UserMessageChunk != nil:
-		return c.emitUserMessage(deref(u.UserMessageChunk.MessageId), contentText(u.UserMessageChunk.Content))
+		id := deref(u.UserMessageChunk.MessageId)
+		if id == "" {
+			id = uuid.NewString()
+		}
+		return c.emitUserMessage(id, contentText(u.UserMessageChunk.Content))
 
 	case u.AvailableCommandsUpdate != nil:
 		return []agui.Event{availableCommandsEvent(u.AvailableCommandsUpdate)}
@@ -87,10 +92,22 @@ func (c *Client) translateUpdate(u acpsdk.SessionUpdate) []agui.Event {
 
 	case u.AgentMessageChunk != nil:
 		id := deref(u.AgentMessageChunk.MessageId)
+		if id == "" {
+			id = c.stream.textID
+			if id == "" {
+				id = uuid.NewString()
+			}
+		}
 		return c.streamText(id, contentText(u.AgentMessageChunk.Content))
 
 	case u.AgentThoughtChunk != nil:
 		id := deref(u.AgentThoughtChunk.MessageId)
+		if id == "" {
+			id = c.stream.thoughtID
+			if id == "" {
+				id = uuid.NewString()
+			}
+		}
 		return c.streamReasoning(id, contentText(u.AgentThoughtChunk.Content))
 
 	case u.ToolCall != nil:

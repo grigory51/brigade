@@ -373,6 +373,13 @@ export class DaemonConfigureRequest extends Message<DaemonConfigureRequest> {
    */
   systemPrompt = "";
 
+  /**
+   * credential_file — файл с ротируемым credential внутри среды. Пусто отключает sync.
+   *
+   * @generated from field: string credential_file = 10;
+   */
+  credentialFile = "";
+
   constructor(data?: PartialMessage<DaemonConfigureRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -389,6 +396,7 @@ export class DaemonConfigureRequest extends Message<DaemonConfigureRequest> {
     { no: 6, name: "plugin_dirs", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 7, name: "mcp_servers_json", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
     { no: 9, name: "system_prompt", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 10, name: "credential_file", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaemonConfigureRequest {

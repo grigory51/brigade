@@ -398,9 +398,11 @@ type DaemonConfigureRequest struct {
 	// mcp_servers_json — JSON []acpsdk.McpServer (stdio MCP-серверы кастомных UI-тулов).
 	McpServersJson []byte `protobuf:"bytes,7,opt,name=mcp_servers_json,json=mcpServersJson,proto3" json:"mcp_servers_json,omitempty"`
 	// system_prompt — дополнение стандартного system prompt; не попадает в user history.
-	SystemPrompt  string `protobuf:"bytes,9,opt,name=system_prompt,json=systemPrompt,proto3" json:"system_prompt,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	SystemPrompt string `protobuf:"bytes,9,opt,name=system_prompt,json=systemPrompt,proto3" json:"system_prompt,omitempty"`
+	// credential_file — файл с ротируемым credential внутри среды. Пусто отключает sync.
+	CredentialFile string `protobuf:"bytes,10,opt,name=credential_file,json=credentialFile,proto3" json:"credential_file,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *DaemonConfigureRequest) Reset() {
@@ -485,6 +487,13 @@ func (x *DaemonConfigureRequest) GetMcpServersJson() []byte {
 func (x *DaemonConfigureRequest) GetSystemPrompt() string {
 	if x != nil {
 		return x.SystemPrompt
+	}
+	return ""
+}
+
+func (x *DaemonConfigureRequest) GetCredentialFile() string {
+	if x != nil {
+		return x.CredentialFile
 	}
 	return ""
 }
@@ -1139,7 +1148,7 @@ const file_brigade_v1_agent_daemon_proto_rawDesc = "" +
 	"\x04rows\x18\x03 \x01(\rR\x04rows\"F\n" +
 	"\x16DaemonWriteFileRequest\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
-	"\acontent\x18\x02 \x01(\fR\acontent\"\xc9\x02\n" +
+	"\acontent\x18\x02 \x01(\fR\acontent\"\xf2\x02\n" +
 	"\x16DaemonConfigureRequest\x12\x1f\n" +
 	"\voauth_token\x18\x01 \x01(\tR\n" +
 	"oauthToken\x12\x1b\n" +
@@ -1150,7 +1159,9 @@ const file_brigade_v1_agent_daemon_proto_rawDesc = "" +
 	"\vplugin_dirs\x18\x06 \x03(\tR\n" +
 	"pluginDirs\x12(\n" +
 	"\x10mcp_servers_json\x18\a \x01(\fR\x0emcpServersJson\x12#\n" +
-	"\rsystem_prompt\x18\t \x01(\tR\fsystemPromptJ\x04\b\b\x10\tR\x14fork_from_session_id\"]\n" +
+	"\rsystem_prompt\x18\t \x01(\tR\fsystemPrompt\x12'\n" +
+	"\x0fcredential_file\x18\n" +
+	" \x01(\tR\x0ecredentialFileJ\x04\b\b\x10\tR\x14fork_from_session_id\"]\n" +
 	"\x17DaemonConfigureResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12#\n" +

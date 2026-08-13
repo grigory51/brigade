@@ -223,3 +223,89 @@ export class CreateMemoryNoteResponse extends Message<CreateMemoryNoteResponse> 
   }
 }
 
+/**
+ * @generated from message brigade.v1.SyncCredentialRequest
+ */
+export class SyncCredentialRequest extends Message<SyncCredentialRequest> {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId = "";
+
+  /**
+   * @generated from field: bytes previous = 2;
+   */
+  previous = new Uint8Array(0);
+
+  /**
+   * @generated from field: bytes current = 3;
+   */
+  current = new Uint8Array(0);
+
+  constructor(data?: PartialMessage<SyncCredentialRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.SyncCredentialRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "previous", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
+    { no: 3, name: "current", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SyncCredentialRequest {
+    return new SyncCredentialRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SyncCredentialRequest {
+    return new SyncCredentialRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SyncCredentialRequest {
+    return new SyncCredentialRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SyncCredentialRequest | PlainMessage<SyncCredentialRequest> | undefined, b: SyncCredentialRequest | PlainMessage<SyncCredentialRequest> | undefined): boolean {
+    return proto3.util.equals(SyncCredentialRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.SyncCredentialResponse
+ */
+export class SyncCredentialResponse extends Message<SyncCredentialResponse> {
+  /**
+   * @generated from field: bytes current = 1;
+   */
+  current = new Uint8Array(0);
+
+  constructor(data?: PartialMessage<SyncCredentialResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.SyncCredentialResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "current", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SyncCredentialResponse {
+    return new SyncCredentialResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SyncCredentialResponse {
+    return new SyncCredentialResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SyncCredentialResponse {
+    return new SyncCredentialResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SyncCredentialResponse | PlainMessage<SyncCredentialResponse> | undefined, b: SyncCredentialResponse | PlainMessage<SyncCredentialResponse> | undefined): boolean {
+    return proto3.util.equals(SyncCredentialResponse, a, b);
+  }
+}
+

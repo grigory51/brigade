@@ -4,7 +4,7 @@ package brigade.v1;
 
 // AgentBridgeService — вызовы ИЗ сессии в brigade: их делает агент/скилл изнутри
 // контейнера сессии, а не веб-клиент пользователя. Авторизация — per-session HMAC-токен
-// (BRIGADE_PREVIEW_TOKEN в окружении агента), не пользовательский JWT, поэтому сервис
+// (BRIGADE_SESSION_TOKEN в окружении агента), не пользовательский JWT, поэтому сервис
 // регистрируется без JWT-интерсептора и проверяет токен сам.
 //
 // Вызывается обычным curl'ом по Connect-протоколу (POST /brigade.v1.AgentBridgeService/
@@ -17,6 +17,9 @@ service AgentBridgeService {
   // CreateMemoryNote сохраняет заметку в личную память пользователя (см. MemoryService) —
   // сессионный вход поверх того же ядра. session_id фиксируется как провенанс.
   rpc CreateMemoryNote(CreateMemoryNoteRequest) returns (CreateMemoryNoteResponse) {}
+  // SyncCredential сохраняет изменённый credential-файл агента и возвращает актуальную
+  // версию. previous защищает от перезаписи более свежего секрета другой сессией.
+  rpc SyncCredential(SyncCredentialRequest) returns (SyncCredentialResponse) {}
 }
 
 message RegisterPreviewRequest {
@@ -46,4 +49,14 @@ message CreateMemoryNoteRequest {
 message CreateMemoryNoteResponse {
   string id = 1;
   string commit_sha = 2;
+}
+
+message SyncCredentialRequest {
+  string session_id = 1;
+  bytes previous = 2;
+  bytes current = 3;
+}
+
+message SyncCredentialResponse {
+  bytes current = 1;
 }

@@ -824,15 +824,17 @@ func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token
 	rc := acpremote.New(addr, "", r.daemonTokenFn(sess.ID))
 	r.setACPHooks(sess, rc)
 	r.loadAgentSSHKey(ctx, sess.UserID, rc.SetSSHKey)
+	extraEnv := r.agentEnv(ctx, sess, token)
 	sid, err := rc.Configure(ctx, acpremote.ConfigureOptions{
 		OAuthToken:      token,
-		ExtraEnv:        r.agentEnv(ctx, sess, token), // auth и preview — только процессу адаптера
+		ExtraEnv:        extraEnv, // auth и preview — только процессу адаптера
 		AdapterCommand:  agent.Get(sess.AgentType).CommandFor(store.SessionKindACP),
 		Cwd:             sess.Cwd,
 		ResumeSessionID: resumeSessionID,
 		McpServers:      r.mcpServers(ctx, sess),
 		PluginDirs:      r.acpPluginDirs(sess),
 		SystemPrompt:    instructionPrompt(sess.InstructionProfile, sess.ResponseInstructions),
+		CredentialFile:  r.rotatingCredentialFile(ctx, sess, extraEnv),
 	})
 	if err != nil {
 		return nil, "", "", fmt.Errorf("session: configure acp daemon: %w", err)
@@ -843,6 +845,23 @@ func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token
 	}
 	lv := &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, client: rc, teardown: r.acpDaemonTeardown(sess.ID)}
 	return lv, sid, "", nil
+}
+
+func (r *Registry) rotatingCredentialFile(ctx context.Context, sess store.Session, env []string) string {
+	profile := sess.AuthProfile
+	if connection, err := r.store.GetAgentConnection(ctx, sess.UserID, sess.AuthProfile); err == nil {
+		profile = connection.AuthProfile
+	}
+	credential, ok := agent.Get(sess.AgentType).RotatingCredentials[profile]
+	if !ok {
+		return ""
+	}
+	for _, item := range env {
+		if base, ok := strings.CutPrefix(item, credential.BaseEnv+"="); ok {
+			return filepath.Join(base, credential.RelativePath)
+		}
+	}
+	return ""
 }
 
 // spawnCLIDaemon поднимает CLI-агента (claude) durable-терминалом per-user демона (общий
@@ -1068,13 +1087,9 @@ func (r *Registry) agentEnv(ctx context.Context, sess store.Session, token strin
 				env = append(env, "CODEX_API_KEY="+secret, "OPENAI_API_KEY="+secret)
 			} else if err := os.MkdirAll(hostHome, 0o700); err == nil {
 				authPath := filepath.Join(hostHome, "auth.json")
-				if current, err := os.ReadFile(authPath); err == nil && json.Valid(current) {
-					// Codex ротирует refresh-токены сам. После аварийного рестарта файл может
-					// быть новее БД — импортируем его до запуска и не затираем старой копией.
-					if err := r.persistCodexAuth(ctx, sess, string(current)); err != nil {
-						log.Printf("session %s: persist recovered codex auth: %v", sess.ID, err)
-					}
-				} else if err := os.WriteFile(authPath, []byte(secret), 0o600); err != nil {
+				// Зашифрованный store — source of truth. Ротации из файла сохраняет daemon;
+				// старый файл остановленной сессии не должен откатывать credential в БД.
+				if err := os.WriteFile(authPath, []byte(secret), 0o600); err != nil {
 					log.Printf("session %s: write codex auth: %v", sess.ID, err)
 				}
 			}
@@ -1182,18 +1197,20 @@ func (r *Registry) hostCwd(sess store.Session) string {
 // в контейнере) либо через host.docker.internal (если brigade — процесс на хосте).
 func (r *Registry) previewEnv(sess store.Session) []string {
 	cfg := r.previews.Config()
-	if !cfg.Enabled {
-		return nil
-	}
 	apiHost := "127.0.0.1"
 	if sess.Mode == store.SessionModeDocker {
 		apiHost = r.dockerAPIHost()
 	}
-	return []string{
-		"BRIGADE_PREVIEW_TOKEN=" + r.previews.TokenFor(sess.ID),
+	env := []string{
+		"BRIGADE_SESSION_TOKEN=" + r.previews.TokenFor(sess.ID),
 		fmt.Sprintf("BRIGADE_API_URL=http://%s:%d", apiHost, cfg.APIPort),
-		"BRIGADE_PREVIEW_URL_TEMPLATE=" + cfg.URLTemplate(sess.ID),
 	}
+	if cfg.Enabled {
+		env = append(env,
+			"BRIGADE_PREVIEW_TOKEN="+r.previews.TokenFor(sess.ID),
+			"BRIGADE_PREVIEW_URL_TEMPLATE="+cfg.URLTemplate(sess.ID))
+	}
+	return env
 }
 
 // dockerAPIHost возвращает hostname, по которому агент-контейнер обращается к API

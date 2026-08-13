@@ -5,10 +5,12 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 
 	"connectrpc.com/connect"
 
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
+	"github.com/grigory51/brigade/backend/internal/agent"
 	"github.com/grigory51/brigade/backend/internal/memory"
 	"github.com/grigory51/brigade/backend/internal/preview"
 	"github.com/grigory51/brigade/backend/internal/store"
@@ -18,13 +20,6 @@ import (
 // чужая или не в нужном режиме). Детали наружу не раскрываются.
 var errSessionNotFound = errors.New("session not found")
 
-// sessionOwner резолвит владельца сессии по её id — чтобы запись из сессии шла в память
-// ВЛАДЕЛЬЦА сессии (HMAC-токен подтверждает доступ к сессии, а не личность пользователя).
-// Реализуется *store.Store.
-type sessionOwner interface {
-	GetSession(ctx context.Context, id string) (store.Session, error)
-}
-
 // AgentBridgeService реализует brigade.v1.AgentBridgeService — вызовы ИЗ сессии
 // (агент/скилл внутри контейнера), а не от веб-клиента. Регистрируется БЕЗ
 // JWT-интерсептора: авторизация — per-session HMAC-токен, который сервис проверяет сам
@@ -32,11 +27,12 @@ type sessionOwner interface {
 type AgentBridgeService struct {
 	previews *preview.Service
 	memory   *memory.Service
-	sessions sessionOwner
+	sessions *store.Store
+	authMu   sync.Mutex
 }
 
 // NewAgentBridgeService собирает реализацию AgentBridgeService.
-func NewAgentBridgeService(previews *preview.Service, mem *memory.Service, sessions sessionOwner) *AgentBridgeService {
+func NewAgentBridgeService(previews *preview.Service, mem *memory.Service, sessions *store.Store) *AgentBridgeService {
 	return &AgentBridgeService{previews: previews, memory: mem, sessions: sessions}
 }
 
@@ -93,4 +89,41 @@ func (s *AgentBridgeService) RegisterPreview(ctx context.Context, req *connect.R
 
 	reg := s.previews.Register(req.Msg.SessionId, int(req.Msg.Port), req.Msg.Name)
 	return connect.NewResponse(&v1.RegisterPreviewResponse{Url: reg.URL}), nil
+}
+
+// SyncCredential принимает ротацию credential от демона сессии. Проверка previous
+// не позволяет запоздалому callback затереть секрет, уже обновлённый другой сессией.
+func (s *AgentBridgeService) SyncCredential(ctx context.Context, req *connect.Request[v1.SyncCredentialRequest]) (*connect.Response[v1.SyncCredentialResponse], error) {
+	if err := s.verifySession(req, req.Msg.SessionId); err != nil {
+		return nil, err
+	}
+	if s.sessions == nil || len(req.Msg.Current) == 0 || len(req.Msg.Current) > 1<<20 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("credential required"))
+	}
+
+	s.authMu.Lock()
+	defer s.authMu.Unlock()
+	sess, err := s.sessions.GetSession(ctx, req.Msg.SessionId)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, errSessionNotFound)
+	}
+	connection, err := s.sessions.GetAgentConnection(ctx, sess.UserID, sess.AuthProfile)
+	if errors.Is(err, store.ErrNotFound) {
+		connection, err = s.sessions.GetAgentConnectionByProfile(ctx, sess.UserID, sess.AgentType, sess.AuthProfile)
+	}
+	if err != nil || connection.AgentType != sess.AgentType {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("session credential is unavailable"))
+	}
+	if _, ok := agent.Get(sess.AgentType).RotatingCredentials[connection.AuthProfile]; !ok {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("session credential is not rotatable"))
+	}
+	if connection.Secret != string(req.Msg.Previous) && connection.Secret != string(req.Msg.Current) {
+		return connect.NewResponse(&v1.SyncCredentialResponse{Current: []byte(connection.Secret)}), nil
+	}
+	if connection.Secret != string(req.Msg.Current) {
+		if err := s.sessions.SetAgentConnectionSecret(ctx, sess.UserID, connection.ID, string(req.Msg.Current)); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+	}
+	return connect.NewResponse(&v1.SyncCredentialResponse{Current: req.Msg.Current}), nil
 }

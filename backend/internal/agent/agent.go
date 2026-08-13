@@ -70,6 +70,14 @@ type Type struct {
 	// McpServerScript — путь к скрипту MCP-сервера brigade внутри runtime. Пусто — агент
 	// его не получает.
 	McpServerScript string
+	// RotatingCredentials описывает файловые credential, которые агент может менять сам.
+	// Ключ — auth_profile подключения; BaseEnv задаёт каталог, RelativePath — файл в нём.
+	RotatingCredentials map[string]CredentialFile
+}
+
+type CredentialFile struct {
+	BaseEnv      string
+	RelativePath string
 }
 
 // Claude — Claude Code: один агент на оба вида сессии, но с разными компонентами.
@@ -100,6 +108,9 @@ var Codex = Type{
 		store.SessionKindACP: "codex-acp",
 	},
 	McpServerScript: LayerBrigadeMCP.Path() + "/brigade-tools.mjs",
+	RotatingCredentials: map[string]CredentialFile{
+		"chatgpt": {BaseEnv: "CODEX_HOME", RelativePath: "auth.json"},
+	},
 }
 
 // types — реестр доступных агентов. Пока один; форма манифеста рассчитана на то, что

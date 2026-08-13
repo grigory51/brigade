@@ -39,6 +39,9 @@ const (
 	// AgentBridgeServiceCreateMemoryNoteProcedure is the fully-qualified name of the
 	// AgentBridgeService's CreateMemoryNote RPC.
 	AgentBridgeServiceCreateMemoryNoteProcedure = "/brigade.v1.AgentBridgeService/CreateMemoryNote"
+	// AgentBridgeServiceSyncCredentialProcedure is the fully-qualified name of the AgentBridgeService's
+	// SyncCredential RPC.
+	AgentBridgeServiceSyncCredentialProcedure = "/brigade.v1.AgentBridgeService/SyncCredential"
 )
 
 // AgentBridgeServiceClient is a client for the brigade.v1.AgentBridgeService service.
@@ -49,6 +52,9 @@ type AgentBridgeServiceClient interface {
 	// CreateMemoryNote сохраняет заметку в личную память пользователя (см. MemoryService) —
 	// сессионный вход поверх того же ядра. session_id фиксируется как провенанс.
 	CreateMemoryNote(context.Context, *connect.Request[v1.CreateMemoryNoteRequest]) (*connect.Response[v1.CreateMemoryNoteResponse], error)
+	// SyncCredential сохраняет изменённый credential-файл агента и возвращает актуальную
+	// версию. previous защищает от перезаписи более свежего секрета другой сессией.
+	SyncCredential(context.Context, *connect.Request[v1.SyncCredentialRequest]) (*connect.Response[v1.SyncCredentialResponse], error)
 }
 
 // NewAgentBridgeServiceClient constructs a client for the brigade.v1.AgentBridgeService service. By
@@ -74,6 +80,12 @@ func NewAgentBridgeServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(agentBridgeServiceMethods.ByName("CreateMemoryNote")),
 			connect.WithClientOptions(opts...),
 		),
+		syncCredential: connect.NewClient[v1.SyncCredentialRequest, v1.SyncCredentialResponse](
+			httpClient,
+			baseURL+AgentBridgeServiceSyncCredentialProcedure,
+			connect.WithSchema(agentBridgeServiceMethods.ByName("SyncCredential")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -81,6 +93,7 @@ func NewAgentBridgeServiceClient(httpClient connect.HTTPClient, baseURL string, 
 type agentBridgeServiceClient struct {
 	registerPreview  *connect.Client[v1.RegisterPreviewRequest, v1.RegisterPreviewResponse]
 	createMemoryNote *connect.Client[v1.CreateMemoryNoteRequest, v1.CreateMemoryNoteResponse]
+	syncCredential   *connect.Client[v1.SyncCredentialRequest, v1.SyncCredentialResponse]
 }
 
 // RegisterPreview calls brigade.v1.AgentBridgeService.RegisterPreview.
@@ -93,6 +106,11 @@ func (c *agentBridgeServiceClient) CreateMemoryNote(ctx context.Context, req *co
 	return c.createMemoryNote.CallUnary(ctx, req)
 }
 
+// SyncCredential calls brigade.v1.AgentBridgeService.SyncCredential.
+func (c *agentBridgeServiceClient) SyncCredential(ctx context.Context, req *connect.Request[v1.SyncCredentialRequest]) (*connect.Response[v1.SyncCredentialResponse], error) {
+	return c.syncCredential.CallUnary(ctx, req)
+}
+
 // AgentBridgeServiceHandler is an implementation of the brigade.v1.AgentBridgeService service.
 type AgentBridgeServiceHandler interface {
 	// RegisterPreview фиксирует dev-сервер сессии для показа ссылки в UI. session_id и
@@ -101,6 +119,9 @@ type AgentBridgeServiceHandler interface {
 	// CreateMemoryNote сохраняет заметку в личную память пользователя (см. MemoryService) —
 	// сессионный вход поверх того же ядра. session_id фиксируется как провенанс.
 	CreateMemoryNote(context.Context, *connect.Request[v1.CreateMemoryNoteRequest]) (*connect.Response[v1.CreateMemoryNoteResponse], error)
+	// SyncCredential сохраняет изменённый credential-файл агента и возвращает актуальную
+	// версию. previous защищает от перезаписи более свежего секрета другой сессией.
+	SyncCredential(context.Context, *connect.Request[v1.SyncCredentialRequest]) (*connect.Response[v1.SyncCredentialResponse], error)
 }
 
 // NewAgentBridgeServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -122,12 +143,20 @@ func NewAgentBridgeServiceHandler(svc AgentBridgeServiceHandler, opts ...connect
 		connect.WithSchema(agentBridgeServiceMethods.ByName("CreateMemoryNote")),
 		connect.WithHandlerOptions(opts...),
 	)
+	agentBridgeServiceSyncCredentialHandler := connect.NewUnaryHandler(
+		AgentBridgeServiceSyncCredentialProcedure,
+		svc.SyncCredential,
+		connect.WithSchema(agentBridgeServiceMethods.ByName("SyncCredential")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/brigade.v1.AgentBridgeService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AgentBridgeServiceRegisterPreviewProcedure:
 			agentBridgeServiceRegisterPreviewHandler.ServeHTTP(w, r)
 		case AgentBridgeServiceCreateMemoryNoteProcedure:
 			agentBridgeServiceCreateMemoryNoteHandler.ServeHTTP(w, r)
+		case AgentBridgeServiceSyncCredentialProcedure:
+			agentBridgeServiceSyncCredentialHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -143,4 +172,8 @@ func (UnimplementedAgentBridgeServiceHandler) RegisterPreview(context.Context, *
 
 func (UnimplementedAgentBridgeServiceHandler) CreateMemoryNote(context.Context, *connect.Request[v1.CreateMemoryNoteRequest]) (*connect.Response[v1.CreateMemoryNoteResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AgentBridgeService.CreateMemoryNote is not implemented"))
+}
+
+func (UnimplementedAgentBridgeServiceHandler) SyncCredential(context.Context, *connect.Request[v1.SyncCredentialRequest]) (*connect.Response[v1.SyncCredentialResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AgentBridgeService.SyncCredential is not implemented"))
 }

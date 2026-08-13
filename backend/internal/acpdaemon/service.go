@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"time"
 
 	"connectrpc.com/connect"
@@ -30,6 +31,7 @@ func (s *service) Configure(ctx context.Context, req *connect.Request[v1.DaemonC
 		PluginDirs:      req.Msg.PluginDirs,
 		McpServersJson:  req.Msg.McpServersJson,
 		SystemPrompt:    req.Msg.SystemPrompt,
+		CredentialFile:  req.Msg.CredentialFile,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -83,6 +85,14 @@ func (s *service) Prompt(ctx context.Context, req *connect.Request[v1.DaemonProm
 	c, err := s.d.getClient()
 	if err != nil {
 		return nil, err
+	}
+	s.d.mu.Lock()
+	credential := s.d.credential
+	s.d.mu.Unlock()
+	if credential != nil {
+		if syncErr := credential.sync(ctx, true); syncErr != nil {
+			log.Printf("acpdaemon: refresh agent credential before prompt: %v", syncErr)
+		}
 	}
 	var stop string
 	if req.Msg.AutoAllowOnce {

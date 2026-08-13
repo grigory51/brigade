@@ -125,6 +125,8 @@ message DaemonConfigureRequest {
   reserved "fork_from_session_id";
   // system_prompt — дополнение стандартного system prompt; не попадает в user history.
   string system_prompt = 9;
+  // credential_file — файл с ротируемым credential внутри среды. Пусто отключает sync.
+  string credential_file = 10;
 }
 
 message DaemonConfigureResponse {

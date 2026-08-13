@@ -77,6 +77,7 @@ type ConfigureOptions struct {
 	PluginDirs      []string
 	McpServers      []acpsdk.McpServer
 	SystemPrompt    string
+	CredentialFile  string
 }
 
 // Configure просит демон (пере)поднять адаптер (секреты — здесь, не в env контейнера).
@@ -95,6 +96,7 @@ func (c *Client) Configure(ctx context.Context, opts ConfigureOptions) (string, 
 		PluginDirs:      opts.PluginDirs,
 		McpServersJson:  mcpJSON,
 		SystemPrompt:    opts.SystemPrompt,
+		CredentialFile:  opts.CredentialFile,
 	}))
 	if err != nil {
 		return "", err

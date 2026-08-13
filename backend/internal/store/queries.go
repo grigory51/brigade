@@ -132,6 +132,23 @@ func (s *Store) GetAgentConnection(ctx context.Context, userID, id string) (Agen
 	return item, nil
 }
 
+func (s *Store) GetAgentConnectionByProfile(ctx context.Context, userID, agentType, authProfile string) (AgentConnection, error) {
+	var item AgentConnection
+	var created int64
+	err := s.db.QueryRowContext(ctx, `SELECT id, user_id, name, agent_type, auth_profile, secret, created_at
+		FROM agent_connections WHERE user_id = ? AND agent_type = ? AND auth_profile = ? ORDER BY created_at LIMIT 1`,
+		userID, agentType, authProfile).Scan(&item.ID, &item.UserID, &item.Name, &item.AgentType, &item.AuthProfile, &item.Secret, &created)
+	if errors.Is(err, sql.ErrNoRows) {
+		return AgentConnection{}, ErrNotFound
+	}
+	if err != nil {
+		return AgentConnection{}, fmt.Errorf("store: get agent connection by profile: %w", err)
+	}
+	item.Secret = s.cipher.Decrypt(item.Secret)
+	item.CreatedAt = fromUnix(created)
+	return item, nil
+}
+
 func (s *Store) SaveAgentConnection(ctx context.Context, item AgentConnection) error {
 	now := toUnix(time.Now())
 	res, err := s.db.ExecContext(ctx, `INSERT INTO agent_connections

@@ -113,6 +113,27 @@ func TestTranslateAgentMessageChunk(t *testing.T) {
 	})
 }
 
+// Некоторые ACP-адаптеры присылают диагностический текст без messageId. Brigade
+// должен синтезировать идентификатор и сохранить его для следующих чанков потока,
+// иначе @ag-ui/client отвергает событие до показа исходной ошибки агента.
+func TestTranslateAgentMessageChunkWithoutID(t *testing.T) {
+	c := &Client{}
+
+	got := c.translateUpdate(acpsdk.SessionUpdate{AgentMessageChunk: &acpsdk.SessionUpdateAgentMessageChunk{
+		Content: acpsdk.TextBlock("token expired"),
+	}})
+	if len(got) != 2 || got[0].MessageID == "" || got[1].MessageID != got[0].MessageID {
+		t.Fatalf("первый чанк без id = %+v", got)
+	}
+
+	more := c.translateUpdate(acpsdk.SessionUpdate{AgentMessageChunk: &acpsdk.SessionUpdateAgentMessageChunk{
+		Content: acpsdk.TextBlock("; sign in again"),
+	}})
+	if len(more) != 1 || more[0].MessageID != got[0].MessageID {
+		t.Fatalf("следующий чанк без id = %+v, want messageId %q", more, got[0].MessageID)
+	}
+}
+
 // TestTranslateAgentThoughtChunk проверяет открытие блока размышлений и переключение с
 // размышления на текст: чанк текста закрывает reasoning (MESSAGE_END+END) перед вставкой.
 func TestTranslateAgentThoughtChunk(t *testing.T) {
