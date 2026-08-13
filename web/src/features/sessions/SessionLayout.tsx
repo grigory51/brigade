@@ -49,6 +49,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -696,7 +701,9 @@ function SessionItem({
         // из-за этого фон кнопки мигал бы. transition-none: паддинг меняется мгновенно, в такт
         // мгновенному появлению иконок (иначе имя доанимировалось бы уже после их показа).
         className={`rounded-[8px] text-[13px] transition-none! group-hover/menu-item:bg-sidebar-accent group-hover/menu-item:text-sidebar-accent-foreground ${
-          session.kind === SessionKind.ACP
+          session.kind === SessionKind.ACP && session.agentOutdated
+            ? "pr-28!"
+            : session.kind === SessionKind.ACP
             ? "group-hover/menu-item:pr-28! group-focus-within/menu-item:pr-28!"
             : "group-hover/menu-item:pr-16! group-focus-within/menu-item:pr-16!"
         }${locked ? " opacity-60" : ""}`}
@@ -713,19 +720,31 @@ function SessionItem({
         )}
       </SidebarMenuButton>
       {session.kind === SessionKind.ACP && (
-        <SidebarMenuAction
-          showOnHover
-          disabled={busy}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (!busy) onReloadAgent();
-          }}
-          aria-label="Перезапустить агента на актуальном окружении"
-          title="Перезапустить агента на актуальном окружении"
-          className="right-[5.25rem] text-sidebar-foreground/60 hover:text-sidebar-foreground"
-        >
-          <RefreshCw className="size-4" />
-        </SidebarMenuAction>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <SidebarMenuAction
+              showOnHover={!session.agentOutdated}
+              disabled={busy}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!busy) onReloadAgent();
+              }}
+              aria-label="Перезапустить агента на актуальном окружении"
+              className={`right-[5.25rem] ${session.agentOutdated ? "text-warning opacity-100 hover:text-warning" : "text-sidebar-foreground/60 hover:text-sidebar-foreground"}`}
+            >
+              <RefreshCw className="size-4" />
+            </SidebarMenuAction>
+          </TooltipTrigger>
+          <TooltipContent side="right" className="max-w-64">
+            {session.agentOutdated ? (
+              <>
+                Среда агента запущена на {session.agentVersion}, Brigade обновлён до {import.meta.env.VITE_APP_VERSION ?? "новой версии"}. Перезапустите агента.
+              </>
+            ) : (
+              <>Перезапустить агента на актуальном окружении</>
+            )}
+          </TooltipContent>
+        </Tooltip>
       )}
       {session.kind === SessionKind.ACP && (
         <SidebarMenuAction

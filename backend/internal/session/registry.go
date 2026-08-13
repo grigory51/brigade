@@ -1835,6 +1835,21 @@ func (r *Registry) MarkRead(ctx context.Context, sessionID, userID string) error
 	return r.store.MarkSessionRead(ctx, sessionID, userID)
 }
 
+func (r *Registry) AgentVersion(sessionID, userID string) string {
+	r.mu.Lock()
+	lv, ok := r.live[sessionID]
+	if !ok || lv.owner != userID {
+		r.mu.Unlock()
+		return ""
+	}
+	client := lv.client
+	r.mu.Unlock()
+	if remote, ok := client.(interface{ DaemonVersion() string }); ok {
+		return remote.DaemonVersion()
+	}
+	return ""
+}
+
 // Get возвращает сессию пользователя по идентификатору. Чужая сессия трактуется как
 // ненайденная (store.ErrNotFound), чтобы не раскрывать её существование.
 func (r *Registry) Get(ctx context.Context, sessionID, userID string) (store.Session, error) {

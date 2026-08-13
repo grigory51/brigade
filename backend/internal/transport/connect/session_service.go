@@ -22,12 +22,13 @@ type SessionService struct {
 	tickets  *auth.TicketStore
 	previews *preview.Service
 	images   *agentimage.Service
+	version  string
 }
 
 // NewSessionService собирает реализацию SessionService. images проверяет, что выбранный
 // образ принадлежит пользователю.
-func NewSessionService(registry *session.Registry, tickets *auth.TicketStore, previews *preview.Service, images *agentimage.Service) *SessionService {
-	return &SessionService{registry: registry, tickets: tickets, previews: previews, images: images}
+func NewSessionService(registry *session.Registry, tickets *auth.TicketStore, previews *preview.Service, images *agentimage.Service, version string) *SessionService {
+	return &SessionService{registry: registry, tickets: tickets, previews: previews, images: images, version: version}
 }
 
 // Create создаёт сессию для аутентифицированного пользователя и спавнит агента.
@@ -74,9 +75,16 @@ func (s *SessionService) List(ctx context.Context, _ *connect.Request[v1.ListSes
 
 	out := make([]*v1.Session, 0, len(sessions))
 	for _, sess := range sessions {
-		out = append(out, sessionToProto(sess))
+		item := sessionToProto(sess)
+		item.AgentVersion = s.registry.AgentVersion(sess.ID, userID)
+		item.AgentOutdated = agentOutdated(s.version, item.AgentVersion)
+		out = append(out, item)
 	}
 	return connect.NewResponse(&v1.ListSessionsResponse{Sessions: out}), nil
+}
+
+func agentOutdated(brigadeVersion, agentVersion string) bool {
+	return agentVersion != "" && brigadeVersion != "dev" && agentVersion != brigadeVersion
 }
 
 // Get возвращает одну сессию текущего пользователя.

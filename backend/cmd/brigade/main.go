@@ -247,7 +247,7 @@ func runServer(configPath string) {
 		mux.HandleFunc("GET /desktop/oidc/callback", desktopEnvironments.OIDCCallbackHandler)
 		mux.Handle(brigadev1connect.NewDesktopServiceHandler(connectsvc.NewDesktopService(desktopEnvironments), interceptors))
 	}
-	mux.Handle(brigadev1connect.NewSessionServiceHandler(connectsvc.NewSessionService(registry, tickets, previewSvc, imagesSvc), interceptors))
+	mux.Handle(brigadev1connect.NewSessionServiceHandler(connectsvc.NewSessionService(registry, tickets, previewSvc, imagesSvc, buildVersion), interceptors))
 	mux.Handle(brigadev1connect.NewWorkspaceServiceHandler(connectsvc.NewWorkspaceService(registry), interceptors))
 	mux.Handle(brigadev1connect.NewAgentServiceHandler(connectsvc.NewAgentService(st, codexLoginSvc), interceptors))
 	// AcpService — управляющие вызовы ACP-чата (история/статус/workflow/отмена/опции/

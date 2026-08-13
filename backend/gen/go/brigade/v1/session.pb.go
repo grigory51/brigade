@@ -213,7 +213,11 @@ type Session struct {
 	// group_label — общая подпись связанных сессий для группировки в списке.
 	GroupLabel string `protobuf:"bytes,20,opt,name=group_label,json=groupLabel,proto3" json:"group_label,omitempty"`
 	// unread — агент завершил turn после последнего просмотра сессии пользователем.
-	Unread        bool `protobuf:"varint,21,opt,name=unread,proto3" json:"unread,omitempty"`
+	Unread bool `protobuf:"varint,21,opt,name=unread,proto3" json:"unread,omitempty"`
+	// agent_version — версия durable daemon в контейнере сессии. Пусто для local/CLI.
+	AgentVersion string `protobuf:"bytes,22,opt,name=agent_version,json=agentVersion,proto3" json:"agent_version,omitempty"`
+	// agent_outdated — daemon запущен другой версией Brigade и требует reload.
+	AgentOutdated bool `protobuf:"varint,23,opt,name=agent_outdated,json=agentOutdated,proto3" json:"agent_outdated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -384,6 +388,20 @@ func (x *Session) GetGroupLabel() string {
 func (x *Session) GetUnread() bool {
 	if x != nil {
 		return x.Unread
+	}
+	return false
+}
+
+func (x *Session) GetAgentVersion() string {
+	if x != nil {
+		return x.AgentVersion
+	}
+	return ""
+}
+
+func (x *Session) GetAgentOutdated() bool {
+	if x != nil {
+		return x.AgentOutdated
 	}
 	return false
 }
@@ -1545,7 +1563,7 @@ var File_brigade_v1_session_proto protoreflect.FileDescriptor
 const file_brigade_v1_session_proto_rawDesc = "" +
 	"\n" +
 	"\x18brigade/v1/session.proto\x12\n" +
-	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\xb9\x05\n" +
+	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\x85\x06\n" +
 	"\aSession\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12+\n" +
@@ -1570,7 +1588,9 @@ const file_brigade_v1_session_proto_rawDesc = "" +
 	"\x15response_profile_name\x18\x13 \x01(\tR\x13responseProfileName\x12\x1f\n" +
 	"\vgroup_label\x18\x14 \x01(\tR\n" +
 	"groupLabel\x12\x16\n" +
-	"\x06unread\x18\x15 \x01(\bR\x06unreadJ\x04\b\f\x10\rR\tparent_id\"\xa7\x02\n" +
+	"\x06unread\x18\x15 \x01(\bR\x06unread\x12#\n" +
+	"\ragent_version\x18\x16 \x01(\tR\fagentVersion\x12%\n" +
+	"\x0eagent_outdated\x18\x17 \x01(\bR\ragentOutdatedJ\x04\b\f\x10\rR\tparent_id\"\xa7\x02\n" +
 	"\x14CreateSessionRequest\x12\x1d\n" +
 	"\n" +
 	"agent_type\x18\x01 \x01(\tR\tagentType\x12+\n" +

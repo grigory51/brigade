@@ -56,6 +56,7 @@ type Client struct {
 	OnTurnEnd      func(stopReason string, err error)
 	OnSessionTitle func(title string)
 	sessionTitle   string
+	daemonVersion  string
 }
 
 // New создаёт клиент к демону по baseURL (http://<host>:<port>). signToken подписывает токен
@@ -105,6 +106,11 @@ func (c *Client) Configure(ctx context.Context, opts ConfigureOptions) (string, 
 	c.sessionID = resp.Msg.SessionId
 	c.sessionTitle = resp.Msg.SessionTitle
 	c.mu.Unlock()
+	if status, statusErr := c.RPC.Status(ctx, daemonrpc.Req(c.Sign(), &v1.Empty{})); statusErr == nil {
+		c.mu.Lock()
+		c.daemonVersion = status.Msg.Version
+		c.mu.Unlock()
+	}
 	if resp.Msg.SessionTitle != "" && c.OnSessionTitle != nil {
 		c.OnSessionTitle(resp.Msg.SessionTitle)
 	}
@@ -123,6 +129,12 @@ func (c *Client) SessionID() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.sessionID
+}
+
+func (c *Client) DaemonVersion() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.daemonVersion
 }
 
 func (c *Client) SetHooks(onTurnEnd func(string, error), onSessionTitle func(string)) {
@@ -192,10 +204,42 @@ func (c *Client) streamLoop(ctx context.Context, gen uint64, from int64) {
 		if cur == nil || curGen != gen {
 			continue
 		}
-		_ = cur(evt)
+		for _, event := range normalizeDaemonEvent(evt) {
+			_ = cur(event)
+		}
 		c.mu.Lock()
 		c.deliveredSeq = msg.Seq
 		c.mu.Unlock()
+	}
+}
+
+// normalizeDaemonEvent поддерживает durable-демоны до v0.53.0: если ACP-адаптер
+// присылал текст без messageId, такой демон журналировал один CONTENT без START/END.
+// Канонический AG-UI требует всю тройку и иначе отдаёт пользователю ошибку валидации.
+func normalizeDaemonEvent(event agui.Event) []agui.Event {
+	if event.MessageID != "" {
+		return []agui.Event{event}
+	}
+	id := uuid.NewString()
+	switch event.Type {
+	case agui.EventTextMessageContent:
+		event.MessageID = id
+		return []agui.Event{
+			{Type: agui.EventTextMessageStart, MessageID: id, Role: "assistant"},
+			event,
+			{Type: agui.EventTextMessageEnd, MessageID: id},
+		}
+	case agui.EventReasoningMessageContent:
+		event.MessageID = id
+		return []agui.Event{
+			{Type: agui.EventReasoningStart, MessageID: id},
+			{Type: agui.EventReasoningMessageStart, MessageID: id, Role: "reasoning"},
+			event,
+			{Type: agui.EventReasoningMessageEnd, MessageID: id},
+			{Type: agui.EventReasoningEnd, MessageID: id},
+		}
+	default:
+		return []agui.Event{event}
 	}
 }
 
@@ -334,6 +378,7 @@ func (c *Client) Status() (generating bool, seq int) {
 	}
 	c.mu.Lock()
 	c.pendingPermissions = resp.Msg.PendingPermissionsJson
+	c.daemonVersion = resp.Msg.Version
 	c.mu.Unlock()
 	return resp.Msg.Generating, int(resp.Msg.Seq)
 }

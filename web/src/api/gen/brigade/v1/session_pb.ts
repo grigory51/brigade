@@ -230,6 +230,20 @@ export class Session extends Message<Session> {
    */
   unread = false;
 
+  /**
+   * agent_version — версия durable daemon в контейнере сессии. Пусто для local/CLI.
+   *
+   * @generated from field: string agent_version = 22;
+   */
+  agentVersion = "";
+
+  /**
+   * agent_outdated — daemon запущен другой версией Brigade и требует reload.
+   *
+   * @generated from field: bool agent_outdated = 23;
+   */
+  agentOutdated = false;
+
   constructor(data?: PartialMessage<Session>) {
     super();
     proto3.util.initPartial(data, this);
@@ -258,6 +272,8 @@ export class Session extends Message<Session> {
     { no: 19, name: "response_profile_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 20, name: "group_label", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 21, name: "unread", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 22, name: "agent_version", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 23, name: "agent_outdated", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Session {

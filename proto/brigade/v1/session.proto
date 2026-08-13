@@ -67,6 +67,10 @@ message Session {
   string group_label = 20;
   // unread — агент завершил turn после последнего просмотра сессии пользователем.
   bool unread = 21;
+  // agent_version — версия durable daemon в контейнере сессии. Пусто для local/CLI.
+  string agent_version = 22;
+  // agent_outdated — daemon запущен другой версией Brigade и требует reload.
+  bool agent_outdated = 23;
 }
 
 message CreateSessionRequest {
