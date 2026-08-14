@@ -145,14 +145,17 @@ func (m *Manager) RefreshInfo(ctx context.Context) {
 		go func() {
 			defer wait.Done()
 			info, err := m.serverInfo(ctx, baseURL)
-			if err != nil {
-				return
-			}
 			m.mu.Lock()
 			if environment := m.findLocked(id); environment != nil {
-				environment.AuthMethods = info.AuthMethods
-				environment.Version = info.Version
-				environment.Capabilities = info.Capabilities
+				if err != nil {
+					environment.AuthMethods = nil
+					environment.Error = err.Error()
+				} else {
+					environment.AuthMethods = info.AuthMethods
+					environment.Version = info.Version
+					environment.Capabilities = info.Capabilities
+					environment.Error = ""
+				}
 				_ = m.saveLocked()
 			}
 			m.mu.Unlock()

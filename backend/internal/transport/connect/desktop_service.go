@@ -17,15 +17,11 @@ func NewDesktopService(environments *desktopenv.Manager) *DesktopService {
 }
 
 func desktopEnvironmentToProto(environment desktopenv.Environment, activeID string) *v1.DesktopEnvironment {
-	authMethods := environment.AuthMethods
-	if environment.Kind == "remote" && len(authMethods) == 0 {
-		authMethods = []*v1.AuthMethod{{Id: "password", Kind: "password", Name: "Логин и пароль"}}
-	}
 	result := &v1.DesktopEnvironment{
 		Id: environment.ID, Name: environment.Name, Kind: environment.Kind, BaseUrl: environment.BaseURL,
 		Active: environment.ID == activeID, Connected: environment.Kind == "local" || environment.Username != "",
 		Username: environment.Username, Version: environment.Version, Capabilities: environment.Capabilities,
-		AuthMethods: authMethods, Error: environment.Error,
+		AuthMethods: environment.AuthMethods, Error: environment.Error,
 	}
 	for _, forward := range environment.PortForwards {
 		result.PortForwards = append(result.PortForwards, &v1.DesktopPortForward{Id: forward.ID, SessionId: forward.SessionID, RemotePort: int32(forward.RemotePort), LocalPort: int32(forward.LocalPort)})

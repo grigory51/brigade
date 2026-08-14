@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "./AuthContext";
 import { authClient, desktopClient } from "@/api/client";
 import type { AuthMethod } from "@/api/gen/brigade/v1/auth_pb";
+import type { DesktopEnvironment } from "@/api/gen/brigade/v1/desktop_pb";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -26,6 +27,7 @@ export function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [methods, setMethods] = useState<AuthMethod[] | null>(null);
   const [remoteEnvironmentId, setRemoteEnvironmentId] = useState("");
+  const [environments, setEnvironments] = useState<DesktopEnvironment[] | null>(null);
 
   // Куда вернуть после логина: исходный защищённый маршрут или список сессий.
   const from =
@@ -36,6 +38,7 @@ export function LoginPage() {
     const load = async () => {
       try {
         const desktop = await desktopClient.listEnvironments({});
+        if (!cancelled) setEnvironments(desktop.environments);
         const remote = desktop.environments.find(
           (environment) => environment.active && environment.kind === "remote",
         );
@@ -43,6 +46,7 @@ export function LoginPage() {
           if (!cancelled) {
             setRemoteEnvironmentId(remote.id);
             setMethods(remote.authMethods);
+            if (remote.error) setError(remote.error);
           }
           return;
         }
@@ -76,6 +80,12 @@ export function LoginPage() {
   const passwordEnabled =
     methods?.some((method) => method.kind === "password") ?? false;
   const oidcMethods = methods?.filter((method) => method.kind === "oidc") ?? [];
+  const activeEnvironment = environments?.find((environment) => environment.active);
+
+  const selectEnvironment = async (id: string) => {
+    const environment = await desktopClient.selectEnvironment({ id });
+    window.location.assign(environment.connected ? "/sessions" : "/login");
+  };
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -113,6 +123,28 @@ export function LoginPage() {
           </div>
         </CardHeader>
         <CardContent>
+          {environments && activeEnvironment && (
+            <div className="mb-5 space-y-2">
+              <Label htmlFor="environment">Окружение</Label>
+              <select
+                id="environment"
+                value={activeEnvironment.id}
+                onChange={(event) => void selectEnvironment(event.target.value)}
+                className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                {environments.map((environment) => (
+                  <option key={environment.id} value={environment.id}>
+                    {environment.name}
+                  </option>
+                ))}
+              </select>
+              {activeEnvironment.kind === "remote" && (
+                <p className="truncate text-xs text-muted-foreground" title={activeEnvironment.baseUrl}>
+                  {activeEnvironment.baseUrl}
+                </p>
+              )}
+            </div>
+          )}
           {methods === null ? (
             <div className="flex h-10 items-center justify-center">
               <Loader2 className="size-4 animate-spin" />
