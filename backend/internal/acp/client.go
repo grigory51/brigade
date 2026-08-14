@@ -2,6 +2,7 @@ package acp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -161,6 +162,9 @@ type Client struct {
 	// user_message_chunk подавляем, чтобы не дублировать оптимистичное сообщение фронта
 	// (см. translate.emitUserMessage). Доступ — под mu.
 	promptActive bool
+	// turnHistoryStart — индекс первого события ассистента текущего turn. Всё до него,
+	// включая user prompt, образует базовый снимок для reconnect.
+	turnHistoryStart int
 	// lastActivityAt — время последнего содержательного события агента (текст/размышление/
 	// tool call). Служит для детекта «агент генерирует» вне живого Prompt: фоновый turn
 	// (agent wakeup после завершения Workflow/задачи) стримит session/update без активного
@@ -413,6 +417,39 @@ type Message struct {
 	Result   string `json:"result,omitempty"`
 }
 
+// MessagesSnapshot переводит серверную проекцию истории в канонический AG-UI snapshot.
+func MessagesSnapshot(messages []Message) any {
+	type snapshotMessage struct {
+		ID      string `json:"id"`
+		Role    string `json:"role"`
+		Content any    `json:"content"`
+	}
+	var out []snapshotMessage
+	var tools *snapshotMessage
+	for _, message := range messages {
+		if message.Role != "tool_call" {
+			tools = nil
+			out = append(out, snapshotMessage{ID: message.ID, Role: message.Role, Content: message.Content})
+			continue
+		}
+		if tools == nil {
+			out = append(out, snapshotMessage{ID: message.ID, Role: "assistant", Content: []any{}})
+			tools = &out[len(out)-1]
+		}
+		args := any(map[string]any{})
+		if message.ArgsText != "" {
+			if err := json.Unmarshal([]byte(message.ArgsText), &args); err != nil {
+				args = map[string]any{}
+			}
+		}
+		tools.Content = append(tools.Content.([]any), map[string]any{
+			"type": "tool-call", "toolCallId": message.ID, "toolName": message.ToolName,
+			"args": args, "argsText": message.ArgsText, "result": message.Result,
+		})
+	}
+	return out
+}
+
 // Commands возвращает последний известный список slash-команд агента (ACP
 // available_commands_update). Отдаётся вместе с историей: команды приходят
 // CUSTOM-событием в SSE-прогоне, а при открытии треда прогон больше не стартует
@@ -441,11 +478,14 @@ func (c *Client) Commands() []agui.AvailableCommand {
 func (c *Client) Messages() []Message {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return messagesFromEvents(c.history)
+}
 
+func messagesFromEvents(events []agui.Event) []Message {
 	var out []Message
 	idx := make(map[string]int)     // messageId → позиция в out (текстовые сообщения)
 	toolIdx := make(map[string]int) // toolCallId → позиция в out (карточки инструментов)
-	for _, evt := range c.history {
+	for _, evt := range events {
 		switch evt.Type {
 		case agui.EventTextMessageStart:
 			if evt.MessageID == "" {
@@ -486,6 +526,19 @@ func (c *Client) Messages() []Message {
 		}
 	}
 	return out
+}
+
+// ReplayState возвращает завершённую часть ленты и полный поток активного turn.
+func (c *Client) ReplayState() ([]Message, []agui.Event, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	start := len(c.history)
+	if c.promptActive {
+		start = c.turnHistoryStart
+	}
+	messages := messagesFromEvents(c.history[:start])
+	events := append([]agui.Event(nil), c.history[start:]...)
+	return messages, events, c.promptActive
 }
 
 // backgroundIdleWindow — окно тишины, после которого фоновый turn считается
@@ -567,6 +620,40 @@ func (c *Client) Bind(sink EventSink, resolver PermissionResolver) (unbind func(
 		c.mu.Lock()
 		// Снимаем привязку только если она всё ещё наша: иначе unbind старого сеанса
 		// затёр бы привязку нового, успевшего перепривязаться.
+		if c.bindGen == gen {
+			c.sink = nil
+			c.resolver = nil
+		}
+		c.mu.Unlock()
+	}
+}
+
+// BindReplay атомарно отдаёт снимок завершённой истории, активный turn от начала и
+// только затем подключает live-доставку новых событий.
+func (c *Client) BindReplay(sink EventSink, resolver PermissionResolver) (unbind func()) {
+	c.mu.Lock()
+	c.bindGen++
+	gen := c.bindGen
+	start := len(c.history)
+	if c.promptActive {
+		start = c.turnHistoryStart
+	}
+	_ = sink(agui.Event{Type: agui.EventMessagesSnapshot, Messages: MessagesSnapshot(messagesFromEvents(c.history[:start]))})
+	for _, event := range c.history[start:] {
+		_ = sink(event)
+	}
+	if c.lastCommands != nil {
+		_ = sink(*c.lastCommands)
+	}
+	if c.lastUsage != nil {
+		_ = sink(*c.lastUsage)
+	}
+	c.sink = sink
+	c.resolver = resolver
+	c.mu.Unlock()
+
+	return func() {
+		c.mu.Lock()
 		if c.bindGen == gen {
 			c.sink = nil
 			c.resolver = nil
@@ -766,6 +853,7 @@ func (c *Client) prompt(ctx context.Context, text string, onTurnStart func(), re
 	// процесса не попадали бы в AcpService.GetHistory — их эмитит лишь session/load при
 	// рестарте, и при reload в рамках живого процесса лента теряла бы реплики пользователя.
 	c.recordUserMessage(text)
+	c.turnHistoryStart = len(c.history)
 	c.mu.Unlock()
 
 	// Барьер привязки sink: под удержанным promptMu предыдущий turn гарантированно

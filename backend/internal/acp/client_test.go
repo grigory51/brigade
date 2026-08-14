@@ -1,6 +1,8 @@
 package acp
 
 import (
+	"bytes"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -64,6 +66,34 @@ func TestFallbackTitleDoesNotReplaceAgentTitle(t *testing.T) {
 	c.publishFallbackTitle("Первый вопрос")
 	if got := c.SessionTitle(); got != agentTitle {
 		t.Fatalf("agent title replaced = %q", got)
+	}
+}
+
+func TestBindReplaySendsBaseSnapshotThenActiveTurn(t *testing.T) {
+	c := &Client{
+		promptActive:     true,
+		turnHistoryStart: 3,
+		history: []agui.Event{
+			{Type: agui.EventTextMessageStart, MessageID: "user", Role: "user"},
+			{Type: agui.EventTextMessageContent, MessageID: "user", Delta: "Вопрос"},
+			{Type: agui.EventTextMessageEnd, MessageID: "user"},
+			{Type: agui.EventTextMessageStart, MessageID: "answer", Role: "assistant"},
+			{Type: agui.EventTextMessageContent, MessageID: "answer", Delta: "Начало ответа"},
+		},
+	}
+	var events []agui.Event
+	unbind := c.BindReplay(func(event agui.Event) error {
+		events = append(events, event)
+		return nil
+	}, nil)
+	defer unbind()
+
+	if len(events) != 3 || events[0].Type != agui.EventMessagesSnapshot || events[1].Type != agui.EventTextMessageStart || events[2].Delta != "Начало ответа" {
+		t.Fatalf("events = %+v", events)
+	}
+	snapshot, err := json.Marshal(events[0].Messages)
+	if err != nil || !bytes.Contains(snapshot, []byte(`"content":"Вопрос"`)) || bytes.Contains(snapshot, []byte("Начало ответа")) {
+		t.Fatalf("snapshot = %s, err=%v", snapshot, err)
 	}
 }
 

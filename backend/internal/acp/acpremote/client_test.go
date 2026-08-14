@@ -15,3 +15,16 @@ func TestNormalizeLegacyDaemonText(t *testing.T) {
 		t.Fatalf("message ids = %q, %q, %q", events[0].MessageID, events[1].MessageID, events[2].MessageID)
 	}
 }
+
+func TestSessionTitleEventUpdatesClientWithoutSink(t *testing.T) {
+	var got string
+	c := &Client{OnSessionTitle: func(title string) { got = title }}
+	c.updateSessionTitle(agui.Event{
+		Type:  agui.EventCustom,
+		Name:  agui.CustomSessionTitleName,
+		Value: map[string]any{"title": "Новая тема"},
+	})
+	if got != "Новая тема" || c.sessionTitle != got {
+		t.Fatalf("callback=%q sessionTitle=%q", got, c.sessionTitle)
+	}
+}

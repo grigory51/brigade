@@ -64,6 +64,9 @@ type Daemon struct {
 	// lastConfig — последняя попытка смены опции через daemon RPC. Нужна dump-команде,
 	// чтобы отличить неотправленный UI-вызов от ошибки или отката адаптера.
 	lastConfig configChangeDebug
+	// turnStartSeq — позиция durable-журнала перед текущим Prompt. Нужна reconnect,
+	// чтобы повторить активный turn целиком, а затем продолжить live-tail.
+	turnStartSeq int64
 }
 
 type configChangeDebug struct {

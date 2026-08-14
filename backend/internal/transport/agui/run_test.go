@@ -29,6 +29,7 @@ type fakeBindable struct {
 	cancelCalled bool
 	cancelErr    error
 	statuses     []bool
+	replayBound  bool
 	// calls — порядок вызовов Bind/Prompt/FinishStreams для проверки, что стрим-стейт
 	// закрывается ДО привязки к новому sink (см. TestServePromptFinishesStreamsBeforeBind).
 	calls []string
@@ -36,6 +37,12 @@ type fakeBindable struct {
 
 func (b *fakeBindable) Bind(sink acp.EventSink, resolver acp.PermissionResolver) (unbind func()) {
 	b.calls = append(b.calls, "Bind")
+	return func() {}
+}
+
+func (b *fakeBindable) BindReplay(sink acp.EventSink, resolver acp.PermissionResolver) (unbind func()) {
+	b.replayBound = true
+	b.calls = append(b.calls, "BindReplay")
 	return func() {}
 }
 
@@ -134,6 +141,9 @@ func TestServeReplay(t *testing.T) {
 	if b.promptCalled {
 		t.Error("Prompt вызван в replay-прогоне, want не вызван")
 	}
+	if !b.replayBound {
+		t.Error("replay-прогон не запросил снимок активного turn")
+	}
 	if !b.finishCalled {
 		t.Error("FinishStreams не вызван в replay-прогоне")
 	}
@@ -218,13 +228,13 @@ func TestServePromptFinishesStreamsBeforeBind(t *testing.T) {
 }
 
 // TestServeReplayFinishesStreamsAfterBind фиксирует обратный порядок для replay
-// (reconnect без нового сообщения): Bind обязан переоткрыть ещё живой поток того же
-// turn'а, и только потом FinishStreams закрывает его перед RUN_FINISHED.
+// (reconnect без нового сообщения): BindReplay обязан восстановить активный turn целиком,
+// и только потом FinishStreams закрывает его перед RUN_FINISHED.
 func TestServeReplayFinishesStreamsAfterBind(t *testing.T) {
 	b := &fakeBindable{}
 	serveInput(b, runAgentInput{ThreadID: "t", RunID: "r"})
 
-	want := []string{"Bind", "FinishStreams"}
+	want := []string{"BindReplay", "FinishStreams"}
 	if strings.Join(b.calls, ",") != strings.Join(want, ",") {
 		t.Errorf("порядок вызовов = %v, want %v", b.calls, want)
 	}

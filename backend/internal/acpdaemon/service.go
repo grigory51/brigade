@@ -51,11 +51,32 @@ func (s *service) Configure(ctx context.Context, req *connect.Request[v1.DaemonC
 // CONTENT/END без START) и переотдаём висящие permission (reconnect посреди ожидания
 // разрешения), затем — журнал с from_seq + live-tail.
 func (s *service) StreamEvents(ctx context.Context, req *connect.Request[v1.DaemonStreamEventsRequest], stream *connect.ServerStream[v1.DaemonEvent]) error {
+	from := req.Msg.FromSeq
 	seq := s.d.log.LastSeq()
 	if c, err := s.d.getClient(); err == nil {
-		for _, evt := range c.ReopenEvents() {
-			if err := sendDaemonEvent(stream, seq, evt); err != nil {
+		if req.Msg.ReplayState {
+			messages, _, active := c.ReplayState()
+			if err := sendDaemonEvent(stream, seq, agui.Event{Type: agui.EventMessagesSnapshot, Messages: acp.MessagesSnapshot(messages)}); err != nil {
 				return err
+			}
+			if active {
+				s.d.mu.Lock()
+				from = s.d.turnStartSeq
+				s.d.mu.Unlock()
+				for _, entry := range s.d.log.ReadFrom(from) {
+					if err := stream.Send(&v1.DaemonEvent{Seq: entry.Seq, AguiJson: entry.Data}); err != nil {
+						return err
+					}
+					from = entry.Seq
+				}
+			} else {
+				from = seq
+			}
+		} else {
+			for _, evt := range c.ReopenEvents() {
+				if err := sendDaemonEvent(stream, seq, evt); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -64,7 +85,7 @@ func (s *service) StreamEvents(ctx context.Context, req *connect.Request[v1.Daem
 			return err
 		}
 	}
-	return s.d.log.Follow(ctx.Done(), req.Msg.FromSeq, func(e eventlog.Entry) error {
+	return s.d.log.Follow(ctx.Done(), from, func(e eventlog.Entry) error {
 		return stream.Send(&v1.DaemonEvent{Seq: e.Seq, AguiJson: e.Data})
 	})
 }
@@ -95,6 +116,9 @@ func (s *service) Prompt(ctx context.Context, req *connect.Request[v1.DaemonProm
 		}
 	}
 	var stop string
+	s.d.mu.Lock()
+	s.d.turnStartSeq = s.d.log.LastSeq()
+	s.d.mu.Unlock()
 	if req.Msg.AutoAllowOnce {
 		stop, err = c.PromptAutoApprove(context.WithoutCancel(ctx), req.Msg.Text, nil)
 	} else {

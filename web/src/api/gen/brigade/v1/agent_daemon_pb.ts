@@ -470,6 +470,14 @@ export class DaemonStreamEventsRequest extends Message<DaemonStreamEventsRequest
    */
   fromSeq = protoInt64.zero;
 
+  /**
+   * replay_state — сначала отдать согласованный снимок ленты и активный turn целиком,
+   * затем продолжить live-tail. Используется после переподключения UI.
+   *
+   * @generated from field: bool replay_state = 2;
+   */
+  replayState = false;
+
   constructor(data?: PartialMessage<DaemonStreamEventsRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -479,6 +487,7 @@ export class DaemonStreamEventsRequest extends Message<DaemonStreamEventsRequest
   static readonly typeName = "brigade.v1.DaemonStreamEventsRequest";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "from_seq", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 2, name: "replay_state", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaemonStreamEventsRequest {

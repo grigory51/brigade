@@ -137,6 +137,9 @@ message DaemonConfigureResponse {
 
 message DaemonStreamEventsRequest {
   int64 from_seq = 1;
+  // replay_state — сначала отдать согласованный снимок ленты и активный turn целиком,
+  // затем продолжить live-tail. Используется после переподключения UI.
+  bool replay_state = 2;
 }
 
 message DaemonEvent {

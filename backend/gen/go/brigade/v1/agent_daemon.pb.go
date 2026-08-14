@@ -552,8 +552,11 @@ func (x *DaemonConfigureResponse) GetSessionTitle() string {
 }
 
 type DaemonStreamEventsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	FromSeq       int64                  `protobuf:"varint,1,opt,name=from_seq,json=fromSeq,proto3" json:"from_seq,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	FromSeq int64                  `protobuf:"varint,1,opt,name=from_seq,json=fromSeq,proto3" json:"from_seq,omitempty"`
+	// replay_state — сначала отдать согласованный снимок ленты и активный turn целиком,
+	// затем продолжить live-tail. Используется после переподключения UI.
+	ReplayState   bool `protobuf:"varint,2,opt,name=replay_state,json=replayState,proto3" json:"replay_state,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -593,6 +596,13 @@ func (x *DaemonStreamEventsRequest) GetFromSeq() int64 {
 		return x.FromSeq
 	}
 	return 0
+}
+
+func (x *DaemonStreamEventsRequest) GetReplayState() bool {
+	if x != nil {
+		return x.ReplayState
+	}
+	return false
 }
 
 type DaemonEvent struct {
@@ -1165,9 +1175,10 @@ const file_brigade_v1_agent_daemon_proto_rawDesc = "" +
 	"\x17DaemonConfigureResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12#\n" +
-	"\rsession_title\x18\x02 \x01(\tR\fsessionTitle\"6\n" +
+	"\rsession_title\x18\x02 \x01(\tR\fsessionTitle\"Y\n" +
 	"\x19DaemonStreamEventsRequest\x12\x19\n" +
-	"\bfrom_seq\x18\x01 \x01(\x03R\afromSeq\"<\n" +
+	"\bfrom_seq\x18\x01 \x01(\x03R\afromSeq\x12!\n" +
+	"\freplay_state\x18\x02 \x01(\bR\vreplayState\"<\n" +
 	"\vDaemonEvent\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x03R\x03seq\x12\x1b\n" +
 	"\tagui_json\x18\x02 \x01(\fR\baguiJson\"Q\n" +

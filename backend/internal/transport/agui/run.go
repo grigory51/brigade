@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/grigory51/brigade/backend/internal/acp"
 	"github.com/grigory51/brigade/backend/internal/agui"
 )
 
@@ -79,7 +80,14 @@ func (rn *run) serve(in runAgentInput) {
 		// Reconnect без нового сообщения: привязываем sink немедленно, чтобы Bind переоткрыл
 		// ещё живой поток того же turn'а (иначе последующий CONTENT/END прилетел бы без START
 		// и клиент отверг бы событие).
-		unbind := rn.bindable.Bind(rn.sink, rn.resolvePermission)
+		var unbind func()
+		if replay, ok := rn.bindable.(interface {
+			BindReplay(acp.EventSink, acp.PermissionResolver) func()
+		}); ok {
+			unbind = replay.BindReplay(rn.sink, rn.resolvePermission)
+		} else {
+			unbind = rn.bindable.Bind(rn.sink, rn.resolvePermission)
+		}
 		defer unbind()
 		// Переотправляем висящие запросы разрешения: turn пережил обрыв (Prompt на
 		// WithoutCancel) и всё ещё ждёт ответа, но исходный диалог ушёл в оборвавшийся

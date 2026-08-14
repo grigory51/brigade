@@ -57,7 +57,8 @@ const (
 
 	// EventStateSnapshot несёт снимок состояния сессии (Snapshot); здесь используется
 	// для проброса плана агента (ACP plan) целиком.
-	EventStateSnapshot EventType = "STATE_SNAPSHOT"
+	EventStateSnapshot    EventType = "STATE_SNAPSHOT"
+	EventMessagesSnapshot EventType = "MESSAGES_SNAPSHOT"
 
 	// EventCustom — расширяемое событие {name, value}. В каноне AG-UI нет отдельного
 	// типа для расхода контекста, поэтому usage_update передаётся как CUSTOM с
@@ -129,6 +130,8 @@ type Event struct {
 
 	// Snapshot — произвольный снимок состояния для STATE_SNAPSHOT (например, план).
 	Snapshot any `json:"snapshot,omitempty"`
+	// Messages — полный снимок ленты для MESSAGES_SNAPSHOT при переподключении.
+	Messages any `json:"messages,omitempty"`
 
 	// Result — произвольный итог прогона для RUN_FINISHED (например, stopReason).
 	Result any `json:"result,omitempty"`

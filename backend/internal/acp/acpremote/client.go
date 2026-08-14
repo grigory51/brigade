@@ -153,6 +153,14 @@ func (c *Client) SetHooks(onTurnEnd func(string, error), onSessionTitle func(str
 // resolver сейчас не используется: permission-запрос прилетает CUSTOM-событием в потоке
 // (демон его журналит), а ответ идёт AcpService.ResolvePermission → демон (Phase 3).
 func (c *Client) Bind(sink acp.EventSink, _ acp.PermissionResolver) (unbind func()) {
+	return c.bind(sink, false)
+}
+
+func (c *Client) BindReplay(sink acp.EventSink, _ acp.PermissionResolver) (unbind func()) {
+	return c.bind(sink, true)
+}
+
+func (c *Client) bind(sink acp.EventSink, replayState bool) (unbind func()) {
 	c.mu.Lock()
 	c.bindGen++
 	gen := c.bindGen
@@ -168,7 +176,7 @@ func (c *Client) Bind(sink acp.EventSink, _ acp.PermissionResolver) (unbind func
 	if st, err := c.RPC.Status(ctx, daemonrpc.Req(c.Sign(), &v1.Empty{})); err == nil {
 		from = st.Msg.Seq
 	}
-	go c.streamLoop(ctx, gen, from)
+	go c.streamLoop(ctx, gen, from, replayState)
 
 	return func() {
 		c.mu.Lock()
@@ -185,8 +193,8 @@ func (c *Client) Bind(sink acp.EventSink, _ acp.PermissionResolver) (unbind func
 
 // streamLoop читает StreamEvents и доставляет каждое событие текущему sink, пока привязка
 // актуальна (gen не сменился) и ctx не отменён.
-func (c *Client) streamLoop(ctx context.Context, gen uint64, from int64) {
-	stream, err := c.RPC.StreamEvents(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonStreamEventsRequest{FromSeq: from}))
+func (c *Client) streamLoop(ctx context.Context, gen uint64, from int64, replayState bool) {
+	stream, err := c.RPC.StreamEvents(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonStreamEventsRequest{FromSeq: from, ReplayState: replayState}))
 	if err != nil {
 		return
 	}
@@ -197,6 +205,7 @@ func (c *Client) streamLoop(ctx context.Context, gen uint64, from int64) {
 			log.Printf("acpremote: unmarshal event seq=%d: %v", msg.Seq, err)
 			continue
 		}
+		c.updateSessionTitle(evt)
 		c.mu.Lock()
 		cur := c.sink
 		curGen := c.bindGen
@@ -210,6 +219,28 @@ func (c *Client) streamLoop(ctx context.Context, gen uint64, from int64) {
 		c.mu.Lock()
 		c.deliveredSeq = msg.Seq
 		c.mu.Unlock()
+	}
+}
+
+func (c *Client) updateSessionTitle(event agui.Event) {
+	if event.Type != agui.EventCustom || event.Name != agui.CustomSessionTitleName {
+		return
+	}
+	value, ok := event.Value.(map[string]any)
+	if !ok {
+		return
+	}
+	title, _ := value["title"].(string)
+	if title == "" {
+		return
+	}
+	c.mu.Lock()
+	changed := c.sessionTitle != title
+	c.sessionTitle = title
+	onTitle := c.OnSessionTitle
+	c.mu.Unlock()
+	if changed && onTitle != nil {
+		onTitle(title)
 	}
 }
 
