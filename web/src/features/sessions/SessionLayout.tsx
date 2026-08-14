@@ -441,6 +441,7 @@ export function SessionLayout() {
                             }
                             deleting={deletingIds.has(s.id)}
                             archiving={archivingIds.has(s.id)}
+                            reloading={reloadingId === s.id}
                             onOpen={() => navigate(sessionRoute(s.id))}
                             onDelete={() => void onDelete(s.id)}
                             onRename={(name) => void onRename(s.id, name)}
@@ -598,6 +599,7 @@ function SessionItem({
   busy,
   deleting = false,
   archiving = false,
+  reloading = false,
   onOpen,
   onDelete,
   onRename,
@@ -609,6 +611,7 @@ function SessionItem({
   busy: boolean;
   deleting?: boolean;
   archiving?: boolean;
+  reloading?: boolean;
   onOpen: () => void;
   onDelete: () => void;
   onRename: (name: string) => void;
@@ -702,7 +705,7 @@ function SessionItem({
         // мгновенному появлению иконок (иначе имя доанимировалось бы уже после их показа).
         className={`rounded-[8px] text-[13px] transition-none! group-hover/menu-item:bg-sidebar-accent group-hover/menu-item:text-sidebar-accent-foreground ${
           session.kind === SessionKind.ACP && session.agentOutdated
-            ? "pr-28!"
+            ? "pr-8! group-hover/menu-item:pr-28! group-focus-within/menu-item:pr-28!"
             : session.kind === SessionKind.ACP
             ? "group-hover/menu-item:pr-28! group-focus-within/menu-item:pr-28!"
             : "group-hover/menu-item:pr-16! group-focus-within/menu-item:pr-16!"
@@ -723,16 +726,20 @@ function SessionItem({
         <Tooltip>
           <TooltipTrigger asChild>
             <SidebarMenuAction
-              showOnHover={!session.agentOutdated}
+              showOnHover={!session.agentOutdated && !reloading}
               disabled={busy}
               onClick={(e) => {
                 e.stopPropagation();
                 if (!busy) onReloadAgent();
               }}
               aria-label="Перезапустить агента на актуальном окружении"
-              className={`right-[5.25rem] ${session.agentOutdated ? "text-warning opacity-100 hover:text-warning" : "text-sidebar-foreground/60 hover:text-sidebar-foreground"}`}
+              className={
+                session.agentOutdated || reloading
+                  ? `right-1 text-warning opacity-100 transition-[right,color,opacity] duration-200 group-hover/menu-item:right-[5.25rem] group-focus-within/menu-item:right-[5.25rem] hover:text-warning${reloading ? " disabled:opacity-100" : ""}`
+                  : "right-[5.25rem] text-sidebar-foreground/60 hover:text-sidebar-foreground"
+              }
             >
-              <RefreshCw className="size-4" />
+              <RefreshCw className={`size-4 ${reloading ? "animate-spin" : ""}`} />
             </SidebarMenuAction>
           </TooltipTrigger>
           <TooltipContent side="right" className="max-w-64">
