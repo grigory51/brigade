@@ -627,6 +627,8 @@ function SessionItem({
   const fallback = `${session.agentType} · ${kindLabel(session.kind)}`;
   const fullLabel = session.name || fallback;
   const groupPrefix = `${session.groupLabel} · `;
+  const refreshPinned =
+    session.kind === SessionKind.ACP && (session.agentOutdated || reloading);
   const label = grouped && fullLabel === session.groupLabel
     ? "Личный чат"
     : grouped && fullLabel.startsWith(groupPrefix)
@@ -704,8 +706,8 @@ function SessionItem({
         // из-за этого фон кнопки мигал бы. transition-none: паддинг меняется мгновенно, в такт
         // мгновенному появлению иконок (иначе имя доанимировалось бы уже после их показа).
         className={`rounded-[8px] text-[13px] transition-none! group-hover/menu-item:bg-sidebar-accent group-hover/menu-item:text-sidebar-accent-foreground ${
-          session.kind === SessionKind.ACP && session.agentOutdated
-            ? "pr-8! group-hover/menu-item:pr-28! group-focus-within/menu-item:pr-28!"
+          refreshPinned
+            ? "pr-28! md:pr-8! md:group-hover/menu-item:pr-28! md:group-focus-within/menu-item:pr-28!"
             : session.kind === SessionKind.ACP
             ? "group-hover/menu-item:pr-28! group-focus-within/menu-item:pr-28!"
             : "group-hover/menu-item:pr-16! group-focus-within/menu-item:pr-16!"
@@ -734,15 +736,15 @@ function SessionItem({
               }}
               aria-label="Перезапустить агента на актуальном окружении"
               className={
-                session.agentOutdated || reloading
-                  ? `right-1 text-warning opacity-100 transition-[right,color,opacity] duration-200 group-hover/menu-item:right-[5.25rem] group-focus-within/menu-item:right-[5.25rem] hover:text-warning${reloading ? " disabled:opacity-100" : ""}`
+                refreshPinned
+                  ? `right-1 z-10 text-warning opacity-100 hover:text-warning${reloading ? " disabled:opacity-100" : ""}`
                   : "right-[5.25rem] text-sidebar-foreground/60 hover:text-sidebar-foreground"
               }
             >
               <RefreshCw className={`size-4 ${reloading ? "animate-spin" : ""}`} />
             </SidebarMenuAction>
           </TooltipTrigger>
-          <TooltipContent side="right" className="max-w-64">
+          <TooltipContent side="right" className="pointer-events-none max-w-64">
             {session.agentOutdated ? (
               <>
                 Среда агента запущена на {session.agentVersion}, Brigade обновлён до {import.meta.env.VITE_APP_VERSION ?? "новой версии"}. Перезапустите агента.
@@ -764,9 +766,13 @@ function SessionItem({
           aria-label="Архивировать сессию"
           // showOnHover прячет кнопку без наведения — на время архивации спиннер виден.
           className={
-            archiving
-              ? "right-14 text-sidebar-foreground/60 opacity-100"
-              : "right-14 text-sidebar-foreground/60 hover:text-sidebar-foreground"
+            refreshPinned
+              ? busy
+                ? `right-[5.25rem] text-sidebar-foreground/60${archiving ? " opacity-100" : ""}`
+                : "right-[5.25rem] text-sidebar-foreground/60 transition-[right,opacity,color] duration-200 md:right-1 md:group-hover/menu-item:right-[5.25rem] md:group-focus-within/menu-item:right-[5.25rem] hover:text-sidebar-foreground"
+              : archiving
+                ? "right-14 text-sidebar-foreground/60 opacity-100"
+                : "right-14 text-sidebar-foreground/60 hover:text-sidebar-foreground"
           }
         >
           {archiving ? (
@@ -784,7 +790,13 @@ function SessionItem({
           if (!busy) startEdit();
         }}
         aria-label="Переименовать сессию"
-        className="right-7 text-sidebar-foreground/60 hover:text-sidebar-foreground"
+        className={
+          refreshPinned
+            ? busy
+              ? "right-14 text-sidebar-foreground/60"
+              : "right-14 text-sidebar-foreground/60 transition-[right,opacity,color] duration-200 md:right-1 md:group-hover/menu-item:right-14 md:group-focus-within/menu-item:right-14 hover:text-sidebar-foreground"
+            : "right-7 text-sidebar-foreground/60 hover:text-sidebar-foreground"
+        }
       >
         <Pencil className="size-4" />
       </SidebarMenuAction>
@@ -799,9 +811,13 @@ function SessionItem({
         // showOnHover прячет кнопку без наведения — на время удаления спиннер
         // остаётся видимым принудительно.
         className={
-          deleting
-            ? "text-sidebar-foreground/60 opacity-100"
-            : "text-sidebar-foreground/60 hover:text-destructive"
+          refreshPinned
+            ? busy
+              ? `right-7 text-sidebar-foreground/60${deleting ? " opacity-100" : ""}`
+              : "right-7 text-sidebar-foreground/60 transition-[right,opacity,color] duration-200 md:right-1 md:group-hover/menu-item:right-7 md:group-focus-within/menu-item:right-7 hover:text-destructive"
+            : deleting
+              ? "text-sidebar-foreground/60 opacity-100"
+              : "text-sidebar-foreground/60 hover:text-destructive"
         }
       >
         {deleting ? (
