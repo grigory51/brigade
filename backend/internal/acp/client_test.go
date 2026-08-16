@@ -97,6 +97,22 @@ func TestBindReplaySendsBaseSnapshotThenActiveTurn(t *testing.T) {
 	}
 }
 
+func TestMessagesSnapshotUsesCanonicalToolMessages(t *testing.T) {
+	snapshot, err := json.Marshal(MessagesSnapshot([]Message{
+		{ID: "call-1", Role: "tool_call", ToolName: "read_file", ArgsText: `{"path":"a.txt"}`, Result: "text"},
+		{ID: "call-2", Role: "tool_call", ToolName: "list_files", Result: "[]"},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(snapshot, []byte(`"content":[`)) ||
+		!bytes.Contains(snapshot, []byte(`"toolCalls":[`)) ||
+		!bytes.Contains(snapshot, []byte(`"role":"tool"`)) ||
+		!bytes.Contains(snapshot, []byte(`"toolCallId":"call-2"`)) {
+		t.Fatalf("snapshot = %s", snapshot)
+	}
+}
+
 // usageEvent конструирует CUSTOM usage-событие для проверки emit/Bind.
 func usageEvent(used, size int) agui.Event {
 	return agui.Event{Type: agui.EventCustom, Name: agui.CustomUsageName, Value: &agui.Usage{Used: used, Size: size}}

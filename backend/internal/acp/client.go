@@ -2,7 +2,6 @@ package acp
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -419,32 +418,44 @@ type Message struct {
 
 // MessagesSnapshot переводит серверную проекцию истории в канонический AG-UI snapshot.
 func MessagesSnapshot(messages []Message) any {
+	type snapshotFunction struct {
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+	}
+	type snapshotToolCall struct {
+		ID       string           `json:"id"`
+		Type     string           `json:"type"`
+		Function snapshotFunction `json:"function"`
+	}
 	type snapshotMessage struct {
-		ID      string `json:"id"`
-		Role    string `json:"role"`
-		Content any    `json:"content"`
+		ID         string             `json:"id"`
+		Role       string             `json:"role"`
+		Content    string             `json:"content"`
+		ToolCalls  []snapshotToolCall `json:"toolCalls,omitempty"`
+		ToolCallID string             `json:"toolCallId,omitempty"`
 	}
 	var out []snapshotMessage
-	var tools *snapshotMessage
+	toolGroup := -1
 	for _, message := range messages {
 		if message.Role != "tool_call" {
-			tools = nil
+			toolGroup = -1
 			out = append(out, snapshotMessage{ID: message.ID, Role: message.Role, Content: message.Content})
 			continue
 		}
-		if tools == nil {
-			out = append(out, snapshotMessage{ID: message.ID, Role: "assistant", Content: []any{}})
-			tools = &out[len(out)-1]
+		if toolGroup < 0 {
+			out = append(out, snapshotMessage{ID: message.ID, Role: "assistant"})
+			toolGroup = len(out) - 1
 		}
-		args := any(map[string]any{})
-		if message.ArgsText != "" {
-			if err := json.Unmarshal([]byte(message.ArgsText), &args); err != nil {
-				args = map[string]any{}
-			}
+		arguments := message.ArgsText
+		if arguments == "" {
+			arguments = "{}"
 		}
-		tools.Content = append(tools.Content.([]any), map[string]any{
-			"type": "tool-call", "toolCallId": message.ID, "toolName": message.ToolName,
-			"args": args, "argsText": message.ArgsText, "result": message.Result,
+		out[toolGroup].ToolCalls = append(out[toolGroup].ToolCalls, snapshotToolCall{
+			ID: message.ID, Type: "function",
+			Function: snapshotFunction{Name: message.ToolName, Arguments: arguments},
+		})
+		out = append(out, snapshotMessage{
+			ID: message.ID + ":tool", Role: "tool", Content: message.Result, ToolCallID: message.ID,
 		})
 	}
 	return out
