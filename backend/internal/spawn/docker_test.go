@@ -25,6 +25,19 @@ func TestRuntimeMountsCurrent(t *testing.T) {
 	}
 }
 
+func TestStaleRuntimeVolume(t *testing.T) {
+	for name, want := range map[string]bool{
+		"brigade-rt-codex-old": false,
+		"brigade-rt-codex-new": true,
+		"brigade-claude-old":   false,
+		"project-data":         false,
+	} {
+		if got := staleRuntimeVolume(name, "old"); got != want {
+			t.Errorf("staleRuntimeVolume(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
 func TestHardenAgentContainer(t *testing.T) {
 	hostCfg := &container.HostConfig{}
 	hardenAgentContainer(hostCfg)

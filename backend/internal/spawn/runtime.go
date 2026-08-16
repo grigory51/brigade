@@ -305,7 +305,26 @@ func (s *DockerSpawner) baseImageDigest(ctx context.Context) (string, error) {
 		id = id[:12]
 	}
 	s.baseImageDigestCache = id
+	s.cleanupRuntimeVolumes(ctx, id)
 	return s.baseImageDigestCache, nil
+}
+
+// cleanupRuntimeVolumes удаляет кеши runtime от предыдущих версий образа. VolumeRemove
+// вызывается без force: слои активных и остановленных контейнеров Docker сохранит сам.
+func (s *DockerSpawner) cleanupRuntimeVolumes(ctx context.Context, currentDigest string) {
+	volumes, err := s.cli.VolumeList(ctx, volume.ListOptions{})
+	if err != nil {
+		return
+	}
+	for _, v := range volumes.Volumes {
+		if staleRuntimeVolume(v.Name, currentDigest) {
+			_ = s.cli.VolumeRemove(ctx, v.Name, false)
+		}
+	}
+}
+
+func staleRuntimeVolume(name, currentDigest string) bool {
+	return strings.HasPrefix(name, "brigade-rt-") && !strings.HasSuffix(name, "-"+currentDigest)
 }
 
 // RefreshRuntime сбрасывает кеш базового образа и заново разрешает его digest. Для
