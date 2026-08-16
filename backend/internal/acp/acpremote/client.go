@@ -248,6 +248,10 @@ func (c *Client) updateSessionTitle(event agui.Event) {
 // присылал текст без messageId, такой демон журналировал один CONTENT без START/END.
 // Канонический AG-UI требует всю тройку и иначе отдаёт пользователю ошибку валидации.
 func normalizeDaemonEvent(event agui.Event) []agui.Event {
+	if event.Type == agui.EventMessagesSnapshot {
+		event.Messages = normalizeDaemonSnapshot(event.Messages)
+		return []agui.Event{event}
+	}
 	if event.MessageID != "" {
 		return []agui.Event{event}
 	}
@@ -272,6 +276,72 @@ func normalizeDaemonEvent(event agui.Event) []agui.Event {
 	default:
 		return []agui.Event{event}
 	}
+}
+
+// normalizeDaemonSnapshot переводит legacy tool-call parts старого демона в канонические
+// AG-UI toolCalls/tool messages. Это позволяет переподключать сессии без обновления их
+// контейнера вместе с Brigade.
+func normalizeDaemonSnapshot(snapshot any) any {
+	type legacyToolPart struct {
+		Type       string          `json:"type"`
+		ToolCallID string          `json:"toolCallId"`
+		ToolName   string          `json:"toolName"`
+		Args       json.RawMessage `json:"args"`
+		ArgsText   string          `json:"argsText"`
+		Result     json.RawMessage `json:"result"`
+	}
+	type legacyMessage struct {
+		ID      string          `json:"id"`
+		Role    string          `json:"role"`
+		Content json.RawMessage `json:"content"`
+	}
+
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		return snapshot
+	}
+	var messages []legacyMessage
+	if json.Unmarshal(data, &messages) != nil {
+		return snapshot
+	}
+	legacy := false
+	var converted []acp.Message
+	for _, message := range messages {
+		if len(message.Content) == 0 || message.Content[0] != '[' {
+			var content string
+			if json.Unmarshal(message.Content, &content) != nil {
+				return snapshot
+			}
+			converted = append(converted, acp.Message{ID: message.ID, Role: message.Role, Content: content})
+			continue
+		}
+		var parts []legacyToolPart
+		if json.Unmarshal(message.Content, &parts) != nil {
+			return snapshot
+		}
+		for _, part := range parts {
+			if part.Type != "tool-call" || part.ToolCallID == "" {
+				return snapshot
+			}
+			args := part.ArgsText
+			if args == "" && len(part.Args) > 0 {
+				args = string(part.Args)
+			}
+			var result string
+			if len(part.Result) > 0 && json.Unmarshal(part.Result, &result) != nil {
+				result = string(part.Result)
+			}
+			converted = append(converted, acp.Message{
+				ID: part.ToolCallID, Role: "tool_call", ToolName: part.ToolName,
+				ArgsText: args, Result: result,
+			})
+		}
+		legacy = true
+	}
+	if !legacy {
+		return snapshot
+	}
+	return acp.MessagesSnapshot(converted)
 }
 
 // Prompt гонит turn через демон. onTurnStart (привязка sink нового прогона) вызывается под
