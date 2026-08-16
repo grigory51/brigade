@@ -107,7 +107,7 @@ func Handler(tickets TicketRedeemer, provider HandleProvider) http.Handler {
 			return
 		}
 
-		conn, err := websocket.Accept(w, r, nil)
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
 		if err != nil {
 			// Accept уже записал ответ; логирование — на вызывающей стороне сервера.
 			return
@@ -145,7 +145,7 @@ func ShellHandler(tickets TicketRedeemer, shells ShellProvider) http.Handler {
 			return
 		}
 
-		conn, err := websocket.Accept(w, r, nil)
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
 		if err != nil {
 			terminateShell(shell, sessionID)
 			return
