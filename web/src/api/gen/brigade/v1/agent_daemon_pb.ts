@@ -380,6 +380,13 @@ export class DaemonConfigureRequest extends Message<DaemonConfigureRequest> {
    */
   credentialFile = "";
 
+  /**
+   * experience_mcp_json — один JSON acpsdk.McpServer для UI-сеанса плагина.
+   *
+   * @generated from field: bytes experience_mcp_json = 11;
+   */
+  experienceMcpJson = new Uint8Array(0);
+
   constructor(data?: PartialMessage<DaemonConfigureRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -397,6 +404,7 @@ export class DaemonConfigureRequest extends Message<DaemonConfigureRequest> {
     { no: 7, name: "mcp_servers_json", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
     { no: 9, name: "system_prompt", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 10, name: "credential_file", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 11, name: "experience_mcp_json", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaemonConfigureRequest {
@@ -413,6 +421,49 @@ export class DaemonConfigureRequest extends Message<DaemonConfigureRequest> {
 
   static equals(a: DaemonConfigureRequest | PlainMessage<DaemonConfigureRequest> | undefined, b: DaemonConfigureRequest | PlainMessage<DaemonConfigureRequest> | undefined): boolean {
     return proto3.util.equals(DaemonConfigureRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.DaemonPluginMCPRequest
+ */
+export class DaemonPluginMCPRequest extends Message<DaemonPluginMCPRequest> {
+  /**
+   * @generated from field: string method = 1;
+   */
+  method = "";
+
+  /**
+   * @generated from field: bytes params_json = 2;
+   */
+  paramsJson = new Uint8Array(0);
+
+  constructor(data?: PartialMessage<DaemonPluginMCPRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.DaemonPluginMCPRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "method", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "params_json", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaemonPluginMCPRequest {
+    return new DaemonPluginMCPRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): DaemonPluginMCPRequest {
+    return new DaemonPluginMCPRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): DaemonPluginMCPRequest {
+    return new DaemonPluginMCPRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: DaemonPluginMCPRequest | PlainMessage<DaemonPluginMCPRequest> | undefined, b: DaemonPluginMCPRequest | PlainMessage<DaemonPluginMCPRequest> | undefined): boolean {
+    return proto3.util.equals(DaemonPluginMCPRequest, a, b);
   }
 }
 

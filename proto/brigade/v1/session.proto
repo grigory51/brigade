@@ -71,6 +71,11 @@ message Session {
   string agent_version = 22;
   // agent_outdated — daemon запущен другой версией Brigade и требует reload.
   bool agent_outdated = 23;
+  // experience_id — постоянный клиент сессии. Пусто означает встроенный chat/console,
+  // определяемый по kind; непустое значение ссылается на установленный MCPB-плагин.
+  string experience_id = 24;
+  // Версия MCPB фиксируется при создании, чтобы обновление плагина не меняло живую сессию.
+  string experience_version = 25;
 }
 
 message CreateSessionRequest {
@@ -91,6 +96,7 @@ message CreateSessionRequest {
   string image = 7;
   string auth_profile = 8;
   string response_profile_id = 9;
+  string experience_id = 10;
 }
 
 message CreateSessionResponse {

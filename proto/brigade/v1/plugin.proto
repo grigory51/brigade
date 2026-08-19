@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package brigade.v1;
+
+// Plugin — установленный MCPB-пакет, который предоставляет постоянный MCP App experience.
+message Plugin {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string version = 4;
+  string icon = 5;
+  string entry_tool = 6;
+  bytes cover = 7;
+  string cover_mime_type = 8;
+}
+
+message ListPluginsRequest {}
+
+message ListPluginsResponse {
+  repeated Plugin plugins = 1;
+}
+
+message GetPluginRequest { string session_id = 1; }
+
+message PluginMCPRequest {
+  string session_id = 1;
+  string method = 2;
+  bytes params_json = 3;
+}
+
+message PluginMCPResponse {
+  bytes result_json = 1;
+}
+
+// PluginService отдаёт пользователям список experiences, установленных оператором.
+service PluginService {
+  rpc List(ListPluginsRequest) returns (ListPluginsResponse) {}
+  rpc Get(GetPluginRequest) returns (Plugin) {}
+  rpc MCP(PluginMCPRequest) returns (PluginMCPResponse) {}
+}

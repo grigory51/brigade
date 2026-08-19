@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { DaemonConfigureRequest, DaemonConfigureResponse, DaemonEvent, DaemonOpenTerminalRequest, DaemonPayloadResponse, DaemonPromptRequest, DaemonPromptResponse, DaemonResolvePermissionRequest, DaemonSetConfigOptionRequest, DaemonSetSSHKeyRequest, DaemonStatusResponse, DaemonStreamEventsRequest, DaemonSummarizeRequest, DaemonSummarizeResponse, DaemonTerminalInputRequest, DaemonTerminalOutput, DaemonTerminalResizeRequest, DaemonWriteFileRequest } from "./agent_daemon_pb.js";
+import { DaemonConfigureRequest, DaemonConfigureResponse, DaemonEvent, DaemonOpenTerminalRequest, DaemonPayloadResponse, DaemonPluginMCPRequest, DaemonPromptRequest, DaemonPromptResponse, DaemonResolvePermissionRequest, DaemonSetConfigOptionRequest, DaemonSetSSHKeyRequest, DaemonStatusResponse, DaemonStreamEventsRequest, DaemonSummarizeRequest, DaemonSummarizeResponse, DaemonTerminalInputRequest, DaemonTerminalOutput, DaemonTerminalResizeRequest, DaemonWriteFileRequest } from "./agent_daemon_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { Empty } from "./auth_pb.js";
 
@@ -224,6 +224,17 @@ export const AgentDaemonService = {
       name: "TerminalResize",
       I: DaemonTerminalResizeRequest,
       O: Empty,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * PluginMCP проксирует MCP Apps host к отдельному stdio-сеансу experience-плагина.
+     *
+     * @generated from rpc brigade.v1.AgentDaemonService.PluginMCP
+     */
+    pluginMCP: {
+      name: "PluginMCP",
+      I: DaemonPluginMCPRequest,
+      O: DaemonPayloadResponse,
       kind: MethodKind.Unary,
     },
   }

@@ -40,6 +40,7 @@ import (
 	"github.com/grigory51/brigade/backend/internal/mcp"
 	"github.com/grigory51/brigade/backend/internal/memory"
 	"github.com/grigory51/brigade/backend/internal/notify"
+	"github.com/grigory51/brigade/backend/internal/plugin"
 	"github.com/grigory51/brigade/backend/internal/preview"
 	"github.com/grigory51/brigade/backend/internal/spawn"
 	"github.com/grigory51/brigade/backend/internal/store"
@@ -65,6 +66,7 @@ type live struct {
 	mode   store.SessionMode
 	handle spawn.Handle // CLI-режим
 	client acpSession   // ACP-режим (локальный *acp.Client или *acpremote.Client к демону)
+	plugin *plugin.Runtime
 	// teardown — доп. освобождение ресурсов при ЯВНОМ teardown (Stop/Delete/Archive), НЕ при
 	// close() (сворачивание реестра). Для docker-ACP это удаление контейнера демона:
 	// client.Close() (acpremote) лишь отцепляет поток, а контейнер должен пережить рестарт
@@ -535,7 +537,7 @@ func (r *Registry) endTeardown(sessionID string) {
 // и сохраняет resume-поля. Режим спавна берётся у инстанса (r.mode), не выбирается
 // пользователем. agentType — тип агента; cwd пустой означает дефолт workDir; prompt
 // передаётся ACP-агенту первым ходом (для CLI игнорируется — ввод идёт по WS).
-func (r *Registry) Create(ctx context.Context, userID string, kind store.SessionKind, agentType, authProfile, cwd, prompt string, mcpServerIDs []string, image, instructionProfile, responseProfileID, groupLabel string) (store.Session, error) {
+func (r *Registry) Create(ctx context.Context, userID string, kind store.SessionKind, agentType, authProfile, cwd, prompt string, mcpServerIDs []string, image, instructionProfile, responseProfileID, groupLabel, experienceID string) (store.Session, error) {
 	at := agent.Get(agentType)
 	connection, connectionErr := r.store.GetAgentConnection(ctx, userID, authProfile)
 	if connectionErr != nil && !errors.Is(connectionErr, store.ErrNotFound) {
@@ -592,6 +594,17 @@ func (r *Registry) Create(ctx context.Context, userID string, kind store.Session
 	if err := r.checkMcp(ctx, userID, mcpServerIDs); err != nil {
 		return store.Session{}, err
 	}
+	experienceVersion := ""
+	if experienceID != "" {
+		if kind != store.SessionKindACP {
+			return store.Session{}, errors.New("session: plugin experience requires ACP")
+		}
+		installed, err := r.store.GetPlugin(ctx, experienceID, "")
+		if err != nil {
+			return store.Session{}, fmt.Errorf("session: plugin %q is not installed: %w", experienceID, err)
+		}
+		experienceVersion = installed.Version
+	}
 	// Потолок на число docker-контейнеров: проверяем до записи сессии в store, чтобы не
 	// плодить failed-записи. Мягкий лимит (см. atContainerLimit).
 	if r.atContainerLimit(userID, kind) {
@@ -636,6 +649,8 @@ func (r *Registry) Create(ctx context.Context, userID string, kind store.Session
 		AuthProfile:        authProfile,
 		InstructionProfile: instructionProfile,
 		ResponseProfileID:  responseProfileID,
+		ExperienceID:       experienceID,
+		ExperienceVersion:  experienceVersion,
 	}
 	var err error
 	sess, _, err = r.resolveResponseProfile(ctx, sess)
@@ -748,17 +763,26 @@ func (r *Registry) spawnFor(ctx context.Context, sess store.Session, prompt stri
 		}
 		// local: acp.New сам поднимает adapter-subprocess в процессе brigade (без демона —
 		// он умрёт с brigade, restore пере-спавнит через session/load).
-		client, err := acp.New(ctx, r.acpLocalOptions(ctx, sess, token))
+		opts, err := r.acpLocalOptions(ctx, sess, token)
+		if err != nil {
+			return nil, "", "", err
+		}
+		client, err := acp.New(ctx, opts)
 		if err != nil {
 			return nil, "", "", fmt.Errorf("session: spawn acp: %w", err)
 		}
 		r.setACPHooks(sess, client)
+		pluginRuntime, err := r.startLocalExperience(ctx, sess)
+		if err != nil {
+			_ = client.Close()
+			return nil, "", "", err
+		}
 		if prompt != "" {
 			// Стартовый промпт отправляем в фоне: turn доходит до конца независимо от
 			// того, подключился ли уже WS-клиент (события буферизуются клиентом ACP).
 			go func() { _, _ = client.Prompt(context.WithoutCancel(ctx), prompt, nil) }()
 		}
-		lv := &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, client: client}
+		lv := &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, client: client, plugin: pluginRuntime}
 		return lv, client.SessionID(), "", nil
 
 	default:
@@ -829,16 +853,32 @@ func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token
 	r.setACPHooks(sess, rc)
 	r.loadAgentSSHKey(ctx, sess.UserID, rc.SetSSHKey)
 	extraEnv := r.agentEnv(ctx, sess, token)
+	servers := r.mcpServers(ctx, sess)
+	var experienceMCP *acpsdk.McpServer
+	if sess.ExperienceID != "" {
+		installed, manifest, err := r.experience(ctx, sess)
+		if err != nil {
+			return nil, "", "", err
+		}
+		root, err := ds.ACP().InstallPlugin(ctx, sess.ID, installed.BundlePath, installed.ID, installed.Version)
+		if err != nil {
+			return nil, "", "", err
+		}
+		server := r.experienceServer(sess, manifest, root)
+		servers = append(servers, server)
+		experienceMCP = &server
+	}
 	sid, err := rc.Configure(ctx, acpremote.ConfigureOptions{
 		OAuthToken:      token,
 		ExtraEnv:        extraEnv, // auth и preview — только процессу адаптера
 		AdapterCommand:  agent.Get(sess.AgentType).CommandFor(store.SessionKindACP),
 		Cwd:             sess.Cwd,
 		ResumeSessionID: resumeSessionID,
-		McpServers:      r.mcpServers(ctx, sess),
+		McpServers:      servers,
 		PluginDirs:      r.acpPluginDirs(sess),
 		SystemPrompt:    instructionPrompt(sess.InstructionProfile, sess.ResponseInstructions),
 		CredentialFile:  r.rotatingCredentialFile(ctx, sess, extraEnv),
+		ExperienceMCP:   experienceMCP,
 	})
 	if err != nil {
 		return nil, "", "", fmt.Errorf("session: configure acp daemon: %w", err)
@@ -953,16 +993,56 @@ func (r *Registry) acpPluginDirs(sess store.Session) []string {
 // respawn, reload) поднимали адаптер с одинаковым набором — иначе часть путей теряет
 // --plugin-dir/MCP и скиллы (/note) либо render_ui пропадают. Resume вызывающий доставляет
 // сам поверх.
-func (r *Registry) acpLocalOptions(ctx context.Context, sess store.Session, token string) acp.Options {
+func (r *Registry) acpLocalOptions(ctx context.Context, sess store.Session, token string) (acp.Options, error) {
+	servers := r.mcpServers(ctx, sess)
+	if sess.ExperienceID != "" {
+		installed, manifest, err := r.experience(ctx, sess)
+		if err != nil {
+			return acp.Options{}, err
+		}
+		servers = append(servers, r.experienceServer(sess, manifest, installed.BundlePath))
+	}
 	return acp.Options{
 		Cwd:            sess.Cwd,
 		OAuthToken:     token,
 		AdapterCommand: agent.Get(sess.AgentType).CommandFor(store.SessionKindACP),
 		ExtraEnv:       r.agentEnv(ctx, sess, token),
-		McpServers:     r.mcpServers(ctx, sess),
+		McpServers:     servers,
 		PluginDirs:     r.acpPluginDirs(sess),
 		SystemPrompt:   instructionPrompt(sess.InstructionProfile, sess.ResponseInstructions),
+	}, nil
+}
+
+func (r *Registry) experienceServer(sess store.Session, manifest plugin.Manifest, root string) acpsdk.McpServer {
+	server := manifest.MCPServer(root)
+	server.Stdio.Env = append(server.Stdio.Env,
+		acpsdk.EnvVariable{Name: "BRIGADE_SESSION_ID", Value: sess.ID},
+		acpsdk.EnvVariable{Name: "BRIGADE_WORKSPACE", Value: sess.Cwd},
+	)
+	return server
+}
+
+func (r *Registry) experience(ctx context.Context, sess store.Session) (store.Plugin, plugin.Manifest, error) {
+	installed, err := r.store.GetPlugin(ctx, sess.ExperienceID, sess.ExperienceVersion)
+	if err != nil {
+		return store.Plugin{}, plugin.Manifest{}, fmt.Errorf("session: plugin %s@%s is unavailable: %w", sess.ExperienceID, sess.ExperienceVersion, err)
 	}
+	manifest, err := plugin.ParseManifest([]byte(installed.ManifestJSON))
+	if err != nil {
+		return store.Plugin{}, plugin.Manifest{}, err
+	}
+	return installed, manifest, nil
+}
+
+func (r *Registry) startLocalExperience(ctx context.Context, sess store.Session) (*plugin.Runtime, error) {
+	if sess.ExperienceID == "" {
+		return nil, nil
+	}
+	installed, manifest, err := r.experience(ctx, sess)
+	if err != nil {
+		return nil, err
+	}
+	return plugin.StartRuntime(context.WithoutCancel(ctx), r.experienceServer(sess, manifest, installed.BundlePath), sess.Cwd, nil)
 }
 
 // mcpServers — набор MCP-серверов сессии: служебный сервер brigade (render_ui/show_choice)
@@ -1520,6 +1600,7 @@ func (r *Registry) EnsureACPClient(ctx context.Context, sessionID, userID string
 	r.mu.Unlock()
 	if old != nil && old.client != nil {
 		_ = old.client.Close() // старый поток мёртв — отцепляем без ожидания
+		_ = old.plugin.Close()
 	}
 	return newLv.client, true
 }
@@ -1608,18 +1689,26 @@ func (r *Registry) reviveACP(ctx context.Context, sess store.Session) (*live, er
 		}
 		return lv, nil
 	}
-	opts := r.acpLocalOptions(ctx, sess, token)
+	opts, err := r.acpLocalOptions(ctx, sess, token)
+	if err != nil {
+		return nil, err
+	}
 	opts.ResumeSessionID = sess.AgentSessionID
 	client, err := acp.New(ctx, opts)
 	if err != nil {
 		return nil, err
 	}
 	r.setACPHooks(sess, client)
+	pluginRuntime, err := r.startLocalExperience(ctx, sess)
+	if err != nil {
+		_ = client.Close()
+		return nil, err
+	}
 	if err := r.store.UpdateSessionResume(ctx, sess.ID, client.SessionID(), ""); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("persist acp resume: %w", err)
 	}
-	return &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, client: client}, nil
+	return &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, client: client, plugin: pluginRuntime}, nil
 }
 
 // ReloadAgent перезапускает ACP-агента сессии и сохраняет диалог через session/load того же
@@ -1804,13 +1893,21 @@ func (r *Registry) reinit(ctx context.Context, lv *live, sess store.Session, ref
 	// local: переподнимаем subprocess-адаптер с resume — session/load читает свежие плагины из
 	// проектного settings.json (--setting-sources project). Новый клиент заменяет старый.
 	token := r.agentToken(ctx, sess)
-	opts := r.acpLocalOptions(ctx, sess, token)
+	opts, err := r.acpLocalOptions(ctx, sess, token)
+	if err != nil {
+		return err
+	}
 	opts.ResumeSessionID = sess.AgentSessionID
 	client, err := acp.New(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("session: reload acp: %w", err)
 	}
 	r.setACPHooks(sess, client)
+	pluginRuntime, err := r.startLocalExperience(ctx, sess)
+	if err != nil {
+		_ = client.Close()
+		return err
+	}
 	r.mu.Lock()
 	// Проверяем, что live не сменился (Stop/Delete в гонке) перед подменой.
 	if cur, ok := r.live[sessionID]; !ok || cur != lv {
@@ -1819,9 +1916,12 @@ func (r *Registry) reinit(ctx context.Context, lv *live, sess store.Session, ref
 		return store.ErrNotFound
 	}
 	old := lv.client
+	oldPlugin := lv.plugin
 	lv.client = client
+	lv.plugin = pluginRuntime
 	r.mu.Unlock()
 	_ = old.Close()
+	_ = oldPlugin.Close()
 	_ = r.store.UpdateSessionResume(ctx, sess.ID, client.SessionID(), "")
 	return nil
 }
@@ -1833,6 +1933,37 @@ func (r *Registry) List(ctx context.Context, userID string) ([]store.Session, er
 
 func (r *Registry) MarkRead(ctx context.Context, sessionID, userID string) error {
 	return r.store.MarkSessionRead(ctx, sessionID, userID)
+}
+
+// PluginMCP обслуживает MCP Apps host через UI-сеанс experience-плагина этой сессии.
+func (r *Registry) PluginMCP(ctx context.Context, sessionID, userID, method string, params []byte) ([]byte, error) {
+	sess, err := r.Get(ctx, sessionID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if sess.ExperienceID == "" {
+		return nil, errors.New("session: experience plugin is not configured")
+	}
+	client, ok := r.EnsureACPClient(ctx, sessionID, userID)
+	if !ok {
+		return nil, errors.New("session: agent is unavailable")
+	}
+	if remote, ok := client.(interface {
+		PluginMCP(context.Context, string, []byte) ([]byte, error)
+	}); ok {
+		return remote.PluginMCP(ctx, method, params)
+	}
+	r.mu.Lock()
+	lv := r.live[sessionID]
+	var runtime *plugin.Runtime
+	if lv != nil {
+		runtime = lv.plugin
+	}
+	r.mu.Unlock()
+	if runtime == nil {
+		return nil, errors.New("session: experience plugin is unavailable")
+	}
+	return runtime.Dispatch(ctx, method, params)
 }
 
 func (r *Registry) AgentVersion(sessionID, userID string) string {
@@ -2269,19 +2400,27 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 		// PluginDirs обязателен и здесь (как в Create/ReloadAgent): session/load шлёт плагин-мета
 		// из него, иначе resume-агент не перечитает скиллы и оставит их из старого состояния
 		// сессии (напр. переименованный скилл не подхватится при рестарте brigade).
-		opts := r.acpLocalOptions(ctx, sess, token)
+		opts, err := r.acpLocalOptions(ctx, sess, token)
+		if err != nil {
+			return err
+		}
 		opts.ResumeSessionID = sess.AgentSessionID
 		client, err := acp.New(ctx, opts)
 		if err != nil {
 			return fmt.Errorf("reattach acp: %w", err)
 		}
 		r.setACPHooks(sess, client)
+		pluginRuntime, err := r.startLocalExperience(ctx, sess)
+		if err != nil {
+			_ = client.Close()
+			return err
+		}
 		if err := r.store.UpdateSessionResume(ctx, sess.ID, client.SessionID(), ""); err != nil {
 			_ = client.Close()
 			return fmt.Errorf("persist acp resume: %w", err)
 		}
 		r.mu.Lock()
-		r.live[sess.ID] = &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, client: client}
+		r.live[sess.ID] = &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, client: client, plugin: pluginRuntime}
 		r.mu.Unlock()
 		return nil
 
@@ -2327,6 +2466,7 @@ func autoName(prompt string) string {
 // закрытие потока: для docker-Handle контейнер при этом продолжает работать (нужно для
 // reconnect). Используется при сворачивании реестра (CloseAll), не при Stop/Delete.
 func (l *live) close() error {
+	_ = l.plugin.Close()
 	if l.handle != nil {
 		return l.handle.Close()
 	}
@@ -2345,6 +2485,7 @@ func (l *live) close() error {
 // (io.Closer), но самоограничен по времени внутренним бюджетом (~6s суммарно, см.
 // gracefulCloseTimeout) — заведомо короче дедлайна terminateCtx.
 func (l *live) terminate(ctx context.Context) error {
+	_ = l.plugin.Close()
 	if l.handle != nil {
 		return l.handle.Terminate(ctx)
 	}

@@ -23,15 +23,16 @@ type service struct {
 
 func (s *service) Configure(ctx context.Context, req *connect.Request[v1.DaemonConfigureRequest]) (*connect.Response[v1.DaemonConfigureResponse], error) {
 	sid, err := s.d.configure(ctx, &v1ConfigureRequest{
-		OauthToken:      req.Msg.OauthToken,
-		ExtraEnv:        req.Msg.ExtraEnv,
-		AdapterCommand:  req.Msg.AdapterCommand,
-		Cwd:             req.Msg.Cwd,
-		ResumeSessionId: req.Msg.ResumeSessionId,
-		PluginDirs:      req.Msg.PluginDirs,
-		McpServersJson:  req.Msg.McpServersJson,
-		SystemPrompt:    req.Msg.SystemPrompt,
-		CredentialFile:  req.Msg.CredentialFile,
+		OauthToken:        req.Msg.OauthToken,
+		ExtraEnv:          req.Msg.ExtraEnv,
+		AdapterCommand:    req.Msg.AdapterCommand,
+		Cwd:               req.Msg.Cwd,
+		ResumeSessionId:   req.Msg.ResumeSessionId,
+		PluginDirs:        req.Msg.PluginDirs,
+		McpServersJson:    req.Msg.McpServersJson,
+		SystemPrompt:      req.Msg.SystemPrompt,
+		CredentialFile:    req.Msg.CredentialFile,
+		ExperienceMcpJson: req.Msg.ExperienceMcpJson,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -42,6 +43,20 @@ func (s *service) Configure(ctx context.Context, req *connect.Request[v1.DaemonC
 		title = c.SessionTitle()
 	}
 	return connect.NewResponse(&v1.DaemonConfigureResponse{SessionId: sid, SessionTitle: title}), nil
+}
+
+func (s *service) PluginMCP(ctx context.Context, req *connect.Request[v1.DaemonPluginMCPRequest]) (*connect.Response[v1.DaemonPayloadResponse], error) {
+	s.d.mu.Lock()
+	runtime := s.d.plugin
+	s.d.mu.Unlock()
+	if runtime == nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("session has no experience plugin"))
+	}
+	result, err := runtime.Dispatch(ctx, req.Msg.Method, req.Msg.ParamsJson)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&v1.DaemonPayloadResponse{Json: result}), nil
 }
 
 // StreamEvents отдаёт события журнала с from_seq и далее live-tail, пока brigade подключён.

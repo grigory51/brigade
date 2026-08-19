@@ -34,6 +34,7 @@ import (
 	"github.com/grigory51/brigade/backend/internal/agui"
 	"github.com/grigory51/brigade/backend/internal/eventlog"
 	"github.com/grigory51/brigade/backend/internal/httpaccess"
+	"github.com/grigory51/brigade/backend/internal/plugin"
 	"github.com/grigory51/brigade/backend/internal/sshagent"
 )
 
@@ -61,6 +62,7 @@ type Daemon struct {
 	ssh *sshagent.Agent
 	// credential синхронизирует ротируемый credential-файл с зашифрованным store Brigade.
 	credential *credentialSync
+	plugin     *plugin.Runtime
 	// lastConfig — последняя попытка смены опции через daemon RPC. Нужна dump-команде,
 	// чтобы отличить неотправленный UI-вызов от ошибки или отката адаптера.
 	lastConfig configChangeDebug
@@ -156,6 +158,17 @@ func (d *Daemon) configure(ctx context.Context, req *v1ConfigureRequest) (string
 			log.Printf("acpdaemon: initial agent credential sync: %v", err)
 		}
 	}
+	if len(req.ExperienceMcpJson) > 0 {
+		var server acpsdk.McpServer
+		if err := json.Unmarshal(req.ExperienceMcpJson, &server); err != nil {
+			return "", fmt.Errorf("acpdaemon: experience_mcp_json: %w", err)
+		}
+		runtime, err := plugin.StartRuntime(context.WithoutCancel(ctx), server, req.Cwd, d.sshEnvLocked())
+		if err != nil {
+			return "", err
+		}
+		d.plugin = runtime
+	}
 
 	client, err := acp.New(ctx, acp.Options{
 		Cwd:        req.Cwd,
@@ -172,6 +185,8 @@ func (d *Daemon) configure(ctx context.Context, req *v1ConfigureRequest) (string
 		// SpawnProc nil → локальный subprocess адаптера внутри контейнера.
 	})
 	if err != nil {
+		_ = d.plugin.Close()
+		d.plugin = nil
 		d.credential.close()
 		d.credential = nil
 		return "", err
@@ -272,10 +287,13 @@ func (d *Daemon) Close() {
 	d.mu.Lock()
 	a := d.ssh
 	credential := d.credential
+	pluginRuntime := d.plugin
 	d.ssh = nil
 	d.credential = nil
+	d.plugin = nil
 	d.mu.Unlock()
 	credential.close()
+	_ = pluginRuntime.Close()
 	if a != nil {
 		a.Close()
 	}
@@ -285,15 +303,16 @@ func (d *Daemon) Close() {
 // v1ConfigureRequest — локальный алиас полей DaemonConfigureRequest (чтобы service.go не
 // тащил gen-типы в сигнатуру configure). Заполняется в хендлере.
 type v1ConfigureRequest struct {
-	OauthToken      string
-	ExtraEnv        []string
-	AdapterCommand  string
-	Cwd             string
-	ResumeSessionId string
-	PluginDirs      []string
-	McpServersJson  []byte
-	SystemPrompt    string
-	CredentialFile  string
+	OauthToken        string
+	ExtraEnv          []string
+	AdapterCommand    string
+	Cwd               string
+	ResumeSessionId   string
+	PluginDirs        []string
+	McpServersJson    []byte
+	SystemPrompt      string
+	CredentialFile    string
+	ExperienceMcpJson []byte
 }
 
 // --- entrypoint ---

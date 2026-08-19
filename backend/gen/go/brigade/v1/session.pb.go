@@ -218,8 +218,13 @@ type Session struct {
 	AgentVersion string `protobuf:"bytes,22,opt,name=agent_version,json=agentVersion,proto3" json:"agent_version,omitempty"`
 	// agent_outdated — daemon запущен другой версией Brigade и требует reload.
 	AgentOutdated bool `protobuf:"varint,23,opt,name=agent_outdated,json=agentOutdated,proto3" json:"agent_outdated,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// experience_id — постоянный клиент сессии. Пусто означает встроенный chat/console,
+	// определяемый по kind; непустое значение ссылается на установленный MCPB-плагин.
+	ExperienceId string `protobuf:"bytes,24,opt,name=experience_id,json=experienceId,proto3" json:"experience_id,omitempty"`
+	// Версия MCPB фиксируется при создании, чтобы обновление плагина не меняло живую сессию.
+	ExperienceVersion string `protobuf:"bytes,25,opt,name=experience_version,json=experienceVersion,proto3" json:"experience_version,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Session) Reset() {
@@ -406,6 +411,20 @@ func (x *Session) GetAgentOutdated() bool {
 	return false
 }
 
+func (x *Session) GetExperienceId() string {
+	if x != nil {
+		return x.ExperienceId
+	}
+	return ""
+}
+
+func (x *Session) GetExperienceVersion() string {
+	if x != nil {
+		return x.ExperienceVersion
+	}
+	return ""
+}
+
 type CreateSessionRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	AgentType string                 `protobuf:"bytes,1,opt,name=agent_type,json=agentType,proto3" json:"agent_type,omitempty"`
@@ -421,6 +440,7 @@ type CreateSessionRequest struct {
 	Image             string `protobuf:"bytes,7,opt,name=image,proto3" json:"image,omitempty"`
 	AuthProfile       string `protobuf:"bytes,8,opt,name=auth_profile,json=authProfile,proto3" json:"auth_profile,omitempty"`
 	ResponseProfileId string `protobuf:"bytes,9,opt,name=response_profile_id,json=responseProfileId,proto3" json:"response_profile_id,omitempty"`
+	ExperienceId      string `protobuf:"bytes,10,opt,name=experience_id,json=experienceId,proto3" json:"experience_id,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -507,6 +527,13 @@ func (x *CreateSessionRequest) GetAuthProfile() string {
 func (x *CreateSessionRequest) GetResponseProfileId() string {
 	if x != nil {
 		return x.ResponseProfileId
+	}
+	return ""
+}
+
+func (x *CreateSessionRequest) GetExperienceId() string {
+	if x != nil {
+		return x.ExperienceId
 	}
 	return ""
 }
@@ -1563,7 +1590,7 @@ var File_brigade_v1_session_proto protoreflect.FileDescriptor
 const file_brigade_v1_session_proto_rawDesc = "" +
 	"\n" +
 	"\x18brigade/v1/session.proto\x12\n" +
-	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\x85\x06\n" +
+	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\xd9\x06\n" +
 	"\aSession\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12+\n" +
@@ -1590,7 +1617,9 @@ const file_brigade_v1_session_proto_rawDesc = "" +
 	"groupLabel\x12\x16\n" +
 	"\x06unread\x18\x15 \x01(\bR\x06unread\x12#\n" +
 	"\ragent_version\x18\x16 \x01(\tR\fagentVersion\x12%\n" +
-	"\x0eagent_outdated\x18\x17 \x01(\bR\ragentOutdatedJ\x04\b\f\x10\rR\tparent_id\"\xa7\x02\n" +
+	"\x0eagent_outdated\x18\x17 \x01(\bR\ragentOutdated\x12#\n" +
+	"\rexperience_id\x18\x18 \x01(\tR\fexperienceId\x12-\n" +
+	"\x12experience_version\x18\x19 \x01(\tR\x11experienceVersionJ\x04\b\f\x10\rR\tparent_id\"\xcc\x02\n" +
 	"\x14CreateSessionRequest\x12\x1d\n" +
 	"\n" +
 	"agent_type\x18\x01 \x01(\tR\tagentType\x12+\n" +
@@ -1600,7 +1629,9 @@ const file_brigade_v1_session_proto_rawDesc = "" +
 	"\x0emcp_server_ids\x18\x06 \x03(\tR\fmcpServerIds\x12\x14\n" +
 	"\x05image\x18\a \x01(\tR\x05image\x12!\n" +
 	"\fauth_profile\x18\b \x01(\tR\vauthProfile\x12.\n" +
-	"\x13response_profile_id\x18\t \x01(\tR\x11responseProfileIdJ\x04\b\x02\x10\x03R\x04mode\"F\n" +
+	"\x13response_profile_id\x18\t \x01(\tR\x11responseProfileId\x12#\n" +
+	"\rexperience_id\x18\n" +
+	" \x01(\tR\fexperienceIdJ\x04\b\x02\x10\x03R\x04mode\"F\n" +
 	"\x15CreateSessionResponse\x12-\n" +
 	"\asession\x18\x01 \x01(\v2\x13.brigade.v1.SessionR\asession\"\x15\n" +
 	"\x13ListSessionsRequest\"G\n" +

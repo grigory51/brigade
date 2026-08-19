@@ -166,6 +166,20 @@ type Session struct {
 	ResponseProfileID    string
 	ResponseProfileName  string
 	ResponseInstructions string
+	ExperienceID         string
+	ExperienceVersion    string
+}
+
+// Plugin — установленный оператором MCPB bundle. Manifest остаётся источником истины
+// для запуска; отдельные поля нужны списку и проверке закреплённой версии сессии.
+type Plugin struct {
+	ID           string
+	Name         string
+	Version      string
+	BundlePath   string
+	Source       string
+	ManifestJSON string
+	InstalledAt  time.Time
 }
 
 type ResponseProfile struct {

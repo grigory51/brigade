@@ -84,6 +84,9 @@ const (
 	// AgentDaemonServiceTerminalResizeProcedure is the fully-qualified name of the AgentDaemonService's
 	// TerminalResize RPC.
 	AgentDaemonServiceTerminalResizeProcedure = "/brigade.v1.AgentDaemonService/TerminalResize"
+	// AgentDaemonServicePluginMCPProcedure is the fully-qualified name of the AgentDaemonService's
+	// PluginMCP RPC.
+	AgentDaemonServicePluginMCPProcedure = "/brigade.v1.AgentDaemonService/PluginMCP"
 )
 
 // AgentDaemonServiceClient is a client for the brigade.v1.AgentDaemonService service.
@@ -132,6 +135,8 @@ type AgentDaemonServiceClient interface {
 	TerminalInput(context.Context, *connect.Request[v1.DaemonTerminalInputRequest]) (*connect.Response[v1.Empty], error)
 	// TerminalResize меняет размер TTY терминала.
 	TerminalResize(context.Context, *connect.Request[v1.DaemonTerminalResizeRequest]) (*connect.Response[v1.Empty], error)
+	// PluginMCP проксирует MCP Apps host к отдельному stdio-сеансу experience-плагина.
+	PluginMCP(context.Context, *connect.Request[v1.DaemonPluginMCPRequest]) (*connect.Response[v1.DaemonPayloadResponse], error)
 }
 
 // NewAgentDaemonServiceClient constructs a client for the brigade.v1.AgentDaemonService service. By
@@ -247,6 +252,12 @@ func NewAgentDaemonServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(agentDaemonServiceMethods.ByName("TerminalResize")),
 			connect.WithClientOptions(opts...),
 		),
+		pluginMCP: connect.NewClient[v1.DaemonPluginMCPRequest, v1.DaemonPayloadResponse](
+			httpClient,
+			baseURL+AgentDaemonServicePluginMCPProcedure,
+			connect.WithSchema(agentDaemonServiceMethods.ByName("PluginMCP")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -269,6 +280,7 @@ type agentDaemonServiceClient struct {
 	openTerminal      *connect.Client[v1.DaemonOpenTerminalRequest, v1.DaemonTerminalOutput]
 	terminalInput     *connect.Client[v1.DaemonTerminalInputRequest, v1.Empty]
 	terminalResize    *connect.Client[v1.DaemonTerminalResizeRequest, v1.Empty]
+	pluginMCP         *connect.Client[v1.DaemonPluginMCPRequest, v1.DaemonPayloadResponse]
 }
 
 // Configure calls brigade.v1.AgentDaemonService.Configure.
@@ -356,6 +368,11 @@ func (c *agentDaemonServiceClient) TerminalResize(ctx context.Context, req *conn
 	return c.terminalResize.CallUnary(ctx, req)
 }
 
+// PluginMCP calls brigade.v1.AgentDaemonService.PluginMCP.
+func (c *agentDaemonServiceClient) PluginMCP(ctx context.Context, req *connect.Request[v1.DaemonPluginMCPRequest]) (*connect.Response[v1.DaemonPayloadResponse], error) {
+	return c.pluginMCP.CallUnary(ctx, req)
+}
+
 // AgentDaemonServiceHandler is an implementation of the brigade.v1.AgentDaemonService service.
 type AgentDaemonServiceHandler interface {
 	// Configure (пере)поднимает адаптер: секреты в env адаптера, resume_session_id непуст →
@@ -402,6 +419,8 @@ type AgentDaemonServiceHandler interface {
 	TerminalInput(context.Context, *connect.Request[v1.DaemonTerminalInputRequest]) (*connect.Response[v1.Empty], error)
 	// TerminalResize меняет размер TTY терминала.
 	TerminalResize(context.Context, *connect.Request[v1.DaemonTerminalResizeRequest]) (*connect.Response[v1.Empty], error)
+	// PluginMCP проксирует MCP Apps host к отдельному stdio-сеансу experience-плагина.
+	PluginMCP(context.Context, *connect.Request[v1.DaemonPluginMCPRequest]) (*connect.Response[v1.DaemonPayloadResponse], error)
 }
 
 // NewAgentDaemonServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -513,6 +532,12 @@ func NewAgentDaemonServiceHandler(svc AgentDaemonServiceHandler, opts ...connect
 		connect.WithSchema(agentDaemonServiceMethods.ByName("TerminalResize")),
 		connect.WithHandlerOptions(opts...),
 	)
+	agentDaemonServicePluginMCPHandler := connect.NewUnaryHandler(
+		AgentDaemonServicePluginMCPProcedure,
+		svc.PluginMCP,
+		connect.WithSchema(agentDaemonServiceMethods.ByName("PluginMCP")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/brigade.v1.AgentDaemonService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AgentDaemonServiceConfigureProcedure:
@@ -549,6 +574,8 @@ func NewAgentDaemonServiceHandler(svc AgentDaemonServiceHandler, opts ...connect
 			agentDaemonServiceTerminalInputHandler.ServeHTTP(w, r)
 		case AgentDaemonServiceTerminalResizeProcedure:
 			agentDaemonServiceTerminalResizeHandler.ServeHTTP(w, r)
+		case AgentDaemonServicePluginMCPProcedure:
+			agentDaemonServicePluginMCPHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -624,4 +651,8 @@ func (UnimplementedAgentDaemonServiceHandler) TerminalInput(context.Context, *co
 
 func (UnimplementedAgentDaemonServiceHandler) TerminalResize(context.Context, *connect.Request[v1.DaemonTerminalResizeRequest]) (*connect.Response[v1.Empty], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AgentDaemonService.TerminalResize is not implemented"))
+}
+
+func (UnimplementedAgentDaemonServiceHandler) PluginMCP(context.Context, *connect.Request[v1.DaemonPluginMCPRequest]) (*connect.Response[v1.DaemonPayloadResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AgentDaemonService.PluginMCP is not implemented"))
 }

@@ -439,12 +439,12 @@ func (s *Store) DeleteTelegramConversation(ctx context.Context, botID, scope str
 func (s *Store) CreateSession(ctx context.Context, sess Session) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO sessions
-		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name, group_label, unread, mcp_servers, image, auth_profile, instruction_profile, response_profile_id, response_profile_name, response_instructions)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name, group_label, unread, mcp_servers, image, auth_profile, instruction_profile, response_profile_id, response_profile_name, response_instructions, experience_id, experience_version)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		sess.ID, sess.UserID, string(sess.Mode), string(sess.Kind), sess.AgentType,
 		sess.AgentSessionID, sess.ContainerLabel, string(sess.Status), sess.Cwd, toUnix(sess.CreatedAt), sess.Name, sess.GroupLabel, sess.Unread,
 		strings.Join(sess.McpServers, ","), sess.Image, sess.AuthProfile, sess.InstructionProfile,
-		sess.ResponseProfileID, sess.ResponseProfileName, sess.ResponseInstructions,
+		sess.ResponseProfileID, sess.ResponseProfileName, sess.ResponseInstructions, sess.ExperienceID, sess.ExperienceVersion,
 	)
 	if err != nil {
 		return fmt.Errorf("store: create session: %w", err)
@@ -541,7 +541,7 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 
 const sessionSelect = `SELECT id, user_id, mode, kind, agent_type, agent_session_id,
 	container_label, status, cwd, created_at, name, group_label, unread, mcp_servers, image, auth_profile, instruction_profile,
-	response_profile_id, response_profile_name, response_instructions FROM sessions`
+	response_profile_id, response_profile_name, response_instructions, experience_id, experience_version FROM sessions`
 
 func (s *Store) querySessions(ctx context.Context, query string, args ...any) ([]Session, error) {
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -584,7 +584,7 @@ func scanSessionRow(r rowScanner) (Session, error) {
 	var createdAt int64
 	err := r.Scan(&sess.ID, &sess.UserID, &mode, &kind, &sess.AgentType,
 		&sess.AgentSessionID, &sess.ContainerLabel, &status, &sess.Cwd, &createdAt, &sess.Name, &sess.GroupLabel, &sess.Unread, &mcp, &sess.Image, &sess.AuthProfile, &sess.InstructionProfile,
-		&sess.ResponseProfileID, &sess.ResponseProfileName, &sess.ResponseInstructions)
+		&sess.ResponseProfileID, &sess.ResponseProfileName, &sess.ResponseInstructions, &sess.ExperienceID, &sess.ExperienceVersion)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Session{}, err
@@ -599,6 +599,82 @@ func scanSessionRow(r rowScanner) (Session, error) {
 		sess.McpServers = strings.Split(mcp, ",")
 	}
 	return sess, nil
+}
+
+const pluginSelect = `SELECT id, name, version, bundle_path, source, manifest_json, installed_at FROM plugins`
+
+func (s *Store) ListPlugins(ctx context.Context) ([]Plugin, error) {
+	rows, err := s.db.QueryContext(ctx, pluginSelect+` WHERE active = 1 ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("store: list plugins: %w", err)
+	}
+	defer rows.Close()
+	var plugins []Plugin
+	for rows.Next() {
+		var plugin Plugin
+		var installedAt int64
+		if err := rows.Scan(&plugin.ID, &plugin.Name, &plugin.Version, &plugin.BundlePath, &plugin.Source, &plugin.ManifestJSON, &installedAt); err != nil {
+			return nil, fmt.Errorf("store: scan plugin: %w", err)
+		}
+		plugin.InstalledAt = fromUnix(installedAt)
+		plugins = append(plugins, plugin)
+	}
+	return plugins, rows.Err()
+}
+
+func (s *Store) GetPlugin(ctx context.Context, id, version string) (Plugin, error) {
+	var plugin Plugin
+	var installedAt int64
+	where, args := ` WHERE id = ? AND active = 1`, []any{id}
+	if version != "" {
+		where, args = ` WHERE id = ? AND version = ?`, []any{id, version}
+	}
+	err := s.db.QueryRowContext(ctx, pluginSelect+where, args...).Scan(
+		&plugin.ID, &plugin.Name, &plugin.Version, &plugin.BundlePath, &plugin.Source, &plugin.ManifestJSON, &installedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Plugin{}, ErrNotFound
+	}
+	if err != nil {
+		return Plugin{}, fmt.Errorf("store: get plugin: %w", err)
+	}
+	plugin.InstalledAt = fromUnix(installedAt)
+	return plugin, nil
+}
+
+func (s *Store) PutPlugin(ctx context.Context, plugin Plugin) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: put plugin: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `UPDATE plugins SET active = 0 WHERE id = ?`, plugin.ID); err != nil {
+		return fmt.Errorf("store: deactivate plugin: %w", err)
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO plugins (id, name, version, bundle_path, source, manifest_json, installed_at, active)
+		VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+		ON CONFLICT(id, version) DO UPDATE SET name=excluded.name, bundle_path=excluded.bundle_path, source=excluded.source,
+		manifest_json=excluded.manifest_json, installed_at=excluded.installed_at, active=1`,
+		plugin.ID, plugin.Name, plugin.Version, plugin.BundlePath, plugin.Source, plugin.ManifestJSON, toUnix(plugin.InstalledAt))
+	if err != nil {
+		return fmt.Errorf("store: put plugin: %w", err)
+	}
+	return tx.Commit()
+}
+
+func (s *Store) DeletePlugin(ctx context.Context, id string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM plugins WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("store: delete plugin: %w", err)
+	}
+	return affectedOne(res, "delete plugin")
+}
+
+func (s *Store) PluginSessionCount(ctx context.Context, id string) (int, error) {
+	var count int
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM sessions WHERE experience_id = ?`, id).Scan(&count); err != nil {
+		return 0, fmt.Errorf("store: count plugin sessions: %w", err)
+	}
+	return count, nil
 }
 
 // SetAgentImages сохраняет список образов агента пользователя. Строка создаётся, если

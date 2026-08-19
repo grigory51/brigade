@@ -77,6 +77,8 @@ func sessionToProto(s store.Session) *v1.Session {
 		AuthProfile:         s.AuthProfile,
 		ResponseProfileId:   s.ResponseProfileID,
 		ResponseProfileName: s.ResponseProfileName,
+		ExperienceId:        s.ExperienceID,
+		ExperienceVersion:   s.ExperienceVersion,
 	}
 }
 

@@ -1,9 +1,14 @@
 package spawn
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -50,6 +55,63 @@ type ACPContainerDebug struct {
 
 // ACP создаёт фабрику контейнерных ACP-процессов поверх docker-клиента спавнера.
 func (s *DockerSpawner) ACP() *DockerACPSpawner { return &DockerACPSpawner{spawner: s} }
+
+// InstallPlugin копирует распакованный MCPB в durable-каталог сессии. Docker archive
+// API работает одинаково, когда brigade запущен на хосте и внутри контейнера с docker.sock.
+func (d *DockerACPSpawner) InstallPlugin(ctx context.Context, sessionID, source, pluginID, version string) (string, error) {
+	if filepath.Base(pluginID) != pluginID || filepath.Base(version) != version {
+		return "", fmt.Errorf("spawn: invalid plugin path")
+	}
+	id, err := d.spawner.findBySessionLabel(ctx, sessionID)
+	if err != nil {
+		return "", err
+	}
+	var archive bytes.Buffer
+	tw := tar.NewWriter(&archive)
+	prefix := filepath.ToSlash(filepath.Join("plugins", pluginID, version))
+	err = filepath.Walk(source, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(source, path)
+		if err != nil || rel == "." {
+			return err
+		}
+		if !info.Mode().IsRegular() && !info.IsDir() {
+			return fmt.Errorf("spawn: unsupported plugin file %q", rel)
+		}
+		header, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return err
+		}
+		header.Name = prefix + "/" + filepath.ToSlash(rel)
+		header.Uid, header.Gid = AgentUID, AgentGID
+		if err := tw.WriteHeader(header); err != nil || info.IsDir() {
+			return err
+		}
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		_, copyErr := io.Copy(tw, file)
+		closeErr := file.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		return closeErr
+	})
+	if err == nil {
+		err = tw.Close()
+	}
+	if err != nil {
+		return "", fmt.Errorf("spawn: pack plugin: %w", err)
+	}
+	destination := AgentHome + daemonLogDir + "/" + sessionID
+	if err := d.spawner.cli.CopyToContainer(ctx, id, destination, &archive, container.CopyToContainerOptions{}); err != nil {
+		return "", fmt.Errorf("spawn: install plugin %s@%s: %w", pluginID, version, err)
+	}
+	return destination + "/" + prefix, nil
+}
 
 // StartDaemon создаёт контейнер сессии с durable ACP-демоном (`brigade acp-agent`, pid1) и
 // возвращает адрес его Connect-сервера для дозвона. Секретов в env контейнера НЕТ (они

@@ -67,6 +67,10 @@ agent_image: ""
 # раз. Не задано → 1 ГиБ; отрицательное — без ограничения. Только docker-режим.
 image_quota_bytes: 1073741824
 
+# Кеш MCPB-плагинов, установленных оператором через `brigade plugin install`.
+# Пусто → ~/.brigade/plugins. Env: BRIGADE_PLUGINS_DIR.
+plugins_dir: ""
+
 # Базовый каталог per-user home на хосте (только docker-режим). brigade создаёт
 # подкаталог <agent_home_dir>/<userID> и bind-mount'ит его в /home/agent целиком во
 # все контейнеры пользователя. Общими per-user становятся состояние агентов и рабочие файлы

@@ -79,6 +79,7 @@ type ConfigureOptions struct {
 	McpServers      []acpsdk.McpServer
 	SystemPrompt    string
 	CredentialFile  string
+	ExperienceMCP   *acpsdk.McpServer
 }
 
 // Configure просит демон (пере)поднять адаптер (секреты — здесь, не в env контейнера).
@@ -88,16 +89,21 @@ func (c *Client) Configure(ctx context.Context, opts ConfigureOptions) (string, 
 	if len(opts.McpServers) > 0 {
 		mcpJSON, _ = json.Marshal(opts.McpServers)
 	}
+	var experienceJSON []byte
+	if opts.ExperienceMCP != nil {
+		experienceJSON, _ = json.Marshal(opts.ExperienceMCP)
+	}
 	resp, err := c.RPC.Configure(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonConfigureRequest{
-		OauthToken:      opts.OAuthToken,
-		ExtraEnv:        opts.ExtraEnv,
-		AdapterCommand:  opts.AdapterCommand,
-		Cwd:             opts.Cwd,
-		ResumeSessionId: opts.ResumeSessionID,
-		PluginDirs:      opts.PluginDirs,
-		McpServersJson:  mcpJSON,
-		SystemPrompt:    opts.SystemPrompt,
-		CredentialFile:  opts.CredentialFile,
+		OauthToken:        opts.OAuthToken,
+		ExtraEnv:          opts.ExtraEnv,
+		AdapterCommand:    opts.AdapterCommand,
+		Cwd:               opts.Cwd,
+		ResumeSessionId:   opts.ResumeSessionID,
+		PluginDirs:        opts.PluginDirs,
+		McpServersJson:    mcpJSON,
+		SystemPrompt:      opts.SystemPrompt,
+		CredentialFile:    opts.CredentialFile,
+		ExperienceMcpJson: experienceJSON,
 	}))
 	if err != nil {
 		return "", err
@@ -512,6 +518,14 @@ func (c *Client) Summarize(ctx context.Context, prompt string) (string, error) {
 func (c *Client) WriteFile(ctx context.Context, path string, content []byte) error {
 	_, err := c.RPC.WriteFile(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonWriteFileRequest{Path: path, Content: content}))
 	return err
+}
+
+func (c *Client) PluginMCP(ctx context.Context, method string, params []byte) ([]byte, error) {
+	resp, err := c.RPC.PluginMCP(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonPluginMCPRequest{Method: method, ParamsJson: params}))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg.Json, nil
 }
 
 // OpenShell поднимает вспомогательный шелл (bash в pty) внутри контейнера через демон и

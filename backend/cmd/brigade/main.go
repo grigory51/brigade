@@ -58,6 +58,7 @@ func main() {
 	root.PersistentFlags().StringVar(&configPath, "config", configPath, "path to the YAML config file")
 	root.AddCommand(newDumpCommand(&configPath))
 	root.AddCommand(newUserCommand(&configPath))
+	root.AddCommand(newPluginCommand(&configPath))
 
 	// Субкоманда демона ACP: pid1 контейнера сессии, durable-relay адаптера
 	// (internal/acpdaemon). Тот же бинарь; конфиг демона — из env, без brigade-конфига.
@@ -259,6 +260,7 @@ func runServer(configPath string) {
 	mux.Handle(brigadev1connect.NewMemoryServiceHandler(connectsvc.NewMemoryService(memorySvc), interceptors))
 	// McpService — персональные MCP-серверы и vault секретов для них. JWT.
 	mux.Handle(brigadev1connect.NewMcpServiceHandler(connectsvc.NewMcpService(st), interceptors))
+	mux.Handle(brigadev1connect.NewPluginServiceHandler(connectsvc.NewPluginService(st, registry), interceptors))
 	mux.Handle(brigadev1connect.NewLinkPreviewServiceHandler(
 		connectsvc.NewLinkPreviewService(linkpreview.New()), interceptors))
 	// AgentBridgeService — вызовы ИЗ сессии (скилл в контейнере). БЕЗ JWT-интерсептора:

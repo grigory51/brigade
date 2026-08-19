@@ -66,6 +66,7 @@ func runDesktop() {
 	desktopRuntimePath = filepath.Join(appDir, "runtime.json")
 	// Подхватывает и существующие config.yaml, созданные до появления agent_home_dir.
 	_ = os.Setenv("BRIGADE_AGENT_HOME_DIR", filepath.Join(appDir, "agent-home"))
+	_ = os.Setenv("BRIGADE_PLUGINS_DIR", filepath.Join(appDir, "plugins"))
 	enrichPATH()
 
 	// Стартуем с /desktop/auth: ручка ставит сессионные cookie сид-пользователя и редиректит на
@@ -137,6 +138,7 @@ seed:
   password: "admin"
 work_dir: %q
 agent_home_dir: %q
+plugins_dir: %q
 preview:
   enabled: true
   mode: "subdomain"
@@ -150,6 +152,7 @@ memory:
 		secret,
 		filepath.Join(appDir, "workspace"),
 		filepath.Join(appDir, "agent-home"),
+		filepath.Join(appDir, "plugins"),
 		filepath.Join(appDir, "memory"),
 	)
 	if err := os.WriteFile(cfgPath, []byte(yaml), 0o600); err != nil {

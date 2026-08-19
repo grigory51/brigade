@@ -244,6 +244,21 @@ export class Session extends Message<Session> {
    */
   agentOutdated = false;
 
+  /**
+   * experience_id — постоянный клиент сессии. Пусто означает встроенный chat/console,
+   * определяемый по kind; непустое значение ссылается на установленный MCPB-плагин.
+   *
+   * @generated from field: string experience_id = 24;
+   */
+  experienceId = "";
+
+  /**
+   * Версия MCPB фиксируется при создании, чтобы обновление плагина не меняло живую сессию.
+   *
+   * @generated from field: string experience_version = 25;
+   */
+  experienceVersion = "";
+
   constructor(data?: PartialMessage<Session>) {
     super();
     proto3.util.initPartial(data, this);
@@ -274,6 +289,8 @@ export class Session extends Message<Session> {
     { no: 21, name: "unread", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 22, name: "agent_version", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 23, name: "agent_outdated", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 24, name: "experience_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 25, name: "experience_version", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Session {
@@ -346,6 +363,11 @@ export class CreateSessionRequest extends Message<CreateSessionRequest> {
    */
   responseProfileId = "";
 
+  /**
+   * @generated from field: string experience_id = 10;
+   */
+  experienceId = "";
+
   constructor(data?: PartialMessage<CreateSessionRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -362,6 +384,7 @@ export class CreateSessionRequest extends Message<CreateSessionRequest> {
     { no: 7, name: "image", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 8, name: "auth_profile", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 9, name: "response_profile_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 10, name: "experience_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CreateSessionRequest {

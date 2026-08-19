@@ -47,7 +47,7 @@ func (s *SessionService) Create(ctx context.Context, req *connect.Request[v1.Cre
 
 	sess, err := s.registry.Create(ctx, userID,
 		kindFromProto(req.Msg.Kind),
-		req.Msg.AgentType, req.Msg.AuthProfile, req.Msg.Cwd, req.Msg.Prompt, req.Msg.McpServerIds, image, "", req.Msg.ResponseProfileId, "")
+		req.Msg.AgentType, req.Msg.AuthProfile, req.Msg.Cwd, req.Msg.Prompt, req.Msg.McpServerIds, image, "", req.Msg.ResponseProfileId, "", req.Msg.ExperienceId)
 	if err != nil {
 		if errors.Is(err, session.ErrClaudeTokenRequired) {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, err)

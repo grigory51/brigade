@@ -75,6 +75,9 @@ type Config struct {
 	TLS      TLSConfig      `koanf:"tls"`
 	Memory   MemoryConfig   `koanf:"memory"`
 	Telegram TelegramConfig `koanf:"telegram"`
+	// PluginsDir — кеш установленных MCPB bundles. Содержимое копируется в среду
+	// сессии и версионируется по id/version.
+	PluginsDir string `koanf:"plugins_dir"`
 }
 
 // TelegramConfig задаёт способ получения updates для всех пользовательских ботов
@@ -371,6 +374,18 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("config: resolve memory.dir %q: %w", c.Memory.Dir, err)
 	} else {
 		c.Memory.Dir = abs
+	}
+	if c.PluginsDir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("config: resolve home for plugins_dir: %w", err)
+		}
+		c.PluginsDir = filepath.Join(home, ".brigade", "plugins")
+	}
+	if abs, err := filepath.Abs(c.PluginsDir); err != nil {
+		return fmt.Errorf("config: resolve plugins_dir %q: %w", c.PluginsDir, err)
+	} else {
+		c.PluginsDir = abs
 	}
 
 	return nil
