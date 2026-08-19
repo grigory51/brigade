@@ -246,6 +246,7 @@ func runServer(configPath string) {
 		mux.HandleFunc("/desktop/auth", authService.DesktopLoginHandler(cfg.Seed.Username))
 		mux.HandleFunc("GET /desktop/oidc/start", desktopEnvironments.OIDCStartHandler)
 		mux.HandleFunc("GET /desktop/oidc/callback", desktopEnvironments.OIDCCallbackHandler)
+		mux.HandleFunc("GET /desktop/oidc/done", desktopEnvironments.OIDCDoneHandler)
 		mux.Handle(brigadev1connect.NewDesktopServiceHandler(connectsvc.NewDesktopService(desktopEnvironments), interceptors))
 	}
 	mux.Handle(brigadev1connect.NewSessionServiceHandler(connectsvc.NewSessionService(registry, tickets, previewSvc, imagesSvc, buildVersion), interceptors))

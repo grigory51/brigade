@@ -18,6 +18,10 @@ package main
 	[webview evaluateJavaScript:@"window.location.assign('/settings')" completionHandler:nil];
 	[self.window makeKeyAndOrderFront:nil];
 }
+- (void)goBack:(id)sender {
+	WKWebView *webview = (WKWebView *)[self.window contentView];
+	if ([webview canGoBack]) [webview goBack];
+}
 @end
 
 static BrigadeMenuTarget *menuTarget;
@@ -59,6 +63,16 @@ static void installAppMenu(void *window) {
 	[editMenu addItemWithTitle:@"Paste" action:@selector(paste:) keyEquivalent:@"v"];
 	[editMenu addItemWithTitle:@"Select All" action:@selector(selectAll:) keyEquivalent:@"a"];
 	[editItem setSubmenu:editMenu];
+
+	// Navigate-меню и системный swipe возвращают из внешнего OIDC/passkey flow.
+	NSMenuItem *navigateItem = [[NSMenuItem alloc] init];
+	[menubar addItem:navigateItem];
+	NSMenu *navigateMenu = [[NSMenu alloc] initWithTitle:@"Navigate"];
+	NSMenuItem *back = [navigateMenu addItemWithTitle:@"Back" action:@selector(goBack:) keyEquivalent:@"["];
+	[back setTarget:menuTarget];
+	[navigateItem setSubmenu:navigateMenu];
+	WKWebView *webview = (WKWebView *)[(NSWindow *)window contentView];
+	[webview setAllowsBackForwardNavigationGestures:YES];
 }
 */
 import "C"

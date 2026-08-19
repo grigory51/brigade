@@ -322,6 +322,8 @@ func (m *Manager) Login(ctx context.Context, id, username, password string) (Env
 		return Environment{}, errors.New("удалённое окружение не найдено")
 	}
 	baseURL := environment.BaseURL
+	environment.Error = ""
+	_ = m.saveLocked()
 	m.mu.Unlock()
 	client := brigadev1connect.NewAuthServiceClient(m.http, baseURL)
 	response, err := client.Login(ctx, connect.NewRequest(&v1.LoginRequest{Username: username, Password: password}))
@@ -377,7 +379,18 @@ func (m *Manager) OIDCStartHandler(w http.ResponseWriter, r *http.Request) {
 func (m *Manager) OIDCCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	returnTo := safeLocalReturn(r.URL.Query().Get("return_to"))
 	if r.URL.Query().Get("error") != "" {
-		http.Redirect(w, r, "/login?error=oidc", http.StatusFound)
+		id := r.URL.Query().Get("environment_id")
+		m.mu.Lock()
+		if environment := m.findLocked(id); environment != nil {
+			environment.Error = "Вход через OIDC отменён или завершился ошибкой."
+			_ = m.saveLocked()
+		}
+		m.mu.Unlock()
+		if returnTo == "/desktop/oidc/done" {
+			http.Redirect(w, r, returnTo+"?error=oidc", http.StatusFound)
+		} else {
+			http.Redirect(w, r, "/login?error=oidc", http.StatusFound)
+		}
 		return
 	}
 	id := r.URL.Query().Get("environment_id")
@@ -403,6 +416,15 @@ func (m *Manager) OIDCCallbackHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, returnTo, http.StatusFound)
+}
+
+func (m *Manager) OIDCDoneHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	message := "Вход выполнен. Вернитесь в Brigade.app."
+	if r.URL.Query().Get("error") != "" {
+		message = "Вход отменён. Вернитесь в Brigade.app."
+	}
+	_, _ = fmt.Fprintf(w, `<!doctype html><meta charset="utf-8"><title>Brigade</title><style>body{margin:0;display:grid;min-height:100vh;place-items:center;background:#1f1e1d;color:#f1eee8;font:16px system-ui}</style><p>%s</p>`, message)
 }
 
 func safeLocalReturn(value string) string {

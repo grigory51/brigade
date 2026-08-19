@@ -17,6 +17,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+declare global {
+  interface Window { brigadeOpenExternal?: (url: string) => void }
+}
+
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -28,6 +32,7 @@ export function LoginPage() {
   const [methods, setMethods] = useState<AuthMethod[] | null>(null);
   const [remoteEnvironmentId, setRemoteEnvironmentId] = useState("");
   const [environments, setEnvironments] = useState<DesktopEnvironment[] | null>(null);
+  const [oidcPending, setOIDCPending] = useState(false);
 
   // Куда вернуть после логина: исходный защищённый маршрут или список сессий.
   const from =
@@ -72,10 +77,33 @@ export function LoginPage() {
 
   const startOIDC = () => {
     const path = remoteEnvironmentId ? "/desktop/oidc/start" : "/auth/oidc/start";
-    const query = new URLSearchParams({ return_to: from });
+    const external = Boolean(remoteEnvironmentId && window.brigadeOpenExternal);
+    const query = new URLSearchParams({ return_to: external ? "/desktop/oidc/done" : from });
     if (remoteEnvironmentId) query.set("environment_id", remoteEnvironmentId);
-    window.location.assign(`${path}?${query}`);
+    const target = `${path}?${query}`;
+    if (external) {
+      setOIDCPending(true);
+      window.brigadeOpenExternal?.(new URL(target, window.location.href).href);
+    } else {
+      window.location.assign(target);
+    }
   };
+
+  useEffect(() => {
+    if (!oidcPending || !remoteEnvironmentId) return;
+    const timer = window.setInterval(() => {
+      void desktopClient.listEnvironments({}).then((result) => {
+        const environment = result.environments.find((item) => item.id === remoteEnvironmentId);
+        if (environment?.connected) {
+          window.location.assign("/sessions");
+        } else if (environment?.error) {
+          setError(environment.error);
+          setOIDCPending(false);
+        }
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [oidcPending, remoteEnvironmentId]);
 
   const passwordEnabled =
     methods?.some((method) => method.kind === "password") ?? false;
@@ -85,6 +113,13 @@ export function LoginPage() {
   const selectEnvironment = async (id: string) => {
     const environment = await desktopClient.selectEnvironment({ id });
     window.location.assign(environment.connected ? "/sessions" : "/login");
+  };
+
+  const manageEnvironments = async () => {
+    const local = environments?.find((environment) => environment.kind === "local");
+    if (!local) return;
+    await desktopClient.selectEnvironment({ id: local.id });
+    window.location.assign("/settings/environments");
   };
 
   async function onSubmit(e: FormEvent) {
@@ -139,9 +174,14 @@ export function LoginPage() {
                 ))}
               </select>
               {activeEnvironment.kind === "remote" && (
-                <p className="truncate text-xs text-muted-foreground" title={activeEnvironment.baseUrl}>
-                  {activeEnvironment.baseUrl}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={activeEnvironment.baseUrl}>
+                    {activeEnvironment.baseUrl}
+                  </p>
+                  <button type="button" className="shrink-0 text-xs text-primary hover:underline" onClick={() => void manageEnvironments()}>
+                    Изменить
+                  </button>
+                </div>
               )}
             </div>
           )}
@@ -156,11 +196,17 @@ export function LoginPage() {
                   key={method.id}
                   type="button"
                   className="w-full"
+                  disabled={oidcPending}
                   onClick={startOIDC}
                 >
-                  Войти через {method.name}
+                  {oidcPending ? <Loader2 className="size-4 animate-spin" /> : `Войти через ${method.name}`}
                 </Button>
               ))}
+              {oidcPending && (
+                <Button type="button" variant="ghost" className="w-full" onClick={() => setOIDCPending(false)}>
+                  Отмена
+                </Button>
+              )}
               {passwordEnabled && (
                 <form onSubmit={onSubmit} className="space-y-4">
                   <div className="space-y-2">

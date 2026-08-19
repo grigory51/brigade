@@ -16,6 +16,7 @@ import { TopicPage } from "./features/memory/TopicPage";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { RouteSpinner } from "./lib/RouteSpinner";
 import { DesktopSetup } from "./features/desktop/DesktopSetup";
+import { DesktopLoginShell } from "./features/desktop/DesktopLoginShell";
 
 // Гейт для защищённых маршрутов. Пока идёт первичная проверка сессии (ready ===
 // false), показываем нейтральный экран загрузки, иначе уже залогиненного
@@ -35,12 +36,12 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 
 // Если пользователь уже вошёл, /login перенаправляет на список сессий.
 function RedirectIfAuthed({ children }: { children: React.ReactNode }) {
-  const { user, ready } = useAuth();
+  const { user, ready, desktop } = useAuth();
   if (!ready) {
     return <RouteSpinner />;
   }
   if (user) return <Navigate to="/sessions" replace />;
-  return <>{children}</>;
+  return desktop ? <DesktopLoginShell>{children}</DesktopLoginShell> : <>{children}</>;
 }
 
 export function App() {
