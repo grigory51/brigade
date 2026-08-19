@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ConnectError } from "@connectrpc/connect";
-import { Loader2 } from "lucide-react";
+import { Boxes, Check, Loader2, MessageCircle, Terminal } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import {
   agentClient,
   authClient,
   mcpClient,
+  pluginClient,
   responseProfileClient,
   sessionClient,
 } from "@/api/client";
@@ -15,6 +16,8 @@ import type { AgentImagesSettings } from "@/api/gen/brigade/v1/auth_pb";
 import { McpServer } from "@/api/gen/brigade/v1/mcp_pb";
 import { Session, SessionKind } from "@/api/gen/brigade/v1/session_pb";
 import type { ResponseProfile } from "@/api/gen/brigade/v1/response_profile_pb";
+import type { Plugin } from "@/api/gen/brigade/v1/plugin_pb";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -43,6 +46,69 @@ const IMAGE_KEY = "brigade.session.lastImage";
 // что пустое значение у пункта Radix Select запрещено, а серверу базовый образ передаётся
 // именно пустой строкой.
 const BASE_IMAGE = "__base__";
+
+function PluginCover({ plugin }: { plugin: Plugin }) {
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    if (!plugin.cover.length) return;
+    const next = URL.createObjectURL(new Blob([plugin.cover], { type: plugin.coverMimeType }));
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [plugin.cover, plugin.coverMimeType]);
+  return url ? (
+    <img src={url} alt="" className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.025]" />
+  ) : (
+    <div className="flex size-full items-center justify-center bg-muted"><Boxes className="size-8 text-muted-foreground" /></div>
+  );
+}
+
+function ExperienceTile({
+  value,
+  selected,
+  disabled,
+  title,
+  description,
+  preview,
+  onSelect,
+}: {
+  value: string;
+  selected: boolean;
+  disabled?: boolean;
+  title: string;
+  description: string;
+  preview: ReactNode;
+  onSelect: (value: string) => void;
+}) {
+  return (
+    <label className={cn(
+      "group relative min-w-0 overflow-hidden rounded-xl border bg-card/40 text-left transition-[border-color,background-color,box-shadow] focus-within:ring-2 focus-within:ring-ring/60",
+      selected ? "border-primary bg-primary/5 shadow-[0_8px_24px_rgba(0,0,0,.18)]" : "border-border hover:border-input hover:bg-card/70",
+      disabled && "cursor-not-allowed opacity-45",
+    )}>
+      <input
+        type="radio"
+        name="experience"
+        value={value}
+        checked={selected}
+        disabled={disabled}
+        onChange={() => onSelect(value)}
+        className="sr-only"
+      />
+      <div className="relative aspect-[16/8] overflow-hidden border-b border-border/70 bg-muted">
+        {preview}
+        {selected && (
+          <span className="absolute top-2 right-2 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
+            <Check className="size-3.5" strokeWidth={3} />
+          </span>
+        )}
+      </div>
+      <div className="space-y-1 p-3">
+        <div className="truncate text-sm font-medium">{title}</div>
+        <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{description}</p>
+      </div>
+    </label>
+  );
+}
 
 function loadMcpSelection(): string[] {
   try {
@@ -87,6 +153,8 @@ export function CreateSessionDialog({
   );
   const [responseProfiles, setResponseProfiles] = useState<ResponseProfile[]>([]);
   const [responseProfileId, setResponseProfileId] = useState("default");
+  const [plugins, setPlugins] = useState<Plugin[]>([]);
+  const [experienceId, setExperienceId] = useState("");
 
   // Список типов агентов подгружается один раз при первом открытии диалога.
   // Режим взаимодействия (kind) выбирается независимо от агента, поэтому при
@@ -118,6 +186,15 @@ export function CreateSessionDialog({
     return () => {
       cancelled = true;
     };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    pluginClient.list({})
+      .then((result) => !cancelled && setPlugins(result.plugins))
+      .catch(() => !cancelled && setPlugins([]));
+    return () => { cancelled = true; };
   }, [open]);
 
   useEffect(() => {
@@ -175,6 +252,18 @@ export function CreateSessionDialog({
 
   const selectedConnection = connections?.find((connection) => connection.id === connectionId);
   const selectedAgent = agents?.find((agent) => agent.id === selectedConnection?.agentType);
+  const experience = experienceId ? `plugin:${experienceId}` : kind === SessionKind.CLI ? "cli" : "chat";
+  const acpDisabled = selectedAgent?.supportedKinds.length ? !selectedAgent.supportedKinds.includes("acp") : false;
+
+  const selectExperience = (value: string) => {
+    if (value === "cli") {
+      setKind(SessionKind.CLI);
+      setExperienceId("");
+    } else {
+      setKind(SessionKind.ACP);
+      setExperienceId(value.startsWith("plugin:") ? value.slice(7) : "");
+    }
+  };
 
   useEffect(() => {
     if (!connections || connections.some((connection) => connection.id === connectionId)) return;
@@ -195,6 +284,7 @@ export function CreateSessionDialog({
         image,
         authProfile: selectedConnection.id,
         responseProfileId: kind === SessionKind.ACP ? responseProfileId : "default",
+        experienceId,
       });
       const session = res.session;
       if (!session) throw new Error("пустой ответ Create");
@@ -216,7 +306,7 @@ export function CreateSessionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Новая сессия</DialogTitle>
           <DialogDescription>
@@ -254,26 +344,50 @@ export function CreateSessionDialog({
             </div>
 
             <div className="space-y-2">
-              <Label>Режим взаимодействия</Label>
-              <Select
-                value={String(kind)}
-                onValueChange={(v) => setKind(Number(v) as SessionKind)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={String(SessionKind.CLI)}>
-                    CLI (терминал)
-                  </SelectItem>
-                  <SelectItem
-                    value={String(SessionKind.ACP)}
-                    disabled={selectedAgent?.supportedKinds.length ? !selectedAgent.supportedKinds.includes("acp") : false}
-                  >
-                    ACP (чат)
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <Label>Интерфейс</Label>
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                <ExperienceTile
+                  value="cli"
+                  selected={experience === "cli"}
+                  title="Console"
+                  description="Полноценный терминал и CLI агента."
+                  onSelect={selectExperience}
+                  preview={(
+                    <div className="flex size-full flex-col justify-center gap-2 bg-[#1f1e1d] px-5 font-mono text-[10px] text-muted-foreground">
+                      <div className="flex items-center gap-2 text-[#e38a68]"><Terminal className="size-4" /><span>brigade</span></div>
+                      <span className="h-1.5 w-4/5 rounded-full bg-[#4a4843]" />
+                      <span className="h-1.5 w-3/5 rounded-full bg-[#3a3a37]" />
+                    </div>
+                  )}
+                />
+                <ExperienceTile
+                  value="chat"
+                  selected={experience === "chat"}
+                  disabled={acpDisabled}
+                  title="Chat"
+                  description="Диалог, инструменты и интерактивные карточки."
+                  onSelect={selectExperience}
+                  preview={(
+                    <div className="flex size-full flex-col justify-center gap-2 bg-[#353532] px-5">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground"><MessageCircle className="size-4 text-[#e38a68]" /><span className="h-2 w-20 rounded-full bg-[#4a4843]" /></div>
+                      <span className="ml-auto h-5 w-2/3 rounded-[8px_8px_2px_8px] bg-[#c96442]/75" />
+                      <span className="h-2 w-4/5 rounded-full bg-[#4a4843]" />
+                    </div>
+                  )}
+                />
+                {plugins.map((plugin) => (
+                  <ExperienceTile
+                    key={plugin.id}
+                    value={`plugin:${plugin.id}`}
+                    selected={experience === `plugin:${plugin.id}`}
+                    disabled={acpDisabled}
+                    title={plugin.name}
+                    description={plugin.description || "Предметный интерфейс с агентом."}
+                    onSelect={selectExperience}
+                    preview={<PluginCover plugin={plugin} />}
+                  />
+                ))}
+              </div>
             </div>
 
             {kind === SessionKind.ACP && responseProfiles.length > 0 && (

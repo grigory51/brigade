@@ -2,15 +2,16 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ConnectError, Code } from "@connectrpc/connect";
 import { sessionClient } from "@/api/client";
-import { SessionKind } from "@/api/gen/brigade/v1/session_pb";
+import { SessionKind, type Session } from "@/api/gen/brigade/v1/session_pb";
 import { RouteSpinner } from "@/lib/RouteSpinner";
 import { Button } from "@/components/ui/button";
 import { CliSession } from "@/features/cli/CliPage";
 import { AcpSession } from "@/features/acp/AcpPage";
+import { PluginSession } from "@/features/plugins/PluginSession";
 
 type Existence = "checking" | "found" | "notfound" | "error";
 
-type SessionLookup = { state: Existence; kind?: SessionKind };
+type SessionLookup = { state: Existence; session?: Session };
 
 // useSessionLookup проверяет наличие сессии по идентификатору через unary-вызов
 // перед открытием WebSocket. Это позволяет показать 404 на заход по несуществующему
@@ -30,7 +31,7 @@ function useSessionLookup(sessionId: string | undefined): SessionLookup {
       .get({ sessionId })
       .then((resp) => {
         if (!cancelled) {
-          setLookup({ state: "found", kind: resp.session?.kind });
+          setLookup({ state: "found", session: resp.session });
         }
       })
       .catch((err) => {
@@ -57,7 +58,7 @@ function useSessionLookup(sessionId: string | undefined): SessionLookup {
 // (CLI или ACP); иначе показывает экран загрузки, 404 или ошибку. Единая точка входа
 // для маршрута /s/:sessionId — режим сессии берётся из данных, а не из URL.
 export function SessionGuard({ sessionId }: { sessionId: string | undefined }) {
-  const { state, kind } = useSessionLookup(sessionId);
+  const { state, session } = useSessionLookup(sessionId);
 
   if (state === "checking") {
     return <RouteSpinner />;
@@ -75,8 +76,12 @@ export function SessionGuard({ sessionId }: { sessionId: string | undefined }) {
   // между сессиями (в т.ч. открытие только что созданной из текущей) переиспользовал бы
   // тот же инстанс — и сообщения прежней сессии «прорастали» бы в новую. Смена key
   // гарантирует полный remount с чистым состоянием на каждую сессию.
-  return kind === SessionKind.ACP ? (
-    <AcpSession key={sessionId} sessionId={sessionId!} />
+  return session?.kind === SessionKind.ACP ? (
+    session.experienceId ? (
+      <PluginSession key={sessionId} session={session} />
+    ) : (
+      <AcpSession key={sessionId} sessionId={sessionId!} />
+    )
   ) : (
     <CliSession key={sessionId} sessionId={sessionId} />
   );

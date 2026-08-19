@@ -20,6 +20,8 @@
     "@connectrpc/connect": "^1.6.1",
     "@connectrpc/connect-web": "^1.6.1",
     "@google/model-viewer": "^4.3.1",
+    "@modelcontextprotocol/ext-apps": "^1.7.5",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "class-variance-authority": "^0.7.1",

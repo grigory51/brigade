@@ -18,6 +18,7 @@ import { LinkPreviewService } from "./gen/brigade/v1/link_preview_connect";
 import { ResponseProfileService } from "./gen/brigade/v1/response_profile_connect";
 import { DesktopService } from "./gen/brigade/v1/desktop_connect";
 import { WorkspaceService } from "./gen/brigade/v1/workspace_connect";
+import { PluginService } from "./gen/brigade/v1/plugin_connect";
 
 // refreshOnUnauthenticated — Connect-интерсептор тихого обновления access-токена.
 // Короткий access-токен (минуты) живёт в httpOnly-cookie; при его истечении вызов
@@ -91,6 +92,7 @@ export const linkPreviewClient = createPromiseClient(LinkPreviewService, transpo
 export const responseProfileClient = createPromiseClient(ResponseProfileService, transport);
 export const desktopClient = createPromiseClient(DesktopService, transport);
 export const workspaceClient = createPromiseClient(WorkspaceService, transport);
+export const pluginClient = createPromiseClient(PluginService, transport);
 
 // refreshSession принудительно обновляет токены через Refresh (refresh-токен берётся из
 // httpOnly-cookie). Используется неконнектовыми путями (AG-UI/SSE поверх обычного fetch),
