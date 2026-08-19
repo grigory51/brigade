@@ -157,7 +157,7 @@ jobs:
         include:
           - runner: ubuntu-latest
             platform: linux-amd64
-          - runner: macos-14-arm64
+          - runner: macos-14
             platform: darwin-arm64
     runs-on: ${{ matrix.runner }}
     steps:
