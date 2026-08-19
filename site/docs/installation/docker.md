@@ -28,7 +28,7 @@ curl -fsSL https://grigory51.github.io/brigade/install.sh | \
 ## Ручной запуск
 
 ```bash
-mkdir -p /srv/brigade/{workspace,agent-home,memory}
+mkdir -p /srv/brigade/{workspace,agent-home,memory,plugins}
 
 docker run -d --name brigade --restart unless-stopped \
   -p 8080:8080 \
@@ -39,6 +39,7 @@ docker run -d --name brigade --restart unless-stopped \
   -e BRIGADE_WORK_DIR=/srv/brigade/workspace \
   -e BRIGADE_AGENT_HOME_DIR=/srv/brigade/agent-home \
   -e BRIGADE_MEMORY__DIR=/srv/brigade/memory \
+  -e BRIGADE_PLUGINS_DIR=/srv/brigade/plugins \
   -e BRIGADE_AGENT_IMAGE=ghcr.io/grigory51/brigade-agent:latest \
   -e BRIGADE_JWT__SECRET='replace-with-a-random-secret' \
   -e BRIGADE_SEED__PASSWORD='replace-this-password' \

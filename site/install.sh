@@ -21,7 +21,7 @@ if [ -e "$ENV_FILE" ] || [ -e "$DATA_DIR/brigade.db" ]; then
 fi
 
 umask 077
-mkdir -p "$DATA_DIR/workspace" "$DATA_DIR/agent-home" "$DATA_DIR/memory"
+mkdir -p "$DATA_DIR/workspace" "$DATA_DIR/agent-home" "$DATA_DIR/memory" "$DATA_DIR/plugins"
 JWT_SECRET="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
 ADMIN_PASSWORD="${BRIGADE_ADMIN_PASSWORD:-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')}"
 {
@@ -30,6 +30,7 @@ ADMIN_PASSWORD="${BRIGADE_ADMIN_PASSWORD:-$(od -An -N16 -tx1 /dev/urandom | tr -
   echo "BRIGADE_WORK_DIR=$DATA_DIR/workspace"
   echo "BRIGADE_AGENT_HOME_DIR=$DATA_DIR/agent-home"
   echo "BRIGADE_MEMORY__DIR=$DATA_DIR/memory"
+  echo "BRIGADE_PLUGINS_DIR=$DATA_DIR/plugins"
   echo "BRIGADE_AGENT_IMAGE=ghcr.io/grigory51/brigade-agent:$VERSION"
   echo "BRIGADE_JWT__SECRET=$JWT_SECRET"
   echo "BRIGADE_SEED__USERNAME=admin"

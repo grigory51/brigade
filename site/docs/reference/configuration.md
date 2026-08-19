@@ -29,6 +29,7 @@ Brigade читает YAML и применяет поверх него перем
 | `max_containers` | `BRIGADE_MAX_CONTAINERS` | Лимит контейнеров; `-1` отключает |
 | `image_quota_bytes` | `BRIGADE_IMAGE_QUOTA_BYTES` | Квота пользовательских image layers |
 | `memory.dir` | `BRIGADE_MEMORY__DIR` | Рабочие копии memory-репозиториев |
+| `plugins_dir` | `BRIGADE_PLUGINS_DIR` | Каталог установленных MCPB-плагинов |
 | `telegram.mode` | `BRIGADE_TELEGRAM__MODE` | `poll` или `webhook` |
 
 `jwt.secret` должен оставаться стабильным: им зашифрованы секреты подключений агентов, MCP, notification connections и Telegram BotFather tokens.

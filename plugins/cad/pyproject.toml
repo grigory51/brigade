@@ -1,0 +1,15 @@
+[project]
+name = "brigade-cad"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "build123d>=0.10,<0.11",
+  "mcp>=2,<3",
+  "trimesh>=4.8,<5",
+]
+
+[dependency-groups]
+dev = ["pyinstaller>=6.16,<7"]
+
+[tool.uv]
+package = false

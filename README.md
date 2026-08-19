@@ -30,6 +30,9 @@ native macOS app.
   accepts a subscription token; Codex supports ChatGPT device login and OpenAI API keys.
 - **CLI or ACP chat** — use a full pty through xterm.js, or structured ACP → AG-UI chat
   with diffs, plans, permission controls, slash commands, model settings and live usage.
+- **Plugin experiences** — install standard MCPB bundles with MCP Apps interfaces and
+  use them as full session workspaces. The first bundled experience is STEP-first CAD
+  with a live 3D scene above the agent chat.
 - **Local or Docker runtime** — run agents as host processes or in Docker. ACP sessions
   get isolated containers; CLI sessions share one long-lived container per user. Custom
   user images are supported, while brigade injects its runtime separately.
@@ -103,7 +106,7 @@ inside the brigade container and on the host because session bind mounts are cre
 that host daemon.
 
 ```sh
-mkdir -p /srv/brigade/{workspace,agent-home,memory}
+mkdir -p /srv/brigade/{workspace,agent-home,memory,plugins}
 
 docker run -d --name brigade --restart unless-stopped \
   -p 8080:8080 \
@@ -114,6 +117,7 @@ docker run -d --name brigade --restart unless-stopped \
   -e BRIGADE_WORK_DIR=/srv/brigade/workspace \
   -e BRIGADE_AGENT_HOME_DIR=/srv/brigade/agent-home \
   -e BRIGADE_MEMORY__DIR=/srv/brigade/memory \
+  -e BRIGADE_PLUGINS_DIR=/srv/brigade/plugins \
   -e BRIGADE_AGENT_IMAGE=ghcr.io/grigory51/brigade-agent:latest \
   -e BRIGADE_JWT__SECRET='replace-with-a-stable-random-secret' \
   -e BRIGADE_SEED__PASSWORD='replace-this-password' \

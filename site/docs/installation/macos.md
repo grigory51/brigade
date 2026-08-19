@@ -11,6 +11,20 @@ Brigade.app — однопользовательское desktop-приложе�
 
 Приложение пока не подписано Developer ID. При первом запуске macOS может потребовать открыть его через контекстное меню **Открыть** или разрешить в системных настройках безопасности.
 
+## CAD
+
+Для локальных сессий установите macOS bundle из релиза в конфигурацию Brigade.app:
+
+```bash
+BRIGADE_PLUGINS_DIR="$HOME/Library/Application Support/Brigade/plugins" \
+  "/Applications/Brigade.app/Contents/MacOS/Brigade" \
+  --config "$HOME/Library/Application Support/Brigade/config.yaml" \
+  plugin install https://github.com/grigory51/brigade/releases/latest/download/brigade-cad-darwin-arm64.mcpb
+```
+
+После этого откройте **Новая сессия** и выберите плитку **CAD**. Для Docker-режима
+вместо macOS bundle установите `brigade-cad-linux-amd64.mcpb`.
+
 Сборка из исходников:
 
 ```bash

@@ -1,0 +1,18 @@
+:root {
+  color-scheme: dark;
+  font: 14px Inter, ui-sans-serif, system-ui, sans-serif;
+  background: #1f1e1d;
+  color: #f1eee8;
+  --brigade-surface: #262624;
+  --brigade-surface-raised: #30302e;
+  --brigade-border: #4a4843;
+  --brigade-muted: #918d85;
+  --brigade-accent: #c96442;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+.brigade-plugin-empty { display: grid; height: 100%; place-items: center; color: var(--brigade-muted); }
+.brigade-plugin-toolbar { position: fixed; inset: auto 16px 16px; display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid var(--brigade-border); border-radius: 14px; background: rgb(38 38 36 / 92%); box-shadow: 0 16px 40px rgb(0 0 0 / 35%); backdrop-filter: blur(12px); }
+.brigade-plugin-toolbar nav { display: flex; gap: 8px; }
+.brigade-plugin-button { padding: 7px 10px; border: 0; border-radius: 9px; color: inherit; background: var(--brigade-surface-raised); text-decoration: none; cursor: pointer; }
+.brigade-plugin-button:hover { background: var(--brigade-border); }

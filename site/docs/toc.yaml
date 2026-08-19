@@ -30,6 +30,10 @@ items:
         href: guides/remote-environments.md
       - name: MCP и секреты
         href: guides/mcp.md
+      - name: Плагины
+        href: guides/plugins.md
+      - name: CAD
+        href: guides/cad.md
       - name: Профили ответов
         href: guides/profiles.md
       - name: Память и архив
@@ -50,3 +54,5 @@ items:
         href: reference/backup.md
       - name: Диагностика
         href: reference/troubleshooting.md
+      - name: Контракт плагина
+        href: reference/plugin-contract.md

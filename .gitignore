@@ -9,6 +9,12 @@ web/node_modules/
 web/dist/
 site/node_modules/
 site/dist/
+__pycache__/
+plugins/*/.venv/
+plugins/*/dist/
+plugins/*/*.mcpb
+plugins/*/ui/node_modules/
+plugins/*/ui/dist/
 
 # Артефакты инструментов в корне репозитория (не часть проекта): node_modules —
 # остатки npx-запусков, data — служебное хранилище memoir, .playwright-mcp —

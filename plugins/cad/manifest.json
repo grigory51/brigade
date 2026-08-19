@@ -1,0 +1,18 @@
+{
+  "manifest_version": "0.3",
+  "name": "cad",
+  "display_name": "CAD",
+  "description": "STEP-first parametric CAD workspace powered by build123d.",
+  "version": "0.1.0",
+  "server": {
+    "type": "binary",
+    "entry_point": "server/cad",
+    "mcp_config": { "args": [], "env": {} }
+  },
+  "compatibility": { "platforms": ["darwin", "linux"] },
+  "_meta": {
+    "brigade": {
+      "experience": { "entry_tool": "cad.open", "cover": "ui/cover.svg" }
+    }
+  }
+}

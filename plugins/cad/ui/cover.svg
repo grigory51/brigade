@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Параметрическая CAD-модель">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#353532"/>
+      <stop offset="1" stop-color="#1f1e1d"/>
+    </linearGradient>
+    <linearGradient id="top" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#e38a68"/>
+      <stop offset="1" stop-color="#b65235"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="360" rx="28" fill="url(#bg)"/>
+  <path d="M90 292H550M126 246H514M164 200H476" stroke="#4a4843" stroke-width="2"/>
+  <path d="M320 62v244M220 92l200 200M420 92 220 292" stroke="#413f3b" stroke-width="2"/>
+  <path d="m220 128 112-50 116 68-112 52z" fill="url(#top)" stroke="#f0a083" stroke-width="3"/>
+  <path d="m220 128 116 70v104l-116-68z" fill="#8f3f2b" stroke="#ce6b49" stroke-width="3"/>
+  <path d="m336 198 112-52v104l-112 52z" fill="#b95538" stroke="#e17d5a" stroke-width="3"/>
+  <ellipse cx="335" cy="137" rx="43" ry="24" fill="#262624" stroke="#f0a083" stroke-width="3"/>
+  <path d="M292 137v38c0 13 19 24 43 24s43-11 43-24v-38" fill="#262624" stroke="#f0a083" stroke-width="3"/>
+  <circle cx="94" cy="292" r="5" fill="#c96442"/>
+  <path d="M94 292h54M94 292v-54" stroke="#c96442" stroke-width="4" stroke-linecap="round"/>
+</svg>

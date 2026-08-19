@@ -1,0 +1,16 @@
+{
+  "name": "@brigade/cad-ui",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "vite build" },
+  "dependencies": {
+    "@google/model-viewer": "^4.3.1",
+    "@modelcontextprotocol/ext-apps": "^1.7.5",
+    "@brigade/plugin-ui": "file:../../ui"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^6.0.3",
+    "vite-plugin-singlefile": "^2.3.0"
+  }
+}
