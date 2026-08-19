@@ -84,9 +84,10 @@ func (s *Service) StartWithSave(userID string, save func(context.Context, string
 	ctx, cancel := context.WithTimeout(context.Background(), 16*time.Minute)
 	a := &attempt{login: Login{ID: uuid.NewString(), Status: "pending"}, userID: userID, save: save, cancel: cancel}
 	s.attempts[a.login.ID] = a
+	login := a.login
 	s.mu.Unlock()
 	go s.run(ctx, userID, a)
-	return a.login
+	return login
 }
 
 func (s *Service) Get(userID, id string) (Login, error) {
