@@ -70,6 +70,43 @@ func TestUpdateKeepsPinnedVersion(t *testing.T) {
 	}
 }
 
+func TestUpdateRestoresMissingBundle(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(filepath.Join(t.TempDir(), "brigade.db"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	source := filepath.Join(t.TempDir(), "app.mcpb")
+	var data bytes.Buffer
+	archive := zip.NewWriter(&data)
+	manifest, _ := archive.Create("manifest.json")
+	_, _ = manifest.Write([]byte(`{"manifest_version":"0.3","name":"app","version":"1.0.0","server":{"type":"python","entry_point":"server.py"},"_meta":{"brigade":{"experience":{"entry_tool":"app.open"}}}}`))
+	entry, _ := archive.Create("server.py")
+	_, _ = entry.Write([]byte("pass"))
+	_ = archive.Close()
+	if err := os.WriteFile(source, data.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	manager := New(t.TempDir(), st)
+	installed, err := manager.InstallFor(ctx, "user", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(installed.BundlePath); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := manager.UpdateFor(ctx, "user", "app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(restored.BundlePath, "server.py")); err != nil {
+		t.Fatalf("restored entry point: %v", err)
+	}
+}
+
 func TestReadCover(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(dir, "ui"), 0o755); err != nil {

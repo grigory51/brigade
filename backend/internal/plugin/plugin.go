@@ -452,15 +452,23 @@ func (m *Manager) InstallFor(ctx context.Context, userID, source string) (store.
 		}
 	}
 	if installed, err := m.store.GetPlugin(ctx, userID, manifest.Name, manifest.Version, target); err == nil && installed.OwnerID == userID {
-		if err := m.store.PutPlugin(ctx, installed); err != nil {
-			return store.Plugin{}, err
+		if _, statErr := os.Stat(filepath.Join(installed.BundlePath, filepath.FromSlash(manifest.Server.EntryPoint))); statErr == nil {
+			if err := m.store.PutPlugin(ctx, installed); err != nil {
+				return store.Plugin{}, err
+			}
+			return installed, nil
+		} else if !errors.Is(statErr, os.ErrNotExist) {
+			return store.Plugin{}, fmt.Errorf("plugin: inspect installed entry point: %w", statErr)
 		}
-		return installed, nil
 	} else if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return store.Plugin{}, err
 	}
 	destination := filepath.Join(parent, target)
-	if _, err := os.Stat(destination); errors.Is(err, os.ErrNotExist) {
+	destinationEntry := filepath.Join(destination, filepath.FromSlash(manifest.Server.EntryPoint))
+	if _, err := os.Stat(destinationEntry); errors.Is(err, os.ErrNotExist) {
+		if err := os.RemoveAll(destination); err != nil {
+			return store.Plugin{}, fmt.Errorf("plugin: replace incomplete bundle: %w", err)
+		}
 		if manifest.Server.Type == "binary" {
 			if err := os.Chmod(entry, 0o755); err != nil {
 				return store.Plugin{}, fmt.Errorf("plugin: mark entry point executable: %w", err)

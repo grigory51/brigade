@@ -376,11 +376,9 @@ func (c *Config) Validate() error {
 		c.Memory.Dir = abs
 	}
 	if c.PluginsDir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("config: resolve home for plugins_dir: %w", err)
-		}
-		c.PluginsDir = filepath.Join(home, ".brigade", "plugins")
+		// Bundle-файлы должны жить рядом с SQLite: если база переживает замену
+		// контейнера, плагины переживают её вместе с базой.
+		c.PluginsDir = filepath.Join(filepath.Dir(c.SQLitePath), "plugins")
 	}
 	if abs, err := filepath.Abs(c.PluginsDir); err != nil {
 		return fmt.Errorf("config: resolve plugins_dir %q: %w", c.PluginsDir, err)

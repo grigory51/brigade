@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -224,10 +226,18 @@ func (s *PluginService) Get(ctx context.Context, req *connect.Request[v1.GetPlug
 func (s *PluginService) mapPlugin(ctx context.Context, userID string, variants []store.Plugin) (*v1.Plugin, error) {
 	item := variants[0]
 	compatible := false
+	hasBundle := false
 	for _, candidate := range variants {
 		candidateManifest, err := plugin.ParseManifest([]byte(candidate.ManifestJSON))
 		if err != nil {
 			return nil, err
+		}
+		if _, err := os.Stat(filepath.Join(candidate.BundlePath, filepath.FromSlash(candidateManifest.Server.EntryPoint))); err != nil {
+			continue
+		}
+		if !hasBundle {
+			item = candidate
+			hasBundle = true
 		}
 		if targetMatches(candidate.Target, s.target) && plugin.SupportsTarget(candidateManifest, s.target) {
 			item = candidate
@@ -244,7 +254,7 @@ func (s *PluginService) mapPlugin(ctx context.Context, userID string, variants [
 	for _, variant := range variants {
 		result.Variants = append(result.Variants, &v1.PluginVariant{Version: variant.Version, Target: variant.Target, Source: variant.Source, InstalledAt: variant.InstalledAt.Unix()})
 	}
-	if manifest.Meta.Brigade.Experience.Cover != "" {
+	if hasBundle && manifest.Meta.Brigade.Experience.Cover != "" {
 		result.Cover, result.CoverMimeType, err = plugin.ReadCover(item.BundlePath, manifest)
 		if err != nil {
 			return nil, err

@@ -150,7 +150,7 @@ export function PluginSection() {
               <div className="flex items-start gap-3">
                 <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary"><Boxes className="size-4 text-primary" /></div>
                 <button type="button" className="min-w-0 flex-1 text-left" onClick={() => editing === item.id ? setEditing("") : edit(item)}>
-                  <div className="flex items-center gap-2"><span className="truncate text-sm font-medium">{item.name}</span><Badge on={item.compatible}>{item.compatible ? "совместим" : "нужна другая сборка"}</Badge></div>
+                  <div className="flex items-center gap-2"><span className="truncate text-sm font-medium">{item.name}</span><Badge on={item.compatible}>{item.compatible ? "совместим" : "недоступен для среды"}</Badge></div>
                   <p className="line-clamp-2 text-xs text-muted-foreground">{item.description}</p>
                   <div className="mt-1 flex flex-wrap gap-1.5 font-mono text-[10.5px] text-muted-foreground">{item.variants.map((variant) => <span key={`${variant.version}-${variant.target}`}>{variant.version} · {variant.target}</span>)}</div>
                 </button>
