@@ -35,6 +35,15 @@ const (
 const (
 	// PluginServiceListProcedure is the fully-qualified name of the PluginService's List RPC.
 	PluginServiceListProcedure = "/brigade.v1.PluginService/List"
+	// PluginServiceInstallProcedure is the fully-qualified name of the PluginService's Install RPC.
+	PluginServiceInstallProcedure = "/brigade.v1.PluginService/Install"
+	// PluginServiceUpdateProcedure is the fully-qualified name of the PluginService's Update RPC.
+	PluginServiceUpdateProcedure = "/brigade.v1.PluginService/Update"
+	// PluginServiceDeleteProcedure is the fully-qualified name of the PluginService's Delete RPC.
+	PluginServiceDeleteProcedure = "/brigade.v1.PluginService/Delete"
+	// PluginServiceSaveConfigProcedure is the fully-qualified name of the PluginService's SaveConfig
+	// RPC.
+	PluginServiceSaveConfigProcedure = "/brigade.v1.PluginService/SaveConfig"
 	// PluginServiceGetProcedure is the fully-qualified name of the PluginService's Get RPC.
 	PluginServiceGetProcedure = "/brigade.v1.PluginService/Get"
 	// PluginServiceMCPProcedure is the fully-qualified name of the PluginService's MCP RPC.
@@ -44,6 +53,10 @@ const (
 // PluginServiceClient is a client for the brigade.v1.PluginService service.
 type PluginServiceClient interface {
 	List(context.Context, *connect.Request[v1.ListPluginsRequest]) (*connect.Response[v1.ListPluginsResponse], error)
+	Install(context.Context, *connect.Request[v1.InstallPluginRequest]) (*connect.Response[v1.Plugin], error)
+	Update(context.Context, *connect.Request[v1.UpdatePluginRequest]) (*connect.Response[v1.Plugin], error)
+	Delete(context.Context, *connect.Request[v1.DeletePluginRequest]) (*connect.Response[v1.Empty], error)
+	SaveConfig(context.Context, *connect.Request[v1.SavePluginConfigRequest]) (*connect.Response[v1.Plugin], error)
 	Get(context.Context, *connect.Request[v1.GetPluginRequest]) (*connect.Response[v1.Plugin], error)
 	MCP(context.Context, *connect.Request[v1.PluginMCPRequest]) (*connect.Response[v1.PluginMCPResponse], error)
 }
@@ -65,6 +78,30 @@ func NewPluginServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(pluginServiceMethods.ByName("List")),
 			connect.WithClientOptions(opts...),
 		),
+		install: connect.NewClient[v1.InstallPluginRequest, v1.Plugin](
+			httpClient,
+			baseURL+PluginServiceInstallProcedure,
+			connect.WithSchema(pluginServiceMethods.ByName("Install")),
+			connect.WithClientOptions(opts...),
+		),
+		update: connect.NewClient[v1.UpdatePluginRequest, v1.Plugin](
+			httpClient,
+			baseURL+PluginServiceUpdateProcedure,
+			connect.WithSchema(pluginServiceMethods.ByName("Update")),
+			connect.WithClientOptions(opts...),
+		),
+		delete: connect.NewClient[v1.DeletePluginRequest, v1.Empty](
+			httpClient,
+			baseURL+PluginServiceDeleteProcedure,
+			connect.WithSchema(pluginServiceMethods.ByName("Delete")),
+			connect.WithClientOptions(opts...),
+		),
+		saveConfig: connect.NewClient[v1.SavePluginConfigRequest, v1.Plugin](
+			httpClient,
+			baseURL+PluginServiceSaveConfigProcedure,
+			connect.WithSchema(pluginServiceMethods.ByName("SaveConfig")),
+			connect.WithClientOptions(opts...),
+		),
 		get: connect.NewClient[v1.GetPluginRequest, v1.Plugin](
 			httpClient,
 			baseURL+PluginServiceGetProcedure,
@@ -82,14 +119,38 @@ func NewPluginServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // pluginServiceClient implements PluginServiceClient.
 type pluginServiceClient struct {
-	list *connect.Client[v1.ListPluginsRequest, v1.ListPluginsResponse]
-	get  *connect.Client[v1.GetPluginRequest, v1.Plugin]
-	mCP  *connect.Client[v1.PluginMCPRequest, v1.PluginMCPResponse]
+	list       *connect.Client[v1.ListPluginsRequest, v1.ListPluginsResponse]
+	install    *connect.Client[v1.InstallPluginRequest, v1.Plugin]
+	update     *connect.Client[v1.UpdatePluginRequest, v1.Plugin]
+	delete     *connect.Client[v1.DeletePluginRequest, v1.Empty]
+	saveConfig *connect.Client[v1.SavePluginConfigRequest, v1.Plugin]
+	get        *connect.Client[v1.GetPluginRequest, v1.Plugin]
+	mCP        *connect.Client[v1.PluginMCPRequest, v1.PluginMCPResponse]
 }
 
 // List calls brigade.v1.PluginService.List.
 func (c *pluginServiceClient) List(ctx context.Context, req *connect.Request[v1.ListPluginsRequest]) (*connect.Response[v1.ListPluginsResponse], error) {
 	return c.list.CallUnary(ctx, req)
+}
+
+// Install calls brigade.v1.PluginService.Install.
+func (c *pluginServiceClient) Install(ctx context.Context, req *connect.Request[v1.InstallPluginRequest]) (*connect.Response[v1.Plugin], error) {
+	return c.install.CallUnary(ctx, req)
+}
+
+// Update calls brigade.v1.PluginService.Update.
+func (c *pluginServiceClient) Update(ctx context.Context, req *connect.Request[v1.UpdatePluginRequest]) (*connect.Response[v1.Plugin], error) {
+	return c.update.CallUnary(ctx, req)
+}
+
+// Delete calls brigade.v1.PluginService.Delete.
+func (c *pluginServiceClient) Delete(ctx context.Context, req *connect.Request[v1.DeletePluginRequest]) (*connect.Response[v1.Empty], error) {
+	return c.delete.CallUnary(ctx, req)
+}
+
+// SaveConfig calls brigade.v1.PluginService.SaveConfig.
+func (c *pluginServiceClient) SaveConfig(ctx context.Context, req *connect.Request[v1.SavePluginConfigRequest]) (*connect.Response[v1.Plugin], error) {
+	return c.saveConfig.CallUnary(ctx, req)
 }
 
 // Get calls brigade.v1.PluginService.Get.
@@ -105,6 +166,10 @@ func (c *pluginServiceClient) MCP(ctx context.Context, req *connect.Request[v1.P
 // PluginServiceHandler is an implementation of the brigade.v1.PluginService service.
 type PluginServiceHandler interface {
 	List(context.Context, *connect.Request[v1.ListPluginsRequest]) (*connect.Response[v1.ListPluginsResponse], error)
+	Install(context.Context, *connect.Request[v1.InstallPluginRequest]) (*connect.Response[v1.Plugin], error)
+	Update(context.Context, *connect.Request[v1.UpdatePluginRequest]) (*connect.Response[v1.Plugin], error)
+	Delete(context.Context, *connect.Request[v1.DeletePluginRequest]) (*connect.Response[v1.Empty], error)
+	SaveConfig(context.Context, *connect.Request[v1.SavePluginConfigRequest]) (*connect.Response[v1.Plugin], error)
 	Get(context.Context, *connect.Request[v1.GetPluginRequest]) (*connect.Response[v1.Plugin], error)
 	MCP(context.Context, *connect.Request[v1.PluginMCPRequest]) (*connect.Response[v1.PluginMCPResponse], error)
 }
@@ -120,6 +185,30 @@ func NewPluginServiceHandler(svc PluginServiceHandler, opts ...connect.HandlerOp
 		PluginServiceListProcedure,
 		svc.List,
 		connect.WithSchema(pluginServiceMethods.ByName("List")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pluginServiceInstallHandler := connect.NewUnaryHandler(
+		PluginServiceInstallProcedure,
+		svc.Install,
+		connect.WithSchema(pluginServiceMethods.ByName("Install")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pluginServiceUpdateHandler := connect.NewUnaryHandler(
+		PluginServiceUpdateProcedure,
+		svc.Update,
+		connect.WithSchema(pluginServiceMethods.ByName("Update")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pluginServiceDeleteHandler := connect.NewUnaryHandler(
+		PluginServiceDeleteProcedure,
+		svc.Delete,
+		connect.WithSchema(pluginServiceMethods.ByName("Delete")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pluginServiceSaveConfigHandler := connect.NewUnaryHandler(
+		PluginServiceSaveConfigProcedure,
+		svc.SaveConfig,
+		connect.WithSchema(pluginServiceMethods.ByName("SaveConfig")),
 		connect.WithHandlerOptions(opts...),
 	)
 	pluginServiceGetHandler := connect.NewUnaryHandler(
@@ -138,6 +227,14 @@ func NewPluginServiceHandler(svc PluginServiceHandler, opts ...connect.HandlerOp
 		switch r.URL.Path {
 		case PluginServiceListProcedure:
 			pluginServiceListHandler.ServeHTTP(w, r)
+		case PluginServiceInstallProcedure:
+			pluginServiceInstallHandler.ServeHTTP(w, r)
+		case PluginServiceUpdateProcedure:
+			pluginServiceUpdateHandler.ServeHTTP(w, r)
+		case PluginServiceDeleteProcedure:
+			pluginServiceDeleteHandler.ServeHTTP(w, r)
+		case PluginServiceSaveConfigProcedure:
+			pluginServiceSaveConfigHandler.ServeHTTP(w, r)
 		case PluginServiceGetProcedure:
 			pluginServiceGetHandler.ServeHTTP(w, r)
 		case PluginServiceMCPProcedure:
@@ -153,6 +250,22 @@ type UnimplementedPluginServiceHandler struct{}
 
 func (UnimplementedPluginServiceHandler) List(context.Context, *connect.Request[v1.ListPluginsRequest]) (*connect.Response[v1.ListPluginsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.PluginService.List is not implemented"))
+}
+
+func (UnimplementedPluginServiceHandler) Install(context.Context, *connect.Request[v1.InstallPluginRequest]) (*connect.Response[v1.Plugin], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.PluginService.Install is not implemented"))
+}
+
+func (UnimplementedPluginServiceHandler) Update(context.Context, *connect.Request[v1.UpdatePluginRequest]) (*connect.Response[v1.Plugin], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.PluginService.Update is not implemented"))
+}
+
+func (UnimplementedPluginServiceHandler) Delete(context.Context, *connect.Request[v1.DeletePluginRequest]) (*connect.Response[v1.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.PluginService.Delete is not implemented"))
+}
+
+func (UnimplementedPluginServiceHandler) SaveConfig(context.Context, *connect.Request[v1.SavePluginConfigRequest]) (*connect.Response[v1.Plugin], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.PluginService.SaveConfig is not implemented"))
 }
 
 func (UnimplementedPluginServiceHandler) Get(context.Context, *connect.Request[v1.GetPluginRequest]) (*connect.Response[v1.Plugin], error) {

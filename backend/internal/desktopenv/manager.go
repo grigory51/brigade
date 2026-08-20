@@ -549,7 +549,7 @@ func shouldProxy(path string) bool {
 	if strings.HasPrefix(path, "/brigade.v1.DesktopService/") {
 		return false
 	}
-	return strings.HasPrefix(path, "/brigade.v1.") || strings.HasPrefix(path, "/api/ag-ui/") || strings.HasPrefix(path, "/api/sessions/") || strings.HasPrefix(path, "/ws/")
+	return strings.HasPrefix(path, "/brigade.v1.") || strings.HasPrefix(path, "/api/ag-ui/") || strings.HasPrefix(path, "/api/sessions/") || strings.HasPrefix(path, "/api/plugins/") || strings.HasPrefix(path, "/ws/")
 }
 
 // Proxy отправляет API и stream-запросы в активное remote-окружение, оставляя SPA и

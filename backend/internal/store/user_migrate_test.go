@@ -21,6 +21,8 @@ func TestMigrateUserMovesDataToOIDCUser(t *testing.T) {
 		`INSERT INTO notification_backends (id, user_id, kind, name, created_at, updated_at) VALUES ('n1', 'u1', 'ntfy', 'main', 0, 0)`,
 		`INSERT INTO telegram_bots (id, user_id, token, telegram_id, username, name, agent_type, created_at, updated_at) VALUES ('b1', 'u1', 'token', 1, 'bot', 'Bot', 'codex', 0, 0)`,
 		`INSERT INTO agent_connections (id, user_id, name, agent_type, auth_profile, secret, created_at, updated_at) VALUES ('a1', 'u1', 'Codex', 'codex', 'chatgpt', 'secret', 0, 0)`,
+		`INSERT INTO plugins (owner_id, id, name, version, target, bundle_path, source, manifest_json, installed_at) VALUES ('u1', 'cad', 'CAD', '1', 'portable', '/old', 'upload:cad.mcpb', '{}', 0)`,
+		`INSERT INTO plugin_configs (user_id, plugin_id, values_json, updated_at) VALUES ('u1', 'cad', '{}', 0)`,
 	}
 	for _, statement := range statements {
 		if _, err := st.DB().Exec(statement); err != nil {
@@ -44,11 +46,17 @@ func TestMigrateUserMovesDataToOIDCUser(t *testing.T) {
 	if err := st.MigrateUser(ctx, "u1", "u2"); err != nil {
 		t.Fatal(err)
 	}
-	for _, table := range []string{"sessions", "user_settings", "user_secrets", "mcp_servers", "notification_backends", "telegram_bots", "response_profiles", "agent_connections", "auth_identities", "refresh_tokens"} {
+	for _, table := range []string{"sessions", "user_settings", "user_secrets", "mcp_servers", "notification_backends", "telegram_bots", "response_profiles", "agent_connections", "auth_identities", "refresh_tokens", "plugin_configs"} {
 		var count int
 		if err := st.DB().QueryRow(`SELECT count(*) FROM ` + table + ` WHERE user_id = 'u1'`).Scan(&count); err != nil || count != 0 {
 			t.Fatalf("%s: old rows=%d err=%v", table, count, err)
 		}
+	}
+	var oldPlugins, newPlugins int
+	_ = st.DB().QueryRow(`SELECT count(*) FROM plugins WHERE owner_id = 'u1'`).Scan(&oldPlugins)
+	_ = st.DB().QueryRow(`SELECT count(*) FROM plugins WHERE owner_id = 'u2' AND id = 'cad'`).Scan(&newPlugins)
+	if oldPlugins != 0 || newPlugins != 1 {
+		t.Fatalf("plugins: old=%d new=%d", oldPlugins, newPlugins)
 	}
 	var oldUsers, sessions, identities, oldTokens, newTokens int
 	if err := st.DB().QueryRow(`SELECT count(*) FROM users WHERE id = 'u1'`).Scan(&oldUsers); err != nil {

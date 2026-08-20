@@ -41,7 +41,7 @@ func newPluginCommand(configPath *string) *cobra.Command {
 		}},
 		&cobra.Command{Use: "list", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 			return withPluginManager(cmd.Context(), *configPath, func(_ *pluginruntime.Manager, st *store.Store) error {
-				plugins, err := st.ListPlugins(cmd.Context())
+				plugins, err := st.ListPlugins(cmd.Context(), "")
 				if err != nil {
 					return err
 				}

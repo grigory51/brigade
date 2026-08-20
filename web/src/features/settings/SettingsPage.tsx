@@ -18,6 +18,7 @@ import {
   Loader2,
   NotebookText,
   MessageSquareText,
+  Boxes,
   Plus,
   Plug,
   RefreshCw,
@@ -45,6 +46,7 @@ import { AgentConnectionsSection } from "./AgentConnectionsSection";
 import { EnvironmentSection } from "./EnvironmentSection";
 import { DesktopEnvironmentsSection } from "./DesktopEnvironmentsSection";
 import { McpSection } from "./McpSection";
+import { PluginSection } from "./PluginSection";
 import { TelegramSection } from "./TelegramSection";
 import { ResponseProfilesSection } from "./ResponseProfilesSection";
 import {
@@ -74,9 +76,9 @@ import {
  * в поле всегда пустой драфт, а состояние показывается флагом «задан».
  */
 
-type SectionId = "agents" | "mcp" | "profiles" | "environments" | "env" | "memory" | "ssh" | "notifications" | "telegram";
+type SectionId = "agents" | "mcp" | "apps" | "profiles" | "environments" | "env" | "memory" | "ssh" | "notifications" | "telegram";
 
-const SECTIONS: SectionId[] = ["agents", "mcp", "profiles", "environments", "env", "memory", "ssh", "notifications", "telegram"];
+const SECTIONS: SectionId[] = ["agents", "mcp", "apps", "profiles", "environments", "env", "memory", "ssh", "notifications", "telegram"];
 
 const AGENTS_OPEN_KEY = "brigade.settings.agentsOpen";
 
@@ -219,6 +221,12 @@ export function SettingsPage() {
             active={active === "mcp"}
             onClick={() => go("mcp")}
             trailing={<StatusDot on={mcpCount > 0} />}
+          />
+          <NavRow
+            icon={Boxes}
+            label="MCP Apps"
+            active={active === "apps"}
+            onClick={() => go("apps")}
           />
           <NavRow
             icon={MessageSquareText}
@@ -367,6 +375,7 @@ export function SettingsPage() {
               />
             )}
             {active === "mcp" && <McpSection onCountChange={setMcpCount} />}
+            {active === "apps" && <PluginSection />}
             {active === "profiles" && <ResponseProfilesSection />}
             {active === "environments" && <DesktopEnvironmentsSection />}
             {active === "env" && <EnvironmentSection />}

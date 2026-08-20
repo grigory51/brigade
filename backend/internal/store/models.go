@@ -170,16 +170,23 @@ type Session struct {
 	ExperienceVersion    string
 }
 
-// Plugin — установленный оператором MCPB bundle. Manifest остаётся источником истины
-// для запуска; отдельные поля нужны списку и проверке закреплённой версии сессии.
+// Plugin — platform-вариант MCPB bundle. Пустой OwnerID означает системную CLI-установку.
 type Plugin struct {
+	OwnerID      string
 	ID           string
 	Name         string
 	Version      string
+	Target       string
 	BundlePath   string
 	Source       string
 	ManifestJSON string
 	InstalledAt  time.Time
+}
+
+type PluginConfig struct {
+	UserID     string
+	PluginID   string
+	ValuesJSON string
 }
 
 type ResponseProfile struct {

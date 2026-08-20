@@ -71,7 +71,7 @@ func deleteUser(ctx context.Context, cmd *cobra.Command, configPath, userID stri
 	if err := st.DeleteUser(ctx, userID); err != nil {
 		return err
 	}
-	for _, root := range []string{cfg.Memory.Dir, cfg.AgentHomeDir} {
+	for _, root := range userDataRoots(cfg) {
 		if root != "" {
 			if err := os.RemoveAll(filepath.Join(root, userID)); err != nil {
 				return fmt.Errorf("user delete: пользователь удалён из БД, удалить каталог %q: %w", filepath.Join(root, userID), err)
@@ -134,7 +134,7 @@ func migrateUser(ctx context.Context, cmd *cobra.Command, configPath, oldID, new
 		return fmt.Errorf("user migrate: новый пользователь %q: %w", newID, err)
 	}
 
-	moved, err := moveUserDirectories([]string{cfg.Memory.Dir, cfg.AgentHomeDir}, oldID, newID)
+	moved, err := moveUserDirectories(userDataRoots(cfg), oldID, newID)
 	if err != nil {
 		return err
 	}
@@ -147,6 +147,14 @@ func migrateUser(ctx context.Context, cmd *cobra.Command, configPath, oldID, new
 }
 
 type movedDirectory struct{ from, to string }
+
+func userDataRoots(cfg *config.Config) []string {
+	roots := []string{cfg.Memory.Dir, cfg.AgentHomeDir}
+	if cfg.PluginsDir != "" {
+		roots = append(roots, filepath.Join(cfg.PluginsDir, "users"))
+	}
+	return roots
+}
 
 func moveUserDirectories(roots []string, oldID, newID string) ([]movedDirectory, error) {
 	var pending []movedDirectory

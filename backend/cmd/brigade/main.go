@@ -26,6 +26,7 @@ import (
 	"github.com/grigory51/brigade/backend/internal/linkpreview"
 	"github.com/grigory51/brigade/backend/internal/memory"
 	"github.com/grigory51/brigade/backend/internal/notify"
+	"github.com/grigory51/brigade/backend/internal/plugin"
 	"github.com/grigory51/brigade/backend/internal/preview"
 	"github.com/grigory51/brigade/backend/internal/runtimecfg"
 	"github.com/grigory51/brigade/backend/internal/secret"
@@ -188,6 +189,7 @@ func runServer(configPath string) {
 	// подписочный токен Claude берётся per-user из store при создании сессии.
 	registry := session.NewRegistry(st, spawner, store.SessionMode(cfg.Mode), cfg.WorkDir, cfg.AgentHomeDir, cfg.MaxContainers, previewSvc, notifySvc, authSvc, memorySvc)
 	defer registry.Close()
+	pluginManager := plugin.New(cfg.PluginsDir, st)
 
 	// Восстановление живых сессий после рестарта: упавшие помечаются failed и не
 	// прерывают старт.
@@ -261,7 +263,9 @@ func runServer(configPath string) {
 	mux.Handle(brigadev1connect.NewMemoryServiceHandler(connectsvc.NewMemoryService(memorySvc), interceptors))
 	// McpService — персональные MCP-серверы и vault секретов для них. JWT.
 	mux.Handle(brigadev1connect.NewMcpServiceHandler(connectsvc.NewMcpService(st), interceptors))
-	mux.Handle(brigadev1connect.NewPluginServiceHandler(connectsvc.NewPluginService(st, registry), interceptors))
+	pluginTarget := plugin.RuntimeTarget(cfg.Mode == config.ModeDocker)
+	mux.Handle(brigadev1connect.NewPluginServiceHandler(connectsvc.NewPluginService(st, pluginManager, registry, pluginTarget), interceptors))
+	mux.Handle("POST /api/plugins/upload", connectsvc.PluginUploadHandler(jwtVerifier{jwt: authSvc.JWT()}, pluginManager))
 	mux.Handle(brigadev1connect.NewLinkPreviewServiceHandler(
 		connectsvc.NewLinkPreviewService(linkpreview.New()), interceptors))
 	// AgentBridgeService — вызовы ИЗ сессии (скилл в контейнере). БЕЗ JWT-интерсептора:

@@ -53,6 +53,32 @@ func TestOpenReadOnly(t *testing.T) {
 	}
 }
 
+func TestPluginsAreScopedAndResolvedByTarget(t *testing.T) {
+	ctx := context.Background()
+	st, err := Open(filepath.Join(t.TempDir(), "brigade.db"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	for _, item := range []Plugin{
+		{ID: "cad", OwnerID: "", Name: "CAD system", Version: "1", Target: "linux-amd64", InstalledAt: time.Now()},
+		{ID: "cad", OwnerID: "u1", Name: "CAD user", Version: "2", Target: "darwin-arm64", InstalledAt: time.Now()},
+		{ID: "cad", OwnerID: "u1", Name: "CAD user", Version: "2", Target: "linux-amd64", InstalledAt: time.Now()},
+	} {
+		if err := st.PutPlugin(ctx, item); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := st.GetPlugin(ctx, "u1", "cad", "", "linux-amd64")
+	if err != nil || got.OwnerID != "u1" || got.Version != "2" || got.Target != "linux-amd64" {
+		t.Fatalf("plugin=%+v err=%v", got, err)
+	}
+	got, err = st.GetPlugin(ctx, "u2", "cad", "", "linux-amd64")
+	if err != nil || got.OwnerID != "" || got.Version != "1" {
+		t.Fatalf("system plugin=%+v err=%v", got, err)
+	}
+}
+
 func TestUpdateSessionNameIfEmptyDoesNotOverwrite(t *testing.T) {
 	ctx := context.Background()
 	st, err := Open(filepath.Join(t.TempDir(), "brigade.db"), nil)

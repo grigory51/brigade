@@ -599,11 +599,23 @@ func (r *Registry) Create(ctx context.Context, userID string, kind store.Session
 		if kind != store.SessionKindACP {
 			return store.Session{}, errors.New("session: plugin experience requires ACP")
 		}
-		installed, err := r.store.GetPlugin(ctx, experienceID, "")
+		target := plugin.RuntimeTarget(r.mode == store.SessionModeDocker)
+		installed, err := r.store.GetPlugin(ctx, userID, experienceID, "", target)
 		if err != nil {
 			return store.Session{}, fmt.Errorf("session: plugin %q is not installed: %w", experienceID, err)
 		}
 		experienceVersion = installed.Version
+		manifest, err := plugin.ParseManifest([]byte(installed.ManifestJSON))
+		if err != nil {
+			return store.Session{}, err
+		}
+		if !plugin.SupportsTarget(manifest, target) {
+			return store.Session{}, fmt.Errorf("session: plugin %q does not support %s", experienceID, target)
+		}
+		probe := store.Session{ID: "new", UserID: userID, Mode: r.mode, Cwd: cwd}
+		if _, err := r.experienceServer(ctx, probe, manifest, installed.BundlePath); err != nil {
+			return store.Session{}, err
+		}
 	}
 	// Потолок на число docker-контейнеров: проверяем до записи сессии в store, чтобы не
 	// плодить failed-записи. Мягкий лимит (см. atContainerLimit).
@@ -864,7 +876,10 @@ func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token
 		if err != nil {
 			return nil, "", "", err
 		}
-		server := r.experienceServer(sess, manifest, root)
+		server, err := r.experienceServer(ctx, sess, manifest, root)
+		if err != nil {
+			return nil, "", "", err
+		}
 		servers = append(servers, server)
 		experienceMCP = &server
 	}
@@ -1000,7 +1015,11 @@ func (r *Registry) acpLocalOptions(ctx context.Context, sess store.Session, toke
 		if err != nil {
 			return acp.Options{}, err
 		}
-		servers = append(servers, r.experienceServer(sess, manifest, installed.BundlePath))
+		server, err := r.experienceServer(ctx, sess, manifest, installed.BundlePath)
+		if err != nil {
+			return acp.Options{}, err
+		}
+		servers = append(servers, server)
 	}
 	return acp.Options{
 		Cwd:            sess.Cwd,
@@ -1013,23 +1032,53 @@ func (r *Registry) acpLocalOptions(ctx context.Context, sess store.Session, toke
 	}, nil
 }
 
-func (r *Registry) experienceServer(sess store.Session, manifest plugin.Manifest, root string) acpsdk.McpServer {
-	server := manifest.MCPServer(root)
+func (r *Registry) experienceServer(ctx context.Context, sess store.Session, manifest plugin.Manifest, root string) (acpsdk.McpServer, error) {
+	config, err := r.store.GetPluginConfig(ctx, sess.UserID, manifest.Name)
+	if err != nil {
+		return acpsdk.McpServer{}, err
+	}
+	values := map[string]any{}
+	if err := json.Unmarshal([]byte(config.ValuesJSON), &values); err != nil {
+		return acpsdk.McpServer{}, fmt.Errorf("session: plugin config: %w", err)
+	}
+	home := spawn.AgentHome
+	if sess.Mode != store.SessionModeDocker {
+		home, err = os.UserHomeDir()
+		if err != nil {
+			return acpsdk.McpServer{}, fmt.Errorf("session: resolve home for plugin config: %w", err)
+		}
+	}
+	values, err = manifest.ResolveConfig(values, home)
+	if err != nil {
+		return acpsdk.McpServer{}, err
+	}
+	secrets, err := r.store.SecretValues(ctx, sess.UserID)
+	if err != nil {
+		return acpsdk.McpServer{}, err
+	}
+	server, err := manifest.MCPServer(root, values, secrets)
+	if err != nil {
+		return acpsdk.McpServer{}, err
+	}
 	server.Stdio.Env = append(server.Stdio.Env,
 		acpsdk.EnvVariable{Name: "BRIGADE_SESSION_ID", Value: sess.ID},
 		acpsdk.EnvVariable{Name: "BRIGADE_WORKSPACE", Value: sess.Cwd},
 	)
-	return server
+	return server, nil
 }
 
 func (r *Registry) experience(ctx context.Context, sess store.Session) (store.Plugin, plugin.Manifest, error) {
-	installed, err := r.store.GetPlugin(ctx, sess.ExperienceID, sess.ExperienceVersion)
+	target := plugin.RuntimeTarget(sess.Mode == store.SessionModeDocker)
+	installed, err := r.store.GetPlugin(ctx, sess.UserID, sess.ExperienceID, sess.ExperienceVersion, target)
 	if err != nil {
 		return store.Plugin{}, plugin.Manifest{}, fmt.Errorf("session: plugin %s@%s is unavailable: %w", sess.ExperienceID, sess.ExperienceVersion, err)
 	}
 	manifest, err := plugin.ParseManifest([]byte(installed.ManifestJSON))
 	if err != nil {
 		return store.Plugin{}, plugin.Manifest{}, err
+	}
+	if !plugin.SupportsTarget(manifest, target) {
+		return store.Plugin{}, plugin.Manifest{}, fmt.Errorf("session: plugin %s@%s does not support %s", sess.ExperienceID, sess.ExperienceVersion, target)
 	}
 	return installed, manifest, nil
 }
@@ -1042,7 +1091,11 @@ func (r *Registry) startLocalExperience(ctx context.Context, sess store.Session)
 	if err != nil {
 		return nil, err
 	}
-	return plugin.StartRuntime(context.WithoutCancel(ctx), r.experienceServer(sess, manifest, installed.BundlePath), sess.Cwd, nil)
+	server, err := r.experienceServer(ctx, sess, manifest, installed.BundlePath)
+	if err != nil {
+		return nil, err
+	}
+	return plugin.StartRuntime(context.WithoutCancel(ctx), server, sess.Cwd, nil)
 }
 
 // mcpServers — набор MCP-серверов сессии: служебный сервер brigade (render_ui/show_choice)

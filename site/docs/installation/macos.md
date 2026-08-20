@@ -13,17 +13,13 @@ Brigade.app — однопользовательское desktop-приложе�
 
 ## CAD
 
-Для локальных сессий установите macOS bundle из релиза в конфигурацию Brigade.app:
+Откройте **Настройки → MCP Apps** и установите bundle из последнего релиза:
 
-```bash
-BRIGADE_PLUGINS_DIR="$HOME/Library/Application Support/Brigade/plugins" \
-  "/Applications/Brigade.app/Contents/MacOS/Brigade" \
-  --config "$HOME/Library/Application Support/Brigade/config.yaml" \
-  plugin install https://github.com/grigory51/brigade/releases/latest/download/brigade-cad-darwin-arm64.mcpb
-```
+- Local: `brigade-cad-darwin-arm64.mcpb`;
+- Docker: `brigade-cad-linux-amd64.mcpb`.
 
-После этого откройте **Новая сессия** и выберите плитку **CAD**. Для Docker-режима
-вместо macOS bundle установите `brigade-cad-linux-amd64.mcpb`.
+Требуемая платформа показана прямо в настройках. После установки откройте **Новая
+сессия** и выберите плитку **CAD**.
 
 Сборка из исходников:
 

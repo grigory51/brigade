@@ -3,11 +3,12 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { GetPluginRequest, ListPluginsRequest, ListPluginsResponse, Plugin, PluginMCPRequest, PluginMCPResponse } from "./plugin_pb.js";
+import { DeletePluginRequest, GetPluginRequest, InstallPluginRequest, ListPluginsRequest, ListPluginsResponse, Plugin, PluginMCPRequest, PluginMCPResponse, SavePluginConfigRequest, UpdatePluginRequest } from "./plugin_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
+import { Empty } from "./auth_pb.js";
 
 /**
- * PluginService отдаёт пользователям список experiences, установленных оператором.
+ * PluginService управляет пользовательскими MCPB experiences и обслуживает их MCP Apps UI.
  *
  * @generated from service brigade.v1.PluginService
  */
@@ -21,6 +22,42 @@ export const PluginService = {
       name: "List",
       I: ListPluginsRequest,
       O: ListPluginsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.PluginService.Install
+     */
+    install: {
+      name: "Install",
+      I: InstallPluginRequest,
+      O: Plugin,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.PluginService.Update
+     */
+    update: {
+      name: "Update",
+      I: UpdatePluginRequest,
+      O: Plugin,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.PluginService.Delete
+     */
+    delete: {
+      name: "Delete",
+      I: DeletePluginRequest,
+      O: Empty,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.PluginService.SaveConfig
+     */
+    saveConfig: {
+      name: "SaveConfig",
+      I: SavePluginConfigRequest,
+      O: Plugin,
       kind: MethodKind.Unary,
     },
     /**

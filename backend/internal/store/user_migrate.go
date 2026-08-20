@@ -56,6 +56,10 @@ func (s *Store) MigrateUser(ctx context.Context, oldID, newID string) error {
 		{`DELETE FROM user_settings WHERE user_id = ? AND EXISTS (SELECT 1 FROM user_settings WHERE user_id = ?)`, []any{newID, oldID}},
 		{`DELETE FROM user_secrets WHERE user_id = ? AND name IN (SELECT name FROM user_secrets WHERE user_id = ?)`, []any{newID, oldID}},
 		{`DELETE FROM mcp_servers WHERE user_id = ? AND name IN (SELECT name FROM mcp_servers WHERE user_id = ?)`, []any{newID, oldID}},
+		{`DELETE FROM plugin_configs WHERE user_id = ? AND plugin_id IN (SELECT plugin_id FROM plugin_configs WHERE user_id = ?)`, []any{newID, oldID}},
+		{`DELETE FROM plugins WHERE owner_id = ? AND EXISTS (
+			SELECT 1 FROM plugins old WHERE old.owner_id = ? AND old.id = plugins.id AND old.version = plugins.version AND old.target = plugins.target
+		)`, []any{newID, oldID}},
 		{`DELETE FROM response_profiles WHERE user_id = ? AND name COLLATE NOCASE IN (SELECT name FROM response_profiles WHERE user_id = ?)`, []any{newID, oldID}},
 		{`DELETE FROM auth_identities WHERE user_id = ? AND provider IN (SELECT provider FROM auth_identities WHERE user_id = ?)`, []any{oldID, newID}},
 	}
@@ -67,11 +71,14 @@ func (s *Store) MigrateUser(ctx context.Context, oldID, newID string) error {
 
 	for _, table := range []string{
 		"sessions", "user_settings", "user_secrets", "mcp_servers", "notification_backends",
-		"telegram_bots", "response_profiles", "agent_connections", "auth_identities",
+		"telegram_bots", "response_profiles", "agent_connections", "auth_identities", "plugin_configs",
 	} {
 		if _, err := tx.ExecContext(ctx, `UPDATE `+table+` SET user_id = ? WHERE user_id = ?`, newID, oldID); err != nil {
 			return fmt.Errorf("store: migrate user: update %s: %w", table, err)
 		}
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE plugins SET owner_id = ? WHERE owner_id = ?`, newID, oldID); err != nil {
+		return fmt.Errorf("store: migrate user: update plugins: %w", err)
 	}
 	result, err := tx.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, oldID)
 	if err != nil {
@@ -116,6 +123,9 @@ func (s *Store) DeleteUser(ctx context.Context, userID string) error {
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM refresh_tokens WHERE user_id = ?`, userID); err != nil {
 		return fmt.Errorf("store: delete user: refresh tokens: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM plugins WHERE owner_id = ?`, userID); err != nil {
+		return fmt.Errorf("store: delete user: plugins: %w", err)
 	}
 	result, err := tx.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, userID)
 	if err != nil {

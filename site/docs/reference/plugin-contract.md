@@ -6,7 +6,7 @@ Brigade не вводит собственный transport или формат U
 
 ## Manifest
 
-Поддерживаются `manifest_version` 0.3 и 0.4, server types `binary`, `node` и `python`.
+Поддерживаются `manifest_version` 0.3 и 0.4, server types `binary`, `node`, `python` и `uv`.
 Brigade требует одно расширение manifest:
 
 ```json
@@ -43,6 +43,14 @@ prompts, `openLink` и `downloadFile`; произвольного доступа
 экземпляру MCP-сервера, MCP Apps host — ко второму; общее состояние храните атомарно в
 workspace, а не в памяти процесса.
 
+Стандартный `user_config` MCPB поддерживается для типов `string`, `number`, `boolean`,
+`file` и `directory`, включая `multiple` для путей, `required`, `default` и `min/max`.
+Значения подставляются в `${user_config.NAME}` при запуске. Поля с `sensitive: true`
+хранятся в vault и должны передаваться серверу через `mcp_config.env`.
+
+Поддерживаются runtime-типы `binary`, `node`, `python` и `uv`. Для `uv` нужен manifest
+0.4 и установленный runtime; стандартный Docker-образ Brigade уже содержит его.
+
 ## Общий UI SDK
 
 Каждый релиз Brigade прикладывает `brigade-plugin-ui.tgz` — минимальный пакет общих
@@ -75,7 +83,10 @@ brigade plugin validate ./example.mcpb
 
 ## Безопасность и жизненный цикл
 
-- MCPB устанавливает оператор, а не пользователь: бинарь исполняется с правами агента.
+- Пользователь устанавливает только свои MCP Apps; операторские CLI-установки доступны
+  всем как системные.
+- В local-режиме бинарь исполняется с правами пользователя Brigade.app; устанавливайте
+  только доверенные bundles. В Docker он исполняется внутри контейнера сессии.
 - Remote URL должен использовать HTTPS; symlink, path traversal и bundle больше 1 GiB
   отклоняются.
 - В Docker bundle копируется в durable home сессии; отдельный plugin-контейнер не нужен.

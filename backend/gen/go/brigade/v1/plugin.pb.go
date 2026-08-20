@@ -23,17 +23,24 @@ const (
 
 // Plugin — установленный MCPB-пакет, который предоставляет постоянный MCP App experience.
 type Plugin struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	Version       string                 `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
-	Icon          string                 `protobuf:"bytes,5,opt,name=icon,proto3" json:"icon,omitempty"`
-	EntryTool     string                 `protobuf:"bytes,6,opt,name=entry_tool,json=entryTool,proto3" json:"entry_tool,omitempty"`
-	Cover         []byte                 `protobuf:"bytes,7,opt,name=cover,proto3" json:"cover,omitempty"`
-	CoverMimeType string                 `protobuf:"bytes,8,opt,name=cover_mime_type,json=coverMimeType,proto3" json:"cover_mime_type,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name              string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Description       string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Version           string                 `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
+	Icon              string                 `protobuf:"bytes,5,opt,name=icon,proto3" json:"icon,omitempty"`
+	EntryTool         string                 `protobuf:"bytes,6,opt,name=entry_tool,json=entryTool,proto3" json:"entry_tool,omitempty"`
+	Cover             []byte                 `protobuf:"bytes,7,opt,name=cover,proto3" json:"cover,omitempty"`
+	CoverMimeType     string                 `protobuf:"bytes,8,opt,name=cover_mime_type,json=coverMimeType,proto3" json:"cover_mime_type,omitempty"`
+	Variants          []*PluginVariant       `protobuf:"bytes,9,rep,name=variants,proto3" json:"variants,omitempty"`
+	ConfigSchemaJson  []byte                 `protobuf:"bytes,10,opt,name=config_schema_json,json=configSchemaJson,proto3" json:"config_schema_json,omitempty"`
+	ConfigValuesJson  []byte                 `protobuf:"bytes,11,opt,name=config_values_json,json=configValuesJson,proto3" json:"config_values_json,omitempty"`
+	ConfiguredSecrets []string               `protobuf:"bytes,12,rep,name=configured_secrets,json=configuredSecrets,proto3" json:"configured_secrets,omitempty"`
+	System            bool                   `protobuf:"varint,13,opt,name=system,proto3" json:"system,omitempty"`
+	Compatible        bool                   `protobuf:"varint,14,opt,name=compatible,proto3" json:"compatible,omitempty"`
+	Configured        bool                   `protobuf:"varint,15,opt,name=configured,proto3" json:"configured,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Plugin) Reset() {
@@ -122,6 +129,123 @@ func (x *Plugin) GetCoverMimeType() string {
 	return ""
 }
 
+func (x *Plugin) GetVariants() []*PluginVariant {
+	if x != nil {
+		return x.Variants
+	}
+	return nil
+}
+
+func (x *Plugin) GetConfigSchemaJson() []byte {
+	if x != nil {
+		return x.ConfigSchemaJson
+	}
+	return nil
+}
+
+func (x *Plugin) GetConfigValuesJson() []byte {
+	if x != nil {
+		return x.ConfigValuesJson
+	}
+	return nil
+}
+
+func (x *Plugin) GetConfiguredSecrets() []string {
+	if x != nil {
+		return x.ConfiguredSecrets
+	}
+	return nil
+}
+
+func (x *Plugin) GetSystem() bool {
+	if x != nil {
+		return x.System
+	}
+	return false
+}
+
+func (x *Plugin) GetCompatible() bool {
+	if x != nil {
+		return x.Compatible
+	}
+	return false
+}
+
+func (x *Plugin) GetConfigured() bool {
+	if x != nil {
+		return x.Configured
+	}
+	return false
+}
+
+type PluginVariant struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	Target        string                 `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
+	Source        string                 `protobuf:"bytes,3,opt,name=source,proto3" json:"source,omitempty"`
+	InstalledAt   int64                  `protobuf:"varint,4,opt,name=installed_at,json=installedAt,proto3" json:"installed_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PluginVariant) Reset() {
+	*x = PluginVariant{}
+	mi := &file_brigade_v1_plugin_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PluginVariant) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PluginVariant) ProtoMessage() {}
+
+func (x *PluginVariant) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_plugin_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PluginVariant.ProtoReflect.Descriptor instead.
+func (*PluginVariant) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_plugin_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *PluginVariant) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *PluginVariant) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+func (x *PluginVariant) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *PluginVariant) GetInstalledAt() int64 {
+	if x != nil {
+		return x.InstalledAt
+	}
+	return 0
+}
+
 type ListPluginsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -130,7 +254,7 @@ type ListPluginsRequest struct {
 
 func (x *ListPluginsRequest) Reset() {
 	*x = ListPluginsRequest{}
-	mi := &file_brigade_v1_plugin_proto_msgTypes[1]
+	mi := &file_brigade_v1_plugin_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -142,7 +266,7 @@ func (x *ListPluginsRequest) String() string {
 func (*ListPluginsRequest) ProtoMessage() {}
 
 func (x *ListPluginsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_plugin_proto_msgTypes[1]
+	mi := &file_brigade_v1_plugin_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -155,19 +279,20 @@ func (x *ListPluginsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPluginsRequest.ProtoReflect.Descriptor instead.
 func (*ListPluginsRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_plugin_proto_rawDescGZIP(), []int{1}
+	return file_brigade_v1_plugin_proto_rawDescGZIP(), []int{2}
 }
 
 type ListPluginsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Plugins       []*Plugin              `protobuf:"bytes,1,rep,name=plugins,proto3" json:"plugins,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Plugins        []*Plugin              `protobuf:"bytes,1,rep,name=plugins,proto3" json:"plugins,omitempty"`
+	RequiredTarget string                 `protobuf:"bytes,2,opt,name=required_target,json=requiredTarget,proto3" json:"required_target,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ListPluginsResponse) Reset() {
 	*x = ListPluginsResponse{}
-	mi := &file_brigade_v1_plugin_proto_msgTypes[2]
+	mi := &file_brigade_v1_plugin_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -179,7 +304,7 @@ func (x *ListPluginsResponse) String() string {
 func (*ListPluginsResponse) ProtoMessage() {}
 
 func (x *ListPluginsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_plugin_proto_msgTypes[2]
+	mi := &file_brigade_v1_plugin_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -192,12 +317,203 @@ func (x *ListPluginsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPluginsResponse.ProtoReflect.Descriptor instead.
 func (*ListPluginsResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_plugin_proto_rawDescGZIP(), []int{2}
+	return file_brigade_v1_plugin_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ListPluginsResponse) GetPlugins() []*Plugin {
 	if x != nil {
 		return x.Plugins
+	}
+	return nil
+}
+
+func (x *ListPluginsResponse) GetRequiredTarget() string {
+	if x != nil {
+		return x.RequiredTarget
+	}
+	return ""
+}
+
+type InstallPluginRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Url           string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InstallPluginRequest) Reset() {
+	*x = InstallPluginRequest{}
+	mi := &file_brigade_v1_plugin_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InstallPluginRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InstallPluginRequest) ProtoMessage() {}
+
+func (x *InstallPluginRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_plugin_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InstallPluginRequest.ProtoReflect.Descriptor instead.
+func (*InstallPluginRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_plugin_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *InstallPluginRequest) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+type UpdatePluginRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdatePluginRequest) Reset() {
+	*x = UpdatePluginRequest{}
+	mi := &file_brigade_v1_plugin_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdatePluginRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdatePluginRequest) ProtoMessage() {}
+
+func (x *UpdatePluginRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_plugin_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdatePluginRequest.ProtoReflect.Descriptor instead.
+func (*UpdatePluginRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_plugin_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *UpdatePluginRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type DeletePluginRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeletePluginRequest) Reset() {
+	*x = DeletePluginRequest{}
+	mi := &file_brigade_v1_plugin_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeletePluginRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeletePluginRequest) ProtoMessage() {}
+
+func (x *DeletePluginRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_plugin_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeletePluginRequest.ProtoReflect.Descriptor instead.
+func (*DeletePluginRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_plugin_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *DeletePluginRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type SavePluginConfigRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ValuesJson    []byte                 `protobuf:"bytes,2,opt,name=values_json,json=valuesJson,proto3" json:"values_json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SavePluginConfigRequest) Reset() {
+	*x = SavePluginConfigRequest{}
+	mi := &file_brigade_v1_plugin_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SavePluginConfigRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SavePluginConfigRequest) ProtoMessage() {}
+
+func (x *SavePluginConfigRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_plugin_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SavePluginConfigRequest.ProtoReflect.Descriptor instead.
+func (*SavePluginConfigRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_plugin_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *SavePluginConfigRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SavePluginConfigRequest) GetValuesJson() []byte {
+	if x != nil {
+		return x.ValuesJson
 	}
 	return nil
 }
@@ -211,7 +527,7 @@ type GetPluginRequest struct {
 
 func (x *GetPluginRequest) Reset() {
 	*x = GetPluginRequest{}
-	mi := &file_brigade_v1_plugin_proto_msgTypes[3]
+	mi := &file_brigade_v1_plugin_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -223,7 +539,7 @@ func (x *GetPluginRequest) String() string {
 func (*GetPluginRequest) ProtoMessage() {}
 
 func (x *GetPluginRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_plugin_proto_msgTypes[3]
+	mi := &file_brigade_v1_plugin_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -236,7 +552,7 @@ func (x *GetPluginRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPluginRequest.ProtoReflect.Descriptor instead.
 func (*GetPluginRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_plugin_proto_rawDescGZIP(), []int{3}
+	return file_brigade_v1_plugin_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetPluginRequest) GetSessionId() string {
@@ -257,7 +573,7 @@ type PluginMCPRequest struct {
 
 func (x *PluginMCPRequest) Reset() {
 	*x = PluginMCPRequest{}
-	mi := &file_brigade_v1_plugin_proto_msgTypes[4]
+	mi := &file_brigade_v1_plugin_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -269,7 +585,7 @@ func (x *PluginMCPRequest) String() string {
 func (*PluginMCPRequest) ProtoMessage() {}
 
 func (x *PluginMCPRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_plugin_proto_msgTypes[4]
+	mi := &file_brigade_v1_plugin_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -282,7 +598,7 @@ func (x *PluginMCPRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginMCPRequest.ProtoReflect.Descriptor instead.
 func (*PluginMCPRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_plugin_proto_rawDescGZIP(), []int{4}
+	return file_brigade_v1_plugin_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *PluginMCPRequest) GetSessionId() string {
@@ -315,7 +631,7 @@ type PluginMCPResponse struct {
 
 func (x *PluginMCPResponse) Reset() {
 	*x = PluginMCPResponse{}
-	mi := &file_brigade_v1_plugin_proto_msgTypes[5]
+	mi := &file_brigade_v1_plugin_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -327,7 +643,7 @@ func (x *PluginMCPResponse) String() string {
 func (*PluginMCPResponse) ProtoMessage() {}
 
 func (x *PluginMCPResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_plugin_proto_msgTypes[5]
+	mi := &file_brigade_v1_plugin_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -340,7 +656,7 @@ func (x *PluginMCPResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginMCPResponse.ProtoReflect.Descriptor instead.
 func (*PluginMCPResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_plugin_proto_rawDescGZIP(), []int{5}
+	return file_brigade_v1_plugin_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *PluginMCPResponse) GetResultJson() []byte {
@@ -355,7 +671,7 @@ var File_brigade_v1_plugin_proto protoreflect.FileDescriptor
 const file_brigade_v1_plugin_proto_rawDesc = "" +
 	"\n" +
 	"\x17brigade/v1/plugin.proto\x12\n" +
-	"brigade.v1\"\xd9\x01\n" +
+	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\xf3\x03\n" +
 	"\x06Plugin\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -365,10 +681,38 @@ const file_brigade_v1_plugin_proto_rawDesc = "" +
 	"\n" +
 	"entry_tool\x18\x06 \x01(\tR\tentryTool\x12\x14\n" +
 	"\x05cover\x18\a \x01(\fR\x05cover\x12&\n" +
-	"\x0fcover_mime_type\x18\b \x01(\tR\rcoverMimeType\"\x14\n" +
-	"\x12ListPluginsRequest\"C\n" +
+	"\x0fcover_mime_type\x18\b \x01(\tR\rcoverMimeType\x125\n" +
+	"\bvariants\x18\t \x03(\v2\x19.brigade.v1.PluginVariantR\bvariants\x12,\n" +
+	"\x12config_schema_json\x18\n" +
+	" \x01(\fR\x10configSchemaJson\x12,\n" +
+	"\x12config_values_json\x18\v \x01(\fR\x10configValuesJson\x12-\n" +
+	"\x12configured_secrets\x18\f \x03(\tR\x11configuredSecrets\x12\x16\n" +
+	"\x06system\x18\r \x01(\bR\x06system\x12\x1e\n" +
+	"\n" +
+	"compatible\x18\x0e \x01(\bR\n" +
+	"compatible\x12\x1e\n" +
+	"\n" +
+	"configured\x18\x0f \x01(\bR\n" +
+	"configured\"|\n" +
+	"\rPluginVariant\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion\x12\x16\n" +
+	"\x06target\x18\x02 \x01(\tR\x06target\x12\x16\n" +
+	"\x06source\x18\x03 \x01(\tR\x06source\x12!\n" +
+	"\finstalled_at\x18\x04 \x01(\x03R\vinstalledAt\"\x14\n" +
+	"\x12ListPluginsRequest\"l\n" +
 	"\x13ListPluginsResponse\x12,\n" +
-	"\aplugins\x18\x01 \x03(\v2\x12.brigade.v1.PluginR\aplugins\"1\n" +
+	"\aplugins\x18\x01 \x03(\v2\x12.brigade.v1.PluginR\aplugins\x12'\n" +
+	"\x0frequired_target\x18\x02 \x01(\tR\x0erequiredTarget\"(\n" +
+	"\x14InstallPluginRequest\x12\x10\n" +
+	"\x03url\x18\x01 \x01(\tR\x03url\"%\n" +
+	"\x13UpdatePluginRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"%\n" +
+	"\x13DeletePluginRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"J\n" +
+	"\x17SavePluginConfigRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
+	"\vvalues_json\x18\x02 \x01(\fR\n" +
+	"valuesJson\"1\n" +
 	"\x10GetPluginRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\"j\n" +
@@ -380,9 +724,14 @@ const file_brigade_v1_plugin_proto_rawDesc = "" +
 	"paramsJson\"4\n" +
 	"\x11PluginMCPResponse\x12\x1f\n" +
 	"\vresult_json\x18\x01 \x01(\fR\n" +
-	"resultJson2\xdb\x01\n" +
+	"resultJson2\xe8\x03\n" +
 	"\rPluginService\x12I\n" +
-	"\x04List\x12\x1e.brigade.v1.ListPluginsRequest\x1a\x1f.brigade.v1.ListPluginsResponse\"\x00\x129\n" +
+	"\x04List\x12\x1e.brigade.v1.ListPluginsRequest\x1a\x1f.brigade.v1.ListPluginsResponse\"\x00\x12A\n" +
+	"\aInstall\x12 .brigade.v1.InstallPluginRequest\x1a\x12.brigade.v1.Plugin\"\x00\x12?\n" +
+	"\x06Update\x12\x1f.brigade.v1.UpdatePluginRequest\x1a\x12.brigade.v1.Plugin\"\x00\x12>\n" +
+	"\x06Delete\x12\x1f.brigade.v1.DeletePluginRequest\x1a\x11.brigade.v1.Empty\"\x00\x12G\n" +
+	"\n" +
+	"SaveConfig\x12#.brigade.v1.SavePluginConfigRequest\x1a\x12.brigade.v1.Plugin\"\x00\x129\n" +
 	"\x03Get\x12\x1c.brigade.v1.GetPluginRequest\x1a\x12.brigade.v1.Plugin\"\x00\x12D\n" +
 	"\x03MCP\x12\x1c.brigade.v1.PluginMCPRequest\x1a\x1d.brigade.v1.PluginMCPResponse\"\x00B\xa8\x01\n" +
 	"\x0ecom.brigade.v1B\vPluginProtoP\x01Z@github.com/grigory51/brigade/backend/gen/go/brigade/v1;brigadev1\xa2\x02\x03BXX\xaa\x02\n" +
@@ -401,28 +750,43 @@ func file_brigade_v1_plugin_proto_rawDescGZIP() []byte {
 	return file_brigade_v1_plugin_proto_rawDescData
 }
 
-var file_brigade_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_brigade_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_brigade_v1_plugin_proto_goTypes = []any{
-	(*Plugin)(nil),              // 0: brigade.v1.Plugin
-	(*ListPluginsRequest)(nil),  // 1: brigade.v1.ListPluginsRequest
-	(*ListPluginsResponse)(nil), // 2: brigade.v1.ListPluginsResponse
-	(*GetPluginRequest)(nil),    // 3: brigade.v1.GetPluginRequest
-	(*PluginMCPRequest)(nil),    // 4: brigade.v1.PluginMCPRequest
-	(*PluginMCPResponse)(nil),   // 5: brigade.v1.PluginMCPResponse
+	(*Plugin)(nil),                  // 0: brigade.v1.Plugin
+	(*PluginVariant)(nil),           // 1: brigade.v1.PluginVariant
+	(*ListPluginsRequest)(nil),      // 2: brigade.v1.ListPluginsRequest
+	(*ListPluginsResponse)(nil),     // 3: brigade.v1.ListPluginsResponse
+	(*InstallPluginRequest)(nil),    // 4: brigade.v1.InstallPluginRequest
+	(*UpdatePluginRequest)(nil),     // 5: brigade.v1.UpdatePluginRequest
+	(*DeletePluginRequest)(nil),     // 6: brigade.v1.DeletePluginRequest
+	(*SavePluginConfigRequest)(nil), // 7: brigade.v1.SavePluginConfigRequest
+	(*GetPluginRequest)(nil),        // 8: brigade.v1.GetPluginRequest
+	(*PluginMCPRequest)(nil),        // 9: brigade.v1.PluginMCPRequest
+	(*PluginMCPResponse)(nil),       // 10: brigade.v1.PluginMCPResponse
+	(*Empty)(nil),                   // 11: brigade.v1.Empty
 }
 var file_brigade_v1_plugin_proto_depIdxs = []int32{
-	0, // 0: brigade.v1.ListPluginsResponse.plugins:type_name -> brigade.v1.Plugin
-	1, // 1: brigade.v1.PluginService.List:input_type -> brigade.v1.ListPluginsRequest
-	3, // 2: brigade.v1.PluginService.Get:input_type -> brigade.v1.GetPluginRequest
-	4, // 3: brigade.v1.PluginService.MCP:input_type -> brigade.v1.PluginMCPRequest
-	2, // 4: brigade.v1.PluginService.List:output_type -> brigade.v1.ListPluginsResponse
-	0, // 5: brigade.v1.PluginService.Get:output_type -> brigade.v1.Plugin
-	5, // 6: brigade.v1.PluginService.MCP:output_type -> brigade.v1.PluginMCPResponse
-	4, // [4:7] is the sub-list for method output_type
-	1, // [1:4] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	1,  // 0: brigade.v1.Plugin.variants:type_name -> brigade.v1.PluginVariant
+	0,  // 1: brigade.v1.ListPluginsResponse.plugins:type_name -> brigade.v1.Plugin
+	2,  // 2: brigade.v1.PluginService.List:input_type -> brigade.v1.ListPluginsRequest
+	4,  // 3: brigade.v1.PluginService.Install:input_type -> brigade.v1.InstallPluginRequest
+	5,  // 4: brigade.v1.PluginService.Update:input_type -> brigade.v1.UpdatePluginRequest
+	6,  // 5: brigade.v1.PluginService.Delete:input_type -> brigade.v1.DeletePluginRequest
+	7,  // 6: brigade.v1.PluginService.SaveConfig:input_type -> brigade.v1.SavePluginConfigRequest
+	8,  // 7: brigade.v1.PluginService.Get:input_type -> brigade.v1.GetPluginRequest
+	9,  // 8: brigade.v1.PluginService.MCP:input_type -> brigade.v1.PluginMCPRequest
+	3,  // 9: brigade.v1.PluginService.List:output_type -> brigade.v1.ListPluginsResponse
+	0,  // 10: brigade.v1.PluginService.Install:output_type -> brigade.v1.Plugin
+	0,  // 11: brigade.v1.PluginService.Update:output_type -> brigade.v1.Plugin
+	11, // 12: brigade.v1.PluginService.Delete:output_type -> brigade.v1.Empty
+	0,  // 13: brigade.v1.PluginService.SaveConfig:output_type -> brigade.v1.Plugin
+	0,  // 14: brigade.v1.PluginService.Get:output_type -> brigade.v1.Plugin
+	10, // 15: brigade.v1.PluginService.MCP:output_type -> brigade.v1.PluginMCPResponse
+	9,  // [9:16] is the sub-list for method output_type
+	2,  // [2:9] is the sub-list for method input_type
+	2,  // [2:2] is the sub-list for extension type_name
+	2,  // [2:2] is the sub-list for extension extendee
+	0,  // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_brigade_v1_plugin_proto_init() }
@@ -430,13 +794,14 @@ func file_brigade_v1_plugin_proto_init() {
 	if File_brigade_v1_plugin_proto != nil {
 		return
 	}
+	file_brigade_v1_auth_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_brigade_v1_plugin_proto_rawDesc), len(file_brigade_v1_plugin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

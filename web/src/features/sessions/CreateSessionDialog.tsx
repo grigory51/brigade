@@ -375,7 +375,7 @@ export function CreateSessionDialog({
                     </div>
                   )}
                 />
-                {plugins.map((plugin) => (
+                {plugins.filter((plugin) => plugin.compatible && plugin.configured).map((plugin) => (
                   <ExperienceTile
                     key={plugin.id}
                     value={`plugin:${plugin.id}`}

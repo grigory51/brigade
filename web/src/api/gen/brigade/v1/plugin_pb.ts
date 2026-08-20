@@ -4,7 +4,7 @@
 // @ts-nocheck
 
 import type { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialMessage, PlainMessage } from "@bufbuild/protobuf";
-import { Message, proto3 } from "@bufbuild/protobuf";
+import { Message, proto3, protoInt64 } from "@bufbuild/protobuf";
 
 /**
  * Plugin — установленный MCPB-пакет, который предоставляет постоянный MCP App experience.
@@ -52,6 +52,41 @@ export class Plugin extends Message<Plugin> {
    */
   coverMimeType = "";
 
+  /**
+   * @generated from field: repeated brigade.v1.PluginVariant variants = 9;
+   */
+  variants: PluginVariant[] = [];
+
+  /**
+   * @generated from field: bytes config_schema_json = 10;
+   */
+  configSchemaJson = new Uint8Array(0);
+
+  /**
+   * @generated from field: bytes config_values_json = 11;
+   */
+  configValuesJson = new Uint8Array(0);
+
+  /**
+   * @generated from field: repeated string configured_secrets = 12;
+   */
+  configuredSecrets: string[] = [];
+
+  /**
+   * @generated from field: bool system = 13;
+   */
+  system = false;
+
+  /**
+   * @generated from field: bool compatible = 14;
+   */
+  compatible = false;
+
+  /**
+   * @generated from field: bool configured = 15;
+   */
+  configured = false;
+
   constructor(data?: PartialMessage<Plugin>) {
     super();
     proto3.util.initPartial(data, this);
@@ -68,6 +103,13 @@ export class Plugin extends Message<Plugin> {
     { no: 6, name: "entry_tool", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 7, name: "cover", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
     { no: 8, name: "cover_mime_type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 9, name: "variants", kind: "message", T: PluginVariant, repeated: true },
+    { no: 10, name: "config_schema_json", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
+    { no: 11, name: "config_values_json", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
+    { no: 12, name: "configured_secrets", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 13, name: "system", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 14, name: "compatible", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 15, name: "configured", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Plugin {
@@ -86,6 +128,61 @@ export class Plugin extends Message<Plugin> {
     return proto3.util.equals(Plugin, a, b);
   }
 }
+/**
+ * @generated from message brigade.v1.PluginVariant
+ */
+export class PluginVariant extends Message<PluginVariant> {
+  /**
+   * @generated from field: string version = 1;
+   */
+  version = "";
+
+  /**
+   * @generated from field: string target = 2;
+   */
+  target = "";
+
+  /**
+   * @generated from field: string source = 3;
+   */
+  source = "";
+
+  /**
+   * @generated from field: int64 installed_at = 4;
+   */
+  installedAt = protoInt64.zero;
+
+  constructor(data?: PartialMessage<PluginVariant>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.PluginVariant";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "version", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "target", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "source", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "installed_at", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): PluginVariant {
+    return new PluginVariant().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): PluginVariant {
+    return new PluginVariant().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): PluginVariant {
+    return new PluginVariant().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: PluginVariant | PlainMessage<PluginVariant> | undefined, b: PluginVariant | PlainMessage<PluginVariant> | undefined): boolean {
+    return proto3.util.equals(PluginVariant, a, b);
+  }
+}
+
 /**
  * @generated from message brigade.v1.ListPluginsRequest
  */
@@ -126,6 +223,11 @@ export class ListPluginsResponse extends Message<ListPluginsResponse> {
    */
   plugins: Plugin[] = [];
 
+  /**
+   * @generated from field: string required_target = 2;
+   */
+  requiredTarget = "";
+
   constructor(data?: PartialMessage<ListPluginsResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -135,6 +237,7 @@ export class ListPluginsResponse extends Message<ListPluginsResponse> {
   static readonly typeName = "brigade.v1.ListPluginsResponse";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "plugins", kind: "message", T: Plugin, repeated: true },
+    { no: 2, name: "required_target", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ListPluginsResponse {
@@ -151,6 +254,160 @@ export class ListPluginsResponse extends Message<ListPluginsResponse> {
 
   static equals(a: ListPluginsResponse | PlainMessage<ListPluginsResponse> | undefined, b: ListPluginsResponse | PlainMessage<ListPluginsResponse> | undefined): boolean {
     return proto3.util.equals(ListPluginsResponse, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.InstallPluginRequest
+ */
+export class InstallPluginRequest extends Message<InstallPluginRequest> {
+  /**
+   * @generated from field: string url = 1;
+   */
+  url = "";
+
+  constructor(data?: PartialMessage<InstallPluginRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.InstallPluginRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): InstallPluginRequest {
+    return new InstallPluginRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): InstallPluginRequest {
+    return new InstallPluginRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): InstallPluginRequest {
+    return new InstallPluginRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: InstallPluginRequest | PlainMessage<InstallPluginRequest> | undefined, b: InstallPluginRequest | PlainMessage<InstallPluginRequest> | undefined): boolean {
+    return proto3.util.equals(InstallPluginRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.UpdatePluginRequest
+ */
+export class UpdatePluginRequest extends Message<UpdatePluginRequest> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  constructor(data?: PartialMessage<UpdatePluginRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.UpdatePluginRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): UpdatePluginRequest {
+    return new UpdatePluginRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): UpdatePluginRequest {
+    return new UpdatePluginRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): UpdatePluginRequest {
+    return new UpdatePluginRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: UpdatePluginRequest | PlainMessage<UpdatePluginRequest> | undefined, b: UpdatePluginRequest | PlainMessage<UpdatePluginRequest> | undefined): boolean {
+    return proto3.util.equals(UpdatePluginRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.DeletePluginRequest
+ */
+export class DeletePluginRequest extends Message<DeletePluginRequest> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  constructor(data?: PartialMessage<DeletePluginRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.DeletePluginRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DeletePluginRequest {
+    return new DeletePluginRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): DeletePluginRequest {
+    return new DeletePluginRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): DeletePluginRequest {
+    return new DeletePluginRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: DeletePluginRequest | PlainMessage<DeletePluginRequest> | undefined, b: DeletePluginRequest | PlainMessage<DeletePluginRequest> | undefined): boolean {
+    return proto3.util.equals(DeletePluginRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.SavePluginConfigRequest
+ */
+export class SavePluginConfigRequest extends Message<SavePluginConfigRequest> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  /**
+   * @generated from field: bytes values_json = 2;
+   */
+  valuesJson = new Uint8Array(0);
+
+  constructor(data?: PartialMessage<SavePluginConfigRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.SavePluginConfigRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "values_json", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SavePluginConfigRequest {
+    return new SavePluginConfigRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SavePluginConfigRequest {
+    return new SavePluginConfigRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SavePluginConfigRequest {
+    return new SavePluginConfigRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SavePluginConfigRequest | PlainMessage<SavePluginConfigRequest> | undefined, b: SavePluginConfigRequest | PlainMessage<SavePluginConfigRequest> | undefined): boolean {
+    return proto3.util.equals(SavePluginConfigRequest, a, b);
   }
 }
 

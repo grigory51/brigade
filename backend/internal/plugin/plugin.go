@@ -5,6 +5,9 @@ package plugin
 import (
 	"archive/zip"
 	"context"
+	"debug/elf"
+	"debug/macho"
+	"debug/pe"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -28,6 +32,21 @@ const (
 )
 
 var validID = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,127}$`)
+var validConfigKey = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+var configRef = regexp.MustCompile(`\$\{user_config\.([A-Za-z0-9_-]+)\}`)
+var secretRef = regexp.MustCompile(`\$\{secret\.([A-Za-z0-9_]+)\}`)
+
+type ConfigField struct {
+	Type        string          `json:"type"`
+	Title       string          `json:"title"`
+	Description string          `json:"description"`
+	Required    bool            `json:"required"`
+	Multiple    bool            `json:"multiple"`
+	Sensitive   bool            `json:"sensitive"`
+	Default     json.RawMessage `json:"default"`
+	Min         *float64        `json:"min"`
+	Max         *float64        `json:"max"`
+}
 
 // Manifest — используемая Brigade часть MCPB manifest 0.3/0.4.
 type Manifest struct {
@@ -49,7 +68,8 @@ type Manifest struct {
 	Compatibility struct {
 		Platforms []string `json:"platforms"`
 	} `json:"compatibility"`
-	Meta struct {
+	UserConfig map[string]ConfigField `json:"user_config"`
+	Meta       struct {
 		Brigade struct {
 			Experience struct {
 				EntryTool string `json:"entry_tool"`
@@ -66,27 +86,187 @@ func (m Manifest) Title() string {
 	return m.Name
 }
 
+// ResolveConfig применяет defaults MCPB и проверяет значения до запуска исполняемого bundle.
+func (m Manifest) ResolveConfig(input map[string]any, home string) (map[string]any, error) {
+	values := make(map[string]any, len(m.UserConfig))
+	for key, field := range m.UserConfig {
+		value, ok := input[key]
+		if !ok && len(field.Default) > 0 {
+			if err := json.Unmarshal(field.Default, &value); err != nil {
+				return nil, fmt.Errorf("plugin: invalid default for %q: %w", key, err)
+			}
+			ok = true
+		}
+		if !ok || emptyConfigValue(value) {
+			if field.Required {
+				return nil, fmt.Errorf("plugin: required config %q is missing", key)
+			}
+			continue
+		}
+		if err := validateConfigValue(key, field, value); err != nil {
+			return nil, err
+		}
+		values[key] = expandHome(value, home)
+	}
+	return values, nil
+}
+
+func validateConfigValue(key string, field ConfigField, value any) error {
+	if field.Multiple {
+		items, ok := value.([]any)
+		if !ok {
+			return fmt.Errorf("plugin: config %q must be an array", key)
+		}
+		for _, item := range items {
+			copy := field
+			copy.Multiple = false
+			if err := validateConfigValue(key, copy, item); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	switch field.Type {
+	case "string", "file", "directory":
+		if _, ok := value.(string); !ok {
+			return fmt.Errorf("plugin: config %q must be a string", key)
+		}
+	case "number":
+		number, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("plugin: config %q must be a number", key)
+		}
+		if field.Min != nil && number < *field.Min {
+			return fmt.Errorf("plugin: config %q is below its minimum", key)
+		}
+		if field.Max != nil && number > *field.Max {
+			return fmt.Errorf("plugin: config %q exceeds its maximum", key)
+		}
+	case "boolean":
+		if _, ok := value.(bool); !ok {
+			return fmt.Errorf("plugin: config %q must be a boolean", key)
+		}
+	default:
+		return fmt.Errorf("plugin: config %q has unsupported type %q", key, field.Type)
+	}
+	return nil
+}
+
+func emptyConfigValue(value any) bool {
+	switch value := value.(type) {
+	case nil:
+		return true
+	case string:
+		return strings.TrimSpace(value) == ""
+	case []any:
+		return len(value) == 0
+	default:
+		return false
+	}
+}
+
+func expandHome(value any, home string) any {
+	if home == "" {
+		return value
+	}
+	switch value := value.(type) {
+	case string:
+		value = strings.ReplaceAll(value, "${HOME}", home)
+		value = strings.ReplaceAll(value, "${DESKTOP}", filepath.Join(home, "Desktop"))
+		return strings.ReplaceAll(value, "${DOCUMENTS}", filepath.Join(home, "Documents"))
+	case []any:
+		for index := range value {
+			value[index] = expandHome(value[index], home)
+		}
+	}
+	return value
+}
+
 // MCPServer возвращает стандартный stdio-конфиг ACP для уже распакованного bundle.
-func (m Manifest) MCPServer(root string) acpsdk.McpServer {
+func (m Manifest) MCPServer(root string, values map[string]any, secrets map[string]string) (acpsdk.McpServer, error) {
 	entryPoint := filepath.Join(root, filepath.FromSlash(m.Server.EntryPoint))
 	command := entryPoint
-	args := append([]string(nil), m.Server.MCPConfig.Args...)
-	switch m.Server.Type {
-	case "node":
-		command, args = "node", append([]string{entryPoint}, args...)
-	case "python":
-		command, args = "python3", append([]string{entryPoint}, args...)
+	argsTemplate := append([]string(nil), m.Server.MCPConfig.Args...)
+	for index := range argsTemplate {
+		argsTemplate[index] = strings.ReplaceAll(argsTemplate[index], "${__dirname}", root)
+	}
+	args, err := expandArgs(argsTemplate, values, secrets)
+	if err != nil {
+		return acpsdk.McpServer{}, err
 	}
 	if m.Server.MCPConfig.Command != "" {
-		command = strings.ReplaceAll(m.Server.MCPConfig.Command, "${__dirname}", root)
+		command, err = expandString(strings.ReplaceAll(m.Server.MCPConfig.Command, "${__dirname}", root), values, secrets)
+		if err != nil {
+			return acpsdk.McpServer{}, err
+		}
+	} else {
+		switch m.Server.Type {
+		case "node":
+			command, args = "node", append([]string{entryPoint}, args...)
+		case "python":
+			command, args = "python3", append([]string{entryPoint}, args...)
+		case "uv":
+			command, args = "uv", append([]string{"--directory", root, "run", entryPoint}, args...)
+		}
 	}
 	env := make([]acpsdk.EnvVariable, 0, len(m.Server.MCPConfig.Env))
 	for name, value := range m.Server.MCPConfig.Env {
-		env = append(env, acpsdk.EnvVariable{Name: name, Value: strings.ReplaceAll(value, "${__dirname}", root)})
+		value, err = expandString(strings.ReplaceAll(value, "${__dirname}", root), values, secrets)
+		if err != nil {
+			return acpsdk.McpServer{}, err
+		}
+		env = append(env, acpsdk.EnvVariable{Name: name, Value: value})
 	}
 	return acpsdk.McpServer{Stdio: &acpsdk.McpServerStdio{
 		Name: m.Title(), Command: command, Args: args, Env: env,
-	}}
+	}}, nil
+}
+
+func expandArgs(input []string, values map[string]any, secrets map[string]string) ([]string, error) {
+	var out []string
+	for _, arg := range input {
+		match := configRef.FindStringSubmatch(arg)
+		if len(match) == 2 && match[0] == arg {
+			if list, ok := values[match[1]].([]any); ok {
+				for _, value := range list {
+					out = append(out, fmt.Sprint(value))
+				}
+				continue
+			}
+		}
+		value, err := expandString(arg, values, secrets)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, value)
+	}
+	return out, nil
+}
+
+func expandString(input string, values map[string]any, secrets map[string]string) (string, error) {
+	var missing string
+	output := configRef.ReplaceAllStringFunc(input, func(ref string) string {
+		key := configRef.FindStringSubmatch(ref)[1]
+		value, ok := values[key]
+		if !ok {
+			missing = key
+			return ref
+		}
+		return fmt.Sprint(value)
+	})
+	output = secretRef.ReplaceAllStringFunc(output, func(ref string) string {
+		key := secretRef.FindStringSubmatch(ref)[1]
+		value, ok := secrets[key]
+		if !ok {
+			missing = key
+			return ref
+		}
+		return value
+	})
+	if missing != "" {
+		return "", fmt.Errorf("plugin: required config %q is missing", missing)
+	}
+	return output, nil
 }
 
 func (m Manifest) Validate() error {
@@ -101,6 +281,10 @@ func (m Manifest) Validate() error {
 	}
 	switch m.Server.Type {
 	case "binary", "node", "python":
+	case "uv":
+		if m.ManifestVersion != "0.4" {
+			return errors.New("plugin: uv server requires manifest_version 0.4")
+		}
 	default:
 		return fmt.Errorf("plugin: unsupported MCPB server.type %q", m.Server.Type)
 	}
@@ -109,6 +293,36 @@ func (m Manifest) Validate() error {
 	}
 	if cover := m.Meta.Brigade.Experience.Cover; cover != "" && !safeRelative(cover) {
 		return errors.New("plugin: _meta.brigade.experience.cover must be a safe relative path")
+	}
+	for key, field := range m.UserConfig {
+		if !validConfigKey.MatchString(key) {
+			return fmt.Errorf("plugin: invalid user_config key %q", key)
+		}
+		switch field.Type {
+		case "string", "number", "boolean", "file", "directory":
+		default:
+			return fmt.Errorf("plugin: config %q has unsupported type %q", key, field.Type)
+		}
+		if field.Sensitive && field.Type != "string" {
+			return fmt.Errorf("plugin: sensitive config %q must be a string", key)
+		}
+		if field.Multiple && field.Type != "file" && field.Type != "directory" {
+			return fmt.Errorf("plugin: multiple config %q must be a file or directory", key)
+		}
+		if len(field.Default) > 0 {
+			var value any
+			if err := json.Unmarshal(field.Default, &value); err != nil {
+				return fmt.Errorf("plugin: invalid default for %q: %w", key, err)
+			}
+			if field.Required && emptyConfigValue(value) {
+				return fmt.Errorf("plugin: required config %q has an empty default", key)
+			}
+			if !emptyConfigValue(value) {
+				if err := validateConfigValue(key, field, value); err != nil {
+					return err
+				}
+			}
+		}
 	}
 	return nil
 }
@@ -159,6 +373,10 @@ type Manager struct {
 func New(dir string, st *store.Store) *Manager { return &Manager{dir: dir, store: st} }
 
 func (m *Manager) Install(ctx context.Context, source string) (store.Plugin, error) {
+	return m.InstallFor(ctx, "", source)
+}
+
+func (m *Manager) InstallFor(ctx context.Context, userID, source string) (store.Plugin, error) {
 	if err := os.MkdirAll(m.dir, 0o700); err != nil {
 		return store.Plugin{}, fmt.Errorf("plugin: create cache: %w", err)
 	}
@@ -189,33 +407,60 @@ func (m *Manager) Install(ctx context.Context, source string) (store.Plugin, err
 	if err != nil {
 		return store.Plugin{}, err
 	}
-	if installed, err := m.store.GetPlugin(ctx, manifest.Name, manifest.Version); err == nil {
+	if userID != "" {
+		if existing, err := m.store.GetPlugin(ctx, userID, manifest.Name, "", ""); err == nil && existing.OwnerID == "" {
+			return store.Plugin{}, fmt.Errorf("plugin: id %q is reserved by a system app", manifest.Name)
+		} else if err != nil && !errors.Is(err, store.ErrNotFound) {
+			return store.Plugin{}, err
+		}
+	}
+	ownerDir := "system"
+	if userID != "" {
+		if filepath.Base(userID) != userID {
+			return store.Plugin{}, errors.New("plugin: invalid user id")
+		}
+		ownerDir = filepath.Join("users", userID)
+	}
+	parent := filepath.Join(m.dir, ownerDir, manifest.Name, manifest.Version)
+	if err := os.MkdirAll(parent, 0o700); err != nil {
+		return store.Plugin{}, fmt.Errorf("plugin: create plugin directory: %w", err)
+	}
+	staging, err := os.MkdirTemp(parent, ".install-*")
+	if err != nil {
+		return store.Plugin{}, fmt.Errorf("plugin: staging: %w", err)
+	}
+	defer os.RemoveAll(staging)
+	if err := extract(&zr.Reader, staging); err != nil {
+		return store.Plugin{}, err
+	}
+	entry := filepath.Join(staging, filepath.FromSlash(manifest.Server.EntryPoint))
+	if _, err := os.Stat(entry); err != nil {
+		return store.Plugin{}, fmt.Errorf("plugin: entry point %q: %w", manifest.Server.EntryPoint, err)
+	}
+	target, err := bundleTarget(manifest, entry)
+	if err != nil {
+		return store.Plugin{}, err
+	}
+	if len(manifest.Compatibility.Platforms) > 0 && target != "portable" {
+		platform := strings.SplitN(target, "-", 2)[0]
+		compatible := false
+		for _, allowed := range manifest.Compatibility.Platforms {
+			compatible = compatible || allowed == platform
+		}
+		if !compatible {
+			return store.Plugin{}, fmt.Errorf("plugin: binary is %s but manifest does not allow %s", target, platform)
+		}
+	}
+	if installed, err := m.store.GetPlugin(ctx, userID, manifest.Name, manifest.Version, target); err == nil && installed.OwnerID == userID {
 		if err := m.store.PutPlugin(ctx, installed); err != nil {
 			return store.Plugin{}, err
 		}
 		return installed, nil
-	} else if !errors.Is(err, store.ErrNotFound) {
+	} else if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return store.Plugin{}, err
 	}
-
-	parent := filepath.Join(m.dir, manifest.Name)
-	if err := os.MkdirAll(parent, 0o700); err != nil {
-		return store.Plugin{}, fmt.Errorf("plugin: create plugin directory: %w", err)
-	}
-	destination := filepath.Join(parent, manifest.Version)
+	destination := filepath.Join(parent, target)
 	if _, err := os.Stat(destination); errors.Is(err, os.ErrNotExist) {
-		staging, err := os.MkdirTemp(parent, ".install-*")
-		if err != nil {
-			return store.Plugin{}, fmt.Errorf("plugin: staging: %w", err)
-		}
-		defer os.RemoveAll(staging)
-		if err := extract(&zr.Reader, staging); err != nil {
-			return store.Plugin{}, err
-		}
-		entry := filepath.Join(staging, filepath.FromSlash(manifest.Server.EntryPoint))
-		if _, err := os.Stat(entry); err != nil {
-			return store.Plugin{}, fmt.Errorf("plugin: entry point %q: %w", manifest.Server.EntryPoint, err)
-		}
 		if manifest.Server.Type == "binary" {
 			if err := os.Chmod(entry, 0o755); err != nil {
 				return store.Plugin{}, fmt.Errorf("plugin: mark entry point executable: %w", err)
@@ -231,7 +476,7 @@ func (m *Manager) Install(ctx context.Context, source string) (store.Plugin, err
 		return store.Plugin{}, fmt.Errorf("plugin: inspect destination: %w", err)
 	}
 
-	installed := store.Plugin{ID: manifest.Name, Name: manifest.Title(), Version: manifest.Version,
+	installed := store.Plugin{OwnerID: userID, ID: manifest.Name, Name: manifest.Title(), Version: manifest.Version, Target: target,
 		BundlePath: destination, Source: source, ManifestJSON: string(raw), InstalledAt: time.Now().UTC()}
 	if err := m.store.PutPlugin(ctx, installed); err != nil {
 		return store.Plugin{}, err
@@ -239,29 +484,152 @@ func (m *Manager) Install(ctx context.Context, source string) (store.Plugin, err
 	return installed, nil
 }
 
-func (m *Manager) Remove(ctx context.Context, id string) error {
-	count, err := m.store.PluginSessionCount(ctx, id)
+func (m *Manager) InstallReaderFor(ctx context.Context, userID, filename string, source io.Reader) (store.Plugin, error) {
+	if err := os.MkdirAll(m.dir, 0o700); err != nil {
+		return store.Plugin{}, fmt.Errorf("plugin: create cache: %w", err)
+	}
+	tmp, err := os.CreateTemp(m.dir, ".upload-*.mcpb")
+	if err != nil {
+		return store.Plugin{}, err
+	}
+	path := tmp.Name()
+	defer os.Remove(path)
+	if _, err := io.Copy(tmp, io.LimitReader(source, maxBundleSize+1)); err != nil {
+		tmp.Close()
+		return store.Plugin{}, fmt.Errorf("plugin: upload: %w", err)
+	}
+	info, err := tmp.Stat()
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return store.Plugin{}, err
+	}
+	if info.Size() > maxBundleSize {
+		return store.Plugin{}, fmt.Errorf("plugin: bundle exceeds %d bytes", maxBundleSize)
+	}
+	installed, err := m.InstallFor(ctx, userID, path)
+	if err != nil {
+		return store.Plugin{}, err
+	}
+	installed.Source = "upload:" + filepath.Base(filename)
+	if err := m.store.PutPlugin(ctx, installed); err != nil {
+		return store.Plugin{}, err
+	}
+	return installed, nil
+}
+
+func (m *Manager) Remove(ctx context.Context, id string) error { return m.RemoveFor(ctx, "", id) }
+
+func (m *Manager) RemoveFor(ctx context.Context, userID, id string) error {
+	count, err := m.store.PluginSessionCount(ctx, userID, id)
 	if err != nil {
 		return err
 	}
 	if count != 0 {
 		return fmt.Errorf("plugin: %s is used by %d sessions", id, count)
 	}
-	if err := m.store.DeletePlugin(ctx, id); err != nil {
+	if err := m.store.DeletePlugin(ctx, userID, id); err != nil {
 		return err
 	}
-	if err := os.RemoveAll(filepath.Join(m.dir, id)); err != nil {
-		return fmt.Errorf("plugin: remove files: %w", err)
+	roots := []string{filepath.Join(m.dir, "system", id)}
+	if userID != "" {
+		roots = []string{filepath.Join(m.dir, "users", userID, id)}
+	} else {
+		roots = append(roots, filepath.Join(m.dir, id)) // layout до user-scoped MCP Apps
+	}
+	for _, root := range roots {
+		if err := os.RemoveAll(root); err != nil {
+			return fmt.Errorf("plugin: remove files: %w", err)
+		}
 	}
 	return nil
 }
 
 func (m *Manager) Update(ctx context.Context, id string) (store.Plugin, error) {
-	current, err := m.store.GetPlugin(ctx, id, "")
+	current, err := m.store.GetPlugin(ctx, "", id, "", "")
 	if err != nil {
 		return store.Plugin{}, err
 	}
 	return m.Install(ctx, current.Source)
+}
+
+func (m *Manager) UpdateFor(ctx context.Context, userID, id string) (store.Plugin, error) {
+	installed, err := m.store.ListPlugins(ctx, userID)
+	if err != nil {
+		return store.Plugin{}, err
+	}
+	var updated store.Plugin
+	for _, current := range installed {
+		if current.OwnerID != userID || current.ID != id {
+			continue
+		}
+		if strings.HasPrefix(current.Source, "upload:") {
+			return store.Plugin{}, errors.New("plugin: uploaded bundle must be replaced by another upload")
+		}
+		updated, err = m.InstallFor(ctx, userID, current.Source)
+		if err != nil {
+			return store.Plugin{}, err
+		}
+	}
+	if updated.ID == "" {
+		return store.Plugin{}, store.ErrNotFound
+	}
+	return updated, nil
+}
+
+func bundleTarget(manifest Manifest, entry string) (string, error) {
+	if manifest.Server.Type != "binary" {
+		return "portable", nil
+	}
+	if file, err := elf.Open(entry); err == nil {
+		defer file.Close()
+		arch := map[elf.Machine]string{elf.EM_X86_64: "amd64", elf.EM_AARCH64: "arm64"}[file.Machine]
+		if arch != "" {
+			return "linux-" + arch, nil
+		}
+	}
+	if file, err := macho.Open(entry); err == nil {
+		defer file.Close()
+		arch := map[macho.Cpu]string{macho.CpuAmd64: "amd64", macho.CpuArm64: "arm64"}[file.Cpu]
+		if arch != "" {
+			return "darwin-" + arch, nil
+		}
+	}
+	if file, err := pe.Open(entry); err == nil {
+		defer file.Close()
+		arch := map[uint16]string{pe.IMAGE_FILE_MACHINE_AMD64: "amd64", pe.IMAGE_FILE_MACHINE_ARM64: "arm64"}[file.Machine]
+		if arch != "" {
+			return "windows-" + arch, nil
+		}
+	}
+	if len(manifest.Compatibility.Platforms) == 1 {
+		return manifest.Compatibility.Platforms[0] + "-any", nil
+	}
+	return "", errors.New("plugin: binary platform cannot be determined")
+}
+
+func RuntimeTarget(docker bool) string {
+	if docker {
+		return "linux-amd64"
+	}
+	return runtime.GOOS + "-" + runtime.GOARCH
+}
+
+func SupportsTarget(manifest Manifest, target string) bool {
+	if len(manifest.Compatibility.Platforms) == 0 {
+		return true
+	}
+	platform := strings.SplitN(target, "-", 2)[0]
+	if platform == "windows" {
+		platform = "win32"
+	}
+	for _, allowed := range manifest.Compatibility.Platforms {
+		if allowed == platform {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *Manager) ValidateBundle(path string) (Manifest, error) {
@@ -301,7 +669,13 @@ func copySource(ctx context.Context, dst *os.File, source string) error {
 		if err != nil {
 			return fmt.Errorf("plugin: create download request: %w", err)
 		}
-		resp, err := http.DefaultClient.Do(req)
+		client := &http.Client{CheckRedirect: func(next *http.Request, _ []*http.Request) error {
+			if u.Scheme == "https" && next.URL.Scheme != "https" {
+				return errors.New("plugin: HTTPS download redirected to an insecure URL")
+			}
+			return nil
+		}}
+		resp, err := client.Do(req)
 		if err != nil {
 			return fmt.Errorf("plugin: download: %w", err)
 		}

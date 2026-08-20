@@ -30,8 +30,9 @@ native macOS app.
   accepts a subscription token; Codex supports ChatGPT device login and OpenAI API keys.
 - **CLI or ACP chat** — use a full pty through xterm.js, or structured ACP → AG-UI chat
   with diffs, plans, permission controls, slash commands, model settings and live usage.
-- **Plugin experiences** — install standard MCPB bundles with MCP Apps interfaces and
-  use them as full session workspaces. The first bundled experience is STEP-first CAD
+- **Plugin experiences** — install per-user standard MCPB bundles by URL or upload, configure
+  secrets through the vault, and use their MCP Apps interfaces as full session workspaces.
+  The first bundled experience is STEP-first CAD
   with a live 3D scene above the agent chat.
 - **Local or Docker runtime** — run agents as host processes or in Docker. ACP sessions
   get isolated containers; CLI sessions share one long-lived container per user. Custom

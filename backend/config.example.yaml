@@ -67,7 +67,7 @@ agent_image: ""
 # раз. Не задано → 1 ГиБ; отрицательное — без ограничения. Только docker-режим.
 image_quota_bytes: 1073741824
 
-# Кеш MCPB-плагинов, установленных оператором через `brigade plugin install`.
+# Кеш пользовательских MCP Apps и системных MCPB-плагинов.
 # Пусто → ~/.brigade/plugins. Env: BRIGADE_PLUGINS_DIR.
 plugins_dir: ""
 

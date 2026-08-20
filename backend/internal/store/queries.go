@@ -601,10 +601,10 @@ func scanSessionRow(r rowScanner) (Session, error) {
 	return sess, nil
 }
 
-const pluginSelect = `SELECT id, name, version, bundle_path, source, manifest_json, installed_at FROM plugins`
+const pluginSelect = `SELECT owner_id, id, name, version, target, bundle_path, source, manifest_json, installed_at FROM plugins`
 
-func (s *Store) ListPlugins(ctx context.Context) ([]Plugin, error) {
-	rows, err := s.db.QueryContext(ctx, pluginSelect+` WHERE active = 1 ORDER BY name`)
+func (s *Store) ListPlugins(ctx context.Context, userID string) ([]Plugin, error) {
+	rows, err := s.db.QueryContext(ctx, pluginSelect+` WHERE active = 1 AND owner_id IN ('', ?) ORDER BY name, owner_id DESC, target`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("store: list plugins: %w", err)
 	}
@@ -613,7 +613,7 @@ func (s *Store) ListPlugins(ctx context.Context) ([]Plugin, error) {
 	for rows.Next() {
 		var plugin Plugin
 		var installedAt int64
-		if err := rows.Scan(&plugin.ID, &plugin.Name, &plugin.Version, &plugin.BundlePath, &plugin.Source, &plugin.ManifestJSON, &installedAt); err != nil {
+		if err := rows.Scan(&plugin.OwnerID, &plugin.ID, &plugin.Name, &plugin.Version, &plugin.Target, &plugin.BundlePath, &plugin.Source, &plugin.ManifestJSON, &installedAt); err != nil {
 			return nil, fmt.Errorf("store: scan plugin: %w", err)
 		}
 		plugin.InstalledAt = fromUnix(installedAt)
@@ -622,15 +622,22 @@ func (s *Store) ListPlugins(ctx context.Context) ([]Plugin, error) {
 	return plugins, rows.Err()
 }
 
-func (s *Store) GetPlugin(ctx context.Context, id, version string) (Plugin, error) {
+func (s *Store) GetPlugin(ctx context.Context, userID, id, version, target string) (Plugin, error) {
 	var plugin Plugin
 	var installedAt int64
-	where, args := ` WHERE id = ? AND active = 1`, []any{id}
+	where, args := ` WHERE owner_id IN ('', ?) AND id = ? AND active = 1`, []any{userID, id}
 	if version != "" {
-		where, args = ` WHERE id = ? AND version = ?`, []any{id, version}
+		where, args = ` WHERE owner_id IN ('', ?) AND id = ? AND version = ?`, []any{userID, id, version}
 	}
+	if target != "" {
+		osTarget := strings.SplitN(target, "-", 2)[0] + "-any"
+		where += ` AND target IN (?, ?, 'portable')`
+		args = append(args, target, osTarget)
+	}
+	where += ` ORDER BY owner_id = ? DESC, target = ? DESC, installed_at DESC LIMIT 1`
+	args = append(args, userID, target)
 	err := s.db.QueryRowContext(ctx, pluginSelect+where, args...).Scan(
-		&plugin.ID, &plugin.Name, &plugin.Version, &plugin.BundlePath, &plugin.Source, &plugin.ManifestJSON, &installedAt)
+		&plugin.OwnerID, &plugin.ID, &plugin.Name, &plugin.Version, &plugin.Target, &plugin.BundlePath, &plugin.Source, &plugin.ManifestJSON, &installedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Plugin{}, ErrNotFound
 	}
@@ -647,34 +654,70 @@ func (s *Store) PutPlugin(ctx context.Context, plugin Plugin) error {
 		return fmt.Errorf("store: put plugin: %w", err)
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `UPDATE plugins SET active = 0 WHERE id = ?`, plugin.ID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE plugins SET active = 0 WHERE owner_id = ? AND id = ? AND target = ?`, plugin.OwnerID, plugin.ID, plugin.Target); err != nil {
 		return fmt.Errorf("store: deactivate plugin: %w", err)
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO plugins (id, name, version, bundle_path, source, manifest_json, installed_at, active)
-		VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-		ON CONFLICT(id, version) DO UPDATE SET name=excluded.name, bundle_path=excluded.bundle_path, source=excluded.source,
+	_, err = tx.ExecContext(ctx, `INSERT INTO plugins (owner_id, id, name, version, target, bundle_path, source, manifest_json, installed_at, active)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+		ON CONFLICT(owner_id, id, version, target) DO UPDATE SET name=excluded.name, bundle_path=excluded.bundle_path, source=excluded.source,
 		manifest_json=excluded.manifest_json, installed_at=excluded.installed_at, active=1`,
-		plugin.ID, plugin.Name, plugin.Version, plugin.BundlePath, plugin.Source, plugin.ManifestJSON, toUnix(plugin.InstalledAt))
+		plugin.OwnerID, plugin.ID, plugin.Name, plugin.Version, plugin.Target, plugin.BundlePath, plugin.Source, plugin.ManifestJSON, toUnix(plugin.InstalledAt))
 	if err != nil {
 		return fmt.Errorf("store: put plugin: %w", err)
 	}
 	return tx.Commit()
 }
 
-func (s *Store) DeletePlugin(ctx context.Context, id string) error {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM plugins WHERE id = ?`, id)
+func (s *Store) DeletePlugin(ctx context.Context, userID, id string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM plugins WHERE owner_id = ? AND id = ?`, userID, id)
 	if err != nil {
 		return fmt.Errorf("store: delete plugin: %w", err)
 	}
 	return affectedOne(res, "delete plugin")
 }
 
-func (s *Store) PluginSessionCount(ctx context.Context, id string) (int, error) {
+func (s *Store) PluginSessionCount(ctx context.Context, userID, id string) (int, error) {
 	var count int
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM sessions WHERE experience_id = ?`, id).Scan(&count); err != nil {
+	query, args := `SELECT count(*) FROM sessions WHERE experience_id = ?`, []any{id}
+	if userID != "" {
+		query += ` AND user_id = ?`
+		args = append(args, userID)
+	}
+	if err := s.db.QueryRowContext(ctx, query, args...).Scan(&count); err != nil {
 		return 0, fmt.Errorf("store: count plugin sessions: %w", err)
 	}
 	return count, nil
+}
+
+func (s *Store) GetPluginConfig(ctx context.Context, userID, pluginID string) (PluginConfig, error) {
+	var config PluginConfig
+	err := s.db.QueryRowContext(ctx, `SELECT user_id, plugin_id, values_json FROM plugin_configs WHERE user_id = ? AND plugin_id = ?`, userID, pluginID).
+		Scan(&config.UserID, &config.PluginID, &config.ValuesJSON)
+	if errors.Is(err, sql.ErrNoRows) {
+		return PluginConfig{UserID: userID, PluginID: pluginID, ValuesJSON: "{}"}, nil
+	}
+	if err != nil {
+		return PluginConfig{}, fmt.Errorf("store: get plugin config: %w", err)
+	}
+	return config, nil
+}
+
+func (s *Store) PutPluginConfig(ctx context.Context, config PluginConfig) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO plugin_configs (user_id, plugin_id, values_json, updated_at) VALUES (?, ?, ?, ?)
+		ON CONFLICT(user_id, plugin_id) DO UPDATE SET values_json = excluded.values_json, updated_at = excluded.updated_at`,
+		config.UserID, config.PluginID, config.ValuesJSON, toUnix(time.Now()))
+	if err != nil {
+		return fmt.Errorf("store: put plugin config: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) DeletePluginConfig(ctx context.Context, userID, pluginID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM plugin_configs WHERE user_id = ? AND plugin_id = ?`, userID, pluginID)
+	if err != nil {
+		return fmt.Errorf("store: delete plugin config: %w", err)
+	}
+	return nil
 }
 
 // SetAgentImages сохраняет список образов агента пользователя. Строка создаётся, если

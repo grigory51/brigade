@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package brigade.v1;
 
+import "brigade/v1/auth.proto";
+
 // Plugin — установленный MCPB-пакет, который предоставляет постоянный MCP App experience.
 message Plugin {
   string id = 1;
@@ -12,12 +14,35 @@ message Plugin {
   string entry_tool = 6;
   bytes cover = 7;
   string cover_mime_type = 8;
+  repeated PluginVariant variants = 9;
+  bytes config_schema_json = 10;
+  bytes config_values_json = 11;
+  repeated string configured_secrets = 12;
+  bool system = 13;
+  bool compatible = 14;
+  bool configured = 15;
+}
+
+message PluginVariant {
+  string version = 1;
+  string target = 2;
+  string source = 3;
+  int64 installed_at = 4;
 }
 
 message ListPluginsRequest {}
 
 message ListPluginsResponse {
   repeated Plugin plugins = 1;
+  string required_target = 2;
+}
+
+message InstallPluginRequest { string url = 1; }
+message UpdatePluginRequest { string id = 1; }
+message DeletePluginRequest { string id = 1; }
+message SavePluginConfigRequest {
+  string id = 1;
+  bytes values_json = 2;
 }
 
 message GetPluginRequest { string session_id = 1; }
@@ -32,9 +57,13 @@ message PluginMCPResponse {
   bytes result_json = 1;
 }
 
-// PluginService отдаёт пользователям список experiences, установленных оператором.
+// PluginService управляет пользовательскими MCPB experiences и обслуживает их MCP Apps UI.
 service PluginService {
   rpc List(ListPluginsRequest) returns (ListPluginsResponse) {}
+  rpc Install(InstallPluginRequest) returns (Plugin) {}
+  rpc Update(UpdatePluginRequest) returns (Plugin) {}
+  rpc Delete(DeletePluginRequest) returns (Empty) {}
+  rpc SaveConfig(SavePluginConfigRequest) returns (Plugin) {}
   rpc Get(GetPluginRequest) returns (Plugin) {}
   rpc MCP(PluginMCPRequest) returns (PluginMCPResponse) {}
 }
