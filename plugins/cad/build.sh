@@ -15,7 +15,6 @@ cp "$ROOT/ui/cover.svg" "$PACKAGE/ui/cover.svg"
 uv sync --locked --project "$ROOT" --group dev
 uv run --locked --project "$ROOT" python -m unittest discover "$ROOT/server" -p "*_test.py"
 PYINSTALLER_CONFIG_DIR="$OUT/pyinstaller" uv run --locked --project "$ROOT" pyinstaller --onefile --name cad \
-  --exclude-module IPython \
   --exclude-module matplotlib \
   --exclude-module vtk \
   --exclude-module vtkmodules \
@@ -24,6 +23,7 @@ PYINSTALLER_CONFIG_DIR="$OUT/pyinstaller" uv run --locked --project "$ROOT" pyin
   --workpath "$OUT/build" \
   --specpath "$OUT" \
   "$ROOT/server/cad.py"
+uv run --locked --project "$ROOT" python "$ROOT/server/smoke_binary.py" "$PACKAGE/server/cad"
 cp "$ROOT/manifest.json" "$PACKAGE/manifest.json"
 rm -f "$ROOT/brigade-cad.mcpb"
 (cd "$PACKAGE" && zip -qr "$ROOT/brigade-cad.mcpb" .)
