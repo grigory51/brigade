@@ -127,7 +127,7 @@ export function PluginSection() {
       <div className="space-y-2 rounded-xl border bg-card/30 p-3">
         <FieldLabel>Добавить по HTTPS-ссылке на .mcpb</FieldLabel>
         <div className="flex gap-2">
-          <Input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://…/application.mcpb" onKeyDown={(event) => { if (event.key === "Enter") void installURL(); }} />
+          <Input value={url} disabled={busy === "install"} onChange={(event) => setUrl(event.target.value)} placeholder="https://…/application.mcpb" onKeyDown={(event) => { if (event.key === "Enter") void installURL(); }} />
           <Button onClick={() => void installURL()} disabled={!url.trim() || busy !== ""}>
             {busy === "install" ? <Loader2 className="size-4 animate-spin" /> : <LinkIcon className="size-4" />} Установить
           </Button>

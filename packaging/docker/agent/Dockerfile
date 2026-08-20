@@ -53,11 +53,12 @@ RUN ln -s /opt/brigade-runtime/node/bin/node /usr/local/bin/node \
 # несёт минимум ОС-утилит, поэтому доставляем ходовой набор для «простых операций»:
 # less (пейджер git), jq (JSON), Python с привычными `python`/`python3`, pip/venv и uv,
 # unzip/zip/wget (архивы/загрузки), procps (ps), openssh-client (git по SSH), patch,
-# file, tree, vim-tiny (git $EDITOR). Компиляторы (build-essential) намеренно НЕ ставим —
-# образ остаётся лёгким; нужен тяжёлый тулчейн — пользователь приносит свой образ.
+# file, tree, vim-tiny (git $EDITOR), libGL для headless CAD-ядер на базе OpenCascade.
+# Компиляторы (build-essential) намеренно НЕ ставим — образ остаётся лёгким; нужен тяжёлый
+# тулчейн — пользователь приносит свой образ.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        git ripgrep ca-certificates curl wget libstdc++6 libgcc-s1 \
+        git ripgrep ca-certificates curl wget libstdc++6 libgcc-s1 libgl1 \
         python3 python3-pip python3-venv \
         jq less unzip zip procps openssh-client patch file tree vim-tiny \
     && ln -s /usr/bin/python3 /usr/local/bin/python \

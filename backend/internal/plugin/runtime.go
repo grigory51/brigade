@@ -1,12 +1,15 @@
 package plugin
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"strings"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 	protocol "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -26,10 +29,14 @@ func StartRuntime(ctx context.Context, server acpsdk.McpServer, cwd string, extr
 	for _, item := range server.Stdio.Env {
 		cmd.Env = append(cmd.Env, item.Name+"="+item.Value)
 	}
-	cmd.Stderr = os.Stderr
+	var stderr bytes.Buffer
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
 	client := protocol.NewClient(&protocol.Implementation{Name: "Brigade", Version: "1"}, nil)
 	session, err := client.Connect(ctx, &protocol.CommandTransport{Command: cmd}, nil)
 	if err != nil {
+		if detail := strings.TrimSpace(stderr.String()); detail != "" {
+			return nil, fmt.Errorf("plugin: start MCP server: %w: %s", err, detail)
+		}
 		return nil, fmt.Errorf("plugin: start MCP server: %w", err)
 	}
 	return &Runtime{session: session}, nil

@@ -34,7 +34,8 @@ Brigade требует одно расширение manifest:
 
 `entry_tool` должен быть MCP tool с `ui://` resource по спецификации MCP Apps. Brigade
 вызывает его без аргументов, читает связанный HTML resource и размещает приложение в
-sandboxed iframe. В iframe доступны стандартные MCP Apps вызовы tools, resources,
+sandboxed iframe на всю рабочую область вкладки приложения. Соседняя вкладка содержит
+полный ACP-чат; её элементы не накладываются на UI плагина. В iframe доступны стандартные MCP Apps вызовы tools, resources,
 prompts, `openLink` и `downloadFile`; произвольного доступа к родительской странице нет.
 Необязательный `cover` — путь внутри bundle к SVG, PNG, JPEG или WebP до 1 MiB; обложка
 показывается в выборе интерфейса новой сессии.
