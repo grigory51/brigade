@@ -18,6 +18,7 @@ PYINSTALLER_CONFIG_DIR="$OUT/pyinstaller" uv run --locked --project "$ROOT" pyin
   --exclude-module matplotlib \
   --exclude-module vtk \
   --exclude-module vtkmodules \
+  --collect-binaries lib3mf \
   --add-data "$PACKAGE/ui/mcp-app.html:ui" \
   --distpath "$PACKAGE/server" \
   --workpath "$OUT/build" \
