@@ -192,7 +192,7 @@ func (d *DockerACPSpawner) StartDaemon(ctx context.Context, spec Spec, stateID, 
 		NetworkMode: d.spawner.netMode(),
 		Mounts:      append(mounts, runtimeMounts...),
 		// Публикуем порт демона на 127.0.0.1:<эфемерный> — для host-режима brigade (процесс на
-		// хосте не достаёт bridge-IP контейнера). В container-режиме (brigade на общей сети)
+		// хосте не достаёт bridge-IP контейнера). В container-режиме (brigade в agent network)
 		// используется прямой IP:port (см. daemonAddr).
 		PortBindings: nat.PortMap{daemonNatPort: []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: ""}}},
 	}
@@ -289,7 +289,7 @@ func (d *DockerACPSpawner) DebugContainer(ctx context.Context, sessionID string)
 // daemonAddr резолвит http-адрес демона сессии в зависимости от режима brigade:
 //   - host-режим (brigade — процесс на хосте, selfNetwork пуст): опубликованный порт на
 //     127.0.0.1 (bridge-IP контейнера с хоста не роутится);
-//   - container-режим (brigade в контейнере на общей сети): прямой IP контейнера:daemonPort.
+//   - container-режим (brigade в контейнере в agent network): прямой IP контейнера:daemonPort.
 func (d *DockerACPSpawner) daemonAddr(ctx context.Context, sessionID string) (string, error) {
 	id, err := d.spawner.findBySessionLabel(ctx, sessionID)
 	if err != nil {
@@ -302,8 +302,11 @@ func (d *DockerACPSpawner) daemonAddr(ctx context.Context, sessionID string) (st
 // brigade (общий резолвер для per-session ACP и per-user CLI демонов):
 //   - host-режим (selfNetwork пуст): опубликованный порт на 127.0.0.1 (bridge-IP контейнера
 //     с хоста не роутится);
-//   - container-режим (brigade на общей сети): прямой IP контейнера:daemonPort.
+//   - container-режим (brigade в agent network): прямой IP контейнера:daemonPort.
 func (s *DockerSpawner) daemonAddrByID(ctx context.Context, id string) (string, error) {
+	if err := s.isolateContainerNetwork(ctx, id); err != nil {
+		return "", fmt.Errorf("spawn: isolate container network: %w", err)
+	}
 	info, err := s.cli.ContainerInspect(ctx, id)
 	if err != nil {
 		return "", fmt.Errorf("spawn: container inspect: %w", err)
@@ -317,10 +320,8 @@ func (s *DockerSpawner) daemonAddrByID(ctx context.Context, id string) (string, 
 		return "", fmt.Errorf("spawn: daemon port for container %s not published", id)
 	}
 	if info.NetworkSettings != nil {
-		for _, nw := range info.NetworkSettings.Networks {
-			if nw.IPAddress != "" {
-				return fmt.Sprintf("http://%s:%d", nw.IPAddress, daemonPort), nil
-			}
+		if nw := info.NetworkSettings.Networks[s.agentNetwork]; nw != nil && nw.IPAddress != "" {
+			return fmt.Sprintf("http://%s:%d", nw.IPAddress, daemonPort), nil
 		}
 	}
 	return "", fmt.Errorf("spawn: container %s has no network address", id)

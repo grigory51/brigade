@@ -7,6 +7,17 @@ import (
 	"github.com/docker/docker/api/types/mount"
 )
 
+func TestAgentNetworkConfig(t *testing.T) {
+	s := &DockerSpawner{agentNetwork: "brigade-agents"}
+	if got := string(s.netMode()); got != s.agentNetwork {
+		t.Fatalf("NetworkMode = %q, want %q", got, s.agentNetwork)
+	}
+	config := s.networkingConfig()
+	if config == nil || config.EndpointsConfig[s.agentNetwork] == nil {
+		t.Fatalf("EndpointsConfig = %v, want %q", config, s.agentNetwork)
+	}
+}
+
 func TestRuntimeMountsCurrent(t *testing.T) {
 	expected := []mount.Mount{
 		{Type: mount.TypeVolume, Source: "brigade-rt-daemon-new", Target: "/opt/brigade-runtime/daemon"},
