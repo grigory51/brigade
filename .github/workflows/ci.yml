@@ -41,6 +41,7 @@ jobs:
       - name: build
         run: |
           npm ci
+          npm test
           npm run build
         working-directory: web
 
@@ -174,7 +175,7 @@ jobs:
         run: python -m pip install uv
       - name: build CAD plugin
         run: |
-          plugins/cad/build.sh
+          VERSION="${GITHUB_REF_NAME#v}" plugins/cad/build.sh
           mv plugins/cad/brigade-cad.mcpb "brigade-cad-${{ matrix.platform }}.mcpb"
       - uses: actions/upload-artifact@v4
         with:

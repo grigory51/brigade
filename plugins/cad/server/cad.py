@@ -8,9 +8,6 @@ import sys
 import threading
 from pathlib import Path
 from typing import Any
-
-import trimesh
-from build123d import Shape, export_step
 from mcp.server import MCPServer
 from mcp.server.apps import Apps
 
@@ -19,7 +16,6 @@ workspace = Path(os.environ.get("BRIGADE_WORKSPACE", os.getcwd())).resolve()
 session_id = os.environ.get("BRIGADE_SESSION_ID", "")
 lock = threading.Lock()
 apps = Apps()
-mcp = MCPServer("Brigade CAD", extensions=[apps])
 
 
 def file_url(path: Path) -> str:
@@ -62,6 +58,16 @@ def read_preview() -> dict[str, Any]:
         return {"status": "ready", "mimeType": "model/gltf-binary", "data": data}
 
 
+def bundled(path: str) -> Path:
+    if root := getattr(sys, "_MEIPASS", None):
+        return Path(root) / path
+    return Path(__file__).resolve().parent.parent / "ui/dist/index.html"
+
+
+apps.add_html_resource(APP_URI, bundled("ui/mcp-app.html").read_text(encoding="utf-8"), title="Brigade CAD")
+mcp = MCPServer("Brigade CAD", extensions=[apps])
+
+
 @mcp.tool(
     name="cad.build",
     title="Build parametric CAD",
@@ -71,6 +77,9 @@ def read_preview() -> dict[str, Any]:
     ),
 )
 def build_cad(source: str, name: str = "model", linear_tolerance: float = 0.1, angular_tolerance: float = 0.2) -> dict[str, Any]:
+    import trimesh
+    from build123d import Shape, export_step
+
     safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip(".-") or "model"
     source_path = workspace / f"{safe_name}.py"
     step_path = workspace / f"{safe_name}.step"
@@ -114,14 +123,6 @@ def build_cad(source: str, name: str = "model", linear_tolerance: float = 0.1, a
         temporary.replace(workspace / ".brigade-cad.json")
         return state
 
-
-def bundled(path: str) -> Path:
-    if root := getattr(sys, "_MEIPASS", None):
-        return Path(root) / path
-    return Path(__file__).resolve().parent.parent / "ui/dist/index.html"
-
-
-apps.add_html_resource(APP_URI, bundled("ui/mcp-app.html").read_text(encoding="utf-8"), title="Brigade CAD")
 
 if __name__ == "__main__":
     mcp.run()

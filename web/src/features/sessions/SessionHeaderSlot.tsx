@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
@@ -24,14 +25,18 @@ export function SessionHeaderProvider({ children }: { children: ReactNode }) {
     title: ReactNode;
     right: ReactNode;
   }>({ title: null, right: null });
+  const updateHeader = useCallback(
+    (next: { title?: ReactNode; right?: ReactNode }) =>
+      setHeader({ title: next.title ?? null, right: next.right ?? null }),
+    [],
+  );
 
   return (
     <SessionHeaderContext.Provider
       value={{
         title: header.title,
         right: header.right,
-        setHeader: (next) =>
-          setHeader({ title: next.title ?? null, right: next.right ?? null }),
+        setHeader: updateHeader,
       }}
     >
       {children}

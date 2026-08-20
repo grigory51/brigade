@@ -31,7 +31,14 @@ func StartRuntime(ctx context.Context, server acpsdk.McpServer, cwd string, extr
 	}
 	var stderr bytes.Buffer
 	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
-	client := protocol.NewClient(&protocol.Implementation{Name: "Brigade", Version: "1"}, nil)
+	capabilities := &protocol.ClientCapabilities{}
+	capabilities.AddExtension("io.modelcontextprotocol/ui", map[string]any{
+		"mimeTypes": []string{"text/html;profile=mcp-app"},
+	})
+	client := protocol.NewClient(
+		&protocol.Implementation{Name: "Brigade", Version: "1"},
+		&protocol.ClientOptions{Capabilities: capabilities},
+	)
 	session, err := client.Connect(ctx, &protocol.CommandTransport{Command: cmd}, nil)
 	if err != nil {
 		if detail := strings.TrimSpace(stderr.String()); detail != "" {

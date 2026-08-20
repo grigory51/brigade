@@ -14,7 +14,7 @@ type ModelState = {
 type PreviewState = { status?: string; mimeType?: string; data?: string };
 
 const root = document.querySelector<HTMLDivElement>("#app")!;
-const app = createBrigadeApp("Brigade CAD", "0.1.0");
+const app = createBrigadeApp("Brigade CAD", import.meta.env.VITE_PLUGIN_VERSION);
 let signature = "";
 let previewUrl = "";
 
