@@ -7,15 +7,23 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/grigory51/brigade/backend/internal/store"
 )
 
 func TestManifestAndSafeExtraction(t *testing.T) {
-	raw := []byte(`{"manifest_version":"0.3","name":"cad","version":"1.0.0","server":{"type":"binary","entry_point":"server/cad"},"_meta":{"brigade":{"experience":{"entry_tool":"cad.open"}}}}`)
-	if _, err := ParseManifest(raw); err != nil {
+	raw := []byte(`{"manifest_version":"0.3","name":"cad","version":"1.0.0","server":{"type":"binary","entry_point":"server/cad"},"_meta":{"brigade":{"experience":{"entry_tool":"cad.open","instructions":"Use CAD tools."}}}}`)
+	manifest, err := ParseManifest(raw)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if manifest.Meta.Brigade.Experience.Instructions != "Use CAD tools." {
+		t.Fatal("experience instructions were not parsed")
+	}
+	if instructions := manifest.ExperienceInstructions(); !strings.Contains(instructions, "cad experience") || !strings.Contains(instructions, "Use CAD tools.") {
+		t.Fatalf("experience instructions = %q", instructions)
 	}
 	unsafeVersion := []byte(`{"manifest_version":"0.3","name":"cad","version":"..","server":{"type":"binary","entry_point":"server/cad"},"_meta":{"brigade":{"experience":{"entry_tool":"cad.open"}}}}`)
 	if _, err := ParseManifest(unsafeVersion); err == nil {
@@ -44,11 +52,11 @@ func TestUpdateKeepsPinnedVersion(t *testing.T) {
 	}
 	defer st.Close()
 	source := filepath.Join(t.TempDir(), "app.mcpb")
-	writeBundle := func(version string) {
+	writeBundle := func(name, version string) {
 		var data bytes.Buffer
 		archive := zip.NewWriter(&data)
 		manifest, _ := archive.Create("manifest.json")
-		_, _ = manifest.Write([]byte(`{"manifest_version":"0.3","name":"app","version":"` + version + `","server":{"type":"python","entry_point":"server.py"},"_meta":{"brigade":{"experience":{"entry_tool":"app.open"}}}}`))
+		_, _ = manifest.Write([]byte(`{"manifest_version":"0.3","name":"` + name + `","version":"` + version + `","server":{"type":"python","entry_point":"server.py"},"_meta":{"brigade":{"experience":{"entry_tool":"app.open"}}}}`))
 		entry, _ := archive.Create("server.py")
 		_, _ = entry.Write([]byte("pass"))
 		_ = archive.Close()
@@ -57,16 +65,20 @@ func TestUpdateKeepsPinnedVersion(t *testing.T) {
 		}
 	}
 	manager := New(t.TempDir(), st)
-	writeBundle("1.0.0")
+	writeBundle("app", "1.0.0")
 	if _, err := manager.InstallFor(ctx, "user", source); err != nil {
 		t.Fatal(err)
 	}
-	writeBundle("2.0.0")
-	if updated, err := manager.UpdateFor(ctx, "user", "app"); err != nil || updated.Version != "2.0.0" {
+	writeBundle("app", "2.0.0")
+	if updated, err := manager.UpdateFor(ctx, "user", "app", source); err != nil || updated.Version != "2.0.0" {
 		t.Fatalf("update = %+v, %v", updated, err)
 	}
 	if pinned, err := st.GetPlugin(ctx, "user", "app", "1.0.0", "portable"); err != nil || pinned.Version != "1.0.0" {
 		t.Fatalf("pinned = %+v, %v", pinned, err)
+	}
+	writeBundle("other", "3.0.0")
+	if _, err := manager.UpdateFor(ctx, "user", "app", source); err == nil {
+		t.Fatal("update must reject a bundle with another id")
 	}
 }
 
@@ -98,7 +110,7 @@ func TestUpdateRestoresMissingBundle(t *testing.T) {
 	if err := os.RemoveAll(installed.BundlePath); err != nil {
 		t.Fatal(err)
 	}
-	restored, err := manager.UpdateFor(ctx, "user", "app")
+	restored, err := manager.UpdateFor(ctx, "user", "app", "")
 	if err != nil {
 		t.Fatal(err)
 	}

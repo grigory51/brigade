@@ -72,8 +72,9 @@ type Manifest struct {
 	Meta       struct {
 		Brigade struct {
 			Experience struct {
-				EntryTool string `json:"entry_tool"`
-				Cover     string `json:"cover"`
+				EntryTool    string `json:"entry_tool"`
+				Cover        string `json:"cover"`
+				Instructions string `json:"instructions"`
 			} `json:"experience"`
 		} `json:"brigade"`
 	} `json:"_meta"`
@@ -84,6 +85,18 @@ func (m Manifest) Title() string {
 		return m.DisplayName
 	}
 	return m.Name
+}
+
+func (m Manifest) ExperienceInstructions() string {
+	context := "The active session uses the " + m.Title() + " experience."
+	if description := strings.TrimSpace(m.Description); description != "" {
+		context += " " + description
+	}
+	context += " Treat requests in this domain as tasks for this experience. Use its MCP tools to create or update the persistent workspace and prefer them over unrelated tools unless the user explicitly asks for a different output."
+	if instructions := strings.TrimSpace(m.Meta.Brigade.Experience.Instructions); instructions != "" {
+		context += "\n\n" + instructions
+	}
+	return context
 }
 
 // ResolveConfig применяет defaults MCPB и проверяет значения до запуска исполняемого bundle.
@@ -377,6 +390,10 @@ func (m *Manager) Install(ctx context.Context, source string) (store.Plugin, err
 }
 
 func (m *Manager) InstallFor(ctx context.Context, userID, source string) (store.Plugin, error) {
+	return m.installFor(ctx, userID, source, "")
+}
+
+func (m *Manager) installFor(ctx context.Context, userID, source, expectedID string) (store.Plugin, error) {
 	if err := os.MkdirAll(m.dir, 0o700); err != nil {
 		return store.Plugin{}, fmt.Errorf("plugin: create cache: %w", err)
 	}
@@ -406,6 +423,9 @@ func (m *Manager) InstallFor(ctx context.Context, userID, source string) (store.
 	manifest, err := ParseManifest(raw)
 	if err != nil {
 		return store.Plugin{}, err
+	}
+	if expectedID != "" && manifest.Name != expectedID {
+		return store.Plugin{}, fmt.Errorf("plugin: bundle id %q does not match installed app %q", manifest.Name, expectedID)
 	}
 	if userID != "" {
 		if existing, err := m.store.GetPlugin(ctx, userID, manifest.Name, "", ""); err == nil && existing.OwnerID == "" {
@@ -562,7 +582,7 @@ func (m *Manager) Update(ctx context.Context, id string) (store.Plugin, error) {
 	return m.Install(ctx, current.Source)
 }
 
-func (m *Manager) UpdateFor(ctx context.Context, userID, id string) (store.Plugin, error) {
+func (m *Manager) UpdateFor(ctx context.Context, userID, id, source string) (store.Plugin, error) {
 	installed, err := m.store.ListPlugins(ctx, userID)
 	if err != nil {
 		return store.Plugin{}, err
@@ -572,13 +592,17 @@ func (m *Manager) UpdateFor(ctx context.Context, userID, id string) (store.Plugi
 		if current.OwnerID != userID || current.ID != id {
 			continue
 		}
-		if strings.HasPrefix(current.Source, "upload:") {
+		if source == "" && strings.HasPrefix(current.Source, "upload:") {
 			return store.Plugin{}, errors.New("plugin: uploaded bundle must be replaced by another upload")
 		}
-		updated, err = m.InstallFor(ctx, userID, current.Source)
+		if source == "" {
+			source = current.Source
+		}
+		updated, err = m.installFor(ctx, userID, source, id)
 		if err != nil {
 			return store.Plugin{}, err
 		}
+		break
 	}
 	if updated.ID == "" {
 		return store.Plugin{}, store.ErrNotFound

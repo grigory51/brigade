@@ -381,6 +381,7 @@ func (x *InstallPluginRequest) GetUrl() string {
 type UpdatePluginRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Url           string                 `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -418,6 +419,13 @@ func (*UpdatePluginRequest) Descriptor() ([]byte, []int) {
 func (x *UpdatePluginRequest) GetId() string {
 	if x != nil {
 		return x.Id
+	}
+	return ""
+}
+
+func (x *UpdatePluginRequest) GetUrl() string {
+	if x != nil {
+		return x.Url
 	}
 	return ""
 }
@@ -704,9 +712,10 @@ const file_brigade_v1_plugin_proto_rawDesc = "" +
 	"\aplugins\x18\x01 \x03(\v2\x12.brigade.v1.PluginR\aplugins\x12'\n" +
 	"\x0frequired_target\x18\x02 \x01(\tR\x0erequiredTarget\"(\n" +
 	"\x14InstallPluginRequest\x12\x10\n" +
-	"\x03url\x18\x01 \x01(\tR\x03url\"%\n" +
+	"\x03url\x18\x01 \x01(\tR\x03url\"7\n" +
 	"\x13UpdatePluginRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"%\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x10\n" +
+	"\x03url\x18\x02 \x01(\tR\x03url\"%\n" +
 	"\x13DeletePluginRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"J\n" +
 	"\x17SavePluginConfigRequest\x12\x0e\n" +

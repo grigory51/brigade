@@ -454,6 +454,17 @@ func instructionPrompt(profile, responseInstructions string) string {
 	return strings.Join(parts, "\n\n")
 }
 
+func appendInstructions(base, extra string) string {
+	parts := make([]string, 0, 2)
+	if base = strings.TrimSpace(base); base != "" {
+		parts = append(parts, base)
+	}
+	if extra = strings.TrimSpace(extra); extra != "" {
+		parts = append(parts, extra)
+	}
+	return strings.Join(parts, "\n\n")
+}
+
 func (r *Registry) resolveResponseProfile(ctx context.Context, sess store.Session) (store.Session, bool, error) {
 	if sess.ResponseProfileID == "" || sess.ResponseProfileID == "default" {
 		changed := sess.ResponseProfileID != "default" || sess.ResponseProfileName != "Обычно" || sess.ResponseInstructions != ""
@@ -864,7 +875,7 @@ func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token
 	rc := acpremote.New(addr, "", r.daemonTokenFn(sess.ID))
 	r.setACPHooks(sess, rc)
 	r.loadAgentSSHKey(ctx, sess.UserID, rc.SetSSHKey)
-	extraEnv := r.agentEnv(ctx, sess, token)
+	systemPrompt := instructionPrompt(sess.InstructionProfile, sess.ResponseInstructions)
 	servers := r.mcpServers(ctx, sess)
 	var experienceMCP *acpsdk.McpServer
 	if sess.ExperienceID != "" {
@@ -882,7 +893,9 @@ func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token
 		}
 		servers = append(servers, server)
 		experienceMCP = &server
+		systemPrompt = appendInstructions(systemPrompt, manifest.ExperienceInstructions())
 	}
+	extraEnv := r.agentEnvWithInstructions(ctx, sess, token, systemPrompt)
 	sid, err := rc.Configure(ctx, acpremote.ConfigureOptions{
 		OAuthToken:      token,
 		ExtraEnv:        extraEnv, // auth и preview — только процессу адаптера
@@ -891,7 +904,7 @@ func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token
 		ResumeSessionID: resumeSessionID,
 		McpServers:      servers,
 		PluginDirs:      r.acpPluginDirs(sess),
-		SystemPrompt:    instructionPrompt(sess.InstructionProfile, sess.ResponseInstructions),
+		SystemPrompt:    systemPrompt,
 		CredentialFile:  r.rotatingCredentialFile(ctx, sess, extraEnv),
 		ExperienceMCP:   experienceMCP,
 	})
@@ -1010,6 +1023,7 @@ func (r *Registry) acpPluginDirs(sess store.Session) []string {
 // сам поверх.
 func (r *Registry) acpLocalOptions(ctx context.Context, sess store.Session, token string) (acp.Options, error) {
 	servers := r.mcpServers(ctx, sess)
+	systemPrompt := instructionPrompt(sess.InstructionProfile, sess.ResponseInstructions)
 	if sess.ExperienceID != "" {
 		installed, manifest, err := r.experience(ctx, sess)
 		if err != nil {
@@ -1020,15 +1034,16 @@ func (r *Registry) acpLocalOptions(ctx context.Context, sess store.Session, toke
 			return acp.Options{}, err
 		}
 		servers = append(servers, server)
+		systemPrompt = appendInstructions(systemPrompt, manifest.ExperienceInstructions())
 	}
 	return acp.Options{
 		Cwd:            sess.Cwd,
 		OAuthToken:     token,
 		AdapterCommand: agent.Get(sess.AgentType).CommandFor(store.SessionKindACP),
-		ExtraEnv:       r.agentEnv(ctx, sess, token),
+		ExtraEnv:       r.agentEnvWithInstructions(ctx, sess, token, systemPrompt),
 		McpServers:     servers,
 		PluginDirs:     r.acpPluginDirs(sess),
-		SystemPrompt:   instructionPrompt(sess.InstructionProfile, sess.ResponseInstructions),
+		SystemPrompt:   systemPrompt,
 	}, nil
 }
 
@@ -1193,13 +1208,17 @@ func (r *Registry) acpDaemonTeardown(sessionID string) func(context.Context) err
 // preview, переменные публикации dev-серверов (см. previewEnv). token — per-user из
 // store; для CLI-режима агент дополнительно опирается на смонтированный ~/.claude.
 func (r *Registry) agentEnv(ctx context.Context, sess store.Session, token string) []string {
+	return r.agentEnvWithInstructions(ctx, sess, token, instructionPrompt(sess.InstructionProfile, sess.ResponseInstructions))
+}
+
+func (r *Registry) agentEnvWithInstructions(ctx context.Context, sess store.Session, token, instructions string) []string {
 	env := []string{"BRIGADE_SESSION_ID=" + sess.ID}
 	if token != "" {
 		env = append(env, "CLAUDE_CODE_OAUTH_TOKEN="+token)
 	}
 	if agent.Get(sess.AgentType).ID == agent.Codex.ID {
 		config := map[string]any{}
-		if instructions := instructionPrompt(sess.InstructionProfile, sess.ResponseInstructions); instructions != "" {
+		if instructions != "" {
 			config["developer_instructions"] = instructions
 		}
 		if sess.Mode == store.SessionModeDocker {

@@ -115,6 +115,8 @@ export type ThreadProps = {
   // readonly — режим только для чтения (архивная сессия): скрывает composer и
   // suggestions, лента остаётся. Ввод недоступен — живого агента нет.
   readonly?: boolean | undefined;
+  // workspace — компактная лента под постоянным предметным интерфейсом плагина.
+  workspace?: boolean | undefined;
 };
 
 const ThreadComponentsContext = createContext<ThreadComponents | null>(null);
@@ -172,6 +174,7 @@ export const Thread: FC<ThreadProps> = ({
   responseProfileBusy = false,
   onResponseProfileChange,
   readonly = false,
+  workspace = false,
 }) => {
   const isEmpty = useAuiState(isNewChatView);
   const configValue = useMemo<ConfigContextValue>(
@@ -198,6 +201,7 @@ export const Thread: FC<ThreadProps> = ({
               footer={footer}
               composer={composer}
               readonly={readonly}
+              workspace={workspace}
             />
           </ResponseProfileContext.Provider>
         </ConfigContext.Provider>
@@ -211,7 +215,8 @@ const ThreadRoot: FC<{
   footer?: ReactNode;
   composer?: ReactNode;
   readonly?: boolean;
-}> = ({ isEmpty, footer, composer, readonly = false }) => {
+  workspace?: boolean;
+}> = ({ isEmpty, footer, composer, readonly = false, workspace = false }) => {
   return (
     <ThreadPrimitive.Root
       className="aui-root aui-thread-root bg-background @container flex h-full flex-col"
@@ -233,17 +238,20 @@ const ThreadRoot: FC<{
         <div
           className={cn(
             // pt-14 — запас под плавающие чипы управления окнами (см. features/acp/dock).
-            "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-14",
-            isEmpty && "justify-center",
+            "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4",
+            workspace ? "pt-3" : "pt-14",
+            isEmpty && !workspace && "justify-center",
           )}
         >
-          <AuiIf condition={isNewChatView}>
-            <ThreadWelcome />
-          </AuiIf>
+          {!workspace && (
+            <AuiIf condition={isNewChatView}>
+              <ThreadWelcome />
+            </AuiIf>
+          )}
 
           <div
             data-slot="aui_message-group"
-            className="mb-14 flex flex-col gap-y-6 empty:hidden"
+            className={cn("flex flex-col empty:hidden", workspace ? "mb-3 gap-y-3" : "mb-14 gap-y-6")}
           >
             <ThreadPrimitive.Messages>
               {() => <ThreadMessage />}
@@ -252,7 +260,8 @@ const ThreadRoot: FC<{
 
           <ThreadPrimitive.ViewportFooter
             className={cn(
-              "aui-thread-viewport-footer bg-background flex flex-col gap-4 overflow-visible pb-4 md:pb-6",
+              "aui-thread-viewport-footer bg-background flex flex-col overflow-visible",
+              workspace ? "gap-2 pb-3" : "gap-4 pb-4 md:pb-6",
               !isEmpty &&
                 "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",
             )}

@@ -86,6 +86,7 @@ export function AcpThread({
   onPermissionDecision,
   readonly = false,
   sessionId,
+  workspace = false,
 }: {
   commands: AvailableCommand[];
   plan: PlanEntry[];
@@ -100,6 +101,7 @@ export function AcpThread({
   onPermissionDecision?: (decision: string) => void;
   readonly?: boolean;
   sessionId?: string;
+  workspace?: boolean;
 }) {
   // uploadFile заливает вложение в рабочую директорию агента сессии; путь возвращается для
   // вставки в текст сообщения (агент читает файл сам). В readonly-ленте архива недоступно.
@@ -160,6 +162,7 @@ export function AcpThread({
             responseProfileBusy={responseProfileBusy}
             onResponseProfileChange={onResponseProfileChange}
             readonly={readonly}
+            workspace={workspace}
           />
         </ComposerUploadContext.Provider>
       </AcpSessionContext.Provider>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Boxes, FileUp, Link as LinkIcon, Loader2, RefreshCw, Trash2 } from "lucide-react";
+import { Boxes, FileUp, Link as LinkIcon, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { pluginClient, refreshSession } from "@/api/client";
 import type { Plugin } from "@/api/gen/brigade/v1/plugin_pb";
@@ -31,6 +31,7 @@ export function PluginSection() {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState("");
   const [editing, setEditing] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
   const [values, setValues] = useState<Record<string, unknown>>({});
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -50,6 +51,10 @@ export function PluginSection() {
       if (!(key in initial) && field.default !== undefined) initial[key] = field.default;
     }
     setValues(initial);
+    const source = item.variants.find((variant) => variant.version === item.version && (variant.target === target || variant.target === "portable"))?.source
+      ?? item.variants.find((variant) => variant.source.startsWith("https://"))?.source
+      ?? "";
+    setSourceUrl(source.startsWith("https://") ? source : "");
     setEditing(item.id);
   };
 
@@ -101,7 +106,12 @@ export function PluginSection() {
 
   const update = async (item: Plugin) => {
     setBusy(item.id);
-    try { await pluginClient.update({ id: item.id }); await reload(); toast.success(`${item.name} обновлён`); }
+    try {
+      const updated = await pluginClient.update({ id: item.id, url: sourceUrl.trim() });
+      await reload();
+      edit(updated);
+      toast.success(`${item.name} обновлён`);
+    }
     catch (error) { toast.error(errorText(error, "Не удалось обновить MCP App")); }
     finally { setBusy(""); }
   };
@@ -145,6 +155,7 @@ export function PluginSection() {
         {plugins.map((item) => {
           const schema = decode<Record<string, ConfigField>>(item.configSchemaJson, {});
           const updating = busy === item.id;
+          const linked = item.variants.some((variant) => variant.source.startsWith("https://"));
           return (
             <div key={item.id} className="rounded-xl border bg-card/40 p-3">
               <div className="flex items-start gap-3">
@@ -155,13 +166,24 @@ export function PluginSection() {
                   <div className="mt-1 flex flex-wrap gap-1.5 font-mono text-[10.5px] text-muted-foreground">{item.variants.map((variant) => <span key={`${variant.version}-${variant.target}`}>{variant.version} · {variant.target}</span>)}</div>
                 </button>
                 {!item.system && <>
-                  {item.variants.some((variant) => variant.source.startsWith("https://")) && <Button size="icon" variant="ghost" title="Проверить обновление" aria-label="Обновить" disabled={updating} onClick={() => void update(item)}>{updating ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}</Button>}
                   <Button size="icon" variant="ghost" aria-label="Удалить" disabled={updating} onClick={() => void remove(item)}><Trash2 className="size-4" /></Button>
                 </>}
               </div>
 
-              {editing === item.id && Object.keys(schema).length > 0 && (
+              {editing === item.id && (linked || Object.keys(schema).length > 0) && (
                 <div className="mt-3 space-y-3 border-t pt-3">
+                  {linked && (
+                    <div className="space-y-1.5">
+                      <FieldLabel>URL пакета</FieldLabel>
+                      <div className="flex gap-2">
+                        <Input value={sourceUrl} disabled={updating} onChange={(event) => setSourceUrl(event.target.value)} />
+                        <Button disabled={updating || !sourceUrl.trim()} onClick={() => void update(item)}>
+                          {updating && <Loader2 className="size-4 animate-spin" />}Сохранить
+                        </Button>
+                      </div>
+                      <p className="text-[11.5px] text-muted-foreground">Bundle будет скачан и проверен заново.</p>
+                    </div>
+                  )}
                   {Object.entries(schema).map(([key, field]) => (
                     <label key={key} className="block space-y-1.5">
                       <FieldLabel>{field.title || key}{field.required ? " *" : ""}</FieldLabel>
@@ -180,7 +202,7 @@ export function PluginSection() {
                       {field.sensitive && <SecretNote>Значение хранится в vault и обратно не возвращается.</SecretNote>}
                     </label>
                   ))}
-                  <Button disabled={updating} onClick={() => void saveConfig(item)}>{updating && <Loader2 className="size-4 animate-spin" />}Сохранить</Button>
+                  {Object.keys(schema).length > 0 && <Button disabled={updating} onClick={() => void saveConfig(item)}>{updating && <Loader2 className="size-4 animate-spin" />}Сохранить настройки</Button>}
                 </div>
               )}
             </div>

@@ -83,7 +83,10 @@ func (s *PluginService) Update(ctx context.Context, req *connect.Request[v1.Upda
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.manager.UpdateFor(ctx, userID, req.Msg.Id); err != nil {
+	if req.Msg.Url != "" && !strings.HasPrefix(req.Msg.Url, "https://") {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("MCPB URL должен использовать HTTPS"))
+	}
+	if _, err := s.manager.UpdateFor(ctx, userID, req.Msg.Id, req.Msg.Url); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	return s.pluginByID(ctx, userID, req.Msg.Id)

@@ -26,7 +26,7 @@ import {
 // фоновых сообщений: фоновый turn (agent wakeup после завершения Workflow/задачи)
 // копится в history бэкенда, но живьём в тред не стримится — sink привязан только на
 // время /run. Инкремент ремоунтит AcpSessionInner, и history-адаптер перечитывает ленту.
-export function AcpSession({ sessionId }: { sessionId: string }) {
+export function AcpSession({ sessionId, workspace = false }: { sessionId: string; workspace?: boolean }) {
   const [reloadNonce, setReloadNonce] = useState(0);
   // Guard живёт выше remount: иначе каждый status poll с generating=true создаёт
   // новый runtime и обрывает replay-SSE до подключения.
@@ -44,6 +44,7 @@ export function AcpSession({ sessionId }: { sessionId: string }) {
     <AcpSessionInner
       key={reloadNonce}
       sessionId={sessionId}
+      workspace={workspace}
       onReload={reload}
       onReloadFinished={finishReload}
     />
@@ -52,10 +53,12 @@ export function AcpSession({ sessionId }: { sessionId: string }) {
 
 function AcpSessionInner({
   sessionId,
+  workspace,
   onReload,
   onReloadFinished,
 }: {
   sessionId: string;
+  workspace: boolean;
   onReload: () => void;
   onReloadFinished: () => void;
 }) {
@@ -115,6 +118,7 @@ function AcpSessionInner({
         <div className="min-h-0 flex-1">
           <AcpThread
             sessionId={sessionId}
+            workspace={workspace}
             commands={commands}
             plan={plan}
             a2ui={a2ui}
@@ -141,7 +145,7 @@ function AcpSessionInner({
         <WorkflowsPanel workflows={workflows} />
         {/* Плавающая обвязка сессии: чипы окон, шкала навигации по ленте, терминал.
             Внутри провайдера рантайма — шкале и ссылкам нужна лента сообщений. */}
-        <SessionDock sessionId={sessionId} />
+        {!workspace && <SessionDock sessionId={sessionId} />}
       </div>
       <SelectionMenu />
       </PendingContextProvider>

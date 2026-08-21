@@ -303,6 +303,11 @@ export class UpdatePluginRequest extends Message<UpdatePluginRequest> {
    */
   id = "";
 
+  /**
+   * @generated from field: string url = 2;
+   */
+  url = "";
+
   constructor(data?: PartialMessage<UpdatePluginRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -312,6 +317,7 @@ export class UpdatePluginRequest extends Message<UpdatePluginRequest> {
   static readonly typeName = "brigade.v1.UpdatePluginRequest";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): UpdatePluginRequest {

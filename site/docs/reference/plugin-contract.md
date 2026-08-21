@@ -25,7 +25,8 @@ Brigade требует одно расширение manifest:
     "brigade": {
       "experience": {
         "entry_tool": "example.open",
-        "cover": "ui/cover.svg"
+        "cover": "ui/cover.svg",
+        "instructions": "Use example.build for domain tasks."
       }
     }
   }
@@ -34,11 +35,15 @@ Brigade требует одно расширение manifest:
 
 `entry_tool` должен быть MCP tool с `ui://` resource по спецификации MCP Apps. Brigade
 вызывает его без аргументов, читает связанный HTML resource и размещает приложение в
-sandboxed iframe на всю рабочую область вкладки приложения. Соседняя вкладка содержит
-полный ACP-чат; её элементы не накладываются на UI плагина. В iframe доступны стандартные MCP Apps вызовы tools, resources,
+sandboxed iframe над встроенным ACP-чатом. Интерфейс и диалог видны одновременно. В iframe доступны стандартные MCP Apps вызовы tools, resources,
 prompts, `openLink` и `downloadFile`; произвольного доступа к родительской странице нет.
 Необязательный `cover` — путь внутри bundle к SVG, PNG, JPEG или WebP до 1 MiB; обложка
 показывается в выборе интерфейса новой сессии.
+
+Brigade добавляет в system/developer instructions агента название и описание активного
+experience, чтобы тот предпочитал его MCP tools. Необязательный `instructions` уточняет
+предметную роль, основной tool и ожидаемый результат. Этот текст действует только в
+сессиях experience и не добавляется к сообщениям пользователя.
 
 Сервер получает `BRIGADE_SESSION_ID` и `BRIGADE_WORKSPACE`. Агент подключается к одному
 экземпляру MCP-сервера, MCP Apps host — ко второму; общее состояние храните атомарно в
