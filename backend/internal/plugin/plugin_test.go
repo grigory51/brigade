@@ -164,6 +164,21 @@ func TestConfigExpansionAndRuntimeTarget(t *testing.T) {
 	if got := server.Stdio.Env; len(got) != 1 || got[0].Value != "secret" {
 		t.Fatalf("env = %#v", got)
 	}
+	empty := Manifest{}
+	empty.Name = "empty"
+	empty.Server.Type = "binary"
+	empty.Server.EntryPoint = "server/empty"
+	emptyServer, err := empty.MCPServer("/plugin", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(emptyServer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"args":[]`) {
+		t.Fatalf("empty args must remain an ACP array: %s", encoded)
+	}
 	node := Manifest{}
 	node.Server.Type = "node"
 	node.Server.EntryPoint = "server.js"

@@ -236,7 +236,7 @@ func (m Manifest) MCPServer(root string, values map[string]any, secrets map[stri
 }
 
 func expandArgs(input []string, values map[string]any, secrets map[string]string) ([]string, error) {
-	var out []string
+	out := make([]string, 0, len(input))
 	for _, arg := range input {
 		match := configRef.FindStringSubmatch(arg)
 		if len(match) == 2 && match[0] == arg {
