@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Boxes, FileUp, Link as LinkIcon, Loader2, Trash2 } from "lucide-react";
+import { Boxes, ChevronDown, FileUp, Link as LinkIcon, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { pluginClient, refreshSession } from "@/api/client";
 import type { Plugin } from "@/api/gen/brigade/v1/plugin_pb";
@@ -155,13 +155,12 @@ export function PluginSection() {
         {plugins.map((item) => {
           const schema = decode<Record<string, ConfigField>>(item.configSchemaJson, {});
           const updating = busy === item.id;
-          const linked = item.variants.some((variant) => variant.source.startsWith("https://"));
           return (
             <div key={item.id} className="rounded-xl border bg-card/40 p-3">
               <div className="flex items-start gap-3">
                 <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary"><Boxes className="size-4 text-primary" /></div>
                 <button type="button" className="min-w-0 flex-1 text-left" onClick={() => editing === item.id ? setEditing("") : edit(item)}>
-                  <div className="flex items-center gap-2"><span className="truncate text-sm font-medium">{item.name}</span><Badge on={item.compatible}>{item.compatible ? "совместим" : "недоступен для среды"}</Badge></div>
+                  <div className="flex items-center gap-2"><span className="truncate text-sm font-medium">{item.name}</span><Badge on={item.compatible}>{item.compatible ? "совместим" : "недоступен для среды"}</Badge><ChevronDown className={`ml-auto size-4 shrink-0 text-muted-foreground transition-transform ${editing === item.id ? "rotate-180" : ""}`} /></div>
                   <p className="line-clamp-2 text-xs text-muted-foreground">{item.description}</p>
                   <div className="mt-1 flex flex-wrap gap-1.5 font-mono text-[10.5px] text-muted-foreground">{item.variants.map((variant) => <span key={`${variant.version}-${variant.target}`}>{variant.version} · {variant.target}</span>)}</div>
                 </button>
@@ -170,13 +169,13 @@ export function PluginSection() {
                 </>}
               </div>
 
-              {editing === item.id && (linked || Object.keys(schema).length > 0) && (
+              {editing === item.id && (!item.system || Object.keys(schema).length > 0) && (
                 <div className="mt-3 space-y-3 border-t pt-3">
-                  {linked && (
+                  {!item.system && (
                     <div className="space-y-1.5">
                       <FieldLabel>URL пакета</FieldLabel>
                       <div className="flex gap-2">
-                        <Input value={sourceUrl} disabled={updating} onChange={(event) => setSourceUrl(event.target.value)} />
+                        <Input value={sourceUrl} disabled={updating} placeholder="https://…/application.mcpb" onChange={(event) => setSourceUrl(event.target.value)} />
                         <Button disabled={updating || !sourceUrl.trim()} onClick={() => void update(item)}>
                           {updating && <Loader2 className="size-4 animate-spin" />}Сохранить
                         </Button>
