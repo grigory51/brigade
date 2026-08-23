@@ -4,13 +4,14 @@ import {
   useComposer,
   useThreadRuntime,
 } from "@assistant-ui/react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckIcon, Loader2 } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { CheckIcon, Loader2, SquareIcon } from "lucide-react";
 import { toast } from "sonner";
 import { ConnectError } from "@connectrpc/connect";
 import { responseProfileClient, sessionClient } from "@/api/client";
 import { PendingContextProvider } from "@/components/assistant-ui/composer-context";
 import { AcpThread } from "./AcpThread";
+import { PermissionComposer } from "./AcpThread";
 import { SelectionMenu } from "./SelectionMenu";
 import { SessionDock } from "./dock/SessionDock";
 import {
@@ -26,7 +27,15 @@ import {
 // фоновых сообщений: фоновый turn (agent wakeup после завершения Workflow/задачи)
 // копится в history бэкенда, но живьём в тред не стримится — sink привязан только на
 // время /run. Инкремент ремоунтит AcpSessionInner, и history-адаптер перечитывает ленту.
-export function AcpSession({ sessionId, workspace = false }: { sessionId: string; workspace?: boolean }) {
+export function AcpSession({
+  sessionId,
+  workspace = false,
+  experience,
+}: {
+  sessionId: string;
+  workspace?: boolean;
+  experience?: ReactNode;
+}) {
   const [reloadNonce, setReloadNonce] = useState(0);
   // Guard живёт выше remount: иначе каждый status poll с generating=true создаёт
   // новый runtime и обрывает replay-SSE до подключения.
@@ -45,6 +54,7 @@ export function AcpSession({ sessionId, workspace = false }: { sessionId: string
       key={reloadNonce}
       sessionId={sessionId}
       workspace={workspace}
+      experience={experience}
       onReload={reload}
       onReloadFinished={finishReload}
     />
@@ -54,11 +64,13 @@ export function AcpSession({ sessionId, workspace = false }: { sessionId: string
 function AcpSessionInner({
   sessionId,
   workspace,
+  experience,
   onReload,
   onReloadFinished,
 }: {
   sessionId: string;
   workspace: boolean;
+  experience?: ReactNode;
   onReload: () => void;
   onReloadFinished: () => void;
 }) {
@@ -116,25 +128,34 @@ function AcpSessionInner({
       <PendingContextProvider>
       <div className="relative flex h-full flex-col">
         <div className="min-h-0 flex-1">
-          <AcpThread
-            sessionId={sessionId}
-            workspace={workspace}
-            commands={commands}
-            plan={plan}
-            a2ui={a2ui}
-            configOptions={configOptions}
-            permission={permission}
-            onPermissionDecision={(decision) =>
-              permission && resolvePermission(permission.id, decision)
-            }
-            onConfigChange={(configId, value) =>
-              void setConfigOption(configId, value)
-            }
-            responseProfiles={responseProfiles}
-            responseProfileId={responseProfileId}
-            responseProfileBusy={responseProfileBusy}
-            onResponseProfileChange={(id) => void changeResponseProfile(id)}
-          />
+          {experience ? (
+            <ExperienceHost
+              permission={permission}
+              onPermissionDecision={(decision) => permission && resolvePermission(permission.id, decision)}
+            >
+              {experience}
+            </ExperienceHost>
+          ) : (
+            <AcpThread
+              sessionId={sessionId}
+              workspace={workspace}
+              commands={commands}
+              plan={plan}
+              a2ui={a2ui}
+              configOptions={configOptions}
+              permission={permission}
+              onPermissionDecision={(decision) =>
+                permission && resolvePermission(permission.id, decision)
+              }
+              onConfigChange={(configId, value) =>
+                void setConfigOption(configId, value)
+              }
+              responseProfiles={responseProfiles}
+              responseProfileId={responseProfileId}
+              responseProfileBusy={responseProfileBusy}
+              onResponseProfileChange={(id) => void changeResponseProfile(id)}
+            />
+          )}
         </div>
         <BackgroundActivity
           status={status}
@@ -150,6 +171,39 @@ function AcpSessionInner({
       <SelectionMenu />
       </PendingContextProvider>
     </AssistantRuntimeProvider>
+  );
+}
+
+function ExperienceHost({
+  children,
+  permission,
+  onPermissionDecision,
+}: {
+  children: ReactNode;
+  permission: ReturnType<typeof useAcpRuntime>["permission"];
+  onPermissionDecision: (decision: string) => void;
+}) {
+  const running = useAuiState((state) => state.thread.isRunning);
+  const thread = useThreadRuntime();
+  return (
+    <div className="relative h-full min-h-0 overflow-hidden">
+      {children}
+      {running && (
+        <button
+          type="button"
+          onClick={() => thread.cancelRun()}
+          className="absolute top-4 right-4 z-20 flex h-8 items-center gap-2 rounded-full border border-border bg-background/90 px-3 text-xs shadow-lg backdrop-blur hover:bg-accent"
+        >
+          <SquareIcon className="size-3 fill-current" />
+          Остановить
+        </button>
+      )}
+      {permission && (
+        <div className="absolute inset-x-4 bottom-4 z-30 mx-auto max-w-2xl">
+          <PermissionComposer permission={permission} onDecide={onPermissionDecision} />
+        </div>
+      )}
+    </div>
   );
 }
 

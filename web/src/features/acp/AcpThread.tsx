@@ -170,7 +170,7 @@ export function AcpThread({
   );
 }
 
-function PermissionComposer({
+export function PermissionComposer({
   permission,
   onDecide,
 }: {

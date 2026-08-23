@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useAuiState, useThreadRuntime } from "@assistant-ui/react";
 import {
   AppBridge,
   PostMessageTransport,
@@ -14,6 +15,7 @@ import type {
 } from "@modelcontextprotocol/sdk/types.js";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { pluginClient } from "@/api/client";
+import { messagePlainText } from "@/features/acp/dock/links";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -31,8 +33,20 @@ type AppState = { html: string; tool: Tool; result: CallToolResult };
 
 export function McpAppFrame({ sessionId, entryTool }: { sessionId: string; entryTool: string }) {
   const iframe = useRef<HTMLIFrameElement>(null);
+  const connectedBridge = useRef<AppBridge | null>(null);
   const [state, setState] = useState<AppState | null>(null);
   const [error, setError] = useState("");
+  const thread = useThreadRuntime();
+  const generating = useAuiState((current) => current.thread.isRunning);
+  const lastMessage = useAuiState((current) => {
+    for (let index = current.thread.messages.length - 1; index >= 0; index -= 1) {
+      const message = current.thread.messages[index];
+      if (message.role === "assistant") return messagePlainText(message);
+    }
+    return "";
+  });
+  const hostState = useRef({ generating, lastMessage });
+  hostState.current = { generating, lastMessage };
 
   useEffect(() => {
     let cancelled = false;
@@ -67,7 +81,14 @@ export function McpAppFrame({ sessionId, entryTool }: { sessionId: string; entry
       bridge = new AppBridge(
         null,
         { name: "Brigade", version: "1" },
-        { openLinks: {}, downloadFile: {}, serverTools: {}, serverResources: {}, logging: {} },
+        {
+          openLinks: {},
+          downloadFile: {},
+          serverTools: {},
+          serverResources: {},
+          logging: {},
+          message: { text: {} },
+        },
         {
           hostContext: {
             toolInfo: { tool: state.tool },
@@ -86,6 +107,16 @@ export function McpAppFrame({ sessionId, entryTool }: { sessionId: string; entry
       bridge.onlistresourcetemplates = (params) => mcp<ListResourceTemplatesResult>(sessionId, "resources/templates/list", params);
       bridge.onreadresource = (params) => mcp<ReadResourceResult>(sessionId, "resources/read", params);
       bridge.onlistprompts = (params) => mcp<ListPromptsResult>(sessionId, "prompts/list", params);
+      bridge.onmessage = async ({ content }) => {
+        const text = content
+          .filter((item): item is { type: "text"; text: string } => item.type === "text")
+          .map((item) => item.text)
+          .join("\n")
+          .trim();
+        if (!text) return { isError: true };
+        await thread.append({ role: "user", content: [{ type: "text", text }] });
+        return {};
+      };
       bridge.onopenlink = async ({ url }) => {
         const parsed = new URL(url, window.location.href);
         if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return { isError: true };
@@ -118,8 +149,13 @@ export function McpAppFrame({ sessionId, entryTool }: { sessionId: string; entry
         return {};
       };
       bridge.oninitialized = () => {
+        connectedBridge.current = bridge;
         void bridge?.sendToolInput({ arguments: {} });
         void bridge?.sendToolResult(state.result);
+        void bridge?.sendToolResult({
+          content: [],
+          structuredContent: { brigadeHost: hostState.current },
+        });
       };
       const transport = new PostMessageTransport(target, target);
       void bridge.connect(transport).catch((reason) => {
@@ -130,9 +166,17 @@ export function McpAppFrame({ sessionId, entryTool }: { sessionId: string; entry
     frame.srcdoc = state.html;
     return () => {
       frame.removeEventListener("load", connect);
+      if (connectedBridge.current === bridge) connectedBridge.current = null;
       void bridge?.close();
     };
-  }, [sessionId, state]);
+  }, [sessionId, state, thread]);
+
+  useEffect(() => {
+    void connectedBridge.current?.sendToolResult({
+      content: [],
+      structuredContent: { brigadeHost: { generating, lastMessage } },
+    });
+  }, [generating, lastMessage]);
 
   if (error) {
     return (

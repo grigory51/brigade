@@ -61,6 +61,10 @@ def main() -> None:
         send(process, {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
         listed = receive(process, selector, 2).get("result", {})
         tools = listed.get("tools", []) if isinstance(listed, dict) else []
+        names = {tool.get("name") for tool in tools}
+        expected = {"cad.open", "cad.preview", "cad.update_parameters", "cad.rebuild", "cad.restore", "cad.build"}
+        if missing := expected - names:
+            raise RuntimeError(f"CAD tools are absent from tools/list: {sorted(missing)}")
         entry = next((tool for tool in tools if tool.get("name") == "cad.open"), None)
         if entry is None or entry.get("_meta", {}).get("ui", {}).get("resourceUri") != APP_URI:
             raise RuntimeError("cad.open with ui:// resource is absent from tools/list")
