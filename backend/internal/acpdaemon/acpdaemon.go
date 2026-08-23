@@ -111,8 +111,8 @@ func (d *Daemon) sink(evt agui.Event) error {
 // увидит его в StreamEvents и покажет диалог), регистрирует ожидание и блокируется до
 // ResolvePermission. Отмена (пустое решение / ctx) → cancelled.
 func (d *Daemon) resolve(ctx context.Context, req agui.PermissionRequest) (string, error) {
-	d.journal(agui.Event{Type: agui.EventCustom, Name: customPermissionName, Value: req})
 	ch := d.perms.register(req)
+	d.journal(agui.Event{Type: agui.EventCustom, Name: customPermissionName, Value: req})
 	select {
 	case decision := <-ch:
 		if decision == "" {

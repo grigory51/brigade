@@ -329,10 +329,8 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
           seq: Number(data.seq),
           tick: prev.tick + 1,
         }));
-        // Догоняем висящий permission-запрос: при открытии треда/возврате во вкладку история
-        // грузится unary, а CUSTOM permission_request не приходит — восстанавливаем диалог из
-        // статуса. Только ДОБАВЛЯЕМ (не гасим): очистка — за ответом/Stop (в docker-режиме
-        // Pending пуст, поведение не меняется).
+        // Статус — источник истины для permission: восстанавливаем запрос после reconnect
+        // и снимаем карточку, когда агент уже получил решение (например, после Full access).
         if (data.pendingPermissions.length > 0) {
           try {
             const p = toPermission(
@@ -344,6 +342,8 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
           } catch {
             // Некорректный JSON запроса — игнорируем, следующий тик повторит.
           }
+        } else {
+          setPermission(null);
         }
       } catch {
         // Транзиентный сбой сети — следующий тик повторит.
@@ -496,6 +496,9 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
         throw new Error(`агент вернул ${configId}=${actual ?? "<missing>"}`);
       }
       setConfigOptions(updated);
+      if (configId === "mode" && (value === "agent-full-access" || value === "bypassPermissions")) {
+        setPermission(null);
+      }
     } catch (err) {
       toast.error("Не удалось изменить настройку агента", {
         description: err instanceof ConnectError ? err.rawMessage : String(err),
