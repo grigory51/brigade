@@ -427,13 +427,6 @@ func (m *Manager) installFor(ctx context.Context, userID, source, expectedID str
 	if expectedID != "" && manifest.Name != expectedID {
 		return store.Plugin{}, fmt.Errorf("plugin: bundle id %q does not match installed app %q", manifest.Name, expectedID)
 	}
-	if userID != "" {
-		if existing, err := m.store.GetPlugin(ctx, userID, manifest.Name, "", ""); err == nil && existing.OwnerID == "" {
-			return store.Plugin{}, fmt.Errorf("plugin: id %q is reserved by a system app", manifest.Name)
-		} else if err != nil && !errors.Is(err, store.ErrNotFound) {
-			return store.Plugin{}, err
-		}
-	}
 	ownerDir := "system"
 	if userID != "" {
 		if filepath.Base(userID) != userID {
@@ -605,7 +598,10 @@ func (m *Manager) UpdateFor(ctx context.Context, userID, id, source string) (sto
 		break
 	}
 	if updated.ID == "" {
-		return store.Plugin{}, store.ErrNotFound
+		if source == "" {
+			return store.Plugin{}, store.ErrNotFound
+		}
+		return m.installFor(ctx, userID, source, id)
 	}
 	return updated, nil
 }

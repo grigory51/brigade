@@ -169,20 +169,18 @@ export function PluginSection() {
                 </>}
               </div>
 
-              {editing === item.id && (!item.system || Object.keys(schema).length > 0) && (
+              {editing === item.id && (
                 <div className="mt-3 space-y-3 border-t pt-3">
-                  {!item.system && (
-                    <div className="space-y-1.5">
-                      <FieldLabel>URL пакета</FieldLabel>
-                      <div className="flex gap-2">
-                        <Input value={sourceUrl} disabled={updating} placeholder="https://…/application.mcpb" onChange={(event) => setSourceUrl(event.target.value)} />
-                        <Button disabled={updating || !sourceUrl.trim()} onClick={() => void update(item)}>
-                          {updating && <Loader2 className="size-4 animate-spin" />}Сохранить
-                        </Button>
-                      </div>
-                      <p className="text-[11.5px] text-muted-foreground">Bundle будет скачан и проверен заново.</p>
+                  <div className="space-y-1.5">
+                    <FieldLabel>URL пакета</FieldLabel>
+                    <div className="flex gap-2">
+                      <Input value={sourceUrl} disabled={updating} placeholder="https://…/application.mcpb" onChange={(event) => setSourceUrl(event.target.value)} />
+                      <Button disabled={updating || !sourceUrl.trim()} onClick={() => void update(item)}>
+                        {updating && <Loader2 className="size-4 animate-spin" />}Сохранить
+                      </Button>
                     </div>
-                  )}
+                    <p className="text-[11.5px] text-muted-foreground">Bundle будет скачан и проверен заново.{item.system ? " Сохранится как ваша версия приложения." : ""}</p>
+                  </div>
                   {Object.entries(schema).map(([key, field]) => (
                     <label key={key} className="block space-y-1.5">
                       <FieldLabel>{field.title || key}{field.required ? " *" : ""}</FieldLabel>

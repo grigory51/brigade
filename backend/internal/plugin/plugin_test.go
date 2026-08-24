@@ -65,6 +65,10 @@ func TestUpdateKeepsPinnedVersion(t *testing.T) {
 		}
 	}
 	manager := New(t.TempDir(), st)
+	writeBundle("app", "0.9.0")
+	if _, err := manager.Install(ctx, source); err != nil {
+		t.Fatal(err)
+	}
 	writeBundle("app", "1.0.0")
 	if _, err := manager.InstallFor(ctx, "user", source); err != nil {
 		t.Fatal(err)
