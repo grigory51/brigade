@@ -20,9 +20,12 @@ type ConfigField = {
   max?: number;
 };
 
-const decode = <T,>(value: Uint8Array, fallback: T): T => {
-  if (!value.length) return fallback;
-  try { return JSON.parse(new TextDecoder().decode(value)) as T; } catch { return fallback; }
+const decodeRecord = <T,>(value: Uint8Array): Record<string, T> => {
+  if (!value.length) return {};
+  try {
+    const parsed: unknown = JSON.parse(new TextDecoder().decode(value));
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, T> : {};
+  } catch { return {}; }
 };
 
 export function PluginSection() {
@@ -45,8 +48,8 @@ export function PluginSection() {
   useEffect(() => { void reload().catch(() => setPlugins([])); }, [reload]);
 
   const edit = (item: Plugin) => {
-    const initial = decode<Record<string, unknown>>(item.configValuesJson, {});
-    const schema = decode<Record<string, ConfigField>>(item.configSchemaJson, {});
+    const initial = decodeRecord<unknown>(item.configValuesJson);
+    const schema = decodeRecord<ConfigField>(item.configSchemaJson);
     for (const [key, field] of Object.entries(schema)) {
       if (!(key in initial) && field.default !== undefined) initial[key] = field.default;
     }
@@ -153,7 +156,7 @@ export function PluginSection() {
 
       <div className="space-y-2">
         {plugins.map((item) => {
-          const schema = decode<Record<string, ConfigField>>(item.configSchemaJson, {});
+          const schema = decodeRecord<ConfigField>(item.configSchemaJson);
           const updating = busy === item.id;
           return (
             <div key={item.id} className="rounded-xl border bg-card/40 p-3">
