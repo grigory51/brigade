@@ -67,7 +67,6 @@ import {
   SidebarMenuItem,
   SidebarMenuSkeleton,
   SidebarProvider,
-  SidebarRail,
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
@@ -496,7 +495,6 @@ export function SessionLayout() {
                 <UserMenu />
               </SidebarFooter>
             )}
-            <SidebarRail />
           </Sidebar>
 
           <SidebarInset className="h-svh min-h-0">

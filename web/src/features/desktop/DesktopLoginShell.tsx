@@ -7,7 +7,6 @@ import {
   SidebarHeader,
   SidebarInset,
   SidebarProvider,
-  SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { EnvironmentSwitcher } from "./EnvironmentSwitcher";
@@ -30,7 +29,6 @@ export function DesktopLoginShell({ children }: { children: ReactNode }) {
             <span className="group-data-[collapsible=icon]:hidden">Новая сессия</span>
           </Button>
         </SidebarHeader>
-        <SidebarRail />
       </Sidebar>
       <SidebarInset className="h-svh min-h-0">{children}</SidebarInset>
     </SidebarProvider>
