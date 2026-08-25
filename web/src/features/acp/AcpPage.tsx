@@ -5,7 +5,7 @@ import {
   useThreadRuntime,
 } from "@assistant-ui/react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { CheckIcon, Loader2, SquareIcon } from "lucide-react";
+import { CheckIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { ConnectError } from "@connectrpc/connect";
 import { responseProfileClient, sessionClient } from "@/api/client";
@@ -183,21 +183,9 @@ function ExperienceHost({
   permission: ReturnType<typeof useAcpRuntime>["permission"];
   onPermissionDecision: (decision: string) => void;
 }) {
-  const running = useAuiState((state) => state.thread.isRunning);
-  const thread = useThreadRuntime();
   return (
     <div className="relative h-full min-h-0 overflow-hidden">
       {children}
-      {running && (
-        <button
-          type="button"
-          onClick={() => thread.cancelRun()}
-          className="absolute top-4 right-4 z-20 flex h-8 items-center gap-2 rounded-full border border-border bg-background/90 px-3 text-xs shadow-lg backdrop-blur hover:bg-accent"
-        >
-          <SquareIcon className="size-3 fill-current" />
-          Остановить
-        </button>
-      )}
       {permission && (
         <div className="absolute inset-x-4 bottom-4 z-30 mx-auto max-w-2xl">
           <PermissionComposer permission={permission} onDecide={onPermissionDecision} />

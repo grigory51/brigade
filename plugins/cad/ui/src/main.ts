@@ -37,7 +37,12 @@ type ModelState = {
   pipeline?: { stage?: string; status?: string };
 };
 type PreviewState = { status?: string; mimeType?: string; data?: string };
-type HostState = { generating?: boolean; lastMessage?: string };
+type HostState = {
+  generating?: boolean;
+  lastMessage?: string;
+  prompts?: string[];
+  submitMode?: "enter" | "modifier-enter";
+};
 type Panel = "parameters" | "validation" | "revisions" | "source";
 
 const root = document.querySelector<HTMLDivElement>("#app")!;
@@ -118,19 +123,29 @@ function render() {
       </section>
 
       <section class="cad-agent">
-        <div class="cad-agent-state">
-          <span class="cad-agent-dot ${host.generating ? "is-running" : ""}"></span>
-          <strong>${host.generating ? "Agent is working" : "Agent"}</strong>
-          <span>${escapeHtml(host.lastMessage || "Ready for the next instruction")}</span>
+        <div class="cad-prompt-history" aria-label="Prompt history">${renderPromptHistory()}</div>
+        <div class="cad-agent-row">
+          <div class="cad-agent-state">
+            <span class="cad-agent-dot ${host.generating ? "is-running" : ""}"></span>
+            <strong>${host.generating ? "Agent is working" : "Agent"}</strong>
+            <span>${escapeHtml(host.lastMessage || "Ready for the next instruction")}</span>
+          </div>
+          <form class="cad-prompt">
+            <textarea rows="1" placeholder="Describe a part or ask for a change…" aria-label="CAD instruction"></textarea>
+            <button class="cad-send" type="submit" ${host.generating ? "hidden" : ""} aria-label="Send instruction">↑</button>
+            <button class="cad-stop" type="button" data-stop ${host.generating ? "" : "hidden"} aria-label="Stop agent"><span></span></button>
+          </form>
         </div>
-        <form class="cad-prompt">
-          <textarea rows="1" placeholder="Describe a part or ask for a change…" aria-label="CAD instruction"></textarea>
-          <button type="submit" ${host.generating ? "disabled" : ""} aria-label="Send instruction">↑</button>
-        </form>
         ${error ? `<div class="cad-toast">${escapeHtml(error)}</div>` : ""}
       </section>
     </main>`;
   bind();
+}
+
+function renderPromptHistory(): string {
+  return (host.prompts || []).map((prompt) => `
+    <div class="cad-prompt-entry"><span>You</span><p>${escapeHtml(prompt)}</p></div>
+  `).join("");
 }
 
 function tab(id: Panel, label: string, count?: number): string {
@@ -188,17 +203,37 @@ function bind() {
   });
   root.querySelector<HTMLFormElement>(".cad-prompt")?.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (host.generating) return;
     const textarea = event.currentTarget.querySelector("textarea")!;
     const text = textarea.value.trim();
     if (!text) return;
+    const previousPrompts = host.prompts || [];
     textarea.value = "";
+    host.prompts = [...previousPrompts, text];
     host.generating = true;
     updateHost();
     try {
       const result = await app.sendMessage({ role: "user", content: [{ type: "text", text }] });
       if (result.isError) throw new Error("The host rejected the instruction");
     } catch (reason) {
+      host.prompts = previousPrompts;
       host.generating = false;
+      showError(reason);
+    }
+  });
+  root.querySelector<HTMLTextAreaElement>(".cad-prompt textarea")?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.isComposing) return;
+    const submit = host.submitMode === "modifier-enter"
+      ? event.metaKey || event.ctrlKey
+      : !event.shiftKey;
+    if (!submit) return;
+    event.preventDefault();
+    root.querySelector<HTMLFormElement>(".cad-prompt")?.requestSubmit();
+  });
+  root.querySelector<HTMLButtonElement>("[data-stop]")?.addEventListener("click", async () => {
+    try {
+      await app.callServerTool({ name: "brigade.cancel", arguments: {} });
+    } catch (reason) {
       showError(reason);
     }
   });
@@ -273,7 +308,14 @@ function updateHost() {
   const message = root.querySelector<HTMLElement>(".cad-agent-state > span:last-child");
   if (message) message.textContent = host.lastMessage || "Ready for the next instruction";
   const send = root.querySelector<HTMLButtonElement>('.cad-prompt button[type="submit"]');
-  if (send) send.disabled = Boolean(host.generating);
+  if (send) send.hidden = Boolean(host.generating);
+  const stop = root.querySelector<HTMLButtonElement>(".cad-stop");
+  if (stop) stop.hidden = !host.generating;
+  const history = root.querySelector<HTMLElement>(".cad-prompt-history");
+  if (history) {
+    history.innerHTML = renderPromptHistory();
+    history.scrollTop = history.scrollHeight;
+  }
 }
 
 async function loadPreview(revision: number) {

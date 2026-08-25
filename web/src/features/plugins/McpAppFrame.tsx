@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuiState, useThreadRuntime } from "@assistant-ui/react";
 import {
   AppBridge,
@@ -16,6 +16,7 @@ import type {
 import { AlertCircle, Loader2 } from "lucide-react";
 import { pluginClient } from "@/api/client";
 import { messagePlainText } from "@/features/acp/dock/links";
+import { getComposerSubmitMode } from "@/lib/composer-submit";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -45,8 +46,18 @@ export function McpAppFrame({ sessionId, entryTool }: { sessionId: string; entry
     }
     return "";
   });
-  const hostState = useRef({ generating, lastMessage });
-  hostState.current = { generating, lastMessage };
+  const promptHistoryJSON = useAuiState((current) => JSON.stringify(
+    current.thread.messages
+      .filter((message) => message.role === "user")
+      .map(messagePlainText)
+      .filter(Boolean)
+      // Последних 50 промптов достаточно для workbench; полная история остаётся в ACP.
+      .slice(-50),
+  ));
+  const prompts = useMemo(() => JSON.parse(promptHistoryJSON) as string[], [promptHistoryJSON]);
+  const submitMode = getComposerSubmitMode();
+  const hostState = useRef({ generating, lastMessage, prompts, submitMode });
+  hostState.current = { generating, lastMessage, prompts, submitMode };
 
   useEffect(() => {
     let cancelled = false;
@@ -102,7 +113,13 @@ export function McpAppFrame({ sessionId, entryTool }: { sessionId: string; entry
           },
         },
       );
-      bridge.oncalltool = (params) => mcp<CallToolResult>(sessionId, "tools/call", params);
+      bridge.oncalltool = async (params) => {
+        if (params.name === "brigade.cancel") {
+          await thread.cancelRun();
+          return { content: [] };
+        }
+        return mcp<CallToolResult>(sessionId, "tools/call", params);
+      };
       bridge.onlistresources = (params) => mcp<ListResourcesResult>(sessionId, "resources/list", params);
       bridge.onlistresourcetemplates = (params) => mcp<ListResourceTemplatesResult>(sessionId, "resources/templates/list", params);
       bridge.onreadresource = (params) => mcp<ReadResourceResult>(sessionId, "resources/read", params);
@@ -174,9 +191,9 @@ export function McpAppFrame({ sessionId, entryTool }: { sessionId: string; entry
   useEffect(() => {
     void connectedBridge.current?.sendToolResult({
       content: [],
-      structuredContent: { brigadeHost: { generating, lastMessage } },
+      structuredContent: { brigadeHost: hostState.current },
     });
-  }, [generating, lastMessage]);
+  }, [generating, lastMessage, prompts, submitMode]);
 
   if (error) {
     return (

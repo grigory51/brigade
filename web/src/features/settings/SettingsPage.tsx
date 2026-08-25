@@ -24,6 +24,7 @@ import {
   RefreshCw,
   Server,
   Send,
+  Settings2,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -42,6 +43,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import {
+  getComposerSubmitMode,
+  setComposerSubmitMode,
+  type ComposerSubmitMode,
+} from "@/lib/composer-submit";
 import { AgentConnectionsSection } from "./AgentConnectionsSection";
 import { EnvironmentSection } from "./EnvironmentSection";
 import { DesktopEnvironmentsSection } from "./DesktopEnvironmentsSection";
@@ -76,9 +82,9 @@ import {
  * в поле всегда пустой драфт, а состояние показывается флагом «задан».
  */
 
-type SectionId = "agents" | "mcp" | "apps" | "profiles" | "environments" | "env" | "memory" | "ssh" | "notifications" | "telegram";
+type SectionId = "general" | "agents" | "mcp" | "apps" | "profiles" | "environments" | "env" | "memory" | "ssh" | "notifications" | "telegram";
 
-const SECTIONS: SectionId[] = ["agents", "mcp", "apps", "profiles", "environments", "env", "memory", "ssh", "notifications", "telegram"];
+const SECTIONS: SectionId[] = ["general", "agents", "mcp", "apps", "profiles", "environments", "env", "memory", "ssh", "notifications", "telegram"];
 
 const AGENTS_OPEN_KEY = "brigade.settings.agentsOpen";
 
@@ -171,6 +177,12 @@ export function SettingsPage() {
 
       <div className="flex min-h-0 flex-1">
         <nav className="flex w-[222px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r px-2.5 pt-4 pb-5">
+          <NavRow
+            icon={Settings2}
+            label="Общее"
+            active={active === "general"}
+            onClick={() => go("general")}
+          />
           <NavRow
             icon={Bot}
             label="Агенты"
@@ -366,6 +378,7 @@ export function SettingsPage() {
             key={active}
             className="mx-auto flex max-w-[680px] animate-[section-in_0.24s_cubic-bezier(0.2,0.8,0.2,1)] flex-col gap-[18px] px-[34px] pt-6 pb-[90px]"
           >
+            {active === "general" && <GeneralSection />}
             {active === "agents" && (
               <AgentConnectionsSection
                 connections={agentConnections}
@@ -409,6 +422,42 @@ export function SettingsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function GeneralSection() {
+  const [submitMode, setSubmitMode] = useState<ComposerSubmitMode>(getComposerSubmitMode);
+  const changeSubmitMode = (value: string) => {
+    const mode: ComposerSubmitMode = value === "modifier-enter" ? "modifier-enter" : "enter";
+    setSubmitMode(mode);
+    setComposerSubmitMode(mode);
+  };
+
+  return (
+    <>
+      <SectionHeader title="Общее">
+        <Description>
+          Настройки интерфейса применяются к обычному чату и рабочим пространствам MCP Apps.
+        </Description>
+      </SectionHeader>
+      <div className="flex items-center justify-between gap-6 border-t pt-4">
+        <div className="min-w-0">
+          <div className="text-[13px] text-[#e7e5df]">Отправка сообщений</div>
+          <div className="mt-1 text-[11.5px] text-[#6c695f]">
+            Альтернативная комбинация вставляет перенос строки.
+          </div>
+        </div>
+        <Select value={submitMode} onValueChange={changeSubmitMode}>
+          <SelectTrigger className="w-[220px] shrink-0">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="enter">Enter отправляет</SelectItem>
+            <SelectItem value="modifier-enter">⌘ / Ctrl + Enter отправляет</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </>
   );
 }
 

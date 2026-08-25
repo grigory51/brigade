@@ -17,6 +17,10 @@ import {
 } from "@/components/assistant-ui/reasoning";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { Button } from "@/components/ui/button";
+import {
+  getComposerSubmitMode,
+  shouldSubmitComposer,
+} from "@/lib/composer-submit";
 import { cn } from "@/lib/utils";
 import {
   ActionBarMorePrimitive,
@@ -364,13 +368,17 @@ function isCoarsePointer(): boolean {
 const ComposerInput: FC<{ historyLoading: boolean }> = ({ historyLoading }) => {
   const { hasItems, sendWithContext } = useComposerContextSend();
   const onKeyDownCapture = (e: ReactKeyboardEvent) => {
-    if (
-      hasItems &&
-      e.key === "Enter" &&
-      !e.shiftKey &&
-      !e.nativeEvent.isComposing &&
-      !isCoarsePointer()
-    ) {
+    if (e.key !== "Enter" || e.nativeEvent.isComposing || isCoarsePointer()) return;
+    const mode = getComposerSubmitMode();
+    if (!shouldSubmitComposer(mode, e.nativeEvent)) {
+      if (mode === "modifier-enter") {
+        // assistant-ui отправляет plain Enter сам; останавливаем bubbling, сохраняя
+        // нативную вставку переноса строки в textarea.
+        e.stopPropagation();
+      }
+      return;
+    }
+    if (hasItems || mode === "modifier-enter") {
       e.preventDefault();
       e.stopPropagation();
       sendWithContext();
