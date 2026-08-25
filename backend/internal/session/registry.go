@@ -1905,6 +1905,24 @@ func (r *Registry) reloadable(ctx context.Context, sessionID, userID string, can
 func (r *Registry) reinit(ctx context.Context, lv *live, sess store.Session, refreshRuntime bool) (err error) {
 	sessionID := sess.ID
 	previous := sess
+	if refreshRuntime && sess.ExperienceID != "" {
+		target := plugin.RuntimeTarget(sess.Mode == store.SessionModeDocker)
+		installed, err := r.store.GetPlugin(ctx, sess.UserID, sess.ExperienceID, "", target)
+		if err != nil {
+			return err
+		}
+		if installed.Version != sess.ExperienceVersion {
+			if err := r.store.UpdateSessionExperienceVersion(ctx, sessionID, installed.Version); err != nil {
+				return err
+			}
+			sess.ExperienceVersion = installed.Version
+			defer func() {
+				if err != nil {
+					_ = r.store.UpdateSessionExperienceVersion(context.WithoutCancel(ctx), sessionID, previous.ExperienceVersion)
+				}
+			}()
+		}
+	}
 	sess, profileChanged, err := r.resolveResponseProfile(ctx, sess)
 	if err != nil {
 		return err

@@ -530,6 +530,14 @@ func (s *Store) UpdateSessionResume(ctx context.Context, id, agentSessionID, con
 	return affectedOne(res, "update session resume")
 }
 
+func (s *Store) UpdateSessionExperienceVersion(ctx context.Context, id, version string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE sessions SET experience_version = ? WHERE id = ?`, version, id)
+	if err != nil {
+		return fmt.Errorf("store: update session experience version: %w", err)
+	}
+	return affectedOne(res, "update session experience version")
+}
+
 // DeleteSession удаляет сессию. Возвращает ErrNotFound, если сессии нет.
 func (s *Store) DeleteSession(ctx context.Context, id string) error {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE id = ?`, id)

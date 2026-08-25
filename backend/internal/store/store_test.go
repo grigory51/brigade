@@ -79,6 +79,27 @@ func TestPluginsAreScopedAndResolvedByTarget(t *testing.T) {
 	}
 }
 
+func TestUpdateSessionExperienceVersion(t *testing.T) {
+	ctx := context.Background()
+	st, err := Open(filepath.Join(t.TempDir(), "brigade.db"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if _, err := st.DB().Exec(`INSERT INTO users (id, username, password_hash, created_at) VALUES ('u1', 'user', '', 0)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateSession(ctx, Session{ID: "s1", UserID: "u1", Mode: SessionModeDocker, Kind: SessionKindACP, AgentType: "codex", Status: SessionStatusRunning, ExperienceID: "cad", ExperienceVersion: "1", CreatedAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpdateSessionExperienceVersion(ctx, "s1", "2"); err != nil {
+		t.Fatal(err)
+	}
+	if session, err := st.GetSession(ctx, "s1"); err != nil || session.ExperienceVersion != "2" {
+		t.Fatalf("session=%+v err=%v", session, err)
+	}
+}
+
 func TestUpdateSessionNameIfEmptyDoesNotOverwrite(t *testing.T) {
 	ctx := context.Background()
 	st, err := Open(filepath.Join(t.TempDir(), "brigade.db"), nil)

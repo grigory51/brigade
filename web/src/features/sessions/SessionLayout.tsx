@@ -278,6 +278,11 @@ export function SessionLayout() {
     try {
       await sessionClient.reloadAgent({ sessionId: id });
       toast.success("Агент перезапущен на актуальном окружении");
+      if (window.location.pathname.endsWith(`/${id}`)) {
+        window.location.reload();
+      } else {
+        await load(true);
+      }
     } catch (err) {
       toast.error(
         err instanceof ConnectError
@@ -287,7 +292,7 @@ export function SessionLayout() {
     } finally {
       setReloadingId(null);
     }
-  }, []);
+  }, [load]);
 
   const openCreate = useCallback(() => setCreateOpen(true), []);
 
