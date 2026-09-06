@@ -41,5 +41,8 @@ Docker socket даёт Brigade возможность создавать кон�
 
 - [Подключить Telegram](guides/telegram.md)
 - [Добавить MCP-сервер](guides/mcp.md)
+- [Установить MCP App](guides/plugins.md)
+- [Работать с CAD](guides/cad.md)
+- [Настроить вход через OIDC](guides/authentication.md)
 - [Настроить память в git](guides/memory.md)
 - [Опубликовать dev-сервер или файл](guides/files-and-ui.md)

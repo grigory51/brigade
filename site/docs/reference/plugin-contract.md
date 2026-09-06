@@ -35,7 +35,8 @@ Brigade требует одно расширение manifest:
 
 `entry_tool` должен быть MCP tool с `ui://` resource по спецификации MCP Apps. Brigade
 вызывает его без аргументов, читает связанный HTML resource и размещает приложение в
-sandboxed iframe над встроенным ACP-чатом. Интерфейс и диалог видны одновременно. В iframe доступны стандартные MCP Apps вызовы tools, resources,
+sandboxed iframe, занимающем рабочую область сессии. Приложение само определяет компоновку
+сцены, панелей и ввода; фиксированного ACP-чата под iframe нет. В iframe доступны стандартные MCP Apps вызовы tools, resources,
 prompts, `openLink` и `downloadFile`; произвольного доступа к родительской странице нет.
 Необязательный `cover` — путь внутри bundle к SVG, PNG, JPEG или WebP до 1 MiB; обложка
 показывается в выборе интерфейса новой сессии.
@@ -80,6 +81,22 @@ app.ontoolresult = (result) => console.log(result.structuredContent);
 void app.connect();
 ```
 
+Host передаёт состояние диалога через `ontoolresult` в
+`structuredContent.brigadeHost`. Эти обновления приходят отдельно от результатов
+инструментов приложения:
+
+| Поле | Значение |
+| --- | --- |
+| `generating` | Выполняется ли сейчас turn агента. |
+| `lastMessage` | Текст последнего сообщения ассистента. |
+| `prompts` | Последние 50 непустых текстов сообщений пользователя. |
+| `submitMode` | `enter` или `modifier-enter` — настройка отправки текущего браузера. |
+
+`app.sendMessage({ role: "user", content: [{ type: "text", text }] })` отправляет промпт
+в ACP-сессию. `app.callServerTool({ name: "brigade.cancel", arguments: {} })`
+останавливает текущий turn через host. Это служебный вызов Brigade: реализовывать
+`brigade.cancel` в MCP-сервере приложения не нужно.
+
 Собирайте UI в один self-contained HTML: bundle не должен зависеть от dev server или CDN.
 Проверка перед установкой:
 
@@ -98,3 +115,5 @@ brigade plugin validate ./example.mcpb
 - В Docker bundle копируется в durable home сессии; отдельный plugin-контейнер не нужен.
 - Сессия закрепляет точную версию. Публикуйте новую версию manifest вместо замены бинаря
   под существующей версией.
+- После установки новой версии явное обновление сессии применяет актуальную установленную
+  версию для её runtime-платформы. До этого сессия продолжает использовать закреплённую.

@@ -5,7 +5,7 @@ Brigade.app — однопользовательское desktop-приложе�
 - **Local** — агенты запускаются процессами на Mac;
 - **Docker** — сессии запускаются через выбранный Docker context.
 
-Приложение также может подключаться к удалённым инстансам Brigade, пробрасывать порты сессий на `127.0.0.1` и монтировать их workspace через FUSE-T. См. [Удалённые окружения в Brigade.app](../guides/remote-environments.md).
+Приложение также может подключаться к удалённым инстансам Brigade, пробрасывать порты сессий на `127.0.0.1` и монтировать их workspace через FUSE-T. См. [Удалённые окружения](../guides/remote-environments.md) в разделе Desktop.
 
 Скачайте `Brigade-<version>-arm64.dmg` из [последнего релиза](https://github.com/grigory51/brigade/releases/latest), откройте образ и перетащите Brigade в Applications.
 

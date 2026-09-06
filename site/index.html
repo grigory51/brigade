@@ -3,503 +3,467 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>brigade — self-hosted multiplexer for coding agents</title>
-  <meta name="description" content="Run Claude Code and Codex on your own hardware. Persistent CLI and ACP sessions in the browser, macOS app and Telegram." />
+  <title>brigade — your agents, your workspace</title>
+  <meta name="description" content="Run Claude Code and Codex on your own hardware. Persistent chat, terminals and MCP Apps, with shared context across the browser, macOS app and Telegram." />
   <meta name="theme-color" content="#262624" />
   <link rel="icon" href="logo.svg" type="image/svg+xml" />
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="brigade — self-hosted multiplexer for coding agents" />
-  <meta property="og:description" content="Run Claude Code and Codex on your own hardware. Persistent CLI and ACP sessions in the browser, macOS app and Telegram." />
+  <meta property="og:title" content="brigade — your agents, your workspace" />
+  <meta property="og:description" content="Run Claude Code and Codex on your own hardware. Persistent chat, terminals and MCP Apps, with shared context across the browser, macOS app and Telegram." />
   <meta property="og:image" content="https://grigory51.github.io/brigade/logo.svg" />
   <meta name="twitter:card" content="summary" />
   <style>
     :root {
-      --bg: #262624; --fg: #faf9f5; --card: #30302e; --panel: #1f1e1d;
-      --muted: #2f2f2d; --muted-fg: #b7b5ac; --border: #413f3b;
-      --primary: #c96442; --primary-2: #b0563a; --primary-3: #7d4029; --primary-fg: #fff;
-      --radius: 14px;
+      --bg: #262624; --fg: #faf9f5; --panel: #1f1e1d; --card: #30302e;
+      --muted-fg: #b7b5ac; --border: #413f3b; --accent: #e18c6f;
+      --primary: #b0563a; --primary-hover: #a24c32;
       --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
     }
     * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
-    body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); line-height: 1.55; -webkit-font-smoothing: antialiased; }
+    html { color-scheme: dark; scroll-behavior: smooth; scroll-padding-top: 96px; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
+    ::selection { background: var(--primary); color: var(--fg); }
     a { color: inherit; text-decoration: none; }
-    ::selection { background: rgba(201,100,66,.35); }
-    .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
-    .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted-fg); }
-    .accent { color: var(--primary); }
-
-    header { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(10px); background: color-mix(in srgb, var(--bg) 82%, transparent); border-bottom: 1px solid var(--border); }
-    .nav { display: flex; align-items: center; justify-content: space-between; height: 64px; }
-    .brand { display: flex; align-items: center; gap: 11px; font-weight: 650; font-size: 17px; letter-spacing: -.01em; }
-    .brand img { width: 30px; height: 30px; border-radius: 8px; }
-    .nav-links { display: flex; align-items: center; gap: 8px; }
-
-    .btn { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 18px; border-radius: 10px; border: 1px solid transparent; font: inherit; font-weight: 550; font-size: 14.5px; cursor: pointer; transition: transform .12s ease, background .15s ease, border-color .15s ease; white-space: nowrap; }
-    .btn svg { width: 17px; height: 17px; }
-    .btn-primary { background: var(--primary); color: var(--primary-fg); box-shadow: 0 1px 0 rgba(0,0,0,.25), 0 8px 24px -12px rgba(201,100,66,.7); }
-    .btn-primary:hover { background: #d6764f; transform: translateY(-1px); }
-    .btn-ghost { background: transparent; color: var(--fg); border-color: var(--border); }
-    .btn-ghost:hover { background: var(--card); border-color: #56534e; transform: translateY(-1px); }
-    .btn-sm { height: 36px; padding: 0 14px; font-size: 13.5px; }
-
-    .hero { position: relative; overflow: hidden; padding: 92px 0 76px; }
-    .hero::before { content: ""; position: absolute; inset: -40% 0 auto 0; height: 620px; background: radial-gradient(60% 60% at 50% 0%, rgba(201,100,66,.16), transparent 70%); pointer-events: none; }
-    .hero-grid { position: relative; display: grid; grid-template-columns: 1.05fr .95fr; gap: 56px; align-items: center; }
-    h1 { font-size: clamp(2.3rem, 5.2vw, 3.6rem); line-height: 1.04; letter-spacing: -.03em; margin: 18px 0 0; font-weight: 680; }
-    .lede { color: var(--muted-fg); font-size: clamp(1.05rem, 2vw, 1.2rem); margin: 20px 0 0; max-width: 34ch; }
-    .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
-    .meta-line { margin-top: 26px; display: flex; gap: 18px; flex-wrap: wrap; color: var(--muted-fg); font-family: var(--mono); font-size: 12.5px; }
-    .meta-line span { display: inline-flex; align-items: center; gap: 7px; }
-    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 3px rgba(201,100,66,.18); }
-
-    /* hero panel */
-    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 18px; box-shadow: 0 40px 80px -40px rgba(0,0,0,.7); overflow: hidden; }
-    .panel-bar { display: flex; align-items: center; gap: 7px; padding: 13px 16px; border-bottom: 1px solid var(--border); }
-    .tl { width: 11px; height: 11px; border-radius: 50%; background: #44423e; }
-    .panel-body { display: grid; grid-template-columns: 148px 1fr; min-height: 268px; }
-    .side { border-right: 1px solid var(--border); padding: 12px 10px; background: color-mix(in srgb, var(--panel) 70%, #000); }
-    .side .lbl { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted-fg); padding: 4px 8px 8px; }
-    .srow { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 8px; font-size: 12.5px; color: #d8d6cf; }
-    .srow.active { background: var(--card); }
-    .srow .sd { width: 7px; height: 7px; border-radius: 50%; flex: none; }
-    .srow .sd.on { background: #4ade80; } .srow .sd.run { background: var(--primary); } .srow .sd.idle { background: #56534e; }
-    .side-group { margin-top: 4px; background: var(--card); color: var(--muted-fg); font-size: 11.5px; }
-    .side-child { margin-left: 14px; }
-    .main { padding: 20px 22px; display: flex; flex-direction: column; gap: 16px; }
-    .prompt { font-family: var(--mono); font-size: 13.5px; color: #e9e7e0; display: flex; gap: 10px; align-items: baseline; }
-    .prompt .chev { color: var(--primary); font-weight: 700; }
-    .caret { display: inline-block; width: 8px; height: 16px; background: var(--primary); vertical-align: -2px; animation: blink 1.1s step-end infinite; }
-    @keyframes blink { 50% { opacity: 0; } }
-    .echelon { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
-    .abar { height: 34px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); display: flex; align-items: center; gap: 10px; padding: 0 12px; font-family: var(--mono); font-size: 12px; color: var(--muted-fg); }
-    .abar .tag { width: 44px; height: 8px; border-radius: 5px; }
-    .abar:nth-child(1) .tag { background: var(--primary); }
-    .abar:nth-child(2) { margin-right: 26px; } .abar:nth-child(2) .tag { background: var(--primary-2); }
-    .abar:nth-child(3) { margin-right: 52px; } .abar:nth-child(3) .tag { background: var(--primary-3); }
-    .abar .pulse { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); animation: pulse 1.6s ease-in-out infinite; }
-    @keyframes pulse { 0%,100% { opacity: .3; } 50% { opacity: 1; } }
-
-    .band { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 7%, transparent), transparent); }
-    .band-inner { padding: 60px 0; text-align: center; }
-    .band h2 { font-size: clamp(1.6rem, 3.4vw, 2.2rem); letter-spacing: -.02em; margin: 10px 0 0; font-weight: 660; }
-    .band p { color: var(--muted-fg); max-width: 56ch; margin: 16px auto 0; font-size: 1.05rem; }
-
-    section { padding: 84px 0; }
-    .sec-head { max-width: 48ch; margin-bottom: 44px; }
-    .sec-head h2 { font-size: clamp(1.7rem, 3.6vw, 2.3rem); letter-spacing: -.025em; margin: 12px 0 0; font-weight: 660; }
-    .sec-head p { color: var(--muted-fg); margin: 14px 0 0; font-size: 1.05rem; }
-
-    /* feature blocks with schematics */
-    .feats { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    .feat { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; display: flex; flex-direction: column; transition: border-color .16s ease, transform .16s ease; }
-    .feat:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border)); transform: translateY(-2px); }
-    .feat-top { display: flex; gap: 14px; }
-    .ic { width: 40px; height: 40px; flex: none; border-radius: 10px; display: grid; place-items: center; background: color-mix(in srgb, var(--primary) 16%, var(--panel)); border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border)); }
-    .ic svg { width: 20px; height: 20px; stroke: var(--primary); fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-    .feat h3 { margin: 2px 0 6px; font-size: 1.08rem; letter-spacing: -.01em; }
-    .feat p { margin: 0; color: var(--muted-fg); font-size: 14px; }
-    .schema { margin-top: 18px; background: var(--panel); border: 1px solid var(--border); border-radius: 11px; padding: 16px; }
-
-    /* shared SVG schematic styles */
-    .sv { display: block; width: 100%; height: auto; }
-    .sv text { font-family: var(--mono); fill: var(--muted-fg); }
-    .s-box { fill: var(--card); stroke: var(--border); stroke-width: 1.5; }
-    .s-box2 { fill: var(--bg); stroke: var(--border); stroke-width: 1.5; }
-    .s-dash { fill: none; stroke: #6a6660; stroke-width: 1.5; stroke-dasharray: 5 4; }
-    .s-l { fill: none; stroke: var(--border); stroke-width: 1.5; }
-    .s-acc { fill: none; stroke: var(--primary); stroke-width: 2; }
-    .s-accf { fill: var(--primary); } .s-accf2 { fill: var(--primary-2); } .s-accf3 { fill: var(--primary-3); }
-    .s-tb { fill: #e9e7e0; } .s-g { fill: #4ade80; } .s-r { fill: #e5654a; }
-
-    /* compact "more" chips */
-    .more { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
-    .chip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border); background: var(--card); border-radius: 999px; padding: 8px 14px; font-size: 13.5px; color: #d8d6cf; }
-    .chip svg { width: 15px; height: 15px; stroke: var(--primary); fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-
-    /* architecture */
-    .arch { display: flex; flex-direction: column; gap: 0; }
-    .layer { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 22px; }
-    .layer .cap { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted-fg); margin-bottom: 14px; }
-    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    .node { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 15px 17px; }
-    .node .n { font-weight: 600; }
-    .node .s { color: var(--muted-fg); font-family: var(--mono); font-size: 12px; margin-top: 5px; }
-    .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-    .mod { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 13px; font-size: 13px; }
-    .mod b { display: block; font-weight: 600; margin-bottom: 3px; }
-    .mod span { color: var(--muted-fg); font-family: var(--mono); font-size: 11.5px; }
-    .mod.hl { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); background: color-mix(in srgb, var(--primary) 8%, var(--card)); }
-    .conn { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 12px 0; color: var(--muted-fg); font-family: var(--mono); font-size: 11.5px; letter-spacing: .06em; }
-    .conn::before, .conn::after { content: ""; height: 1px; width: 44px; background: linear-gradient(90deg, transparent, var(--primary)); }
-    .conn::after { transform: scaleX(-1); }
-    .arch-foot { margin-top: 20px; color: var(--muted-fg); font-size: 14px; }
-
-    /* quickstart */
-    .qs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    .code { position: relative; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
-    .code-head { display: flex; align-items: center; justify-content: space-between; padding: 11px 14px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 12px; color: var(--muted-fg); }
-    .copy { background: transparent; border: 1px solid var(--border); color: var(--muted-fg); border-radius: 7px; padding: 4px 9px; font: inherit; font-size: 11.5px; cursor: pointer; transition: .14s; }
-    .copy:hover { color: var(--fg); border-color: #56534e; }
-    pre { margin: 0; padding: 16px; overflow-x: auto; }
-    code { font-family: var(--mono); font-size: 12.6px; line-height: 1.7; color: #e4e2db; }
-    .cm { color: #8a8880; } .ca { color: var(--primary); }
-
-    footer { border-top: 1px solid var(--border); padding: 44px 0; }
-    .foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; }
-    .foot .brand { font-size: 15px; }
-    .foot-meta { color: var(--muted-fg); font-size: 13.5px; }
-    .status { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; color: var(--muted-fg); }
-    .status .sd { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); }
-
+    a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; }
+    button { font: inherit; cursor: pointer; }
+    button:disabled { cursor: default; }
+    h1, h2, h3, p { margin: 0; }
+    h1, h2, h3 { text-wrap: balance; }
+    p { text-wrap: pretty; }
+    h2 { font-size: clamp(2rem, 3.8vw, 3.4rem); line-height: 1.12; letter-spacing: -.03em; font-weight: 600; }
+    h3 { font-size: 1.25rem; line-height: 1.3; font-weight: 600; letter-spacing: -.015em; }
+    .wrap { max-width: 1200px; margin-inline: auto; padding-inline: 40px; }
+    .text-link { text-decoration: underline; text-underline-offset: .25em; text-decoration-color: var(--border); transition: text-decoration-color .15s; }
+    .text-link:hover { text-decoration-color: currentColor; }
+    .skip { position: fixed; z-index: 30; top: 12px; left: 20px; padding: 8px 16px; background: var(--fg); color: var(--bg); transform: translateY(-180%); }
+    .skip:focus { transform: translateY(0); }
+    .site-header { position: sticky; top: 0; z-index: 20; background: var(--bg); border-bottom: 1px solid var(--border); }
+    .nav { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+    .brand { display: inline-flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 650; letter-spacing: -.02em; }
+    .brand img { width: 36px; height: 36px; }
+    .nav-links { display: flex; align-items: center; gap: 28px; font-size: 14px; }
+    .nav-links a:not(.btn) { padding-block: 12px; color: var(--muted-fg); }
+    .nav-links a:hover { color: var(--fg); }
+    .btn { display: inline-flex; justify-content: center; align-items: center; gap: 12px; min-height: 46px; padding: 10px 18px; border: 1px solid var(--border); border-radius: 10px; font-size: 14px; font-weight: 600; transition: background .15s, border-color .15s; }
+    .btn:hover { background: var(--card); border-color: var(--muted-fg); }
+    .btn-primary { background: var(--primary); color: #fff; border-color: transparent; }
+    .btn-primary:hover { background: var(--primary-hover); border-color: transparent; }
+    .btn svg { width: 18px; height: 18px; }
+    .hero { padding-block: 112px 64px; }
+    .hero-layout { display: grid; grid-template-columns: 1.65fr 1fr; align-items: end; gap: 64px; }
+    h1 { font-size: clamp(3.5rem, 7.4vw, 6rem); line-height: .99; letter-spacing: -.04em; font-weight: 600; }
+    h1 span { color: var(--accent); }
+    .hero-copy p { color: var(--muted-fg); font-size: 19px; }
+    .agent-name { position: relative; display: inline-grid; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; line-height: inherit; text-align: center; vertical-align: baseline; }
+    .agent-visual { display: none; grid-area: 1 / 1; }
+    .agent-name.is-ready .agent-fallback { display: none; }
+    .agent-name.is-ready .agent-visual { display: grid; }
+    .agent-visual::before { content: "Claude Code"; visibility: hidden; grid-area: 1 / 1; }
+    .agent-label { grid-area: 1 / 1; }
+    .agent-name canvas { position: absolute; inset: 0; width: 100%; height: 100%; visibility: hidden; pointer-events: none; }
+    .agent-name.is-changing canvas { visibility: visible; }
+    .agent-name.is-changing .agent-label { visibility: hidden; }
+    .agent-name.is-ready:hover { text-decoration: underline dotted; text-underline-offset: .2em; }
+    .hero-copy .btn { margin-top: 28px; }
+    .story { border-top: 1px solid var(--border); padding-block: 88px; }
+    .section-intro { display: grid; grid-template-columns: 1.2fr 1fr; gap: 64px; align-items: end; margin-bottom: 48px; }
+    .section-intro > p { color: var(--muted-fg); font-size: 17px; max-width: 52ch; }
+    .interfaces { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; }
+    .interface { padding-block: 28px; border-top: 1px solid var(--border); display: flex; flex-direction: column; }
+    .interface p { color: var(--muted-fg); margin-top: 14px; font-size: 15px; }
+    .interface > a { align-self: start; margin-top: auto; padding-top: 24px; font-size: 14px; }
+    .illustration { display: block; width: 100%; height: auto; }
+    .interface .illustration { margin-bottom: 28px; }
+    .illustration text { font-family: var(--mono); font-size: 11px; fill: var(--muted-fg); }
+    .illustration .surface { fill: var(--panel); stroke: var(--border); }
+    .illustration .inset { fill: var(--card); stroke: var(--border); }
+    .illustration .line { fill: none; stroke: var(--border); stroke-width: 1.5; }
+    .illustration .signal { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+    .illustration .highlight { fill: var(--accent); }
+    .illustration .bright { fill: var(--fg); }
+    .memory-illustration { margin-top: 32px; max-width: 400px; }
+    .context-layout { display: grid; grid-template-columns: 1fr 1.2fr; gap: 100px; }
+    .context-intro p { color: var(--muted-fg); margin-top: 24px; max-width: 40ch; }
+    .context-list { margin: 0; }
+    .context-item { padding-block: 24px; border-bottom: 1px solid var(--border); }
+    .context-item:first-child { padding-top: 0; }
+    .context-item:last-child { padding-bottom: 0; border-bottom: 0; }
+    .context-item dt { font-size: 19px; font-weight: 600; }
+    .context-item dd { margin: 10px 0 0; color: var(--muted-fg); font-size: 15px; }
+    .continuity { background: var(--panel); border-block: 1px solid var(--border); padding-block: 88px; }
+    .continuity .section-intro { align-items: start; }
+    .continuity h2 { max-width: 16ch; }
+    .channels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px; padding-top: 32px; border-top: 1px solid var(--border); }
+    .channels p { color: var(--muted-fg); font-size: 15px; margin-block: 14px 20px; }
+    .channels a { font-size: 14px; }
+    .deploy { padding-block: 88px; }
+    .deploy .section-intro { align-items: start; }
+    .setup { display: grid; grid-template-columns: 1.4fr 1fr; gap: 64px; }
+    .code { min-width: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+    .code-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--muted-fg); }
+    .copy { color: var(--fg); background: transparent; border: 1px solid var(--border); border-radius: 7px; padding: 6px 12px; min-height: 36px; font-size: 12px; }
+    .copy:hover { border-color: var(--muted-fg); }
+    .copy:disabled { opacity: .7; }
+    pre { margin: 0; padding: 24px 20px; overflow-x: auto; }
+    code { font: 12px/1.8 var(--mono); color: var(--fg); }
+    .install-notes { color: var(--muted-fg); font-size: 13px; margin-top: 20px; }
+    .install-links { display: flex; flex-wrap: wrap; gap: 10px 24px; font-size: 14px; margin-top: 24px; }
+    .access-note { padding-top: 28px; margin-top: 32px; border-top: 1px solid var(--border); }
+    .access-note p { color: var(--muted-fg); font-size: 15px; margin-top: 12px; }
+    .access-note a { font-size: 14px; display: inline-block; margin-top: 16px; }
+    .mac p { color: var(--muted-fg); margin: 14px 0 24px; font-size: 15px; }
+    .mac .fine { font-size: 13px; }
+    footer { border-top: 1px solid var(--border); padding-block: 32px; }
+    .footer-layout { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 24px; }
+    .footer-layout p { font-size: 13px; color: var(--muted-fg); margin-top: 8px; }
+    .footer-links { display: flex; flex-wrap: wrap; gap: 24px; font-size: 14px; }
+    .hero-layout > *, .section-intro > *, .context-layout > *, .setup > * { min-width: 0; }
     @media (max-width: 900px) {
-      .hero-grid { grid-template-columns: 1fr; gap: 40px; }
-      .hero { padding: 64px 0 56px; }
-      .feats { grid-template-columns: 1fr; }
-      .qs-grid { grid-template-columns: 1fr; }
-      .row2, .grid3 { grid-template-columns: 1fr; }
-      .nav-links .hide-sm { display: none; }
+      .hero-layout, .section-intro, .context-layout, .setup { gap: 40px; }
+      .hero-layout { grid-template-columns: 1.3fr 1fr; }
+      .hero { padding-top: 80px; }
+      .interfaces { gap: 24px; }
+      .channels { gap: 24px; }
+      .nav-links { gap: 20px; }
+      .nav-links .optional { display: none; }
+    }
+    @media (max-width: 640px) {
+      .wrap { padding-inline: 24px; }
+      .nav { gap: 16px; min-height: 68px; }
+      .nav-links { gap: 20px; }
+      .nav-links .btn { display: none; }
+      .brand { font-size: 18px; }
+      .brand img { width: 30px; height: 30px; }
+      .hero { padding-block: 64px 40px; }
+      .hero-layout, .section-intro, .context-layout, .setup { grid-template-columns: 1fr; gap: 28px; }
+      h1 { font-size: clamp(3.2rem, 12vw, 4.8rem); }
+      .hero-copy p { font-size: 17px; max-width: 36ch; }
+      .story, .continuity, .deploy { padding-block: 56px; }
+      .section-intro { margin-bottom: 32px; }
+      .interfaces, .channels { grid-template-columns: 1fr; gap: 0; }
+      .interface { padding-block: 24px; }
+      .interface .illustration { max-width: 380px; margin-bottom: 20px; }
+      .interface > a { padding-top: 16px; }
+      .channels { padding-top: 0; border-top: 0; }
+      .channels article { border-top: 1px solid var(--border); padding-block: 24px; }
+      .channels article:last-child { padding-bottom: 0; }
+      .continuity h2 { max-width: none; }
+      .context-item:first-child { border-top: 1px solid var(--border); padding-top: 24px; }
+      .mac { border-top: 1px solid var(--border); padding-top: 28px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .agent-name.is-ready .agent-fallback { display: inline; }
+      .agent-name.is-ready .agent-visual, .agent-name canvas { display: none; }
+      *, *::before, *::after { transition: none !important; animation: none !important; }
     }
   </style>
 </head>
 <body>
-  <header>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="site-header">
     <div class="wrap nav">
-      <a class="brand" href="#top"><img src="logo.svg" alt="" /> brigade</a>
-      <nav class="nav-links">
-        <a class="btn btn-ghost btn-sm hide-sm" href="#features">Features</a>
-        <a class="btn btn-ghost btn-sm" href="docs/">Docs</a>
-        <a class="btn btn-ghost btn-sm" href="https://github.com/grigory51/brigade" target="_blank" rel="noopener">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.09.68-.22.68-.49 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.49-1.11-1.49-.91-.64.07-.62.07-.62 1 .07 1.53 1.05 1.53 1.05.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.55-1.14-4.55-5.05 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05a9.4 9.4 0 0 1 5 0c1.91-1.32 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.92-2.34 4.79-4.57 5.04.36.32.68.94.68 1.9 0 1.37-.01 2.48-.01 2.82 0 .27.18.59.69.49A10.03 10.03 0 0 0 22 12.25C22 6.58 17.52 2 12 2Z"/></svg>
-          GitHub
-        </a>
+      <a class="brand" href="#top"><img src="logo.svg" alt="" width="36" height="36" />brigade</a>
+      <nav class="nav-links" aria-label="Main navigation">
+        <a class="optional" href="#workflow">How it works</a>
+        <a href="docs/">Docs</a>
+        <a href="https://github.com/grigory51/brigade">GitHub</a>
+        <a class="btn" href="#quickstart">Get started</a>
       </nav>
     </div>
   </header>
-
-  <a id="top"></a>
-  <div class="hero">
-    <div class="wrap hero-grid">
-      <div>
-        <div class="eyebrow">Self-hosted · Open source · MIT</div>
-        <h1>Your coding agents,<br /><span class="accent">running on your hardware.</span></h1>
-        <p class="lede">brigade keeps Claude Code and Codex sessions alive on your own server and mirrors them to the browser, macOS app and Telegram.</p>
-        <div class="cta-row">
-          <a class="btn btn-primary" href="docs/quickstart.html">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
-            Get started
-          </a>
-          <a class="btn btn-ghost" href="https://github.com/grigory51/brigade" target="_blank" rel="noopener">Star on GitHub</a>
-        </div>
-        <div class="meta-line">
-          <span><i class="dot"></i> Single Go binary</span>
-          <span><i class="dot"></i> Local or Docker</span>
-          <span><i class="dot"></i> Claude Code &amp; Codex</span>
-        </div>
-      </div>
-
-      <div class="panel" aria-hidden="true">
-        <div class="panel-bar"><i class="tl"></i><i class="tl"></i><i class="tl"></i></div>
-        <div class="panel-body">
-          <div class="side">
-            <div class="lbl">Sessions</div>
-            <div class="srow active"><i class="sd run"></i> deploy-landing</div>
-            <div class="srow side-group">Telegram · @brigade</div>
-            <div class="srow side-child"><i class="sd on"></i> release chat</div>
-            <div class="srow side-child"><i class="sd idle"></i> support topic</div>
-          </div>
-          <div class="main">
-            <div class="prompt"><span class="chev">&gt;</span> ship the landing page<span class="caret"></span></div>
-            <div class="echelon">
-              <div class="abar"><span class="tag"></span> reading site/index.html <i class="pulse"></i></div>
-              <div class="abar"><span class="tag"></span> writing pages.yml <i class="pulse"></i></div>
-              <div class="abar"><span class="tag"></span> git push origin main <i class="pulse"></i></div>
-            </div>
+  <main id="main">
+    <section class="hero" id="top" aria-labelledby="hero-title">
+      <div class="wrap">
+        <div class="hero-layout">
+          <h1 id="hero-title">Your agents.<br /><span>Your hardware.</span></h1>
+          <div class="hero-copy">
+            <p>Give <button class="agent-name" type="button" disabled aria-label="Claude Code and Codex"><span class="agent-fallback">Claude Code and Codex</span><span class="agent-visual" aria-hidden="true"><span class="agent-label">Claude Code</span></span><canvas aria-hidden="true"></canvas></button> a place to work. Brigade keeps their sessions on your machine or server, ready whenever you come back.</p>
+            <a class="btn btn-primary" href="#quickstart">Get started
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6"/></svg>
+            </a>
           </div>
         </div>
       </div>
-    </div>
-  </div>
+    </section>
 
-  <div class="band">
-    <div class="wrap band-inner">
-      <div class="eyebrow">Persist &amp; resume</div>
-      <h2>The session outlives the connection.</h2>
-      <p>Agents run on the server, not in the tab. Sessions survive backend restarts and reconnects — start a turn in the browser, then receive the result through Telegram or a notification.</p>
-    </div>
-  </div>
-
-  <section id="features">
-    <div class="wrap">
-      <div class="sec-head">
-        <div class="eyebrow">What's inside</div>
-        <h2>One binary. The whole workflow.</h2>
-        <p>brigade spawns coding agents, keeps them alive, and gives you a real interface to drive them — terminal or structured chat, isolated how you like.</p>
+    <section class="story wrap" id="workflow" aria-labelledby="workflow-title">
+      <div class="section-intro">
+        <h2 id="workflow-title">Choose how<br />you work.</h2>
+        <p>Connect Claude Code or Codex, then start a session. Keep separate connections for different accounts and choose the one the task needs.</p>
       </div>
-
-      <div class="feats">
-
-        <!-- Two session modes -->
-        <div class="feat">
-          <div class="feat-top">
-            <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3"/><path d="M13 15h4"/></svg></div>
-            <div><h3>Two session modes</h3><p>A full terminal (pty + xterm.js) or a structured chat over ACP → AG-UI: tool-call cards, diffs, plans and permission prompts.</p></div>
-          </div>
-          <div class="schema">
-            <svg class="sv" viewBox="0 0 300 132" role="img" aria-label="terminal and chat panels">
-              <rect class="s-box" x="6" y="10" width="132" height="112" rx="8"/>
-              <text x="18" y="34" font-size="10">$ npm run dev</text>
-              <text x="18" y="52" class="s-tb" font-size="10">▸ ready :3000</text>
-              <rect class="s-accf" x="18" y="62" width="8" height="12"/>
-              <text x="18" y="112" font-size="9">TERMINAL</text>
-              <rect class="s-box" x="162" y="10" width="132" height="112" rx="8"/>
-              <rect class="s-box2" x="174" y="22" width="70" height="14" rx="7"/>
-              <rect class="s-box2" x="192" y="42" width="90" height="16" rx="8"/>
-              <rect class="s-box2" x="174" y="66" width="108" height="34" rx="6"/>
-              <rect class="s-g" x="182" y="74" width="7" height="7" rx="1.5"/><text x="194" y="80" font-size="8">+ added</text>
-              <rect class="s-r" x="182" y="86" width="7" height="7" rx="1.5"/><text x="194" y="92" font-size="8">- removed</text>
-              <text x="174" y="114" font-size="9">CHAT</text>
-            </svg>
-          </div>
-        </div>
-
-        <!-- Supported agents -->
-        <div class="feat">
-          <div class="feat-top">
-            <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><circle cx="12" cy="12" r="4"/></svg></div>
-            <div><h3>Claude Code and Codex</h3><p>Choose the agent per session and run it as CLI or ACP. Claude uses a subscription token; Codex supports ChatGPT device login and API keys.</p></div>
-          </div>
-          <div class="schema">
-            <svg class="sv" viewBox="0 0 300 132" role="img" aria-label="brigade runs Claude Code and Codex through CLI or ACP">
-              <rect class="s-box" x="10" y="46" width="86" height="40" rx="9"/>
-              <text x="30" y="70" class="s-tb" font-size="12">brigade</text>
-              <path class="s-acc" d="M96 66 H150"/>
-              <text x="104" y="60" class="accent" font-size="9" fill="#c96442">CLI · ACP</text>
-              <rect class="s-box" x="150" y="29" width="132" height="30" rx="7"/>
-              <circle class="s-g" cx="164" cy="44" r="4"/><text x="176" y="48" class="s-tb" font-size="11">Claude Code</text>
-              <rect class="s-box" x="150" y="73" width="132" height="30" rx="7"/>
-              <circle class="s-g" cx="164" cy="88" r="4"/><text x="176" y="92" class="s-tb" font-size="11">Codex</text>
-              <path class="s-acc" d="M96 66 C120 66 126 44 150 44 M96 66 C120 66 126 88 150 88"/>
-            </svg>
-          </div>
-        </div>
-
-        <!-- Local or Docker -->
-        <div class="feat">
-          <div class="feat-top">
-            <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M21 8V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v2"/><path d="M7 12h.01M7 16h.01"/></svg></div>
-            <div><h3>Local or Docker isolation</h3><p>Run agents as host processes or in Docker. ACP gets a container per session; CLI shares one long-lived container per user. Bring a custom image when the built-in toolset is not enough.</p></div>
-          </div>
-          <div class="schema">
-            <svg class="sv" viewBox="0 0 300 132" role="img" aria-label="local process vs docker container">
-              <text x="8" y="20" font-size="9">LOCAL</text>
-              <line class="s-l" x1="8" y1="98" x2="140" y2="98"/>
-              <rect class="s-box" x="30" y="54" width="88" height="34" rx="9"/>
-              <text x="46" y="75" class="s-tb" font-size="11">agent pty</text>
-              <line class="s-l" x1="74" y1="88" x2="74" y2="98"/>
-              <text x="162" y="20" font-size="9">DOCKER</text>
-              <rect class="s-dash" x="162" y="28" width="130" height="86" rx="10"/>
-              <rect class="s-box" x="174" y="48" width="106" height="24" rx="7"/>
-              <text x="188" y="64" class="s-tb" font-size="10">ACP session</text>
-              <rect class="s-box" x="174" y="80" width="106" height="24" rx="7"/>
-              <text x="188" y="96" class="s-tb" font-size="10">CLI · user</text>
-              <text x="172" y="42" font-size="9">containers</text>
-            </svg>
-          </div>
-        </div>
-
-        <!-- MCP -->
-        <div class="feat">
-          <div class="feat-top">
-            <div class="ic"><svg viewBox="0 0 24 24"><path d="M8 7V5a3 3 0 0 1 6 0v10a4 4 0 0 1-8 0V7a2 2 0 0 1 4 0v8"/><path d="M14 9h4a3 3 0 0 1 0 6h-1"/></svg></div>
-            <div><h3>Per-user MCP and secret vault</h3><p>Add stdio, HTTP and SSE servers, select them per session, then toggle them in a running ACP chat. Environment variables and headers reference encrypted server-side secrets.</p></div>
-          </div>
-        </div>
-
-        <!-- Telegram -->
-        <div class="feat">
-          <div class="feat-top">
-            <div class="ic"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg></div>
-            <div><h3>Your agent in Telegram</h3><p>Connect your own bot and choose an agent connection, image and MCP set. Direct chats and forum topics become grouped persistent sessions with formatted replies, images and files.</p></div>
-          </div>
-        </div>
-
-        <!-- Session groups -->
-        <div class="feat">
-          <div class="feat-top">
-            <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="2"/><path d="M7 13h14M7 18h14"/><circle cx="4" cy="13" r="1"/><circle cx="4" cy="18" r="1"/></svg></div>
-            <div><h3>Grouped sessions</h3><p>Related sessions share one label in the sidebar. Telegram topics are grouped by bot, while independent sessions stay exactly where you expect them.</p></div>
-          </div>
-          <div class="schema">
-            <svg class="sv" viewBox="0 0 300 132" role="img" aria-label="three sessions grouped under one Telegram bot">
-              <rect class="s-box" x="36" y="12" width="228" height="30" rx="8"/>
-              <text x="54" y="31" class="s-tb" font-size="11">Telegram · @brigade</text>
-              <path class="s-l" d="M58 42 V112"/>
-              <circle class="s-accf" cx="58" cy="62" r="4"/><text x="76" y="66" font-size="10">release chat</text>
-              <circle class="s-accf2" cx="58" cy="86" r="4"/><text x="76" y="90" font-size="10">support topic</text>
-              <circle class="s-accf" cx="58" cy="110" r="4"/><text x="76" y="114" font-size="10">private chat</text>
-            </svg>
-          </div>
-        </div>
-
-        <!-- Preview proxy -->
-        <div class="feat">
-          <div class="feat-top">
-            <div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/></svg></div>
-            <div><h3>Preview proxy</h3><p>A dev server the agent starts is instantly live at a per-session subdomain — built-in L7 proxy and TLS, no reverse proxy to wire up.</p></div>
-          </div>
-          <div class="schema">
-            <svg class="sv" viewBox="0 0 300 132" role="img" aria-label="browser to preview url to session port">
-              <rect class="s-box" x="8" y="50" width="70" height="34" rx="8"/><text x="24" y="71" class="s-tb" font-size="11">browser</text>
-              <path class="s-acc" d="M78 67 H108"/>
-              <rect class="s-box2" x="108" y="46" width="112" height="42" rx="10"/>
-              <path class="s-acc" d="M122 67 a5 5 0 0 1 10 0" /><rect class="s-accf" x="121" y="66" width="12" height="9" rx="2"/>
-              <text x="138" y="64" class="s-tb" font-size="9">app-3000</text>
-              <text x="138" y="76" font-size="9">.you.dev</text>
-              <path class="s-acc" d="M220 67 H250"/>
-              <rect class="s-box" x="250" y="50" width="44" height="34" rx="8"/><text x="258" y="71" class="s-tb" font-size="10">:3000</text>
-            </svg>
-          </div>
-        </div>
-
-        <!-- Git-backed memory -->
-        <div class="feat">
-          <div class="feat-top">
-            <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M14 3v5h5M8 13h6M8 17h4"/></svg></div>
-            <div><h3>Memory and archive in your git</h3><p>Searchable Markdown notes and complete archived chats are <span class="accent">committed to your own private repository</span>. Archive keeps a read-only session snapshot; delete removes it permanently.</p></div>
-          </div>
-          <div class="schema">
-            <svg class="sv" viewBox="0 0 300 132" role="img" aria-label="a note committed to a git repo">
-              <rect class="s-box" x="10" y="34" width="78" height="64" rx="8"/>
-              <line class="s-l" x1="22" y1="52" x2="76" y2="52"/><line class="s-l" x1="22" y1="64" x2="76" y2="64"/><line class="s-l" x1="22" y1="76" x2="60" y2="76"/>
-              <text x="20" y="114" font-size="9">note.md</text>
-              <path class="s-acc" d="M88 66 H120"/>
-              <path class="s-acc" d="M126 66 H250"/>
-              <circle class="s-accf3" cx="140" cy="66" r="6"/><circle class="s-accf2" cx="188" cy="66" r="6"/><circle class="s-accf" cx="236" cy="66" r="6"/>
-              <rect class="s-box" x="256" y="46" width="36" height="40" rx="8"/>
-              <text x="264" y="70" class="s-tb" font-size="10">git</text>
-              <text x="126" y="100" font-size="9">commits · searchable · durable</text>
-            </svg>
-          </div>
-        </div>
-
+      <div class="interfaces">
+        <article class="interface">
+          <svg class="illustration" viewBox="0 0 300 180" role="img" aria-label="Chat illustration: a prompt, an agent reply and a code diff">
+            <rect class="surface" x="1" y="1" width="298" height="178" rx="12"/>
+            <rect class="inset" x="121" y="19" width="160" height="30" rx="8"/>
+            <text x="136" y="38">Add a dark theme</text>
+            <path class="signal" d="m19 67 5 4-5 4m10 0h6"/>
+            <text class="bright" x="44" y="75">Updated the styles.</text>
+            <rect class="inset" x="19" y="91" width="262" height="65" rx="7"/>
+            <text x="32" y="112">theme.css</text>
+            <text class="highlight" x="32" y="139">+ color-scheme: dark;</text>
+          </svg>
+          <h3>Talk it through.</h3>
+          <p>ACP chat keeps the conversation, diffs and tool activity together. Reply to permission requests in place and jump back to earlier prompts with Time Machine.</p>
+          <a class="text-link" href="docs/guides/sessions.html">Work in chat</a>
+        </article>
+        <article class="interface">
+          <svg class="illustration" viewBox="0 0 300 180" role="img" aria-label="Terminal illustration: starting a development server on port 3000">
+            <rect class="surface" x="1" y="1" width="298" height="178" rx="12"/>
+            <path class="line" d="M1 34h298"/>
+            <text x="19" y="23">agent — workspace</text>
+            <text class="bright" x="19" y="62">$ npm run dev</text>
+            <path class="signal" d="m20 85 5 4-5 4"/>
+            <text x="36" y="94">ready on localhost:3000</text>
+            <path class="line" d="M19 112h138"/>
+            <text class="highlight" x="19" y="147">$</text>
+            <rect class="highlight" x="33" y="137" width="7" height="12" rx="1"/>
+          </svg>
+          <h3>Stay in the terminal.</h3>
+          <p>Prefer the agent’s own CLI? Use a full terminal in your browser. A separate shell is also available alongside ACP when you need to inspect or run something yourself.</p>
+          <a class="text-link" href="docs/guides/sessions.html">Use CLI sessions</a>
+        </article>
+        <article class="interface">
+          <svg class="illustration" viewBox="0 0 300 180" role="img" aria-label="CAD workspace illustration: a mounting plate, its dimensions and a prompt below the model">
+            <rect class="surface" x="1" y="1" width="298" height="178" rx="12"/>
+            <path class="line" d="M198 1v130M1 130h298"/>
+            <rect class="inset" x="42" y="40" width="113" height="63" rx="9"/>
+            <g class="signal">
+              <circle cx="57" cy="55" r="5"/><circle cx="140" cy="55" r="5"/>
+              <circle cx="57" cy="88" r="5"/><circle cx="140" cy="88" r="5"/>
+              <path d="M42 28h113m-113-4v8m113-8v8"/>
+            </g>
+            <text x="214" y="33">Width</text><text class="bright" x="214" y="52">60 mm</text>
+            <path class="line" d="M214 65h65"/>
+            <text x="214" y="86">Height</text><text class="bright" x="214" y="105">40 mm</text>
+            <text x="17" y="158">Make the holes wider</text>
+            <path class="signal" d="M275 161v-12m-5 5 5-5 5 5"/>
+          </svg>
+          <h3>Work with the result.</h3>
+          <p>Install an MCP App for a task-specific interface. CAD puts a live model, editable parameters and your prompt together, with build123d source and STEP export.</p>
+          <a class="text-link" href="docs/guides/plugins.html">Explore MCP Apps</a>
+        </article>
       </div>
+    </section>
 
-      <div class="more">
-        <span class="chip"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m8 10 2 2-2 2M13 15h3"/></svg> Floating terminal</span>
-        <span class="chip"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h5"/></svg> A2UI cards</span>
-        <span class="chip"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><circle cx="9" cy="9" r="2"/><path d="m4 17 5-5 4 4 2-2 5 5"/></svg> Images &amp; file cards</span>
-        <span class="chip"><svg viewBox="0 0 24 24"><path d="m12 2 8 5v10l-8 5-8-5V7z"/><path d="m4 7 8 5 8-5M12 12v10"/></svg> 3D &amp; CAD viewer</span>
-        <span class="chip"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg> Multiple ntfy connections</span>
-        <span class="chip"><svg viewBox="0 0 24 24"><path d="M4 12h16M12 4v16"/><circle cx="12" cy="12" r="8"/></svg> Time Machine navigation</span>
-        <span class="chip"><svg viewBox="0 0 24 24"><path d="M7 10V7a5 5 0 0 1 10 0v3"/><rect x="4" y="10" width="16" height="11" rx="2"/></svg> In-memory SSH agent</span>
-        <span class="chip"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m7 14 4-4 3 3 5-6"/></svg> Live usage</span>
-        <span class="chip"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/></svg> Model &amp; mode controls</span>
-        <span class="chip"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg> Desktop app (macOS)</span>
-      </div>
-    </div>
-  </section>
-
-  <section style="padding-top:0">
-    <div class="wrap">
-      <div class="sec-head">
-        <div class="eyebrow">Architecture</div>
-        <h2>Browser in, agents out.</h2>
-        <p>One Go binary serves the UI and transports, owns session state, and starts agent runtimes locally or through the host Docker daemon.</p>
-      </div>
-
-      <div class="arch">
-        <div class="layer">
-          <div class="cap">Clients and integrations</div>
-          <div class="grid3">
-            <div class="node"><div class="n">Browser</div><div class="s">React · xterm.js · AG-UI chat</div></div>
-            <div class="node"><div class="n">Brigade.app</div><div class="s">native macOS webview · local or Docker</div></div>
-            <div class="node"><div class="n">Telegram</div><div class="s">personal bots · poll or webhook</div></div>
-          </div>
+    <section class="story wrap" aria-labelledby="context-title">
+      <div class="context-layout">
+        <div class="context-intro">
+          <h2 id="context-title">Make it<br />your agent.</h2>
+          <p>The connection is only the start. Give the agent your tools, choose how it responds and keep useful knowledge beyond a single conversation.</p>
+          <p>Claude connects with a subscription token. Codex supports ChatGPT device login or an API key. <a class="text-link" href="docs/guides/agents.html">Connect an agent</a>.</p>
+          <svg class="illustration memory-illustration" viewBox="0 0 360 134" role="img" aria-label="Memory illustration: Markdown notes become commits in your private git repository">
+            <path class="surface" d="M9 23h49l16 16v70H9z"/>
+            <path class="line" d="M58 23v16h16M22 53h38M22 66h38M22 79h24"/>
+            <text x="41.5" y="126" text-anchor="middle">notes.md</text>
+            <path class="signal" d="M86 66h180m-6-5 6 5-6 5"/>
+            <circle class="inset" cx="123" cy="66" r="6"/>
+            <circle class="inset" cx="174" cy="66" r="6"/>
+            <circle class="highlight" cx="225" cy="66" r="6"/>
+            <text x="174" y="126" text-anchor="middle">commits</text>
+            <rect class="surface" x="279" y="43" width="72" height="46" rx="8"/>
+            <text class="bright" x="315" y="66" text-anchor="middle" dominant-baseline="central">git</text>
+            <text x="315" y="126" text-anchor="middle">your repo</text>
+          </svg>
         </div>
-
-        <div class="conn">ConnectRPC · WebSocket · SSE</div>
-
-        <div class="layer">
-          <div class="cap">brigade — single Go binary</div>
-          <div class="grid3">
-            <div class="mod"><b>ConnectRPC API</b><span>+ embedded SPA (go:embed)</span></div>
-            <div class="mod"><b>WS streams</b><span>terminal · side shell</span></div>
-            <div class="mod"><b>SSE chat</b><span>ACP → AG-UI</span></div>
-            <div class="mod"><b>L7 preview proxy</b><span>wildcard + TLS</span></div>
-            <div class="mod"><b>Auth · SQLite</b><span>users · settings · sessions</span></div>
-            <div class="mod hl"><b>Spawner</b><span>local pty │ docker</span></div>
+        <dl class="context-list">
+          <div class="context-item">
+            <dt>Bring your tools.</dt>
+            <dd>Add your own <a class="text-link" href="docs/guides/mcp.html">MCP servers</a> and select them per session. Tokens and other secrets stay encrypted on the server; environment variables and headers reference them when needed.</dd>
           </div>
+          <div class="context-item">
+            <dt>Set the tone.</dt>
+            <dd>Use a <a class="text-link" href="docs/guides/profiles.html">response profile</a> for concise answers, detailed explanations or your own instructions. Change it as the work changes, without rewriting your messages.</dd>
+          </div>
+          <div class="context-item">
+            <dt>Keep what you learn.</dt>
+            <dd><a class="text-link" href="docs/guides/memory.html">Notes and archived conversations</a> live in your private git repository, shared across your agents. Archive preserves a read-only chat snapshot; it is not a workspace backup.</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="continuity" aria-labelledby="continuity-title">
+      <div class="wrap">
+        <div class="section-intro">
+          <h2 id="continuity-title">Close the tab.<br />Not the task.</h2>
+          <p>The agent runs independently of your browser connection. Come back to the conversation, see unread replies and carry on from another device.</p>
         </div>
-
-        <div class="conn">starts and restores agent runtimes</div>
-
-        <div class="layer">
-          <div class="cap">Agents and durable user data</div>
-          <div class="row2">
-            <div class="node"><div class="n">Claude Code · Codex</div><div class="s">CLI or ACP · local process or Docker</div></div>
-            <div class="node"><div class="n">User's git repository</div><div class="s">Markdown notes · archived chats</div></div>
-          </div>
+        <div class="channels">
+          <article>
+            <h3>Pick it up in Telegram.</h3>
+            <p>Connect your own bot. Chats and topics become grouped sessions, with replies, images and files in Telegram and Brigade. The bot responds only to its linked owner, including guest mentions.</p>
+            <a class="text-link" href="docs/guides/telegram.html">Connect a bot</a>
+          </article>
+          <article>
+            <h3>Keep your Mac in reach.</h3>
+            <p>Switch between local and remote environments in Brigade.app. Forward remote session ports to localhost and mount workspaces with FUSE-T, installed separately.</p>
+            <a class="text-link" href="docs/guides/remote-environments.html">Connect a remote environment</a>
+          </article>
+          <article>
+            <h3>See what came out of it.</h3>
+            <p>Open files, images and interactive forms in chat, or preview a running dev server. Add ntfy connections when you want notifications outside Brigade.</p>
+            <a class="text-link" href="docs/guides/files-and-ui.html">Files, previews and interactive UI</a>
+          </article>
         </div>
       </div>
-      <div class="arch-foot">The protobuf files in <span class="accent">proto/</span> are the API source of truth. WebSocket and SSE are reserved for terminal and streaming chat protocols.</div>
-    </div>
-  </section>
+    </section>
 
-  <section id="quickstart" style="padding-top:0">
-    <div class="wrap">
-      <div class="sec-head">
-        <div class="eyebrow">Quick start</div>
-        <h2>Running in one command.</h2>
-        <p>Use the installer for an isolated Docker setup, then connect Claude Code or Codex from Settings.</p>
+    <section class="deploy wrap" id="quickstart" aria-labelledby="install-title">
+      <div class="section-intro">
+        <h2 id="install-title">Give it a home.</h2>
+        <p>One Go binary serves Brigade and its web interface. Run agents as local processes or in Docker, with a custom image when your tools need one.</p>
       </div>
-      <div class="qs-grid">
-        <div class="code">
-          <div class="code-head"><span>Docker — recommended</span><button class="copy" type="button">Copy</button></div>
-<pre><code>curl -fsSL https://grigory51.github.io/brigade/install.sh | sudo sh
-
-<span class="cm"># → http://localhost:8080</span></code></pre>
+      <div class="setup">
+        <div>
+          <div class="code">
+            <div class="code-head"><span>Linux amd64 · Docker installed</span><button class="copy" type="button" aria-label="Copy Docker install command">Copy</button></div>
+<pre><code>curl -fsSL https://grigory51.github.io/brigade/install.sh | sudo sh</code></pre>
+          </div>
+          <p class="install-notes">The installer generates credentials and starts Brigade on port 8080. It grants Brigade access to the Docker socket: use a trusted host and HTTPS or a VPN. <a class="text-link" href="https://github.com/grigory51/brigade/blob/main/site/install.sh">Read the installer</a>.</p>
+          <div class="install-links">
+            <a class="text-link" href="docs/quickstart.html">First session guide</a>
+            <a class="text-link" href="docs/installation/docker.html">Docker setup</a>
+            <a class="text-link" href="docs/installation/linux.html">Linux binary</a>
+            <a class="text-link" href="docs/installation/source.html">Build from source</a>
+          </div>
+          <div class="access-note">
+            <h3>Decide who gets in.</h3>
+            <p>Use password login or your own OIDC provider, including ZITADEL. Configure a required role and turn off local passwords if you want provider-only sign-in.</p>
+            <a class="text-link" href="docs/guides/authentication.html">Configure authentication</a>
+          </div>
         </div>
-        <div class="code">
-          <div class="code-head"><span>Prebuilt Linux amd64 binary</span><button class="copy" type="button">Copy</button></div>
-<pre><code>curl -L https://github.com/grigory51/brigade/releases/latest/download/brigade-linux-amd64.tar.gz | tar xz
-curl -Lo config.yaml https://raw.githubusercontent.com/grigory51/brigade/main/backend/config.example.yaml
-./brigade --config config.yaml
-
-<span class="cm"># Edit the credentials before exposing the server.</span></code></pre>
-        </div>
+        <aside class="mac" aria-labelledby="mac-title">
+          <h3 id="mac-title">Or start on your Mac.</h3>
+          <p>Brigade.app for Apple Silicon runs locally, uses a selected Docker context or connects to a remote Brigade instance.</p>
+          <a class="btn" href="https://github.com/grigory51/brigade/releases/latest">Download Brigade.app</a>
+          <p class="fine">Node is included; agent runtimes install on first launch and check for updates on later launches. The app is not yet Developer ID signed. Follow the <a class="text-link" href="docs/installation/macos.html">macOS setup guide</a> for first-launch requirements.</p>
+        </aside>
       </div>
-      <p style="margin-top:18px; color:var(--muted-fg); font-size:14.5px;">
-        Prefer a native window? Download <a class="accent" href="https://github.com/grigory51/brigade/releases/latest">Brigade.app for Apple Silicon</a>
-        from the latest release. It includes Node;
-        agent runtimes install and update on launch, and sessions run locally or through a selected Docker context.
-      </p>
-    </div>
-  </section>
-
+    </section>
+  </main>
   <footer>
-    <div class="wrap foot">
+    <div class="wrap footer-layout">
       <div>
-        <a class="brand" href="#top"><img src="logo.svg" alt="" style="width:26px;height:26px" /> brigade</a>
-        <div class="foot-meta" style="margin-top:10px">Self-hosted multiplexer for coding agents · MIT</div>
+        <a class="brand" href="#top"><img src="logo.svg" alt="" width="36" height="36" />brigade</a>
+        <p>Your agents, your workspace. Open source under MIT.</p>
       </div>
-      <div style="display:flex; flex-direction:column; align-items:flex-end; gap:10px">
-        <a class="btn btn-ghost btn-sm" href="docs/">Documentation</a>
-        <a class="btn btn-ghost btn-sm" href="https://github.com/grigory51/brigade" target="_blank" rel="noopener">github.com/grigory51/brigade</a>
-        <span class="status"><i class="sd"></i> Early and moving fast — run it behind a VPN</span>
-      </div>
+      <nav class="footer-links" aria-label="Further reading">
+        <a class="text-link" href="docs/">Documentation</a>
+        <a class="text-link" href="https://github.com/grigory51/brigade/releases">Releases</a>
+        <a class="text-link" href="https://github.com/grigory51/brigade">GitHub</a>
+      </nav>
     </div>
   </footer>
-
   <script>
+    (function () {
+      var button = document.querySelector('.agent-name');
+      var label = button.querySelector('.agent-label');
+      var canvas = button.querySelector('canvas');
+      var context = canvas.getContext('2d');
+      var source = document.createElement('canvas');
+      var sourceContext = source.getContext('2d');
+      var pixels = document.createElement('canvas');
+      var pixelContext = pixels.getContext('2d');
+      if (!context || !sourceContext || !pixelContext) return;
+
+      var names = ['Claude Code', 'Codex'];
+      var reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+      var index = 0;
+      var visible = false;
+      var paused = false;
+      var timer = 0;
+      var frame = 0;
+
+      function schedule() {
+        clearTimeout(timer);
+        cancelAnimationFrame(frame);
+        button.classList.remove('is-changing');
+        button.classList.toggle('is-ready', !reducedMotion.matches);
+        button.disabled = reducedMotion.matches;
+        button.setAttribute('aria-label', reducedMotion.matches ? 'Claude Code and Codex' :
+          'Claude Code and Codex. ' + (paused ? 'Resume' : 'Pause') + ' name animation');
+        button.title = reducedMotion.matches ? '' : (paused ? 'Resume' : 'Pause') + ' animation';
+        if (!reducedMotion.matches && !paused && visible && !document.hidden) {
+          timer = setTimeout(transition, 1800);
+        }
+      }
+
+      function transition() {
+        var style = getComputedStyle(label);
+        var width = button.getBoundingClientRect().width;
+        var height = button.getBoundingClientRect().height;
+        var ratio = Math.min(devicePixelRatio || 1, 2);
+        canvas.width = source.width = Math.ceil(width * ratio);
+        canvas.height = source.height = Math.ceil(height * ratio);
+        sourceContext.scale(ratio, ratio);
+        sourceContext.font = style.fontWeight + ' ' + style.fontSize + ' ' + style.fontFamily;
+        sourceContext.textAlign = 'center';
+        sourceContext.fillStyle = style.color;
+        var metrics = sourceContext.measureText(names[0]);
+        var ascent = metrics.fontBoundingBoxAscent ?? parseFloat(style.fontSize) * .8;
+        var descent = metrics.fontBoundingBoxDescent ?? parseFloat(style.fontSize) * .2;
+        var baseline = (height - ascent - descent) / 2 + ascent;
+        var next = (index + 1) % names.length;
+        var start;
+        button.classList.add('is-changing');
+
+        function draw(now) {
+          if (start === undefined) start = now;
+          var progress = Math.min((now - start) / 800, 1);
+          var mix = Math.max(0, Math.min((progress - .35) / .3, 1));
+          var block = 1 / ratio + 5 * Math.pow(Math.sin(Math.PI * progress), 2);
+          sourceContext.clearRect(0, 0, width, height);
+          sourceContext.globalAlpha = 1 - mix;
+          sourceContext.fillText(names[index], width / 2, baseline);
+          sourceContext.globalAlpha = mix;
+          sourceContext.fillText(names[next], width / 2, baseline);
+          pixels.width = Math.max(1, Math.ceil(width / block));
+          pixels.height = Math.max(1, Math.ceil(height / block));
+          pixelContext.drawImage(source, 0, 0, pixels.width, pixels.height);
+          context.clearRect(0, 0, canvas.width, canvas.height);
+          context.imageSmoothingEnabled = false;
+          context.drawImage(pixels, 0, 0, canvas.width, canvas.height);
+          if (progress < 1) {
+            frame = requestAnimationFrame(draw);
+          } else {
+            index = next;
+            label.textContent = names[index];
+            schedule();
+          }
+        }
+        frame = requestAnimationFrame(draw);
+      }
+
+      button.addEventListener('click', function () { paused = !paused; schedule(); });
+      reducedMotion.addEventListener('change', schedule);
+      document.addEventListener('visibilitychange', schedule);
+      window.addEventListener('resize', schedule);
+      new IntersectionObserver(function (entries) {
+        visible = entries[0].isIntersecting;
+        schedule();
+      }).observe(button);
+    })();
+
     document.querySelectorAll('.copy').forEach(function (btn) {
-      btn.addEventListener('click', function () {
+      btn.addEventListener('click', async function () {
         var code = btn.closest('.code').querySelector('code');
-        navigator.clipboard.writeText(code.innerText).then(function () {
-          var prev = btn.textContent; btn.textContent = 'Copied';
-          setTimeout(function () { btn.textContent = prev; }, 1400);
-        });
+        btn.disabled = true;
+        try {
+          await navigator.clipboard.writeText(code.innerText);
+          btn.textContent = 'Copied';
+        } catch {
+          var selection = window.getSelection();
+          var range = document.createRange();
+          range.selectNodeContents(code);
+          selection.removeAllRanges();
+          selection.addRange(range);
+          btn.textContent = 'Select & copy';
+        } finally {
+          setTimeout(function () { btn.textContent = 'Copy'; btn.disabled = false; }, 2000);
+        }
       });
     });
   </script>

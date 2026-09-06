@@ -12,8 +12,13 @@ items:
         href: installation/docker.md
       - name: Linux-бинарь
         href: installation/linux.md
-      - name: macOS
-        href: installation/macos.md
+      - name: Desktop
+        href: installation/desktop.md
+        items:
+          - name: macOS
+            href: installation/macos.md
+          - name: Удалённые окружения
+            href: guides/remote-environments.md
       - name: Сборка из исходников
         href: installation/source.md
       - name: Обновление
@@ -22,28 +27,31 @@ items:
     items:
       - name: Сессии
         href: guides/sessions.md
+        items:
+          - name: Файлы, preview и A2UI
+            href: guides/files-and-ui.md
       - name: Подключения агентов
         href: guides/agents.md
       - name: Среда агента
         href: guides/environment.md
-      - name: Удалённые окружения в Brigade.app
-        href: guides/remote-environments.md
-      - name: MCP и секреты
+      - name: MCP
         href: guides/mcp.md
       - name: Плагины
         href: guides/plugins.md
-      - name: CAD
-        href: guides/cad.md
+        items:
+          - name: CAD
+            href: guides/cad.md
       - name: Профили ответов
         href: guides/profiles.md
       - name: Память и архив
         href: guides/memory.md
-      - name: Telegram
-        href: guides/telegram.md
+      - name: Интеграции
+        href: guides/integrations.md
+        items:
+          - name: Telegram
+            href: guides/telegram.md
       - name: Уведомления
         href: guides/notifications.md
-      - name: Файлы, preview и A2UI
-        href: guides/files-and-ui.md
   - name: Эксплуатация
     items:
       - name: Конфигурация
