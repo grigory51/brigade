@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AgentImagesSettings, AgentRuntimeSettings, CancelCodexLoginRequest, ClaudeSettings, CodexLogin, CodexSettings, Empty, ExchangeOIDCRequest, GetCodexLoginRequest, LoginRequest, LoginResponse, MemorySettings, RefreshRequest, RefreshResponse, ServerInfo, SetAgentImagesRequest, SetAgentRuntimeRequest, SetClaudeTokenRequest, SetCodexApiKeyRequest, SetCodexChatGPTAuthRequest, SetCodexDefaultProfileRequest, SetMemorySettingsRequest, SSHSettings, User } from "./auth_pb.js";
+import { AgentImageBuild, AgentImagesSettings, AgentRuntimeSettings, CancelAgentImageBuildRequest, CancelCodexLoginRequest, ClaudeSettings, CodexLogin, CodexSettings, Empty, ExchangeOIDCRequest, GetCodexLoginRequest, LoginRequest, LoginResponse, MemorySettings, RefreshRequest, RefreshResponse, ServerInfo, SetAgentImagesRequest, SetAgentRuntimeRequest, SetClaudeTokenRequest, SetCodexApiKeyRequest, SetCodexChatGPTAuthRequest, SetCodexDefaultProfileRequest, SetMemorySettingsRequest, SSHSettings, StartAgentImageBuildRequest, User } from "./auth_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -228,8 +228,7 @@ export const AuthService = {
       kind: MethodKind.Unary,
     },
     /**
-     * SetAgentImages перезаписывает список образов пользователя. Образ, который не удалось
-     * подтянуть, не пригоден для сессий или не влезает в квоту, отклоняет весь запрос.
+     * SetAgentImages удаляет или переупорядочивает сохранённые образы пользователя.
      *
      * @generated from rpc brigade.v1.AuthService.SetAgentImages
      */
@@ -237,6 +236,33 @@ export const AuthService = {
       name: "SetAgentImages",
       I: SetAgentImagesRequest,
       O: AgentImagesSettings,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.AuthService.GetAgentImageBuild
+     */
+    getAgentImageBuild: {
+      name: "GetAgentImageBuild",
+      I: Empty,
+      O: AgentImageBuild,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.AuthService.StartAgentImageBuild
+     */
+    startAgentImageBuild: {
+      name: "StartAgentImageBuild",
+      I: StartAgentImageBuildRequest,
+      O: AgentImageBuild,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.AuthService.CancelAgentImageBuild
+     */
+    cancelAgentImageBuild: {
+      name: "CancelAgentImageBuild",
+      I: CancelAgentImageBuildRequest,
+      O: AgentImageBuild,
       kind: MethodKind.Unary,
     },
     /**

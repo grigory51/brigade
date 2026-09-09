@@ -251,7 +251,7 @@ export function TelegramSection({
             <SelectTrigger className="h-[41px] w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value={BASE_IMAGE}>Базовый ({images.defaultImage})</SelectItem>
-              {images.images.map((image) => <SelectItem key={image.image} value={image.image}>{image.image}</SelectItem>)}
+              {images.images.map((image) => <SelectItem key={image.image} value={image.image}>{image.name || image.image}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>

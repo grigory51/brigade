@@ -129,6 +129,7 @@ message SetAgentRuntimeRequest {
 message AgentImage {
   string image = 1;
   int64 size_bytes = 2;
+  string name = 3;
 }
 
 // AgentImagesSettings — образы контейнеров агента, доступные пользователю при создании
@@ -141,11 +142,32 @@ message AgentImagesSettings {
   int64 quota_bytes = 4;
 }
 
-// SetAgentImagesRequest — новый список образов (перезаписывается целиком). Каждый образ
-// проверяется: подтягивается при отсутствии, проверяется на пригодность для сессий и на
-// квоту.
+// SetAgentImagesRequest — оставшийся список сохранённых образов. Разрешены удаление
+// и перестановка; новые образы добавляет только успешная сборка скрипта.
 message SetAgentImagesRequest {
   repeated string images = 1;
+}
+
+// Последняя сборка окружения текущего пользователя. Пустой id — сборок ещё не было.
+message AgentImageBuild {
+  string id = 1;
+  string script = 2;
+  // queued | building | succeeded | failed | cancelled | interrupted
+  string status = 3;
+  string log = 4;
+  string error = 5;
+  string image = 6;
+  string name = 7;
+}
+
+message StartAgentImageBuildRequest {
+  string script = 1;
+  bool no_cache = 2;
+  string name = 3;
+}
+
+message CancelAgentImageBuildRequest {
+  string id = 1;
 }
 
 // ServerInfo — режим работы сервера, от которого зависит интерфейс клиента.
@@ -205,9 +227,11 @@ service AuthService {
   // GetAgentImages возвращает образы контейнеров агента пользователя, базовый образ и
   // состояние квоты.
   rpc GetAgentImages(Empty) returns (AgentImagesSettings) {}
-  // SetAgentImages перезаписывает список образов пользователя. Образ, который не удалось
-  // подтянуть, не пригоден для сессий или не влезает в квоту, отклоняет весь запрос.
+  // SetAgentImages удаляет или переупорядочивает сохранённые образы пользователя.
   rpc SetAgentImages(SetAgentImagesRequest) returns (AgentImagesSettings) {}
+  rpc GetAgentImageBuild(Empty) returns (AgentImageBuild) {}
+  rpc StartAgentImageBuild(StartAgentImageBuildRequest) returns (AgentImageBuild) {}
+  rpc CancelAgentImageBuild(CancelAgentImageBuildRequest) returns (AgentImageBuild) {}
   // GetSSHSettings возвращает публичный SSH-ключ агента пользователя, генерируя пару при
   // первом обращении (приватный ключ наружу не отдаётся).
   rpc GetSSHSettings(Empty) returns (SSHSettings) {}

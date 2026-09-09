@@ -1,9 +1,8 @@
 // Package agentimage — образы контейнеров агента, которые пользователь может выбрать при
 // создании сессии, и квота на их суммарный вес.
 //
-// Образ пользователя ничем не обязан базовому: компоненты brigade (демон, node, адаптер,
-// MCP-сервер) приезжают в контейнер read-only volume'ами (см. internal/spawn). От образа
-// требуется лишь совместимость — её проверяет docker-спавнер перед добавлением.
+// Новые образы добавляются только результатом сборки скрипта поверх базы инстанса.
+// Ранее сохранённые образы остаются доступны существующим пользователям.
 //
 // Квота нужна, чтобы список образов не забил диск хоста: образы тяжёлые, а добавлять их
 // пользователь может сколько угодно. Считается не сумма размеров, а реальный прирост места
@@ -15,7 +14,11 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"strings"
+	"time"
+
+	"github.com/docker/docker/client"
 
 	"github.com/grigory51/brigade/backend/internal/spawn"
 	"github.com/grigory51/brigade/backend/internal/store"
@@ -38,6 +41,7 @@ type Docker interface {
 	InspectImage(ctx context.Context, ref string) (spawn.ImageInfo, error)
 	CheckImage(ctx context.Context, ref string) error
 	RemoveImage(ctx context.Context, ref string) error
+	TagImage(ctx context.Context, source, target string) error
 }
 
 // Image — образ в списке пользователя с его весом.
@@ -56,15 +60,16 @@ type Settings struct {
 
 // Service — операции над списком образов пользователя.
 type Service struct {
-	store  *store.Store
-	docker Docker
-	quota  int64
+	mutation chan struct{}
+	store    *store.Store
+	docker   Docker
+	quota    int64
 }
 
 // New собирает сервис. docker == nil (local-режим) — операции возвращают ErrUnavailable.
 // quota — предел суммарного веса образов на пользователя в байтах; 0 — без ограничения.
 func New(st *store.Store, docker Docker, quota int64) *Service {
-	return &Service{store: st, docker: docker, quota: quota}
+	return &Service{store: st, docker: docker, quota: quota, mutation: make(chan struct{}, 1)}
 }
 
 // List возвращает образы пользователя с весами и состоянием квоты.
@@ -85,12 +90,106 @@ func (s *Service) List(ctx context.Context, userID string) (Settings, error) {
 	return settings, nil
 }
 
-// Set перезаписывает список образов пользователя. Отсутствующие локально подтягиваются из
-// реестра, каждый проверяется на пригодность для сессий, затем считается квота. При отказе
-// образы, стянутые этим вызовом, удаляются — иначе неудачная попытка оставляла бы на диске
-// именно то, от чего защищает квота. Образы, лежавшие локально (пользователь собрал их
-// сам), не трогаем.
+// Set удаляет или переупорядочивает сохранённые образы. Добавление разрешено только
+// внутреннему пути завершения сборки, а не произвольной ссылке клиента.
 func (s *Service) Set(ctx context.Context, userID string, refs []string) (Settings, error) {
+	select {
+	case s.mutation <- struct{}{}:
+	case <-ctx.Done():
+		return Settings{}, ctx.Err()
+	}
+	defer func() { <-s.mutation }()
+	if s.docker == nil {
+		return Settings{}, ErrUnavailable
+	}
+	known, err := s.refs(ctx, userID)
+	if err != nil {
+		return Settings{}, err
+	}
+	for _, ref := range normalize(refs) {
+		if !contains(known, ref) {
+			return Settings{}, errors.New("добавить образ можно только сборкой из скрипта в разделе «Среда агента»")
+		}
+	}
+	return s.set(ctx, userID, refs)
+}
+
+func (s *Service) publishBuilt(ctx context.Context, userID, name, source string) (string, error) {
+	target, err := imageRef(userID, name)
+	if err != nil {
+		return "", err
+	}
+	select {
+	case s.mutation <- struct{}{}:
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
+	defer func() { <-s.mutation }()
+	refs, err := s.refs(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	if err := s.docker.CheckImage(ctx, source); err != nil {
+		return "", err
+	}
+	next, err := s.docker.InspectImage(ctx, source)
+	if err != nil {
+		return "", err
+	}
+	// Считаем квоту с новым содержимым, не меняя рабочий тег до проверки.
+	candidates := make([]string, 0, len(refs)+1)
+	for _, ref := range refs {
+		if ref != target {
+			candidates = append(candidates, ref)
+		}
+	}
+	weights := s.weigh(ctx, append(candidates, source))
+	var used int64
+	for _, bytes := range weights {
+		used += bytes
+	}
+	if s.quota > 0 && used > s.quota {
+		return "", fmt.Errorf("%w: занято %s из %s", ErrQuotaExceeded, humanBytes(used), humanBytes(s.quota))
+	}
+	previous, err := s.docker.InspectImage(ctx, target)
+	if err != nil && !client.IsErrNotFound(err) {
+		return "", err
+	}
+	if err := s.docker.TagImage(ctx, source, target); err != nil {
+		return "", err
+	}
+	if !contains(refs, target) {
+		refs = append(refs, target)
+	}
+	if err := s.store.SetAgentImages(ctx, userID, refs); err != nil {
+		rollbackCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		var rollbackErr error
+		if previous.ID != "" {
+			rollbackErr = s.docker.TagImage(rollbackCtx, previous.ID, target)
+		} else {
+			rollbackErr = s.docker.RemoveImage(rollbackCtx, target)
+		}
+		return "", errors.Join(err, rollbackErr)
+	}
+	// Удаление по ID может снять единственный оставшийся alias даже без force.
+	// Убираем только образ без тегов; занятый контейнером Docker сохранит.
+	if previous.ID != "" && previous.ID != next.ID {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		old, inspectErr := s.docker.InspectImage(cleanupCtx, previous.ID)
+		if inspectErr != nil && !client.IsErrNotFound(inspectErr) {
+			log.Printf("image build: inspect previous image %s: %v", previous.ID, inspectErr)
+		} else if inspectErr == nil && len(old.Tags) == 0 {
+			if err := s.docker.RemoveImage(cleanupCtx, previous.ID); err != nil {
+				log.Printf("image build: retain previous image %s: %v", previous.ID, err)
+			}
+		}
+		cancel()
+	}
+	return target, nil
+}
+
+func (s *Service) set(ctx context.Context, userID string, refs []string) (Settings, error) {
 	if s.docker == nil {
 		return Settings{}, ErrUnavailable
 	}
@@ -141,7 +240,13 @@ func (s *Service) Set(ctx context.Context, userID string, refs []string) (Settin
 		rollback()
 		return Settings{}, err
 	}
-	return s.List(ctx, userID)
+	// После commit не выполняем отменяемых операций: ошибка чтения не должна
+	// превращать успешно добавленный образ в кандидата на rollback.
+	out := Settings{DefaultImage: s.docker.BaseImage(), QuotaBytes: s.quota, UsedBytes: used}
+	for _, ref := range refs {
+		out.Images = append(out.Images, Image{Ref: ref, Bytes: weights[ref]})
+	}
+	return out, nil
 }
 
 // Resolve проверяет, что образ разрешён пользователю, и возвращает его. Пустая ссылка —
@@ -195,7 +300,10 @@ func (s *Service) weigh(ctx context.Context, refs []string) map[string]int64 {
 		}
 		var base int64
 		for other, oinfo := range infos {
-			if other != ref && isPrefix(oinfo.Layers, info.Layers) && oinfo.Size > base {
+			// Одинаковое содержимое под разными тегами оплачивается один раз.
+			sameLayers := len(info.Layers) > 0 && slices.Equal(oinfo.Layers, info.Layers)
+			sharedAlias := sameLayers && (other == s.docker.BaseImage() || other < ref)
+			if other != ref && (isPrefix(oinfo.Layers, info.Layers) || sharedAlias) && oinfo.Size > base {
 				base = oinfo.Size
 			}
 		}

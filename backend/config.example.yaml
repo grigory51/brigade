@@ -67,6 +67,13 @@ agent_image: ""
 # раз. Не задано → 1 ГиБ; отрицательное — без ограничения. Только docker-режим.
 image_quota_bytes: 1073741824
 
+# Сборка пользовательских окружений. Docker backend — только для доверенных пользователей.
+# Скрипт исполняется при сборке образа, не при каждом запуске сессии.
+image_build:
+  backend: docker
+  timeout: 30m
+  max_concurrent: 2
+
 # Кеш пользовательских MCP Apps и системных MCPB-плагинов.
 # Пусто → ~/.brigade/plugins. Env: BRIGADE_PLUGINS_DIR.
 plugins_dir: ""

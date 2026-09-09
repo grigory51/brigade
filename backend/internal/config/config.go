@@ -69,7 +69,8 @@ type Config struct {
 	// пользователем (docker-режим). Образы тяжёлые и лежат на диске хоста, поэтому список
 	// без предела забил бы его. Не задано (0) → дефолт 1 ГиБ; отрицательное значение
 	// снимает ограничение.
-	ImageQuotaBytes int64 `koanf:"image_quota_bytes"`
+	ImageQuotaBytes int64            `koanf:"image_quota_bytes"`
+	ImageBuild      ImageBuildConfig `koanf:"image_build"`
 
 	Preview  PreviewConfig  `koanf:"preview"`
 	TLS      TLSConfig      `koanf:"tls"`
@@ -78,6 +79,13 @@ type Config struct {
 	// PluginsDir — кеш установленных MCPB bundles. Содержимое копируется в среду
 	// сессии и версионируется по id/version.
 	PluginsDir string `koanf:"plugins_dir"`
+}
+
+// ImageBuildConfig задаёт сборщик пользовательских окружений инстанса.
+type ImageBuildConfig struct {
+	Backend       string        `koanf:"backend"`
+	Timeout       time.Duration `koanf:"timeout"`
+	MaxConcurrent int           `koanf:"max_concurrent"`
 }
 
 // TelegramConfig задаёт способ получения updates для всех пользовательских ботов
@@ -203,6 +211,21 @@ func Load(path string) (*Config, error) {
 // Validate проверяет согласованность загруженной конфигурации. Цель — поймать
 // заведомо нерабочие значения на старте, а не при первом обращении к ним.
 func (c *Config) Validate() error {
+	if c.ImageBuild.Backend == "" {
+		c.ImageBuild.Backend = "docker"
+	}
+	if c.ImageBuild.Backend != "docker" {
+		return fmt.Errorf("config: неизвестный image_build.backend %q", c.ImageBuild.Backend)
+	}
+	if c.ImageBuild.Timeout == 0 {
+		c.ImageBuild.Timeout = 30 * time.Minute
+	}
+	if c.ImageBuild.MaxConcurrent == 0 {
+		c.ImageBuild.MaxConcurrent = 2
+	}
+	if c.ImageBuild.Timeout < 0 || c.ImageBuild.MaxConcurrent < 1 {
+		return fmt.Errorf("config: image_build.timeout и max_concurrent должны быть положительными")
+	}
 	// Пустой mode трактуем как local (дефолт), явный недопустимый — ошибка.
 	switch c.Mode {
 	case "":

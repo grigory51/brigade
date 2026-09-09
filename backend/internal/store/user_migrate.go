@@ -54,6 +54,7 @@ func (s *Store) MigrateUser(ctx context.Context, oldID, newID string) error {
 	}{
 		{`DELETE FROM refresh_tokens WHERE user_id = ?`, []any{oldID}},
 		{`DELETE FROM user_settings WHERE user_id = ? AND EXISTS (SELECT 1 FROM user_settings WHERE user_id = ?)`, []any{newID, oldID}},
+		{`DELETE FROM image_builds WHERE user_id = ? AND EXISTS (SELECT 1 FROM image_builds WHERE user_id = ?)`, []any{newID, oldID}},
 		{`DELETE FROM user_secrets WHERE user_id = ? AND name IN (SELECT name FROM user_secrets WHERE user_id = ?)`, []any{newID, oldID}},
 		{`DELETE FROM mcp_servers WHERE user_id = ? AND name IN (SELECT name FROM mcp_servers WHERE user_id = ?)`, []any{newID, oldID}},
 		{`DELETE FROM plugin_configs WHERE user_id = ? AND plugin_id IN (SELECT plugin_id FROM plugin_configs WHERE user_id = ?)`, []any{newID, oldID}},
@@ -71,7 +72,7 @@ func (s *Store) MigrateUser(ctx context.Context, oldID, newID string) error {
 
 	for _, table := range []string{
 		"sessions", "user_settings", "user_secrets", "mcp_servers", "notification_backends",
-		"telegram_bots", "response_profiles", "agent_connections", "auth_identities", "plugin_configs",
+		"telegram_bots", "response_profiles", "agent_connections", "auth_identities", "plugin_configs", "image_builds",
 	} {
 		if _, err := tx.ExecContext(ctx, `UPDATE `+table+` SET user_id = ? WHERE user_id = ?`, newID, oldID); err != nil {
 			return fmt.Errorf("store: migrate user: update %s: %w", table, err)

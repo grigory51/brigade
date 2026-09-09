@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { authClient } from "@/api/client";
 import type {
   AgentImagesSettings,
   AgentRuntimeSettings,
 } from "@/api/gen/brigade/v1/auth_pb";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { ImageBuildForm } from "./ImageBuildForm";
 import {
   Badge,
   Code,
@@ -28,16 +27,19 @@ import {
  * перезапуском, в серверном задан конфигом и только показывается. Всё, что ниже режима,
  * относится к контейнерам и в local-режиме не показывается.
  *
- * Образ не обязан наследоваться от базового: компоненты brigade (демон, node, агент,
- * MCP-сервер) приезжают в контейнер отдельно, read-only. От образа требуется совместимая
- * libc, пользователь с uid 1001 и git — это проверяется при добавлении.
+ * Пользователь добавляет инструменты скриптом сборки поверх базового образа инстанса.
  */
 
 export function EnvironmentSection() {
   const [settings, setSettings] = useState<AgentImagesSettings | null>(null);
   const [runtime, setRuntime] = useState<AgentRuntimeSettings | null>(null);
-  const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [buildBusy, setBuildBusy] = useState(true);
+
+  const refreshImages = useCallback(async (signal: AbortSignal) => {
+    const res = await authClient.getAgentImages({}, { signal, timeoutMs: 15_000 });
+    if (!signal.aborted) setSettings(res);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -73,15 +75,13 @@ export function EnvironmentSection() {
     [],
   );
 
-  // Список образов перезаписывается целиком: сервер проверяет каждый образ и считает
-  // квоту по итоговому набору.
+  // Удаление передаёт серверу оставшийся список образов.
   const save = useCallback(
     async (images: string[]) => {
       setBusy(true);
       try {
         const res = await authClient.setAgentImages({ images });
         setSettings(res);
-        setDraft("");
       } catch (err) {
         toast.error(errorText(err, "Не удалось сохранить образы"));
       } finally {
@@ -98,29 +98,22 @@ export function EnvironmentSection() {
   const quota = Number(settings.quotaBytes);
   const ratio = quota > 0 ? Math.min(1, used / quota) : 0;
   const docker = runtime.mode === "docker";
+  const canBuild = docker && runtime.runningMode === "docker" && !runtime.restartRequired;
+  const controlsBusy = busy || (canBuild && buildBusy);
 
   return (
     <>
-      <SectionHeader
-        title="Среда агента"
-        badge={<Badge on={docker}>{docker ? "docker" : "local"}</Badge>}
-      >
-        <Description>
-          Где исполняются сессии. <Code>local</Code> — агент запускается процессом на этой
-          машине и видит её файлы и инструменты. <Code>docker</Code> — каждая сессия живёт
-          в своём контейнере: изоляция, свой набор инструментов и выбор образа.
-        </Description>
-      </SectionHeader>
+      <SectionHeader title="Среда агента" />
 
       <div className="flex flex-col gap-2">
-        <FieldLabel>Режим</FieldLabel>
+        {runtime.editable && <FieldLabel>Режим</FieldLabel>}
         {runtime.editable ? (
           <div className="flex w-fit gap-0.5 rounded-[9px] border p-0.5">
             {(["local", "docker"] as const).map((mode) => (
               <button
                 key={mode}
                 type="button"
-                disabled={busy}
+                disabled={controlsBusy}
                 onClick={() => void saveRuntime(mode, runtime.dockerContext)}
                 className={cn(
                   "rounded-[7px] px-3.5 py-1.5 text-[12.5px] transition-colors disabled:opacity-60",
@@ -134,8 +127,9 @@ export function EnvironmentSection() {
             ))}
           </div>
         ) : (
-          <p className="text-[12.5px] text-muted-foreground/70">
-            <Code>{runtime.mode}</Code> — задан конфигурацией инстанса
+          <p className="text-[12.5px] text-muted-foreground">
+            <span className="text-foreground">{docker ? "Docker" : "Local"}</span>
+            {" · задан администратором"}
           </p>
         )}
       </div>
@@ -182,7 +176,7 @@ export function EnvironmentSection() {
                   name="docker-context"
                   className="size-3.5 accent-primary"
                   checked={(runtime.dockerContext || "default") === ctx.name}
-                  disabled={busy}
+                  disabled={controlsBusy}
                   onChange={() => void saveRuntime("docker", ctx.name)}
                 />
                 <span className="min-w-0 flex-1 truncate text-[12.5px]">
@@ -213,9 +207,10 @@ export function EnvironmentSection() {
               </Badge>
             </div>
             <Description>
-              Свой образ нужен, когда агенту (или вашим MCP-серверам) требуются
-              инструменты: компиляторы, утилиты, клиенты баз. Образ выбирается при создании
-              сессии; без выбора берётся базовый — <Code>{settings.defaultImage}</Code>.
+              Добавьте инструменты для агента и MCP-серверов скриптом установки.
+              Он создаст дополнительный слой поверх базового образа —{" "}
+              <Code>{settings.defaultImage}</Code>. Готовое окружение можно выбрать
+              при создании сессии.
             </Description>
           </div>
 
@@ -226,7 +221,7 @@ export function EnvironmentSection() {
                 className="flex items-center gap-3 rounded-[10px] border bg-card px-3 py-2.5"
               >
                 <span className="min-w-0 flex-1 truncate font-mono text-[12.5px]">
-                  {img.image}
+                  {img.name || img.image}
                 </span>
                 <span className="shrink-0 text-[11.5px] text-[#6c695f]">
                   {formatBytes(Number(img.sizeBytes))}
@@ -234,7 +229,7 @@ export function EnvironmentSection() {
                 <button
                   type="button"
                   aria-label="Удалить"
-                  disabled={busy}
+                  disabled={controlsBusy}
                   onClick={() => void save(refs.filter((ref) => ref !== img.image))}
                   className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-destructive"
                 >
@@ -263,52 +258,23 @@ export function EnvironmentSection() {
             </div>
           )}
 
-          <div className="flex flex-col gap-2">
-            <FieldLabel>Новый образ</FieldLabel>
-            <div className="flex items-start gap-2">
-              <Input
-                value={draft}
-                placeholder="ghcr.io/username/agent:v1"
-                autoComplete="off"
-                onChange={(e) => setDraft(e.target.value)}
-                className="h-[41px] flex-1 bg-[#1c1b1a] font-mono text-[12.5px]"
-              />
-              <Button
-                className="h-[41px]"
-                disabled={busy || !draft.trim()}
-                onClick={() => void save([...refs, draft.trim()])}
-              >
-                {busy ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Plus className="size-4" />
-                )}
-                Добавить
-              </Button>
-            </div>
+          {canBuild ? (
+            <ImageBuildForm
+              disabled={busy}
+              onBusyChange={setBuildBusy}
+              onSucceeded={refreshImages}
+            />
+          ) : (
             <Description>
-              Образ подтягивается из реестра и проверяется на пригодность. Требования:{" "}
-              <Code>glibc ≥ 2.31</Code> (ubuntu 20.04+, debian 11+; alpine не подходит),
-              пользователь с uid 1001 и домашним каталогом <Code>/home/agent</Code>,
-              установленные <Code>git</Code> и <Code>ca-certificates</Code>. Инструменты
-              кладите в образ уже собранными — на старте сессии ничего не скачивается.
+              Сборка образа из скрипта будет доступна после перезапуска в режиме Docker.
             </Description>
-            <pre className="overflow-x-auto rounded-[10px] border bg-[#1c1b1a] px-3 py-2.5 font-mono text-[11.5px] leading-[1.7] text-[#a8a49b]">
-              {DOCKERFILE_EXAMPLE}
-            </pre>
-          </div>
+          )}
+
         </>
       )}
     </>
   );
 }
-
-const DOCKERFILE_EXAMPLE = `FROM ubuntu:jammy
-RUN apt-get update && apt-get install -y --no-install-recommends \\
-      git ca-certificates golang-go && rm -rf /var/lib/apt/lists/*
-RUN useradd -u 1001 -m agent
-# инструменты — собранными, а не через "go run ...@latest"
-RUN GOBIN=/usr/local/bin go install github.com/you/tool@latest`;
 
 // formatBytes — вес образа человекочитаемо.
 function formatBytes(n: number): string {

@@ -735,12 +735,18 @@ func (s *Store) SetAgentImages(ctx context.Context, userID string, images []stri
 	if err != nil {
 		return fmt.Errorf("store: encode agent images: %w", err)
 	}
-	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO user_settings (user_id, agent_images, updated_at) VALUES (?, ?, ?)
+	result, err := s.db.ExecContext(ctx,
+		`INSERT INTO user_settings (user_id, agent_images, updated_at)
+		 SELECT ?, ?, ? WHERE EXISTS (SELECT 1 FROM users WHERE id = ?)
 		 ON CONFLICT(user_id) DO UPDATE SET agent_images = excluded.agent_images, updated_at = excluded.updated_at`,
-		userID, string(raw), toUnix(time.Now()))
+		userID, string(raw), toUnix(time.Now()), userID)
 	if err != nil {
 		return fmt.Errorf("store: set agent images: %w", err)
+	}
+	if n, err := result.RowsAffected(); err != nil {
+		return fmt.Errorf("store: set agent images: %w", err)
+	} else if n != 1 {
+		return fmt.Errorf("store: set agent images: пользователь не найден")
 	}
 	return nil
 }

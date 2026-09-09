@@ -95,6 +95,15 @@ const (
 	// AuthServiceSetAgentImagesProcedure is the fully-qualified name of the AuthService's
 	// SetAgentImages RPC.
 	AuthServiceSetAgentImagesProcedure = "/brigade.v1.AuthService/SetAgentImages"
+	// AuthServiceGetAgentImageBuildProcedure is the fully-qualified name of the AuthService's
+	// GetAgentImageBuild RPC.
+	AuthServiceGetAgentImageBuildProcedure = "/brigade.v1.AuthService/GetAgentImageBuild"
+	// AuthServiceStartAgentImageBuildProcedure is the fully-qualified name of the AuthService's
+	// StartAgentImageBuild RPC.
+	AuthServiceStartAgentImageBuildProcedure = "/brigade.v1.AuthService/StartAgentImageBuild"
+	// AuthServiceCancelAgentImageBuildProcedure is the fully-qualified name of the AuthService's
+	// CancelAgentImageBuild RPC.
+	AuthServiceCancelAgentImageBuildProcedure = "/brigade.v1.AuthService/CancelAgentImageBuild"
 	// AuthServiceGetSSHSettingsProcedure is the fully-qualified name of the AuthService's
 	// GetSSHSettings RPC.
 	AuthServiceGetSSHSettingsProcedure = "/brigade.v1.AuthService/GetSSHSettings"
@@ -140,9 +149,11 @@ type AuthServiceClient interface {
 	// GetAgentImages возвращает образы контейнеров агента пользователя, базовый образ и
 	// состояние квоты.
 	GetAgentImages(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.AgentImagesSettings], error)
-	// SetAgentImages перезаписывает список образов пользователя. Образ, который не удалось
-	// подтянуть, не пригоден для сессий или не влезает в квоту, отклоняет весь запрос.
+	// SetAgentImages удаляет или переупорядочивает сохранённые образы пользователя.
 	SetAgentImages(context.Context, *connect.Request[v1.SetAgentImagesRequest]) (*connect.Response[v1.AgentImagesSettings], error)
+	GetAgentImageBuild(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.AgentImageBuild], error)
+	StartAgentImageBuild(context.Context, *connect.Request[v1.StartAgentImageBuildRequest]) (*connect.Response[v1.AgentImageBuild], error)
+	CancelAgentImageBuild(context.Context, *connect.Request[v1.CancelAgentImageBuildRequest]) (*connect.Response[v1.AgentImageBuild], error)
 	// GetSSHSettings возвращает публичный SSH-ключ агента пользователя, генерируя пару при
 	// первом обращении (приватный ключ наружу не отдаётся).
 	GetSSHSettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error)
@@ -294,6 +305,24 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("SetAgentImages")),
 			connect.WithClientOptions(opts...),
 		),
+		getAgentImageBuild: connect.NewClient[v1.Empty, v1.AgentImageBuild](
+			httpClient,
+			baseURL+AuthServiceGetAgentImageBuildProcedure,
+			connect.WithSchema(authServiceMethods.ByName("GetAgentImageBuild")),
+			connect.WithClientOptions(opts...),
+		),
+		startAgentImageBuild: connect.NewClient[v1.StartAgentImageBuildRequest, v1.AgentImageBuild](
+			httpClient,
+			baseURL+AuthServiceStartAgentImageBuildProcedure,
+			connect.WithSchema(authServiceMethods.ByName("StartAgentImageBuild")),
+			connect.WithClientOptions(opts...),
+		),
+		cancelAgentImageBuild: connect.NewClient[v1.CancelAgentImageBuildRequest, v1.AgentImageBuild](
+			httpClient,
+			baseURL+AuthServiceCancelAgentImageBuildProcedure,
+			connect.WithSchema(authServiceMethods.ByName("CancelAgentImageBuild")),
+			connect.WithClientOptions(opts...),
+		),
 		getSSHSettings: connect.NewClient[v1.Empty, v1.SSHSettings](
 			httpClient,
 			baseURL+AuthServiceGetSSHSettingsProcedure,
@@ -333,6 +362,9 @@ type authServiceClient struct {
 	setAgentRuntime        *connect.Client[v1.SetAgentRuntimeRequest, v1.AgentRuntimeSettings]
 	getAgentImages         *connect.Client[v1.Empty, v1.AgentImagesSettings]
 	setAgentImages         *connect.Client[v1.SetAgentImagesRequest, v1.AgentImagesSettings]
+	getAgentImageBuild     *connect.Client[v1.Empty, v1.AgentImageBuild]
+	startAgentImageBuild   *connect.Client[v1.StartAgentImageBuildRequest, v1.AgentImageBuild]
+	cancelAgentImageBuild  *connect.Client[v1.CancelAgentImageBuildRequest, v1.AgentImageBuild]
 	getSSHSettings         *connect.Client[v1.Empty, v1.SSHSettings]
 	regenerateSSHKey       *connect.Client[v1.Empty, v1.SSHSettings]
 }
@@ -447,6 +479,21 @@ func (c *authServiceClient) SetAgentImages(ctx context.Context, req *connect.Req
 	return c.setAgentImages.CallUnary(ctx, req)
 }
 
+// GetAgentImageBuild calls brigade.v1.AuthService.GetAgentImageBuild.
+func (c *authServiceClient) GetAgentImageBuild(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.AgentImageBuild], error) {
+	return c.getAgentImageBuild.CallUnary(ctx, req)
+}
+
+// StartAgentImageBuild calls brigade.v1.AuthService.StartAgentImageBuild.
+func (c *authServiceClient) StartAgentImageBuild(ctx context.Context, req *connect.Request[v1.StartAgentImageBuildRequest]) (*connect.Response[v1.AgentImageBuild], error) {
+	return c.startAgentImageBuild.CallUnary(ctx, req)
+}
+
+// CancelAgentImageBuild calls brigade.v1.AuthService.CancelAgentImageBuild.
+func (c *authServiceClient) CancelAgentImageBuild(ctx context.Context, req *connect.Request[v1.CancelAgentImageBuildRequest]) (*connect.Response[v1.AgentImageBuild], error) {
+	return c.cancelAgentImageBuild.CallUnary(ctx, req)
+}
+
 // GetSSHSettings calls brigade.v1.AuthService.GetSSHSettings.
 func (c *authServiceClient) GetSSHSettings(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error) {
 	return c.getSSHSettings.CallUnary(ctx, req)
@@ -494,9 +541,11 @@ type AuthServiceHandler interface {
 	// GetAgentImages возвращает образы контейнеров агента пользователя, базовый образ и
 	// состояние квоты.
 	GetAgentImages(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.AgentImagesSettings], error)
-	// SetAgentImages перезаписывает список образов пользователя. Образ, который не удалось
-	// подтянуть, не пригоден для сессий или не влезает в квоту, отклоняет весь запрос.
+	// SetAgentImages удаляет или переупорядочивает сохранённые образы пользователя.
 	SetAgentImages(context.Context, *connect.Request[v1.SetAgentImagesRequest]) (*connect.Response[v1.AgentImagesSettings], error)
+	GetAgentImageBuild(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.AgentImageBuild], error)
+	StartAgentImageBuild(context.Context, *connect.Request[v1.StartAgentImageBuildRequest]) (*connect.Response[v1.AgentImageBuild], error)
+	CancelAgentImageBuild(context.Context, *connect.Request[v1.CancelAgentImageBuildRequest]) (*connect.Response[v1.AgentImageBuild], error)
 	// GetSSHSettings возвращает публичный SSH-ключ агента пользователя, генерируя пару при
 	// первом обращении (приватный ключ наружу не отдаётся).
 	GetSSHSettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error)
@@ -644,6 +693,24 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("SetAgentImages")),
 		connect.WithHandlerOptions(opts...),
 	)
+	authServiceGetAgentImageBuildHandler := connect.NewUnaryHandler(
+		AuthServiceGetAgentImageBuildProcedure,
+		svc.GetAgentImageBuild,
+		connect.WithSchema(authServiceMethods.ByName("GetAgentImageBuild")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceStartAgentImageBuildHandler := connect.NewUnaryHandler(
+		AuthServiceStartAgentImageBuildProcedure,
+		svc.StartAgentImageBuild,
+		connect.WithSchema(authServiceMethods.ByName("StartAgentImageBuild")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceCancelAgentImageBuildHandler := connect.NewUnaryHandler(
+		AuthServiceCancelAgentImageBuildProcedure,
+		svc.CancelAgentImageBuild,
+		connect.WithSchema(authServiceMethods.ByName("CancelAgentImageBuild")),
+		connect.WithHandlerOptions(opts...),
+	)
 	authServiceGetSSHSettingsHandler := connect.NewUnaryHandler(
 		AuthServiceGetSSHSettingsProcedure,
 		svc.GetSSHSettings,
@@ -702,6 +769,12 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceGetAgentImagesHandler.ServeHTTP(w, r)
 		case AuthServiceSetAgentImagesProcedure:
 			authServiceSetAgentImagesHandler.ServeHTTP(w, r)
+		case AuthServiceGetAgentImageBuildProcedure:
+			authServiceGetAgentImageBuildHandler.ServeHTTP(w, r)
+		case AuthServiceStartAgentImageBuildProcedure:
+			authServiceStartAgentImageBuildHandler.ServeHTTP(w, r)
+		case AuthServiceCancelAgentImageBuildProcedure:
+			authServiceCancelAgentImageBuildHandler.ServeHTTP(w, r)
 		case AuthServiceGetSSHSettingsProcedure:
 			authServiceGetSSHSettingsHandler.ServeHTTP(w, r)
 		case AuthServiceRegenerateSSHKeyProcedure:
@@ -801,6 +874,18 @@ func (UnimplementedAuthServiceHandler) GetAgentImages(context.Context, *connect.
 
 func (UnimplementedAuthServiceHandler) SetAgentImages(context.Context, *connect.Request[v1.SetAgentImagesRequest]) (*connect.Response[v1.AgentImagesSettings], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.SetAgentImages is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) GetAgentImageBuild(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.AgentImageBuild], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.GetAgentImageBuild is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) StartAgentImageBuild(context.Context, *connect.Request[v1.StartAgentImageBuildRequest]) (*connect.Response[v1.AgentImageBuild], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.StartAgentImageBuild is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) CancelAgentImageBuild(context.Context, *connect.Request[v1.CancelAgentImageBuildRequest]) (*connect.Response[v1.AgentImageBuild], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AuthService.CancelAgentImageBuild is not implemented"))
 }
 
 func (UnimplementedAuthServiceHandler) GetSSHSettings(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.SSHSettings], error) {

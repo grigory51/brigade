@@ -83,6 +83,8 @@ func (s *DockerSpawner) RemoveImage(ctx context.Context, ref string) error {
 
 // ImageInfo — сведения об образе, нужные квоте и проверке совместимости.
 type ImageInfo struct {
+	ID   string
+	Tags []string
 	// Size — размер образа целиком (сумма слоёв).
 	Size int64
 	// Layers — diff_id слоёв. По общим префиксам считается, сколько образы делят между
@@ -96,7 +98,11 @@ func (s *DockerSpawner) InspectImage(ctx context.Context, ref string) (ImageInfo
 	if err != nil {
 		return ImageInfo{}, fmt.Errorf("spawn: inspect image %s: %w", ref, err)
 	}
-	return ImageInfo{Size: insp.Size, Layers: insp.RootFS.Layers}, nil
+	return ImageInfo{ID: insp.ID, Tags: insp.RepoTags, Size: insp.Size, Layers: insp.RootFS.Layers}, nil
+}
+
+func (s *DockerSpawner) TagImage(ctx context.Context, source, target string) error {
+	return s.cli.ImageTag(ctx, source, target)
 }
 
 // imageProbe — скрипт проверки образа. Запускается интерпретатором из runtime-слоя, то

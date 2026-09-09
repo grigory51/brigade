@@ -1001,6 +1001,11 @@ export class AgentImage extends Message<AgentImage> {
    */
   sizeBytes = protoInt64.zero;
 
+  /**
+   * @generated from field: string name = 3;
+   */
+  name = "";
+
   constructor(data?: PartialMessage<AgentImage>) {
     super();
     proto3.util.initPartial(data, this);
@@ -1011,6 +1016,7 @@ export class AgentImage extends Message<AgentImage> {
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "image", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "size_bytes", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 3, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): AgentImage {
@@ -1090,9 +1096,8 @@ export class AgentImagesSettings extends Message<AgentImagesSettings> {
 }
 
 /**
- * SetAgentImagesRequest — новый список образов (перезаписывается целиком). Каждый образ
- * проверяется: подтягивается при отсутствии, проверяется на пригодность для сессий и на
- * квоту.
+ * SetAgentImagesRequest — оставшийся список сохранённых образов. Разрешены удаление
+ * и перестановка; новые образы добавляет только успешная сборка скрипта.
  *
  * @generated from message brigade.v1.SetAgentImagesRequest
  */
@@ -1127,6 +1132,169 @@ export class SetAgentImagesRequest extends Message<SetAgentImagesRequest> {
 
   static equals(a: SetAgentImagesRequest | PlainMessage<SetAgentImagesRequest> | undefined, b: SetAgentImagesRequest | PlainMessage<SetAgentImagesRequest> | undefined): boolean {
     return proto3.util.equals(SetAgentImagesRequest, a, b);
+  }
+}
+
+/**
+ * Последняя сборка окружения текущего пользователя. Пустой id — сборок ещё не было.
+ *
+ * @generated from message brigade.v1.AgentImageBuild
+ */
+export class AgentImageBuild extends Message<AgentImageBuild> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  /**
+   * @generated from field: string script = 2;
+   */
+  script = "";
+
+  /**
+   * queued | building | succeeded | failed | cancelled | interrupted
+   *
+   * @generated from field: string status = 3;
+   */
+  status = "";
+
+  /**
+   * @generated from field: string log = 4;
+   */
+  log = "";
+
+  /**
+   * @generated from field: string error = 5;
+   */
+  error = "";
+
+  /**
+   * @generated from field: string image = 6;
+   */
+  image = "";
+
+  /**
+   * @generated from field: string name = 7;
+   */
+  name = "";
+
+  constructor(data?: PartialMessage<AgentImageBuild>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.AgentImageBuild";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "script", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "status", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "log", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "image", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): AgentImageBuild {
+    return new AgentImageBuild().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): AgentImageBuild {
+    return new AgentImageBuild().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): AgentImageBuild {
+    return new AgentImageBuild().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: AgentImageBuild | PlainMessage<AgentImageBuild> | undefined, b: AgentImageBuild | PlainMessage<AgentImageBuild> | undefined): boolean {
+    return proto3.util.equals(AgentImageBuild, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.StartAgentImageBuildRequest
+ */
+export class StartAgentImageBuildRequest extends Message<StartAgentImageBuildRequest> {
+  /**
+   * @generated from field: string script = 1;
+   */
+  script = "";
+
+  /**
+   * @generated from field: bool no_cache = 2;
+   */
+  noCache = false;
+
+  /**
+   * @generated from field: string name = 3;
+   */
+  name = "";
+
+  constructor(data?: PartialMessage<StartAgentImageBuildRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.StartAgentImageBuildRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "script", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "no_cache", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 3, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): StartAgentImageBuildRequest {
+    return new StartAgentImageBuildRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): StartAgentImageBuildRequest {
+    return new StartAgentImageBuildRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): StartAgentImageBuildRequest {
+    return new StartAgentImageBuildRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: StartAgentImageBuildRequest | PlainMessage<StartAgentImageBuildRequest> | undefined, b: StartAgentImageBuildRequest | PlainMessage<StartAgentImageBuildRequest> | undefined): boolean {
+    return proto3.util.equals(StartAgentImageBuildRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.CancelAgentImageBuildRequest
+ */
+export class CancelAgentImageBuildRequest extends Message<CancelAgentImageBuildRequest> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  constructor(data?: PartialMessage<CancelAgentImageBuildRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.CancelAgentImageBuildRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CancelAgentImageBuildRequest {
+    return new CancelAgentImageBuildRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): CancelAgentImageBuildRequest {
+    return new CancelAgentImageBuildRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): CancelAgentImageBuildRequest {
+    return new CancelAgentImageBuildRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: CancelAgentImageBuildRequest | PlainMessage<CancelAgentImageBuildRequest> | undefined, b: CancelAgentImageBuildRequest | PlainMessage<CancelAgentImageBuildRequest> | undefined): boolean {
+    return proto3.util.equals(CancelAgentImageBuildRequest, a, b);
   }
 }
 

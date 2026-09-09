@@ -422,7 +422,7 @@ export function CreateSessionDialog({
                     </SelectItem>
                     {images.images.map((img) => (
                       <SelectItem key={img.image} value={img.image}>
-                        {img.image}
+                        {img.name || img.image}
                       </SelectItem>
                     ))}
                   </SelectContent>

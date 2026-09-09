@@ -22,6 +22,7 @@ import (
 type AuthService struct {
 	svc        *auth.Service
 	images     *agentimage.Service
+	builds     *agentimage.Builds
 	runtime    *runtimecfg.Service
 	desktop    bool
 	version    string
@@ -33,6 +34,7 @@ type AuthService struct {
 }
 
 func (s *AuthService) SetCodexLogin(service *codexlogin.Service) { s.codexLogin = service }
+func (s *AuthService) SetImageBuilds(service *agentimage.Builds) { s.builds = service }
 
 // NewAuthService собирает реализацию AuthService. notify может быть nil — тогда проверка
 // уведомлений недоступна, остальные методы работают. images — образы контейнера агента
@@ -98,9 +100,17 @@ func (s *AuthService) SetAgentImages(ctx context.Context, req *connect.Request[v
 	if !ok {
 		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
 	}
-	settings, err := s.images.Set(ctx, u.ID, req.Msg.Images)
+	var settings agentimage.Settings
+	var err error
+	if s.builds != nil {
+		settings, err = s.builds.SetImages(ctx, u.ID, req.Msg.Images)
+	} else {
+		settings, err = s.images.Set(ctx, u.ID, req.Msg.Images)
+	}
 	if err != nil {
 		switch {
+		case errors.Is(err, agentimage.ErrBuildBusy):
+			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 		case errors.Is(err, agentimage.ErrUnavailable):
 			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 		case errors.Is(err, agentimage.ErrQuotaExceeded):
@@ -118,7 +128,7 @@ func imagesToProto(s agentimage.Settings) *v1.AgentImagesSettings {
 		QuotaBytes:   s.QuotaBytes,
 	}
 	for _, img := range s.Images {
-		out.Images = append(out.Images, &v1.AgentImage{Image: img.Ref, SizeBytes: img.Bytes})
+		out.Images = append(out.Images, &v1.AgentImage{Image: img.Ref, Name: agentimage.DisplayName(img.Ref), SizeBytes: img.Bytes})
 	}
 	return out
 }

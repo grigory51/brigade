@@ -23,6 +23,7 @@ import (
 	"github.com/grigory51/brigade/backend/internal/codexlogin"
 	"github.com/grigory51/brigade/backend/internal/config"
 	"github.com/grigory51/brigade/backend/internal/httpaccess"
+	"github.com/grigory51/brigade/backend/internal/imagebuild"
 	"github.com/grigory51/brigade/backend/internal/linkpreview"
 	"github.com/grigory51/brigade/backend/internal/memory"
 	"github.com/grigory51/brigade/backend/internal/notify"
@@ -180,10 +181,20 @@ func runServer(configPath string) {
 	// и выбирать при создании сессии. Вне docker-режима спавнер не докерный — сервис
 	// отвечает «недоступно», а сессии идут на хостовом окружении.
 	var imageDocker agentimage.Docker
+	var imageBuilder imagebuild.Builder
 	if ds, ok := spawner.(*spawn.DockerSpawner); ok {
 		imageDocker = ds
+		switch cfg.ImageBuild.Backend {
+		case "docker":
+			imageBuilder = ds
+		}
 	}
 	imagesSvc := agentimage.New(st, imageDocker, cfg.ImageQuotaBytes)
+	imageBuilds, err := agentimage.NewBuilds(st, imagesSvc, imageBuilder, cfg.ImageBuild.Timeout, cfg.ImageBuild.MaxConcurrent)
+	if err != nil {
+		log.Fatalf("brigade: image builds: %v", err)
+	}
+	defer imageBuilds.Close()
 
 	// Реестр живых сессий поверх store и спавнера. Режим фиксируется в каждой сессии;
 	// подписочный токен Claude берётся per-user из store при создании сессии.
@@ -224,6 +235,7 @@ func runServer(configPath string) {
 	perms := aguitransport.NewPermissionStore()
 
 	authService := connectsvc.NewAuthService(authSvc, imagesSvc, runtimeSvc, desktopMode, buildVersion, cfg.Auth.PasswordEnabled, cfg.Auth.OIDC.Name, oidcLogin, strings.HasPrefix(cfg.Auth.OIDC.RedirectURL, "https://"))
+	authService.SetImageBuilds(imageBuilds)
 	var codexLoginRunner codexlogin.Runner = registry
 	if desktopMode {
 		// Desktop наследует host DNS/VPN; Docker VM может обходить split-tunnel.

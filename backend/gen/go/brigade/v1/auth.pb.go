@@ -1185,6 +1185,7 @@ type AgentImage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Image         string                 `protobuf:"bytes,1,opt,name=image,proto3" json:"image,omitempty"`
 	SizeBytes     int64                  `protobuf:"varint,2,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1231,6 +1232,13 @@ func (x *AgentImage) GetSizeBytes() int64 {
 		return x.SizeBytes
 	}
 	return 0
+}
+
+func (x *AgentImage) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
 }
 
 // AgentImagesSettings — образы контейнеров агента, доступные пользователю при создании
@@ -1304,9 +1312,8 @@ func (x *AgentImagesSettings) GetQuotaBytes() int64 {
 	return 0
 }
 
-// SetAgentImagesRequest — новый список образов (перезаписывается целиком). Каждый образ
-// проверяется: подтягивается при отсутствии, проверяется на пригодность для сессий и на
-// квоту.
+// SetAgentImagesRequest — оставшийся список сохранённых образов. Разрешены удаление
+// и перестановка; новые образы добавляет только успешная сборка скрипта.
 type SetAgentImagesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Images        []string               `protobuf:"bytes,1,rep,name=images,proto3" json:"images,omitempty"`
@@ -1351,6 +1358,204 @@ func (x *SetAgentImagesRequest) GetImages() []string {
 	return nil
 }
 
+// Последняя сборка окружения текущего пользователя. Пустой id — сборок ещё не было.
+type AgentImageBuild struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Id     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Script string                 `protobuf:"bytes,2,opt,name=script,proto3" json:"script,omitempty"`
+	// queued | building | succeeded | failed | cancelled | interrupted
+	Status        string `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
+	Log           string `protobuf:"bytes,4,opt,name=log,proto3" json:"log,omitempty"`
+	Error         string `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
+	Image         string `protobuf:"bytes,6,opt,name=image,proto3" json:"image,omitempty"`
+	Name          string `protobuf:"bytes,7,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentImageBuild) Reset() {
+	*x = AgentImageBuild{}
+	mi := &file_brigade_v1_auth_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentImageBuild) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentImageBuild) ProtoMessage() {}
+
+func (x *AgentImageBuild) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_auth_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentImageBuild.ProtoReflect.Descriptor instead.
+func (*AgentImageBuild) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *AgentImageBuild) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *AgentImageBuild) GetScript() string {
+	if x != nil {
+		return x.Script
+	}
+	return ""
+}
+
+func (x *AgentImageBuild) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *AgentImageBuild) GetLog() string {
+	if x != nil {
+		return x.Log
+	}
+	return ""
+}
+
+func (x *AgentImageBuild) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *AgentImageBuild) GetImage() string {
+	if x != nil {
+		return x.Image
+	}
+	return ""
+}
+
+func (x *AgentImageBuild) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type StartAgentImageBuildRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Script        string                 `protobuf:"bytes,1,opt,name=script,proto3" json:"script,omitempty"`
+	NoCache       bool                   `protobuf:"varint,2,opt,name=no_cache,json=noCache,proto3" json:"no_cache,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartAgentImageBuildRequest) Reset() {
+	*x = StartAgentImageBuildRequest{}
+	mi := &file_brigade_v1_auth_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartAgentImageBuildRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartAgentImageBuildRequest) ProtoMessage() {}
+
+func (x *StartAgentImageBuildRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_auth_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartAgentImageBuildRequest.ProtoReflect.Descriptor instead.
+func (*StartAgentImageBuildRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *StartAgentImageBuildRequest) GetScript() string {
+	if x != nil {
+		return x.Script
+	}
+	return ""
+}
+
+func (x *StartAgentImageBuildRequest) GetNoCache() bool {
+	if x != nil {
+		return x.NoCache
+	}
+	return false
+}
+
+func (x *StartAgentImageBuildRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type CancelAgentImageBuildRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelAgentImageBuildRequest) Reset() {
+	*x = CancelAgentImageBuildRequest{}
+	mi := &file_brigade_v1_auth_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelAgentImageBuildRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelAgentImageBuildRequest) ProtoMessage() {}
+
+func (x *CancelAgentImageBuildRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_auth_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelAgentImageBuildRequest.ProtoReflect.Descriptor instead.
+func (*CancelAgentImageBuildRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *CancelAgentImageBuildRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
 // ServerInfo — режим работы сервера, от которого зависит интерфейс клиента.
 // desktop=true у локального однопользовательского запуска (`brigade desktop`): там
 // авто-логин сид-пользователя, поэтому ни входа, ни выхода, ни смены пользователя нет.
@@ -1370,7 +1575,7 @@ type ServerInfo struct {
 
 func (x *ServerInfo) Reset() {
 	*x = ServerInfo{}
-	mi := &file_brigade_v1_auth_proto_msgTypes[25]
+	mi := &file_brigade_v1_auth_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1382,7 +1587,7 @@ func (x *ServerInfo) String() string {
 func (*ServerInfo) ProtoMessage() {}
 
 func (x *ServerInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_auth_proto_msgTypes[25]
+	mi := &file_brigade_v1_auth_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1395,7 +1600,7 @@ func (x *ServerInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerInfo.ProtoReflect.Descriptor instead.
 func (*ServerInfo) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{25}
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ServerInfo) GetDesktop() bool {
@@ -1437,7 +1642,7 @@ type AuthMethod struct {
 
 func (x *AuthMethod) Reset() {
 	*x = AuthMethod{}
-	mi := &file_brigade_v1_auth_proto_msgTypes[26]
+	mi := &file_brigade_v1_auth_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1449,7 +1654,7 @@ func (x *AuthMethod) String() string {
 func (*AuthMethod) ProtoMessage() {}
 
 func (x *AuthMethod) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_auth_proto_msgTypes[26]
+	mi := &file_brigade_v1_auth_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1462,7 +1667,7 @@ func (x *AuthMethod) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthMethod.ProtoReflect.Descriptor instead.
 func (*AuthMethod) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{26}
+	return file_brigade_v1_auth_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *AuthMethod) GetId() string {
@@ -1557,12 +1762,13 @@ const file_brigade_v1_auth_proto_rawDesc = "" +
 	"\fdocker_error\x18\b \x01(\tR\vdockerError\"S\n" +
 	"\x16SetAgentRuntimeRequest\x12\x12\n" +
 	"\x04mode\x18\x01 \x01(\tR\x04mode\x12%\n" +
-	"\x0edocker_context\x18\x02 \x01(\tR\rdockerContext\"A\n" +
+	"\x0edocker_context\x18\x02 \x01(\tR\rdockerContext\"U\n" +
 	"\n" +
 	"AgentImage\x12\x14\n" +
 	"\x05image\x18\x01 \x01(\tR\x05image\x12\x1d\n" +
 	"\n" +
-	"size_bytes\x18\x02 \x01(\x03R\tsizeBytes\"\xaa\x01\n" +
+	"size_bytes\x18\x02 \x01(\x03R\tsizeBytes\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\"\xaa\x01\n" +
 	"\x13AgentImagesSettings\x12.\n" +
 	"\x06images\x18\x01 \x03(\v2\x16.brigade.v1.AgentImageR\x06images\x12#\n" +
 	"\rdefault_image\x18\x02 \x01(\tR\fdefaultImage\x12\x1d\n" +
@@ -1571,7 +1777,21 @@ const file_brigade_v1_auth_proto_rawDesc = "" +
 	"\vquota_bytes\x18\x04 \x01(\x03R\n" +
 	"quotaBytes\"/\n" +
 	"\x15SetAgentImagesRequest\x12\x16\n" +
-	"\x06images\x18\x01 \x03(\tR\x06images\"\x9f\x01\n" +
+	"\x06images\x18\x01 \x03(\tR\x06images\"\xa3\x01\n" +
+	"\x0fAgentImageBuild\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
+	"\x06script\x18\x02 \x01(\tR\x06script\x12\x16\n" +
+	"\x06status\x18\x03 \x01(\tR\x06status\x12\x10\n" +
+	"\x03log\x18\x04 \x01(\tR\x03log\x12\x14\n" +
+	"\x05error\x18\x05 \x01(\tR\x05error\x12\x14\n" +
+	"\x05image\x18\x06 \x01(\tR\x05image\x12\x12\n" +
+	"\x04name\x18\a \x01(\tR\x04name\"d\n" +
+	"\x1bStartAgentImageBuildRequest\x12\x16\n" +
+	"\x06script\x18\x01 \x01(\tR\x06script\x12\x19\n" +
+	"\bno_cache\x18\x02 \x01(\bR\anoCache\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\".\n" +
+	"\x1cCancelAgentImageBuildRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\x9f\x01\n" +
 	"\n" +
 	"ServerInfo\x12\x18\n" +
 	"\adesktop\x18\x01 \x01(\bR\adesktop\x12\x18\n" +
@@ -1582,7 +1802,7 @@ const file_brigade_v1_auth_proto_rawDesc = "" +
 	"AuthMethod\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name2\xf6\r\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name2\x80\x10\n" +
 	"\vAuthService\x12>\n" +
 	"\x05Login\x12\x18.brigade.v1.LoginRequest\x1a\x19.brigade.v1.LoginResponse\"\x00\x12L\n" +
 	"\fExchangeOIDC\x12\x1f.brigade.v1.ExchangeOIDCRequest\x1a\x19.brigade.v1.LoginResponse\"\x00\x12D\n" +
@@ -1605,7 +1825,10 @@ const file_brigade_v1_auth_proto_rawDesc = "" +
 	"\x0fGetAgentRuntime\x12\x11.brigade.v1.Empty\x1a .brigade.v1.AgentRuntimeSettings\"\x00\x12Y\n" +
 	"\x0fSetAgentRuntime\x12\".brigade.v1.SetAgentRuntimeRequest\x1a .brigade.v1.AgentRuntimeSettings\"\x00\x12F\n" +
 	"\x0eGetAgentImages\x12\x11.brigade.v1.Empty\x1a\x1f.brigade.v1.AgentImagesSettings\"\x00\x12V\n" +
-	"\x0eSetAgentImages\x12!.brigade.v1.SetAgentImagesRequest\x1a\x1f.brigade.v1.AgentImagesSettings\"\x00\x12>\n" +
+	"\x0eSetAgentImages\x12!.brigade.v1.SetAgentImagesRequest\x1a\x1f.brigade.v1.AgentImagesSettings\"\x00\x12F\n" +
+	"\x12GetAgentImageBuild\x12\x11.brigade.v1.Empty\x1a\x1b.brigade.v1.AgentImageBuild\"\x00\x12^\n" +
+	"\x14StartAgentImageBuild\x12'.brigade.v1.StartAgentImageBuildRequest\x1a\x1b.brigade.v1.AgentImageBuild\"\x00\x12`\n" +
+	"\x15CancelAgentImageBuild\x12(.brigade.v1.CancelAgentImageBuildRequest\x1a\x1b.brigade.v1.AgentImageBuild\"\x00\x12>\n" +
 	"\x0eGetSSHSettings\x12\x11.brigade.v1.Empty\x1a\x17.brigade.v1.SSHSettings\"\x00\x12@\n" +
 	"\x10RegenerateSSHKey\x12\x11.brigade.v1.Empty\x1a\x17.brigade.v1.SSHSettings\"\x00B\xa6\x01\n" +
 	"\x0ecom.brigade.v1B\tAuthProtoP\x01Z@github.com/grigory51/brigade/backend/gen/go/brigade/v1;brigadev1\xa2\x02\x03BXX\xaa\x02\n" +
@@ -1624,7 +1847,7 @@ func file_brigade_v1_auth_proto_rawDescGZIP() []byte {
 	return file_brigade_v1_auth_proto_rawDescData
 }
 
-var file_brigade_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_brigade_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_brigade_v1_auth_proto_goTypes = []any{
 	(*Empty)(nil),                         // 0: brigade.v1.Empty
 	(*User)(nil),                          // 1: brigade.v1.User
@@ -1651,14 +1874,17 @@ var file_brigade_v1_auth_proto_goTypes = []any{
 	(*AgentImage)(nil),                    // 22: brigade.v1.AgentImage
 	(*AgentImagesSettings)(nil),           // 23: brigade.v1.AgentImagesSettings
 	(*SetAgentImagesRequest)(nil),         // 24: brigade.v1.SetAgentImagesRequest
-	(*ServerInfo)(nil),                    // 25: brigade.v1.ServerInfo
-	(*AuthMethod)(nil),                    // 26: brigade.v1.AuthMethod
+	(*AgentImageBuild)(nil),               // 25: brigade.v1.AgentImageBuild
+	(*StartAgentImageBuildRequest)(nil),   // 26: brigade.v1.StartAgentImageBuildRequest
+	(*CancelAgentImageBuildRequest)(nil),  // 27: brigade.v1.CancelAgentImageBuildRequest
+	(*ServerInfo)(nil),                    // 28: brigade.v1.ServerInfo
+	(*AuthMethod)(nil),                    // 29: brigade.v1.AuthMethod
 }
 var file_brigade_v1_auth_proto_depIdxs = []int32{
 	1,  // 0: brigade.v1.LoginResponse.user:type_name -> brigade.v1.User
 	19, // 1: brigade.v1.AgentRuntimeSettings.contexts:type_name -> brigade.v1.DockerContext
 	22, // 2: brigade.v1.AgentImagesSettings.images:type_name -> brigade.v1.AgentImage
-	26, // 3: brigade.v1.ServerInfo.auth_methods:type_name -> brigade.v1.AuthMethod
+	29, // 3: brigade.v1.ServerInfo.auth_methods:type_name -> brigade.v1.AuthMethod
 	2,  // 4: brigade.v1.AuthService.Login:input_type -> brigade.v1.LoginRequest
 	6,  // 5: brigade.v1.AuthService.ExchangeOIDC:input_type -> brigade.v1.ExchangeOIDCRequest
 	4,  // 6: brigade.v1.AuthService.Refresh:input_type -> brigade.v1.RefreshRequest
@@ -1681,34 +1907,40 @@ var file_brigade_v1_auth_proto_depIdxs = []int32{
 	21, // 23: brigade.v1.AuthService.SetAgentRuntime:input_type -> brigade.v1.SetAgentRuntimeRequest
 	0,  // 24: brigade.v1.AuthService.GetAgentImages:input_type -> brigade.v1.Empty
 	24, // 25: brigade.v1.AuthService.SetAgentImages:input_type -> brigade.v1.SetAgentImagesRequest
-	0,  // 26: brigade.v1.AuthService.GetSSHSettings:input_type -> brigade.v1.Empty
-	0,  // 27: brigade.v1.AuthService.RegenerateSSHKey:input_type -> brigade.v1.Empty
-	3,  // 28: brigade.v1.AuthService.Login:output_type -> brigade.v1.LoginResponse
-	3,  // 29: brigade.v1.AuthService.ExchangeOIDC:output_type -> brigade.v1.LoginResponse
-	5,  // 30: brigade.v1.AuthService.Refresh:output_type -> brigade.v1.RefreshResponse
-	1,  // 31: brigade.v1.AuthService.Me:output_type -> brigade.v1.User
-	25, // 32: brigade.v1.AuthService.GetServerInfo:output_type -> brigade.v1.ServerInfo
-	0,  // 33: brigade.v1.AuthService.Logout:output_type -> brigade.v1.Empty
-	7,  // 34: brigade.v1.AuthService.GetClaudeSettings:output_type -> brigade.v1.ClaudeSettings
-	7,  // 35: brigade.v1.AuthService.SetClaudeToken:output_type -> brigade.v1.ClaudeSettings
-	9,  // 36: brigade.v1.AuthService.GetCodexSettings:output_type -> brigade.v1.CodexSettings
-	9,  // 37: brigade.v1.AuthService.SetCodexApiKey:output_type -> brigade.v1.CodexSettings
-	9,  // 38: brigade.v1.AuthService.SetCodexChatGPTAuth:output_type -> brigade.v1.CodexSettings
-	13, // 39: brigade.v1.AuthService.StartCodexLogin:output_type -> brigade.v1.CodexLogin
-	13, // 40: brigade.v1.AuthService.GetCodexLogin:output_type -> brigade.v1.CodexLogin
-	0,  // 41: brigade.v1.AuthService.CancelCodexLogin:output_type -> brigade.v1.Empty
-	9,  // 42: brigade.v1.AuthService.DisconnectCodexChatGPT:output_type -> brigade.v1.CodexSettings
-	9,  // 43: brigade.v1.AuthService.SetCodexDefaultProfile:output_type -> brigade.v1.CodexSettings
-	16, // 44: brigade.v1.AuthService.GetMemorySettings:output_type -> brigade.v1.MemorySettings
-	16, // 45: brigade.v1.AuthService.SetMemorySettings:output_type -> brigade.v1.MemorySettings
-	20, // 46: brigade.v1.AuthService.GetAgentRuntime:output_type -> brigade.v1.AgentRuntimeSettings
-	20, // 47: brigade.v1.AuthService.SetAgentRuntime:output_type -> brigade.v1.AgentRuntimeSettings
-	23, // 48: brigade.v1.AuthService.GetAgentImages:output_type -> brigade.v1.AgentImagesSettings
-	23, // 49: brigade.v1.AuthService.SetAgentImages:output_type -> brigade.v1.AgentImagesSettings
-	18, // 50: brigade.v1.AuthService.GetSSHSettings:output_type -> brigade.v1.SSHSettings
-	18, // 51: brigade.v1.AuthService.RegenerateSSHKey:output_type -> brigade.v1.SSHSettings
-	28, // [28:52] is the sub-list for method output_type
-	4,  // [4:28] is the sub-list for method input_type
+	0,  // 26: brigade.v1.AuthService.GetAgentImageBuild:input_type -> brigade.v1.Empty
+	26, // 27: brigade.v1.AuthService.StartAgentImageBuild:input_type -> brigade.v1.StartAgentImageBuildRequest
+	27, // 28: brigade.v1.AuthService.CancelAgentImageBuild:input_type -> brigade.v1.CancelAgentImageBuildRequest
+	0,  // 29: brigade.v1.AuthService.GetSSHSettings:input_type -> brigade.v1.Empty
+	0,  // 30: brigade.v1.AuthService.RegenerateSSHKey:input_type -> brigade.v1.Empty
+	3,  // 31: brigade.v1.AuthService.Login:output_type -> brigade.v1.LoginResponse
+	3,  // 32: brigade.v1.AuthService.ExchangeOIDC:output_type -> brigade.v1.LoginResponse
+	5,  // 33: brigade.v1.AuthService.Refresh:output_type -> brigade.v1.RefreshResponse
+	1,  // 34: brigade.v1.AuthService.Me:output_type -> brigade.v1.User
+	28, // 35: brigade.v1.AuthService.GetServerInfo:output_type -> brigade.v1.ServerInfo
+	0,  // 36: brigade.v1.AuthService.Logout:output_type -> brigade.v1.Empty
+	7,  // 37: brigade.v1.AuthService.GetClaudeSettings:output_type -> brigade.v1.ClaudeSettings
+	7,  // 38: brigade.v1.AuthService.SetClaudeToken:output_type -> brigade.v1.ClaudeSettings
+	9,  // 39: brigade.v1.AuthService.GetCodexSettings:output_type -> brigade.v1.CodexSettings
+	9,  // 40: brigade.v1.AuthService.SetCodexApiKey:output_type -> brigade.v1.CodexSettings
+	9,  // 41: brigade.v1.AuthService.SetCodexChatGPTAuth:output_type -> brigade.v1.CodexSettings
+	13, // 42: brigade.v1.AuthService.StartCodexLogin:output_type -> brigade.v1.CodexLogin
+	13, // 43: brigade.v1.AuthService.GetCodexLogin:output_type -> brigade.v1.CodexLogin
+	0,  // 44: brigade.v1.AuthService.CancelCodexLogin:output_type -> brigade.v1.Empty
+	9,  // 45: brigade.v1.AuthService.DisconnectCodexChatGPT:output_type -> brigade.v1.CodexSettings
+	9,  // 46: brigade.v1.AuthService.SetCodexDefaultProfile:output_type -> brigade.v1.CodexSettings
+	16, // 47: brigade.v1.AuthService.GetMemorySettings:output_type -> brigade.v1.MemorySettings
+	16, // 48: brigade.v1.AuthService.SetMemorySettings:output_type -> brigade.v1.MemorySettings
+	20, // 49: brigade.v1.AuthService.GetAgentRuntime:output_type -> brigade.v1.AgentRuntimeSettings
+	20, // 50: brigade.v1.AuthService.SetAgentRuntime:output_type -> brigade.v1.AgentRuntimeSettings
+	23, // 51: brigade.v1.AuthService.GetAgentImages:output_type -> brigade.v1.AgentImagesSettings
+	23, // 52: brigade.v1.AuthService.SetAgentImages:output_type -> brigade.v1.AgentImagesSettings
+	25, // 53: brigade.v1.AuthService.GetAgentImageBuild:output_type -> brigade.v1.AgentImageBuild
+	25, // 54: brigade.v1.AuthService.StartAgentImageBuild:output_type -> brigade.v1.AgentImageBuild
+	25, // 55: brigade.v1.AuthService.CancelAgentImageBuild:output_type -> brigade.v1.AgentImageBuild
+	18, // 56: brigade.v1.AuthService.GetSSHSettings:output_type -> brigade.v1.SSHSettings
+	18, // 57: brigade.v1.AuthService.RegenerateSSHKey:output_type -> brigade.v1.SSHSettings
+	31, // [31:58] is the sub-list for method output_type
+	4,  // [4:31] is the sub-list for method input_type
 	4,  // [4:4] is the sub-list for extension type_name
 	4,  // [4:4] is the sub-list for extension extendee
 	0,  // [0:4] is the sub-list for field type_name
@@ -1725,7 +1957,7 @@ func file_brigade_v1_auth_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_brigade_v1_auth_proto_rawDesc), len(file_brigade_v1_auth_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   27,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
