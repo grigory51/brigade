@@ -5,7 +5,7 @@ import {
   type ComponentType,
   type ReactNode,
 } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import {
   Bell,
   Bot,
@@ -13,7 +13,6 @@ import {
   ChevronDown,
   Container,
   Copy,
-  Info,
   KeyRound,
   Loader2,
   NotebookText,
@@ -65,6 +64,7 @@ import {
   Loading,
   SecretNote,
   SectionHeader,
+  SettingsGroup,
   Toggle,
   errorText,
 } from "./ui";
@@ -82,9 +82,9 @@ import {
  * в поле всегда пустой драфт, а состояние показывается флагом «задан».
  */
 
-type SectionId = "general" | "agents" | "mcp" | "apps" | "profiles" | "environments" | "env" | "memory" | "ssh" | "notifications" | "telegram";
+type SectionId = "general" | "agents" | "mcp" | "apps" | "profiles" | "environments" | "env" | "memory" | "notifications" | "telegram";
 
-const SECTIONS: SectionId[] = ["general", "agents", "mcp", "apps", "profiles", "environments", "env", "memory", "ssh", "notifications", "telegram"];
+const SECTIONS: SectionId[] = ["general", "agents", "mcp", "apps", "profiles", "environments", "env", "memory", "notifications", "telegram"];
 
 const AGENTS_OPEN_KEY = "brigade.settings.agentsOpen";
 
@@ -164,6 +164,8 @@ export function SettingsPage() {
     (id: SectionId) => navigate(`/settings/${id}`),
     [navigate],
   );
+
+  if (section === "ssh") return <Navigate to="/settings/general" replace />;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -262,17 +264,10 @@ export function SettingsPage() {
           />
           <NavRow
             icon={NotebookText}
-            label="Память"
+            label="Заметки"
             active={active === "memory"}
             onClick={() => go("memory")}
             trailing={<StatusDot on={Boolean(remote?.trim())} />}
-          />
-          <NavRow
-            icon={KeyRound}
-            label="SSH-ключ"
-            active={active === "ssh"}
-            onClick={() => go("ssh")}
-            trailing={<StatusDot on={Boolean(publicKey)} />}
           />
           <NavRow
             icon={Send}
@@ -378,7 +373,9 @@ export function SettingsPage() {
             key={active}
             className="mx-auto flex max-w-[680px] animate-[section-in_0.24s_cubic-bezier(0.2,0.8,0.2,1)] flex-col gap-[18px] px-[34px] pt-6 pb-[90px]"
           >
-            {active === "general" && <GeneralSection />}
+            {active === "general" && (
+              <GeneralSection publicKey={publicKey} onKeyChange={setPublicKey} />
+            )}
             {active === "agents" && (
               <AgentConnectionsSection
                 connections={agentConnections}
@@ -397,9 +394,6 @@ export function SettingsPage() {
                 remote={remote}
                 onChange={setRemote}
               />
-            )}
-            {active === "ssh" && (
-              <SshSection publicKey={publicKey} onChange={setPublicKey} />
             )}
             {active === "notifications" && (
               <NotificationsSection
@@ -425,7 +419,10 @@ export function SettingsPage() {
   );
 }
 
-function GeneralSection() {
+function GeneralSection({ publicKey, onKeyChange }: {
+  publicKey: string | null;
+  onKeyChange: (value: string) => void;
+}) {
   const [submitMode, setSubmitMode] = useState<ComposerSubmitMode>(getComposerSubmitMode);
   const changeSubmitMode = (value: string) => {
     const mode: ComposerSubmitMode = value === "modifier-enter" ? "modifier-enter" : "enter";
@@ -434,30 +431,29 @@ function GeneralSection() {
   };
 
   return (
-    <>
-      <SectionHeader title="Общее">
-        <Description>
-          Настройки интерфейса применяются к обычному чату и рабочим пространствам MCP Apps.
-        </Description>
-      </SectionHeader>
-      <div className="flex items-center justify-between gap-6 border-t pt-4">
-        <div className="min-w-0">
-          <div className="text-[13px] text-[#e7e5df]">Отправка сообщений</div>
-          <div className="mt-1 text-[11.5px] text-[#6c695f]">
-            Альтернативная комбинация вставляет перенос строки.
+    <div className="@container flex min-w-0 flex-col gap-8">
+      <SectionHeader title="Общее" />
+      <SettingsGroup title="Чат" icon={MessageSquareText} description="Обычные сессии и рабочие пространства MCP Apps.">
+        <div className="flex flex-col gap-4 @min-[480px]:flex-row @min-[480px]:items-center @min-[480px]:justify-between">
+          <div className="min-w-0">
+            <div className="text-[13px] text-[#e7e5df]">Отправка сообщений</div>
+            <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Альтернативная комбинация вставляет перенос строки.
+            </div>
           </div>
+          <Select value={submitMode} onValueChange={changeSubmitMode}>
+            <SelectTrigger aria-label="Отправка сообщений" className="w-full @min-[480px]:w-[220px] shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="enter">Enter отправляет</SelectItem>
+              <SelectItem value="modifier-enter">⌘ / Ctrl + Enter отправляет</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <Select value={submitMode} onValueChange={changeSubmitMode}>
-          <SelectTrigger className="w-[220px] shrink-0">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="enter">Enter отправляет</SelectItem>
-            <SelectItem value="modifier-enter">⌘ / Ctrl + Enter отправляет</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-    </>
+      </SettingsGroup>
+      <SshSection publicKey={publicKey} onChange={onKeyChange} />
+    </div>
   );
 }
 
@@ -542,28 +538,23 @@ function MemorySection({
         remote: (remote ?? "").trim(),
       });
       onChange(res.remote);
-      toast.success("Настройки памяти сохранены");
+      toast.success("Настройки заметок сохранены");
     } catch (err) {
-      toast.error(errorText(err, "Не удалось сохранить настройки памяти"));
+      toast.error(errorText(err, "Не удалось сохранить настройки заметок"));
     } finally {
       setSaving(false);
     }
   }, [remote, onChange]);
 
   if (remote === null) return <Loading />;
-  const filled = Boolean(remote.trim());
 
   return (
     <>
-      <SectionHeader
-        title="Память"
-        badge={<Badge on={filled}>{filled ? "подключена" : "выключена"}</Badge>}
-      >
+      <SectionHeader title="Заметки">
         <Description>
-          Приватный git-репозиторий заметок: агент читает его в начале сессии и
-          дописывает в конце. Репозиторий один на пользователя и общий для всех агентов. Для
+          Заметки хранятся в вашем приватном git-репозитории и доступны во всех сессиях. Для
           git@-remote используется{" "}
-          <Link className="text-foreground underline underline-offset-2" to="/settings/ssh">
+          <Link className="text-foreground underline underline-offset-2" to="/settings/general">
             SSH-ключ агента
           </Link>{" "}
           — отдельный ключ не нужен.
@@ -585,19 +576,6 @@ function MemorySection({
             Сохранить
           </Button>
         </div>
-        <p
-          className={cn(
-            "flex items-start gap-1.5 text-[11.5px] leading-[1.55]",
-            filled ? "text-[#6c695f]" : "text-warning",
-          )}
-        >
-          <Info className="mt-0.5 size-3 shrink-0" />
-          <span>
-            {filled
-              ? "Агент клонирует репозиторий в контейнер сессии при старте"
-              : "Память выключена — агент начинает каждую сессию с нуля"}
-          </span>
-        </p>
       </div>
     </>
   );
@@ -648,21 +626,20 @@ function SshSection({
   if (publicKey === null) return <Loading />;
 
   return (
-    <>
-      <SectionHeader
-        title="SSH-ключ агента"
-        badge={<Badge on={Boolean(publicKey)}>ключ создан</Badge>}
-      >
-        <Description>
-          Стабильный ключ, который brigade подкладывает в контейнер ваших сессий.
-          Добавьте публичный ключ в{" "}
-          <ExternalLink href="https://github.com/settings/keys">
-            GitHub → SSH keys
-          </ExternalLink>{" "}
-          (или как deploy key репозитория) — и агент сможет пушить по{" "}
-          <Code>git@github.com</Code>.
-        </Description>
-      </SectionHeader>
+    <SettingsGroup
+      title="SSH-ключ агента"
+      icon={KeyRound}
+      description="Доступ агента к git-репозиториям и серверам."
+      badge={publicKey ? <Badge on>ключ создан</Badge> : undefined}
+    >
+      <Description>
+        Добавьте публичный ключ в{" "}
+        <ExternalLink href="https://github.com/settings/keys">
+          GitHub → SSH keys
+        </ExternalLink>{" "}
+        (или как deploy key репозитория) — и агент сможет пушить по{" "}
+        <Code>git@github.com</Code>.
+      </Description>
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
@@ -671,6 +648,7 @@ function SshSection({
             variant="outline"
             size="sm"
             onClick={copy}
+            disabled={!publicKey}
             className={cn(
               "h-7 gap-1.5 text-xs",
               copied && "border-success/35 text-[#8dbf82]",
@@ -680,11 +658,11 @@ function SshSection({
             {copied ? "Скопировано" : "Скопировать"}
           </Button>
         </div>
-        <div className="rounded-[10px] border bg-[#1c1b1a] px-[13px] py-3 font-mono text-[11.5px] leading-[1.7] break-all text-muted-foreground select-all">
-          {publicKey}
+        <div className="rounded-lg bg-background px-3 py-3 font-mono text-xs leading-relaxed break-all text-foreground select-all">
+          {publicKey || "Ключ ещё не создан"}
         </div>
         <SecretNote>
-          Приватная часть хранится на сервере зашифрованной и наружу не отдаётся
+          Приватный ключ хранится зашифрованным. Агент использует его через SSH-agent — без записи в файлы сессии.
         </SecretNote>
       </div>
 
@@ -704,7 +682,7 @@ function SshSection({
             Перевыпустить
           </Button>
         ) : (
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               disabled={busy}
               onClick={() => void regenerate()}
@@ -723,7 +701,7 @@ function SshSection({
           </div>
         )}
       </DangerZone>
-    </>
+    </SettingsGroup>
   );
 }
 

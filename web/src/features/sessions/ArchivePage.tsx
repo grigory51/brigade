@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { AcpThread } from "@/features/acp/AcpThread";
 import { useArchivedRuntime } from "@/features/acp/useArchivedRuntime";
 import { SessionDock } from "@/features/acp/dock/SessionDock";
+import { EmptyState } from "@/components/empty-state";
 
 // sessionTitle — подпись сессии для карточки: имя, либо производная (тип агента) для
 // сессий без имени.
@@ -74,6 +75,18 @@ export function ArchivePage() {
     );
   }
 
+  if (sessions.length === 0) {
+    return (
+      <div className="flex h-full flex-col overflow-y-auto px-4">
+        <EmptyState
+          icon={Archive}
+          title="Архив пока пуст"
+          description="Отправьте завершённую сессию в архив через её меню в боковом списке. Переписка останется доступна для чтения."
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto h-full w-full max-w-4xl overflow-y-auto px-6 py-8">
       <div className="mb-6 flex items-center gap-2">
@@ -81,12 +94,6 @@ export function ArchivePage() {
         <h1 className="text-lg font-semibold">Архив</h1>
       </div>
 
-      {sessions.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          Здесь появятся заархивированные сессии. Архивируйте сессию из её меню в списке
-          слева.
-        </p>
-      ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {sessions.map((s) => {
             const deleting = deletingIds.has(s.id);
@@ -131,7 +138,6 @@ export function ArchivePage() {
             );
           })}
         </div>
-      )}
     </div>
   );
 }

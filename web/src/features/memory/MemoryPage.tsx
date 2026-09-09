@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { Loader2, Plus, RefreshCw, Search, Sparkles } from "lucide-react";
+import { ArrowRight, BookOpenText, FolderPlus, Loader2, Plus, RefreshCw, Search, SearchX, Sparkles, Unplug } from "lucide-react";
 import { toast } from "sonner";
 
 import { memoryClient } from "@/api/client";
 import type { Topic } from "@/api/gen/brigade/v1/memory_pb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
 import {
   noteCountLabel,
@@ -26,10 +27,12 @@ export function MemoryPage() {
   const [composerOpen, setComposerOpen] = useState(false);
   // configured=false — у пользователя не настроен git-репозиторий памяти.
   const [configured, setConfigured] = useState(true);
+  const [loadError, setLoadError] = useState("");
   // syncing — идёт ручной pull с origin (кнопка «Обновить»).
   const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(async () => {
+    setLoadError("");
     try {
       const r = await memoryClient.listTopics({ query: "" });
       setTopics(r.topics);
@@ -40,7 +43,7 @@ export function MemoryPage() {
         setConfigured(false);
         return;
       }
-      toast.error(
+      setLoadError(
         err instanceof ConnectError ? err.rawMessage : "Не удалось загрузить темы",
       );
     }
@@ -57,10 +60,10 @@ export function MemoryPage() {
     try {
       await memoryClient.syncMemory({});
       await load();
-      toast.success("Память обновлена");
+      toast.success("Заметки обновлены");
     } catch (err) {
       toast.error(
-        err instanceof ConnectError ? err.rawMessage : "Не удалось обновить память",
+        err instanceof ConnectError ? err.rawMessage : "Не удалось обновить заметки",
       );
     } finally {
       setSyncing(false);
@@ -90,27 +93,37 @@ export function MemoryPage() {
     );
   }
 
-  if (!configured) {
+  if (!configured || loadError) {
     return (
-      <div className="mx-auto h-full w-full max-w-5xl px-6 py-8">
-        <Header count={0} />
-        <p className="mt-6 text-sm text-muted-foreground">
-          Память ещё не настроена. Укажите свой приватный git-репозиторий заметок и
-          SSH-ключ в{" "}
-          <Link to="/settings" className="underline hover:text-foreground">
-            Настройках → Память
-          </Link>
-          .
-        </p>
+      <div className="flex h-full flex-col">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4">
+          {loadError ? (
+            <EmptyState icon={Unplug} title="Не удалось открыть заметки" description={loadError}>
+              <Button onClick={() => { setTopics(null); void load(); }}>
+                <RefreshCw className="size-4" />Попробовать снова
+              </Button>
+            </EmptyState>
+          ) : (
+            <EmptyState
+              icon={BookOpenText}
+              title="Важное остаётся с вами"
+              description="Сохраняйте решения и идеи из разговоров в заметки, доступные во всех сессиях. Подключите приватный git-репозиторий, чтобы начать."
+            >
+              <Button asChild>
+                <Link to="/settings/memory">Настроить заметки<ArrowRight className="size-4" /></Link>
+              </Button>
+            </EmptyState>
+          )}
+        </div>
       </div>
     );
   }
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-14 shrink-0 items-center gap-3 border-b px-6">
+      {topics.length > 0 && <div className="flex min-h-14 shrink-0 flex-wrap items-center gap-3 border-b px-4 py-2 sm:px-6">
         <Sparkles className="size-[18px] text-primary" />
-        <h1 className="text-[15px] font-semibold">Память</h1>
+        <h1 className="text-[15px] font-semibold">Заметки</h1>
         {topics.length > 0 && (
           <span className="text-sm text-muted-foreground">
             · {topics.length} {plural(topics.length, ["тема", "темы", "тем"])}
@@ -123,14 +136,15 @@ export function MemoryPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Искать во всех темах…"
-            className="h-9 w-52 pl-8"
+            aria-label="Поиск по заметкам"
+            className="h-9 w-40 pl-8 sm:w-52"
           />
         </div>
         <button
           type="button"
           onClick={() => void sync()}
           disabled={syncing}
-          aria-label="Обновить память"
+          aria-label="Обновить заметки"
           title="Подтянуть изменения с сервера"
           className="flex size-8 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
         >
@@ -140,9 +154,9 @@ export function MemoryPage() {
           <Plus className="size-4" />
           Тема
         </Button>
-      </div>
+      </div>}
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-6">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
         {composerOpen && (
           <NewTopicComposer
             onClose={() => setComposerOpen(false)}
@@ -154,11 +168,18 @@ export function MemoryPage() {
         )}
 
         {filtered.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {query.trim()
-              ? "Ничего не найдено."
-              : "Пока нет тем. Создай тему кнопкой «Тема» — или агент сложит сюда заметки из сессии."}
-          </p>
+          query.trim() ? (
+            <EmptyState icon={SearchX} title="Совпадений пока нет" description="Попробуйте другие слова или сбросьте поиск, чтобы увидеть все темы.">
+              <Button variant="outline" onClick={() => setQuery("")}>Сбросить поиск</Button>
+            </EmptyState>
+          ) : !composerOpen && (
+            <EmptyState icon={FolderPlus} title="С какой темы начнём?" description="Собирайте связанные заметки в темы. Создайте первую здесь или попросите агента сохранить важное из разговора в заметку.">
+              <Button onClick={() => setComposerOpen(true)}><Plus className="size-4" />Создать тему</Button>
+              <Button variant="outline" disabled={syncing} onClick={() => void sync()}>
+                <RefreshCw className={syncing ? "size-4 animate-spin" : "size-4"} />Обновить заметки
+              </Button>
+            </EmptyState>
+          )
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((t) => (
@@ -167,18 +188,6 @@ export function MemoryPage() {
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function Header({ count }: { count: number }) {
-  return (
-    <div className="flex items-center gap-2">
-      <Sparkles className="size-[18px] text-primary" />
-      <h1 className="text-[15px] font-semibold">Память</h1>
-      {count > 0 && (
-        <span className="text-sm text-muted-foreground">· {count}</span>
-      )}
     </div>
   );
 }

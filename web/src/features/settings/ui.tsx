@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, type ComponentType, type ReactNode } from "react";
 import { ConnectError } from "@connectrpc/connect";
 import { Loader2, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -54,6 +54,34 @@ export function SectionHeader({
   );
 }
 
+// SettingsGroup отделяет тематическую группу от заголовка всей страницы настроек.
+export function SettingsGroup({ title, icon: Icon, description, badge, children }: {
+  title: string;
+  icon: ComponentType<{ className?: string }>;
+  description?: string;
+  badge?: ReactNode;
+  children: ReactNode;
+}) {
+  const id = useId();
+  return (
+    <section aria-labelledby={id} className="flex min-w-0 flex-col gap-3">
+      <header className="flex items-start gap-2.5">
+        <span aria-hidden="true" className="mt-0.5 text-primary"><Icon className="size-4" /></span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 id={id} className="text-sm font-semibold">{title}</h3>
+            {badge}
+          </div>
+          {description && <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>}
+        </div>
+      </header>
+      <div className="flex min-w-0 flex-col gap-4 rounded-xl border bg-card/40 p-4 @min-[480px]:p-5">
+        {children}
+      </div>
+    </section>
+  );
+}
+
 // Code — инлайновый код в описаниях разделов (команды, схемы remote).
 export function Code({ children }: { children: ReactNode }) {
   return (
@@ -105,7 +133,7 @@ export function DangerZone({
   children: ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-t pt-3.5">
+    <div className="flex flex-wrap items-center justify-between gap-4 border-t pt-3.5">
       <div className="min-w-0">
         <div className="text-[13px] text-[#e7e5df]">{title}</div>
         <div className="text-[11.5px] text-[#6c695f]">{hint}</div>

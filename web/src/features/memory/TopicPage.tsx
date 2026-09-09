@@ -75,10 +75,10 @@ export function TopicPage() {
     try {
       await memoryClient.syncMemory({});
       await reload();
-      toast.success("Память обновлена");
+      toast.success("Заметки обновлены");
     } catch (err) {
       toast.error(
-        err instanceof ConnectError ? err.rawMessage : "Не удалось обновить память",
+        err instanceof ConnectError ? err.rawMessage : "Не удалось обновить заметки",
       );
     } finally {
       setSyncing(false);
@@ -305,7 +305,7 @@ function TopicHeader({
                 type="button"
                 onClick={onSync}
                 disabled={syncing}
-                aria-label="Обновить память"
+                aria-label="Обновить заметки"
                 title="Подтянуть изменения с сервера"
                 className="flex size-8 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
               >
