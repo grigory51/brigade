@@ -15,11 +15,13 @@ import { CheckIcon, CopyIcon } from "lucide-react";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { LinkWithPreview } from "@/components/assistant-ui/link-with-preview";
 import { cn } from "@/lib/utils";
+import { BufferedTable, rehypeTableBuffer } from "./buffered-table";
 
 const MarkdownTextImpl = () => {
   return (
     <MarkdownTextPrimitive
       remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeTableBuffer]}
       className="aui-md"
       components={defaultComponents}
       defer
@@ -177,15 +179,7 @@ const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
-  table: ({ className, ...props }) => (
-    <table
-      className={cn(
-        "aui-md-table my-3 w-full border-separate border-spacing-0 overflow-y-auto",
-        className,
-      )}
-      {...props}
-    />
-  ),
+  table: BufferedTable,
   th: ({ className, ...props }) => (
     <th
       className={cn(
