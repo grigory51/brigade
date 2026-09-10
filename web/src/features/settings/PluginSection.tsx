@@ -28,7 +28,7 @@ const decodeRecord = <T,>(value: Uint8Array): Record<string, T> => {
   } catch { return {}; }
 };
 
-export function PluginSection() {
+export function PluginSection({ onCountChange }: { onCountChange?: (count: number) => void }) {
   const [plugins, setPlugins] = useState<Plugin[] | null>(null);
   const [target, setTarget] = useState("");
   const [url, setUrl] = useState("");
@@ -41,9 +41,10 @@ export function PluginSection() {
   const reload = useCallback(async () => {
     const result = await pluginClient.list({});
     setPlugins(result.plugins);
+    onCountChange?.(result.plugins.length);
     setTarget(result.requiredTarget);
     return result.plugins;
-  }, []);
+  }, [onCountChange]);
 
   useEffect(() => { void reload().catch(() => setPlugins([])); }, [reload]);
 
@@ -130,7 +131,7 @@ export function PluginSection() {
 
   return (
     <>
-      <SectionHeader title="MCP Apps" badge={<Badge on={plugins.length > 0}>{plugins.length ? `${plugins.length} шт.` : "нет"}</Badge>}>
+      <SectionHeader as="h3" title="MCP Apps" badge={<Badge on={plugins.length > 0}>{plugins.length ? `${plugins.length} шт.` : "нет"}</Badge>}>
         <Description>
           Полноценные интерфейсы с MCP-сервером. Для текущей среды нужна сборка <span className="font-mono text-foreground">{target}</span>.
           {" "}Устанавливайте только доверенные пакеты: они выполняют код в среде агента.

@@ -38,15 +38,17 @@ export function SectionHeader({
   title,
   badge,
   children,
+  as: Heading = "h2",
 }: {
   title: string;
   badge?: ReactNode;
   children?: ReactNode;
+  as?: "h2" | "h3";
 }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2.5">
-        <h2 className="text-[16.5px] font-semibold">{title}</h2>
+        <Heading className="text-[16.5px] font-semibold">{title}</Heading>
         {badge}
       </div>
       {children}

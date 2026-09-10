@@ -13,7 +13,7 @@ Brigade.app — однопользовательское desktop-приложе�
 
 ## CAD
 
-Откройте **Настройки → MCP Apps** и установите bundle из последнего релиза:
+Откройте **Настройки → MCP → MCP Apps** и установите bundle из последнего релиза:
 
 - Local: `brigade-cad-darwin-arm64.mcpb`;
 - Docker: `brigade-cad-linux-amd64.mcpb`.

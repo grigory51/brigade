@@ -17,7 +17,6 @@ import {
   Loader2,
   NotebookText,
   MessageSquareText,
-  Boxes,
   Plus,
   Plug,
   RefreshCw,
@@ -27,7 +26,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { agentClient, authClient, mcpClient, notificationClient, telegramClient } from "@/api/client";
+import { agentClient, authClient, mcpClient, notificationClient, pluginClient, telegramClient } from "@/api/client";
 import { useAuth } from "@/features/auth/AuthContext";
 import type { AgentConnection } from "@/api/gen/brigade/v1/agent_pb";
 import type { NotificationBackend } from "@/api/gen/brigade/v1/notification_pb";
@@ -82,9 +81,9 @@ import {
  * в поле всегда пустой драфт, а состояние показывается флагом «задан».
  */
 
-type SectionId = "general" | "agents" | "mcp" | "apps" | "profiles" | "environments" | "env" | "memory" | "notifications" | "telegram";
+type SectionId = "general" | "agents" | "mcp" | "profiles" | "environments" | "env" | "memory" | "notifications" | "telegram";
 
-const SECTIONS: SectionId[] = ["general", "agents", "mcp", "apps", "profiles", "environments", "env", "memory", "notifications", "telegram"];
+const SECTIONS: SectionId[] = ["general", "agents", "mcp", "profiles", "environments", "env", "memory", "notifications", "telegram"];
 
 const AGENTS_OPEN_KEY = "brigade.settings.agentsOpen";
 
@@ -125,6 +124,7 @@ export function SettingsPage() {
   // Счётчик серверов держится здесь ради точки в навигации; сам раздел грузит свои
   // данные и сообщает изменения наверх.
   const [mcpCount, setMcpCount] = useState(0);
+  const [pluginCount, setPluginCount] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -147,6 +147,9 @@ export function SettingsPage() {
       .listServers({})
       .then((r) => alive && setMcpCount(r.servers.length))
       .catch(() => alive && setMcpCount(0));
+    void pluginClient.list({})
+      .then((r) => alive && setPluginCount(r.plugins.length))
+      .catch(() => alive && setPluginCount(0));
     void telegramClient
       .listBots({})
       .then((r) => {
@@ -166,6 +169,7 @@ export function SettingsPage() {
   );
 
   if (section === "ssh") return <Navigate to="/settings/general" replace />;
+  if (section === "apps") return <Navigate to="/settings/mcp" replace />;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -231,16 +235,10 @@ export function SettingsPage() {
           )}
           <NavRow
             icon={Plug}
-            label="MCP-серверы"
+            label="MCP"
             active={active === "mcp"}
             onClick={() => go("mcp")}
-            trailing={<StatusDot on={mcpCount > 0} />}
-          />
-          <NavRow
-            icon={Boxes}
-            label="MCP Apps"
-            active={active === "apps"}
-            onClick={() => go("apps")}
+            trailing={<StatusDot on={mcpCount + pluginCount > 0} />}
           />
           <NavRow
             icon={MessageSquareText}
@@ -384,8 +382,17 @@ export function SettingsPage() {
                 onChange={setAgentConnections}
               />
             )}
-            {active === "mcp" && <McpSection onCountChange={setMcpCount} />}
-            {active === "apps" && <PluginSection />}
+            {active === "mcp" && (
+              <div className="flex min-w-0 flex-col gap-8">
+                <SectionHeader title="MCP" />
+                <section aria-label="MCP-серверы" className="flex min-w-0 flex-col gap-4">
+                  <McpSection onCountChange={setMcpCount} />
+                </section>
+                <section aria-label="MCP Apps" className="flex min-w-0 flex-col gap-4 border-t pt-8">
+                  <PluginSection onCountChange={setPluginCount} />
+                </section>
+              </div>
+            )}
             {active === "profiles" && <ResponseProfilesSection />}
             {active === "environments" && <DesktopEnvironmentsSection />}
             {active === "env" && <EnvironmentSection />}

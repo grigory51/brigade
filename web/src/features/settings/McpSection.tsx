@@ -171,6 +171,7 @@ export function McpSection({ onCountChange }: { onCountChange: (n: number) => vo
   return (
     <>
       <SectionHeader
+        as="h3"
         title="MCP-серверы"
         badge={
           <Badge on={servers.length > 0}>
@@ -543,7 +544,7 @@ function SecretsBlock({
     <div className="flex flex-col gap-[18px] border-t pt-[18px]">
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-2.5">
-          <h3 className="text-[14px] font-semibold">Секреты</h3>
+          <h4 className="text-[14px] font-semibold">Секреты</h4>
           <Badge on={secrets.length > 0}>
             {secrets.length > 0 ? `${secrets.length} шт.` : "пусто"}
           </Badge>

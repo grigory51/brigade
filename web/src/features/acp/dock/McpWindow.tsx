@@ -97,7 +97,7 @@ export function McpWindow({
           <p className="px-2 py-4 text-center text-[12px] leading-[1.6] text-muted-foreground">
             Серверов пока нет. Добавьте их в разделе
             <br />
-            <span className="text-foreground">Настройки → MCP-серверы</span>
+            <span className="text-foreground">Настройки → MCP</span>
           </p>
         ) : (
           servers.map((srv) => {
