@@ -1,6 +1,8 @@
 import {
   useCallback,
   useEffect,
+  useId,
+  useRef,
   useState,
   type ComponentType,
   type ReactNode,
@@ -91,6 +93,9 @@ export function SettingsPage() {
   const { desktop } = useAuth();
   const { section } = useParams<{ section: string }>();
   const navigate = useNavigate();
+  const [navigationOpen, setNavigationOpen] = useState(false);
+  const navigationId = useId();
+  const navigationTrigger = useRef<HTMLButtonElement>(null);
   const active =
     section === "ntfy"
       ? "notifications"
@@ -164,9 +169,15 @@ export function SettingsPage() {
   }, []);
 
   const go = useCallback(
-    (id: SectionId) => navigate(`/settings/${id}`),
+    (id: SectionId) => {
+      setNavigationOpen(false);
+      navigationTrigger.current?.focus();
+      navigate(`/settings/${id}`);
+    },
     [navigate],
   );
+
+  useEffect(() => { setNavigationOpen(false); }, [section]);
 
   if (section === "ssh") return <Navigate to="/settings/general" replace />;
   if (section === "apps") return <Navigate to="/settings/mcp" replace />;
@@ -175,14 +186,39 @@ export function SettingsPage() {
     <div className="flex h-full min-h-0 flex-col">
       {/* px-5 — заголовок стоит на одной вертикали с иконками пунктов ниже
           (отступ колонки 10px + внутренний отступ строки 10px). */}
-      <header className="shrink-0 border-b px-5 pt-[22px] pb-4">
+      <header className="flex min-h-16 shrink-0 items-center justify-between gap-2 border-b py-2 pr-4 pl-14 md:block md:px-5 md:pt-[22px] md:pb-4">
         <h1 className="text-[20px] font-semibold tracking-[-0.01em]">
           Настройки
         </h1>
+        <Button
+          ref={navigationTrigger}
+          variant="ghost"
+          className="h-11 md:hidden"
+          aria-expanded={navigationOpen}
+          aria-controls={navigationId}
+          onClick={() => setNavigationOpen((open) => !open)}
+        >
+          Разделы
+          <ChevronDown className={cn("size-4 transition-transform", navigationOpen && "rotate-180")} />
+        </Button>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <nav className="flex w-[222px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r px-2.5 pt-4 pb-5">
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <nav
+          id={navigationId}
+          aria-label="Разделы настроек"
+          className={cn(
+            "max-h-[45dvh] w-full shrink-0 flex-col gap-0.5 overflow-y-auto overscroll-contain border-b px-2.5 py-3 md:flex md:max-h-none md:w-[222px] md:border-r md:border-b-0 md:pt-4 md:pb-5 max-md:[&_button]:min-h-11",
+            navigationOpen ? "flex" : "hidden",
+          )}
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && navigationOpen) {
+              event.stopPropagation();
+              setNavigationOpen(false);
+              navigationTrigger.current?.focus();
+            }
+          }}
+        >
           <NavRow
             icon={Settings2}
             label="Общее"
@@ -364,12 +400,12 @@ export function SettingsPage() {
           )}
         </nav>
 
-        <div className="min-h-0 flex-1 overflow-y-auto scroll-smooth">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto scroll-smooth">
           {/* key — чтобы смена раздела заново проигрывала вход и сбрасывала локальное
               состояние деталей (подтверждение перевыпуска ключа, «Скопировано»). */}
           <div
             key={active}
-            className="mx-auto flex max-w-[680px] animate-[section-in_0.24s_cubic-bezier(0.2,0.8,0.2,1)] flex-col gap-[18px] px-[34px] pt-6 pb-[90px]"
+            className="mx-auto flex min-w-0 max-w-[680px] animate-[section-in_0.24s_cubic-bezier(0.2,0.8,0.2,1)] flex-col gap-[18px] px-4 pt-6 pb-[90px] md:px-[34px]"
           >
             {active === "general" && (
               <GeneralSection publicKey={publicKey} onKeyChange={setPublicKey} />
