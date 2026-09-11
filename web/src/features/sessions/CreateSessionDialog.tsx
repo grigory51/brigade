@@ -306,7 +306,7 @@ export function CreateSessionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Новая сессия</DialogTitle>
           <DialogDescription>
@@ -326,7 +326,7 @@ export function CreateSessionDialog({
             </Button>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="-mx-1 min-h-0 space-y-4 overflow-y-auto overscroll-contain px-1 py-1">
             <div className="space-y-2">
               <Label>Агент</Label>
               <Select value={connectionId} onValueChange={setConnectionId}>
