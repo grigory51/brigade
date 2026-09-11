@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Check, Copy, ExternalLinkIcon, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -41,6 +41,8 @@ type Draft = {
   authProfile: string;
   image: string;
   mcpServerIds: string[];
+  sessionMode: "threads" | "chat";
+  newSessionAction: "archive" | "delete";
 };
 
 const emptyDraft = (): Draft => ({
@@ -49,6 +51,8 @@ const emptyDraft = (): Draft => ({
   authProfile: "",
   image: "",
   mcpServerIds: [],
+  sessionMode: "threads",
+  newSessionAction: "archive",
 });
 
 export function TelegramSection({
@@ -73,6 +77,8 @@ export function TelegramSection({
   const [saving, setSaving] = useState(false);
   const [binding, setBinding] = useState(false);
   const [copied, setCopied] = useState(false);
+  const sessionModeHintId = useId();
+  const newSessionActionHintId = useId();
 
   useEffect(() => {
     let alive = true;
@@ -112,6 +118,8 @@ export function TelegramSection({
       authProfile: bot.authProfile,
       image: bot.image,
       mcpServerIds: bot.mcpServerIds,
+      sessionMode: bot.sessionMode === "chat" ? "chat" : "threads",
+      newSessionAction: bot.newSessionAction === "delete" ? "delete" : "archive",
     });
     setToken("");
     setBindingURL("");
@@ -149,6 +157,8 @@ export function TelegramSection({
           authProfile: draft.authProfile,
           image: draft.image,
           mcpServerIds: draft.mcpServerIds,
+          sessionMode: draft.sessionMode,
+          newSessionAction: draft.sessionMode === "threads" ? "archive" : draft.newSessionAction,
         },
         token,
       });
@@ -244,6 +254,56 @@ export function TelegramSection({
         </div>
       </div>
 
+      <div className="flex flex-col gap-2">
+        <FieldLabel>Режим сессий</FieldLabel>
+        <Select
+          value={draft.sessionMode}
+          onValueChange={(value: Draft["sessionMode"]) => patch({ sessionMode: value })}
+          disabled={saving}
+        >
+          <SelectTrigger aria-label="Режим сессий" aria-describedby={sessionModeHintId} className="h-[41px] w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="threads">Треды</SelectItem>
+            <SelectItem value="chat">Обычный</SelectItem>
+          </SelectContent>
+        </Select>
+        <p id={sessionModeHintId} className="text-xs leading-relaxed text-muted-foreground">
+          {draft.sessionMode === "threads"
+            ? "Каждый топик — отдельная сессия. /new архивирует текущую; следующее сообщение создаёт новую."
+            : "Одна сессия на чат без разделения по топикам. /new архивирует или удаляет предыдущую и сразу создаёт новую."}
+          {" "}Смена режима не удаляет старые сессии.
+        </p>
+      </div>
+
+      {draft.sessionMode === "chat" && (
+        <div className="flex flex-col gap-2">
+          <FieldLabel>При /new</FieldLabel>
+          <Select
+            value={draft.newSessionAction}
+            onValueChange={(value: Draft["newSessionAction"]) => patch({ newSessionAction: value })}
+            disabled={saving}
+          >
+            <SelectTrigger aria-label="При /new" aria-describedby={newSessionActionHintId} className="h-[41px] w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="archive">Архивировать</SelectItem>
+              <SelectItem value="delete">Удалять</SelectItem>
+            </SelectContent>
+          </Select>
+          <p id={newSessionActionHintId} className="text-xs leading-relaxed text-muted-foreground">
+            {draft.newSessionAction === "archive"
+              ? "Для архивации нужен репозиторий заметок. При ошибке история не удаляется."
+              : "История Brigade удаляется необратимо. Сообщения в Telegram остаются."}
+          </p>
+        </div>
+      )}
+      {draft.sessionMode === "threads" && (
+        <Description>Для архивации нужен репозиторий заметок. При ошибке история не удаляется.</Description>
+      )}
+
       {images && images.images.length > 0 && (
         <div className="flex flex-col gap-2">
           <FieldLabel>Docker-образ</FieldLabel>
@@ -284,7 +344,7 @@ export function TelegramSection({
         </div>
       )}
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button disabled={saving || !draft.agentType || (!draft.id && !token.trim())} onClick={() => void save()}>
           {saving && <Loader2 className="size-4 animate-spin" />}
           Сохранить
@@ -300,7 +360,7 @@ export function TelegramSection({
       {bindingURL && (
         <div className="flex flex-col gap-2 rounded-[11px] border bg-[#1c1b1a] p-3.5">
           <div className="text-[13px]">Откройте ссылку под своим Telegram-аккаунтом</div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button asChild size="sm">
               <a href={bindingURL} target="_blank" rel="noreferrer">
                 <ExternalLinkIcon className="size-3.5" /> Открыть Telegram
@@ -319,7 +379,7 @@ export function TelegramSection({
         <div className="flex flex-col gap-2 rounded-[11px] border bg-[#1c1b1a] p-3.5 text-[12px]">
           <div className="flex justify-between gap-3">
             <span className="text-muted-foreground">Владелец</span>
-            <span>{selected.ownerConnected ? `@${selected.ownerUsername || "подключён"}` : "не привязан"}</span>
+            <span className="min-w-0 break-all text-right">{selected.ownerConnected ? `@${selected.ownerUsername || "подключён"}` : "не привязан"}</span>
           </div>
           <div className="flex justify-between gap-3">
             <span className="text-muted-foreground">Топики в личном чате</span>

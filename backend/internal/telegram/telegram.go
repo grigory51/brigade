@@ -17,6 +17,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"path"
 	"strings"
 	"sync"
@@ -27,6 +28,7 @@ import (
 	"github.com/grigory51/brigade/backend/internal/acp"
 	"github.com/grigory51/brigade/backend/internal/agent"
 	"github.com/grigory51/brigade/backend/internal/agentimage"
+	"github.com/grigory51/brigade/backend/internal/memory"
 	"github.com/grigory51/brigade/backend/internal/session"
 	"github.com/grigory51/brigade/backend/internal/store"
 )
@@ -37,9 +39,21 @@ const (
 	maxTelegramInboundFileSize = 20 << 20
 )
 
+type sessionRegistry interface {
+	Get(context.Context, string, string) (store.Session, error)
+	Create(context.Context, string, store.SessionKind, string, string, string, string, []string, string, string, string, string, string) (store.Session, error)
+	Rename(context.Context, string, string, string) (store.Session, error)
+	SetInstructionProfile(context.Context, string, string, string) error
+	Archive(context.Context, string, string) (memory.ArchivedSession, error)
+	Delete(context.Context, string, string) error
+	PromptAutoApprove(context.Context, string, string, string) (session.PromptResult, error)
+	UploadFile(context.Context, string, string, string, []byte) (string, error)
+	OpenWorkspaceFile(context.Context, string, string, string) (*os.File, error)
+}
+
 type Service struct {
 	store      *store.Store
-	registry   *session.Registry
+	registry   sessionRegistry
 	images     *agentimage.Service
 	api        *botAPI
 	mode       string
@@ -78,8 +92,18 @@ func (s *Service) Start(ctx context.Context) error {
 		return err
 	}
 	for _, bot := range bots {
-		stale, _ := s.store.ListTelegramUpdates(ctx, bot.ID, "running")
+		stale, err := s.store.ListTelegramUpdates(ctx, bot.ID, "running")
+		if err != nil {
+			return err
+		}
 		for _, update := range stale {
+			if update.ResetPlan != "" {
+				// /new содержит неизменяемый ID старой сессии, поэтому его можно продолжить.
+				if err := s.store.SetTelegramUpdateState(ctx, bot.ID, update.UpdateID, "queued", "", ""); err != nil {
+					return err
+				}
+				continue
+			}
 			_ = s.store.SetTelegramUpdateState(ctx, bot.ID, update.UpdateID, "ready",
 				"Brigade перезапустился во время выполнения запроса. Повторите сообщение: turn не запускается повторно автоматически, чтобы не выполнить действия дважды.",
 				"interrupted by restart")
@@ -123,11 +147,24 @@ func (s *Service) Save(ctx context.Context, userID string, bot store.TelegramBot
 		bot.BindTokenExpiresAt = current.BindTokenExpiresAt
 		bot.UpdateOffset = current.UpdateOffset
 		bot.CreatedAt = current.CreatedAt
+		// Старый клиент не должен сбрасывать новые настройки при сохранении бота.
+		if bot.SessionMode == "" {
+			bot.SessionMode = current.SessionMode
+		}
+		if bot.NewSessionAction == "" {
+			bot.NewSessionAction = current.NewSessionAction
+		}
 	} else {
 		bot.ID = uuid.NewString()
 		bot.CreatedAt = time.Now()
 	}
 	bot.UserID = userID
+	if bot.SessionMode != "" && bot.SessionMode != store.TelegramSessionThreads && bot.SessionMode != store.TelegramSessionChat {
+		return store.TelegramBot{}, errors.New("telegram: неизвестный режим сессий")
+	}
+	if bot.NewSessionAction != "" && bot.NewSessionAction != store.TelegramNewSessionArchive && bot.NewSessionAction != store.TelegramNewSessionDelete {
+		return store.TelegramBot{}, errors.New("telegram: неизвестное действие /new")
+	}
 	bot.Token = strings.TrimSpace(bot.Token)
 	if bot.Token == "" {
 		return store.TelegramBot{}, errors.New("telegram: bot token required")
@@ -427,7 +464,7 @@ func (s *Service) deliverReady(bot store.TelegramBot) bool {
 		if err := s.reply(s.ctx, bot, in, stored.Response); err != nil {
 			log.Printf("telegram: deliver @%s update=%d: %v", bot.Username, stored.UpdateID, err)
 			if isPermanentBotAPIError(err) {
-				if isMissingMessageThread(err) {
+				if isMissingMessageThread(err) && bot.SessionMode != store.TelegramSessionChat {
 					_ = s.store.DeleteTelegramConversation(s.ctx, bot.ID, in.scope, in.chatID, in.threadID)
 				}
 				if !in.guest {
@@ -749,7 +786,7 @@ func (s *Service) processQueued(bot store.TelegramBot, queued []store.TelegramUp
 		_ = s.api.setReaction(s.ctx, bot.Token, in.chatID, in.message.MessageID, "👀")
 	}
 	if in.text == "/new" {
-		s.newSession(bot, in)
+		s.newSession(bot, in, queued[0].ResetPlan)
 		return
 	}
 	batch := []inbound{in}
@@ -761,6 +798,14 @@ func (s *Service) processQueued(bot store.TelegramBot, queued []store.TelegramUp
 			}
 			other := inboundFrom(next)
 			addressed := other.message != nil && (other.message.Chat.Type == "private" || addressedTo(bot, other.message))
+			// Команда разделяет очередь: последующие сообщения принадлежат новой сессии.
+			if addressed && other.from != nil && other.from.ID == bot.OwnerTelegramID && stripAddress(bot, other.text) == "/new" {
+				break
+			}
+			if bot.SessionMode == store.TelegramSessionChat && addressed && other.from != nil && other.from.ID == bot.OwnerTelegramID &&
+				!other.guest && other.scope == in.scope && other.chatID == in.chatID && other.threadID != in.threadID && other.hasContent() {
+				break
+			}
 			if addressed && other.from != nil && other.from.ID == bot.OwnerTelegramID &&
 				!other.guest && other.scope == in.scope && other.chatID == in.chatID && other.threadID == in.threadID &&
 				other.hasContent() && !strings.HasPrefix(other.text, "/") {
@@ -812,7 +857,11 @@ func (s *Service) bindOwner(bot store.TelegramBot, in inbound) {
 		s.finishWithReply(bot, []inbound{in}, "Не удалось привязать Telegram к Brigade.", err)
 		return
 	}
-	s.finishWithReply(bot, []inbound{in}, "Telegram подключён к Brigade. Напишите задачу в личном чате; топики можно использовать для отдельных сессий.", nil)
+	message := "Telegram подключён к Brigade. Напишите задачу в личном чате; топики можно использовать для отдельных сессий."
+	if bot.SessionMode == store.TelegramSessionChat {
+		message = "Telegram подключён к Brigade. Напишите задачу в личном чате. Команда /new завершит текущую сессию и создаст новую."
+	}
+	s.finishWithReply(bot, []inbound{in}, message, nil)
 }
 
 func addressedTo(bot store.TelegramBot, message *telegramMessage) bool {
@@ -837,9 +886,17 @@ func stripAddress(bot store.TelegramBot, text string) string {
 }
 
 func (s *Service) session(bot store.TelegramBot, in inbound) (string, error) {
-	conversation, err := s.store.TelegramConversation(s.ctx, bot.ID, in.scope, in.chatID, in.threadID)
+	threadID := conversationThreadID(bot, in)
+	conversation, err := s.store.TelegramConversation(s.ctx, bot.ID, in.scope, in.chatID, threadID)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return "", err
+	}
 	if err == nil {
-		if existing, getErr := s.registry.Get(s.ctx, conversation.SessionID, bot.UserID); getErr == nil && existing.Status == store.SessionStatusRunning {
+		existing, getErr := s.registry.Get(s.ctx, conversation.SessionID, bot.UserID)
+		if getErr != nil && !errors.Is(getErr, store.ErrNotFound) {
+			return "", getErr
+		}
+		if getErr == nil && existing.Status == store.SessionStatusRunning {
 			if in.guest && existing.InstructionProfile != session.InstructionProfileTelegramGuest {
 				if err := s.registry.SetInstructionProfile(s.ctx, existing.ID, bot.UserID, session.InstructionProfileTelegramGuest); err != nil {
 					return "", err
@@ -865,9 +922,21 @@ func (s *Service) session(bot store.TelegramBot, in inbound) (string, error) {
 	name := telegramSessionName(bot, in)
 	_, _ = s.registry.Rename(s.ctx, created.ID, bot.UserID, name)
 	err = s.store.SetTelegramConversation(s.ctx, store.TelegramConversation{
-		BotID: bot.ID, Scope: in.scope, ChatID: in.chatID, ThreadID: in.threadID, SessionID: created.ID,
+		BotID: bot.ID, Scope: in.scope, ChatID: in.chatID, ThreadID: threadID, SessionID: created.ID,
 	})
+	if err != nil {
+		if deleteErr := s.registry.Delete(s.ctx, created.ID, bot.UserID); deleteErr != nil {
+			log.Printf("telegram: cleanup unbound session %s: %v", created.ID, deleteErr)
+		}
+	}
 	return created.ID, err
+}
+
+func conversationThreadID(bot store.TelegramBot, in inbound) int64 {
+	if bot.SessionMode == store.TelegramSessionChat {
+		return 0
+	}
+	return in.threadID
 }
 
 func telegramSessionName(bot store.TelegramBot, in inbound) string {
@@ -882,7 +951,7 @@ func telegramSessionName(bot store.TelegramBot, in inbound) string {
 		}
 		name = "Telegram · " + peer
 	}
-	if in.threadID != 0 {
+	if conversationThreadID(bot, in) != 0 {
 		name += fmt.Sprintf(" · %d", in.threadID)
 	}
 	return name
@@ -895,16 +964,88 @@ func telegramSessionGroupLabel(bot store.TelegramBot) string {
 	return "Telegram"
 }
 
-func (s *Service) newSession(bot store.TelegramBot, in inbound) {
-	conversation, err := s.store.TelegramConversation(s.ctx, bot.ID, in.scope, in.chatID, in.threadID)
-	if err == nil {
-		if _, err = s.registry.Archive(s.ctx, conversation.SessionID, bot.UserID); err != nil && !errors.Is(err, store.ErrNotFound) {
-			s.finishWithReply(bot, []inbound{in}, "Не удалось архивировать текущую сессию.", err)
+type resetPlan struct {
+	SessionID   string                         `json:"sessionId"`
+	SessionMode store.TelegramSessionMode      `json:"sessionMode"`
+	Action      store.TelegramNewSessionAction `json:"action"`
+	ThreadID    int64                          `json:"threadId"`
+}
+
+func (s *Service) newSession(bot store.TelegramBot, in inbound, savedPlan string) {
+	plan := resetPlan{SessionMode: bot.SessionMode, Action: bot.NewSessionAction, ThreadID: conversationThreadID(bot, in)}
+	if savedPlan != "" {
+		if err := json.Unmarshal([]byte(savedPlan), &plan); err != nil {
+			s.finishWithReply(bot, []inbound{in}, "Не удалось восстановить /new. Обратитесь к администратору.", err)
+			return
+		}
+	} else {
+		conversation, err := s.store.TelegramConversation(s.ctx, bot.ID, in.scope, in.chatID, plan.ThreadID)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			s.finishWithReply(bot, []inbound{in}, "Не удалось прочитать текущую сессию. Повторите /new.", err)
+			return
+		}
+		plan.SessionID = conversation.SessionID
+		data, err := json.Marshal(plan)
+		if err != nil {
+			s.finishWithReply(bot, []inbound{in}, "Не удалось подготовить /new.", err)
+			return
+		}
+		savedPlan = string(data)
+	}
+	if err := s.store.StartTelegramReset(s.ctx, bot.ID, in.updateID, savedPlan); err != nil {
+		log.Printf("telegram: start /new @%s: %v", bot.Username, err)
+		return
+	}
+	bot.SessionMode, bot.NewSessionAction = plan.SessionMode, plan.Action
+	completed := ""
+	if plan.SessionID != "" {
+		_, err := s.registry.Get(s.ctx, plan.SessionID, bot.UserID)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			s.finishWithReply(bot, []inbound{in}, "Не удалось прочитать текущую сессию. Повторите /new.", err)
+			return
+		}
+		if err == nil {
+			if bot.SessionMode == store.TelegramSessionChat && bot.NewSessionAction == store.TelegramNewSessionDelete {
+				err = s.registry.Delete(s.ctx, plan.SessionID, bot.UserID)
+				completed = "Предыдущая сессия удалена. "
+			} else {
+				_, err = s.registry.Archive(s.ctx, plan.SessionID, bot.UserID)
+				completed = "Предыдущая сессия отправлена в архив. "
+			}
+			if err != nil {
+				message := "Не удалось удалить текущую сессию. Новая не создана; повторите /new."
+				if bot.SessionMode != store.TelegramSessionChat || bot.NewSessionAction != store.TelegramNewSessionDelete {
+					message = "Не удалось архивировать текущую сессию. Новая не создана. Проверьте репозиторий в Настройки → Заметки и повторите /new."
+				}
+				s.finishWithReply(bot, []inbound{in}, message, err)
+				return
+			}
+		}
+	}
+	conversation, err := s.store.TelegramConversation(s.ctx, bot.ID, in.scope, in.chatID, plan.ThreadID)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		s.finishWithReply(bot, []inbound{in}, completed+"Не удалось прочитать привязку чата. Повторите /new.", err)
+		return
+	}
+	// При восстановлении новая сессия уже может быть создана и привязана.
+	if err == nil && conversation.SessionID == plan.SessionID {
+		if err := s.store.DeleteTelegramConversation(s.ctx, bot.ID, in.scope, in.chatID, plan.ThreadID); err != nil {
+			s.finishWithReply(bot, []inbound{in}, completed+"Не удалось сбросить привязку чата. Повторите /new.", err)
 			return
 		}
 	}
-	_ = s.store.DeleteTelegramConversation(s.ctx, bot.ID, in.scope, in.chatID, in.threadID)
-	s.finishWithReply(bot, []inbound{in}, "Текущая сессия отправлена в архив. Следующее сообщение создаст новую.", nil)
+	if bot.SessionMode == store.TelegramSessionChat {
+		stopTyping := s.typing(bot, in)
+		_, err := s.session(bot, in)
+		stopTyping()
+		if err != nil {
+			s.finishWithReply(bot, []inbound{in}, completed+"Не удалось запустить новую сессию. Повторите /new или отправьте задачу ещё раз.", err)
+			return
+		}
+		s.finishWithReply(bot, []inbound{in}, completed+"Новая сессия готова. Напишите задачу.", nil)
+		return
+	}
+	s.finishWithReply(bot, []inbound{in}, completed+"Следующее сообщение создаст новую сессию.", nil)
 }
 
 func (s *Service) typing(bot store.TelegramBot, in inbound) func() {

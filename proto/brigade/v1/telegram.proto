@@ -18,6 +18,10 @@ message TelegramBot {
   repeated string mcp_server_ids = 10;
   bool supports_guest_queries = 11;
   bool has_topics_enabled = 12;
+  // threads: отдельная сессия на топик (по умолчанию); chat: одна на чат.
+  string session_mode = 13;
+  // archive (по умолчанию) | delete: действие /new в режиме chat.
+  string new_session_action = 14;
 }
 
 message ListTelegramBotsResponse {

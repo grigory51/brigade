@@ -240,7 +240,7 @@ func (s *Store) DeleteNotificationBackend(ctx context.Context, userID, id string
 const telegramBotSelect = `SELECT id, user_id, token, telegram_id, username, name,
 	owner_telegram_id, owner_telegram_username, agent_type, auth_profile, image, mcp_servers,
 	bind_token_hash, bind_token_expires_at, update_offset, supports_guest_queries,
-	has_topics_enabled, created_at FROM telegram_bots`
+	has_topics_enabled, session_mode, new_session_action, created_at FROM telegram_bots`
 
 func (s *Store) ListTelegramBots(ctx context.Context, userID string) ([]TelegramBot, error) {
 	rows, err := s.db.QueryContext(ctx, telegramBotSelect+` WHERE user_id = ? ORDER BY created_at`, userID)
@@ -283,7 +283,7 @@ func (s *Store) scanTelegramBot(row rowScanner) (TelegramBot, error) {
 	if err := row.Scan(&bot.ID, &bot.UserID, &token, &bot.TelegramID, &bot.Username, &bot.Name,
 		&bot.OwnerTelegramID, &bot.OwnerTelegramUsername, &bot.AgentType, &bot.AuthProfile,
 		&bot.Image, &mcp, &bot.BindTokenHash, &bindExpires, &bot.UpdateOffset,
-		&bot.SupportsGuestQueries, &bot.HasTopicsEnabled, &createdAt); err != nil {
+		&bot.SupportsGuestQueries, &bot.HasTopicsEnabled, &bot.SessionMode, &bot.NewSessionAction, &createdAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return TelegramBot{}, ErrNotFound
 		}
@@ -303,24 +303,31 @@ func (s *Store) GetTelegramBot(ctx context.Context, id string) (TelegramBot, err
 }
 
 func (s *Store) SaveTelegramBot(ctx context.Context, bot TelegramBot) error {
+	if bot.SessionMode == "" {
+		bot.SessionMode = TelegramSessionThreads
+	}
+	if bot.NewSessionAction == "" {
+		bot.NewSessionAction = TelegramNewSessionArchive
+	}
 	now := toUnix(time.Now())
 	_, err := s.db.ExecContext(ctx, `INSERT INTO telegram_bots
 		(id, user_id, token, telegram_id, username, name, owner_telegram_id,
 		 owner_telegram_username, agent_type, auth_profile, image, mcp_servers,
 		 bind_token_hash, bind_token_expires_at, update_offset, supports_guest_queries,
-		 has_topics_enabled, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 has_topics_enabled, session_mode, new_session_action, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET token=excluded.token, telegram_id=excluded.telegram_id,
 		 username=excluded.username, name=excluded.name, agent_type=excluded.agent_type,
 		 auth_profile=excluded.auth_profile, image=excluded.image, mcp_servers=excluded.mcp_servers,
 		 supports_guest_queries=excluded.supports_guest_queries,
-		 has_topics_enabled=excluded.has_topics_enabled, updated_at=excluded.updated_at
+		 has_topics_enabled=excluded.has_topics_enabled, session_mode=excluded.session_mode,
+		 new_session_action=excluded.new_session_action, updated_at=excluded.updated_at
 		WHERE telegram_bots.user_id=excluded.user_id`,
 		bot.ID, bot.UserID, s.cipher.Encrypt(bot.Token), bot.TelegramID, bot.Username, bot.Name,
 		bot.OwnerTelegramID, bot.OwnerTelegramUsername, bot.AgentType, bot.AuthProfile,
 		bot.Image, strings.Join(bot.McpServers, ","), bot.BindTokenHash,
 		toUnix(bot.BindTokenExpiresAt), bot.UpdateOffset, bot.SupportsGuestQueries,
-		bot.HasTopicsEnabled, now, now)
+		bot.HasTopicsEnabled, bot.SessionMode, bot.NewSessionAction, now, now)
 	if err != nil {
 		return fmt.Errorf("store: save telegram bot: %w", err)
 	}
@@ -371,7 +378,10 @@ func (s *Store) SetTelegramUpdateOffset(ctx context.Context, id string, offset i
 
 func (s *Store) InsertTelegramUpdate(ctx context.Context, botID string, updateID int64, payload string) (bool, error) {
 	now := toUnix(time.Now())
-	res, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO telegram_updates (bot_id, update_id, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`, botID, updateID, payload, now, now)
+	// Проверка offset в БД защищает от запоздалого webhook с устаревшим снимком бота,
+	// даже если обработанный update уже удалён из inbox.
+	res, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO telegram_updates (bot_id, update_id, payload, created_at, updated_at)
+		SELECT id, ?, ?, ?, ? FROM telegram_bots WHERE id=? AND update_offset <= ?`, updateID, payload, now, now, botID, updateID)
 	if err != nil {
 		return false, fmt.Errorf("store: insert telegram update: %w", err)
 	}
@@ -380,7 +390,7 @@ func (s *Store) InsertTelegramUpdate(ctx context.Context, botID string, updateID
 }
 
 func (s *Store) ListTelegramUpdates(ctx context.Context, botID, state string) ([]TelegramUpdate, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT bot_id, update_id, payload, state, response, error, created_at FROM telegram_updates WHERE bot_id=? AND state=? ORDER BY update_id`, botID, state)
+	rows, err := s.db.QueryContext(ctx, `SELECT bot_id, update_id, payload, state, response, error, reset_plan, created_at FROM telegram_updates WHERE bot_id=? AND state=? ORDER BY update_id`, botID, state)
 	if err != nil {
 		return nil, fmt.Errorf("store: list telegram updates: %w", err)
 	}
@@ -389,7 +399,7 @@ func (s *Store) ListTelegramUpdates(ctx context.Context, botID, state string) ([
 	for rows.Next() {
 		var update TelegramUpdate
 		var created int64
-		if err := rows.Scan(&update.BotID, &update.UpdateID, &update.Payload, &update.State, &update.Response, &update.Error, &created); err != nil {
+		if err := rows.Scan(&update.BotID, &update.UpdateID, &update.Payload, &update.State, &update.Response, &update.Error, &update.ResetPlan, &created); err != nil {
 			return nil, fmt.Errorf("store: scan telegram update: %w", err)
 		}
 		update.CreatedAt = fromUnix(created)
@@ -406,6 +416,14 @@ func (s *Store) SetTelegramUpdateState(ctx context.Context, botID string, update
 func (s *Store) SetTelegramUpdatePayload(ctx context.Context, botID string, updateID int64, payload string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE telegram_updates SET payload=?, updated_at=? WHERE bot_id=? AND update_id=?`, payload, toUnix(time.Now()), botID, updateID)
 	return err
+}
+
+func (s *Store) StartTelegramReset(ctx context.Context, botID string, updateID int64, plan string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE telegram_updates SET state='running', reset_plan=?, updated_at=? WHERE bot_id=? AND update_id=?`, plan, toUnix(time.Now()), botID, updateID)
+	if err != nil {
+		return err
+	}
+	return affectedOne(res, "start telegram reset")
 }
 
 func (s *Store) DeleteTelegramUpdate(ctx context.Context, botID string, updateID int64) error {

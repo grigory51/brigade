@@ -36,8 +36,12 @@ type TelegramBot struct {
 	McpServerIds         []string               `protobuf:"bytes,10,rep,name=mcp_server_ids,json=mcpServerIds,proto3" json:"mcp_server_ids,omitempty"`
 	SupportsGuestQueries bool                   `protobuf:"varint,11,opt,name=supports_guest_queries,json=supportsGuestQueries,proto3" json:"supports_guest_queries,omitempty"`
 	HasTopicsEnabled     bool                   `protobuf:"varint,12,opt,name=has_topics_enabled,json=hasTopicsEnabled,proto3" json:"has_topics_enabled,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// threads: отдельная сессия на топик (по умолчанию); chat: одна на чат.
+	SessionMode string `protobuf:"bytes,13,opt,name=session_mode,json=sessionMode,proto3" json:"session_mode,omitempty"`
+	// archive (по умолчанию) | delete: действие /new в режиме chat.
+	NewSessionAction string `protobuf:"bytes,14,opt,name=new_session_action,json=newSessionAction,proto3" json:"new_session_action,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *TelegramBot) Reset() {
@@ -152,6 +156,20 @@ func (x *TelegramBot) GetHasTopicsEnabled() bool {
 		return x.HasTopicsEnabled
 	}
 	return false
+}
+
+func (x *TelegramBot) GetSessionMode() string {
+	if x != nil {
+		return x.SessionMode
+	}
+	return ""
+}
+
+func (x *TelegramBot) GetNewSessionAction() string {
+	if x != nil {
+		return x.NewSessionAction
+	}
+	return ""
 }
 
 type ListTelegramBotsResponse struct {
@@ -361,7 +379,7 @@ var File_brigade_v1_telegram_proto protoreflect.FileDescriptor
 const file_brigade_v1_telegram_proto_rawDesc = "" +
 	"\n" +
 	"\x19brigade/v1/telegram.proto\x12\n" +
-	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\x9c\x03\n" +
+	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\xed\x03\n" +
 	"\vTelegramBot\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12\x12\n" +
@@ -376,7 +394,9 @@ const file_brigade_v1_telegram_proto_rawDesc = "" +
 	"\x0emcp_server_ids\x18\n" +
 	" \x03(\tR\fmcpServerIds\x124\n" +
 	"\x16supports_guest_queries\x18\v \x01(\bR\x14supportsGuestQueries\x12,\n" +
-	"\x12has_topics_enabled\x18\f \x01(\bR\x10hasTopicsEnabled\"[\n" +
+	"\x12has_topics_enabled\x18\f \x01(\bR\x10hasTopicsEnabled\x12!\n" +
+	"\fsession_mode\x18\r \x01(\tR\vsessionMode\x12,\n" +
+	"\x12new_session_action\x18\x0e \x01(\tR\x10newSessionAction\"[\n" +
 	"\x18ListTelegramBotsResponse\x12+\n" +
 	"\x04bots\x18\x01 \x03(\v2\x17.brigade.v1.TelegramBotR\x04bots\x12\x12\n" +
 	"\x04mode\x18\x02 \x01(\tR\x04mode\"Y\n" +

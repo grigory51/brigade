@@ -72,6 +72,20 @@ export class TelegramBot extends Message<TelegramBot> {
    */
   hasTopicsEnabled = false;
 
+  /**
+   * threads: отдельная сессия на топик (по умолчанию); chat: одна на чат.
+   *
+   * @generated from field: string session_mode = 13;
+   */
+  sessionMode = "";
+
+  /**
+   * archive (по умолчанию) | delete: действие /new в режиме chat.
+   *
+   * @generated from field: string new_session_action = 14;
+   */
+  newSessionAction = "";
+
   constructor(data?: PartialMessage<TelegramBot>) {
     super();
     proto3.util.initPartial(data, this);
@@ -92,6 +106,8 @@ export class TelegramBot extends Message<TelegramBot> {
     { no: 10, name: "mcp_server_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 11, name: "supports_guest_queries", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 12, name: "has_topics_enabled", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 13, name: "session_mode", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 14, name: "new_session_action", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): TelegramBot {
@@ -110,6 +126,7 @@ export class TelegramBot extends Message<TelegramBot> {
     return proto3.util.equals(TelegramBot, a, b);
   }
 }
+
 /**
  * @generated from message brigade.v1.ListTelegramBotsResponse
  */
@@ -279,3 +296,4 @@ export class TelegramBindingLink extends Message<TelegramBindingLink> {
     return proto3.util.equals(TelegramBindingLink, a, b);
   }
 }
+

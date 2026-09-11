@@ -23,6 +23,25 @@ func TestTelegramStore(t *testing.T) {
 	if err != nil || got.Token != bot.Token || len(got.McpServers) != 2 {
 		t.Fatalf("GetTelegramBot: %+v, %v", got, err)
 	}
+	if got.SessionMode != TelegramSessionThreads || got.NewSessionAction != TelegramNewSessionArchive {
+		t.Fatalf("legacy defaults changed: %+v", got)
+	}
+	bot.SessionMode, bot.NewSessionAction = TelegramSessionChat, TelegramNewSessionDelete
+	if err := st.SaveTelegramBot(ctx, bot); err != nil {
+		t.Fatal(err)
+	}
+	got, err = st.GetTelegramBot(ctx, bot.ID)
+	if err != nil || got.SessionMode != TelegramSessionChat || got.NewSessionAction != TelegramNewSessionDelete {
+		t.Fatalf("mode not persisted: %+v, %v", got, err)
+	}
+	bot.SessionMode = "invalid"
+	if err := st.SaveTelegramBot(ctx, bot); err == nil {
+		t.Fatal("invalid session mode accepted")
+	}
+	bot.SessionMode, bot.NewSessionAction = TelegramSessionChat, "invalid"
+	if err := st.SaveTelegramBot(ctx, bot); err == nil {
+		t.Fatal("invalid reset action accepted")
+	}
 
 	inserted, err := st.InsertTelegramUpdate(ctx, bot.ID, 7, `{"update_id":7}`)
 	if err != nil || !inserted {
@@ -44,6 +63,13 @@ func TestTelegramStore(t *testing.T) {
 	}
 	if err := st.DeleteTelegramUpdate(ctx, bot.ID, 7); err != nil {
 		t.Fatalf("DeleteTelegramUpdate: %v", err)
+	}
+	if err := st.SetTelegramUpdateOffset(ctx, bot.ID, 8); err != nil {
+		t.Fatal(err)
+	}
+	inserted, err = st.InsertTelegramUpdate(ctx, bot.ID, 7, `{"update_id":7}`)
+	if err != nil || inserted {
+		t.Fatalf("completed update replayed after inbox cleanup: inserted=%v err=%v", inserted, err)
 	}
 
 	conversation := TelegramConversation{BotID: bot.ID, Scope: "chat", ChatID: -100, ThreadID: 9, SessionID: "session-1"}

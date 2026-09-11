@@ -47,6 +47,7 @@ func (s *TelegramService) SaveBot(ctx context.Context, req *connect.Request[v1.S
 	saved, err := s.telegram.Save(ctx, userID, store.TelegramBot{
 		ID: in.Id, Token: req.Msg.Token, AgentType: in.AgentType, AuthProfile: in.AuthProfile,
 		Image: in.Image, McpServers: in.McpServerIds,
+		SessionMode: store.TelegramSessionMode(in.SessionMode), NewSessionAction: store.TelegramNewSessionAction(in.NewSessionAction),
 	})
 	if err != nil {
 		code := connect.CodeInvalidArgument
@@ -88,5 +89,6 @@ func telegramBotToProto(bot store.TelegramBot) *v1.TelegramBot {
 		AgentType: bot.AgentType, AuthProfile: bot.AuthProfile, Image: bot.Image,
 		McpServerIds: bot.McpServers, SupportsGuestQueries: bot.SupportsGuestQueries,
 		HasTopicsEnabled: bot.HasTopicsEnabled,
+		SessionMode:      string(bot.SessionMode), NewSessionAction: string(bot.NewSessionAction),
 	}
 }

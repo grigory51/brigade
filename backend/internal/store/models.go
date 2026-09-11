@@ -87,6 +87,16 @@ type NotificationBackend struct {
 	Events string
 }
 
+type TelegramSessionMode string
+type TelegramNewSessionAction string
+
+const (
+	TelegramSessionThreads    TelegramSessionMode      = "threads"
+	TelegramSessionChat       TelegramSessionMode      = "chat"
+	TelegramNewSessionArchive TelegramNewSessionAction = "archive"
+	TelegramNewSessionDelete  TelegramNewSessionAction = "delete"
+)
+
 // TelegramBot — персональный бот пользователя и шаблон ACP-сессий, создаваемых из
 // Telegram. Token расшифровывается только внутри backend и никогда не возвращается в API.
 type TelegramBot struct {
@@ -107,6 +117,8 @@ type TelegramBot struct {
 	UpdateOffset          int64
 	SupportsGuestQueries  bool
 	HasTopicsEnabled      bool
+	SessionMode           TelegramSessionMode
+	NewSessionAction      TelegramNewSessionAction
 	CreatedAt             time.Time
 }
 
@@ -120,6 +132,7 @@ type TelegramUpdate struct {
 	State     string
 	Response  string
 	Error     string
+	ResetPlan string
 	CreatedAt time.Time
 }
 
