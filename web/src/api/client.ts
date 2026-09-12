@@ -19,6 +19,7 @@ import { ResponseProfileService } from "./gen/brigade/v1/response_profile_connec
 import { DesktopService } from "./gen/brigade/v1/desktop_connect";
 import { WorkspaceService } from "./gen/brigade/v1/workspace_connect";
 import { PluginService } from "./gen/brigade/v1/plugin_connect";
+import { BrowserService } from "./gen/brigade/v1/browser_connect";
 
 // refreshOnUnauthenticated — Connect-интерсептор тихого обновления access-токена.
 // Короткий access-токен (минуты) живёт в httpOnly-cookie; при его истечении вызов
@@ -65,6 +66,8 @@ export const transport = createConnectTransport({
   interceptors: [refreshOnUnauthenticated],
   fetch: (input, init) => fetch(input, { ...init, credentials: "include" }),
 });
+
+export const browserClient = createPromiseClient(BrowserService, transport);
 
 // refreshTransport — отдельный транспорт без интерсептора обновления: на нём работает
 // сам Refresh, чтобы вызов обновления не рекурсировал через тот же интерсептор.

@@ -265,6 +265,7 @@ func runServer(configPath string) {
 	}
 	mux.Handle(brigadev1connect.NewSessionServiceHandler(connectsvc.NewSessionService(registry, tickets, previewSvc, imagesSvc, buildVersion), interceptors))
 	mux.Handle(brigadev1connect.NewWorkspaceServiceHandler(connectsvc.NewWorkspaceService(registry), interceptors))
+	mux.Handle(brigadev1connect.NewBrowserServiceHandler(connectsvc.NewBrowserService(registry), interceptors))
 	mux.Handle(brigadev1connect.NewAgentServiceHandler(connectsvc.NewAgentService(st, codexLoginSvc), interceptors))
 	// AcpService — управляющие вызовы ACP-чата (история/статус/workflow/отмена/опции/
 	// permission-ответ). JWT-авторизация, как у прочих пользовательских сервисов.

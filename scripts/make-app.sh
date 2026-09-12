@@ -143,7 +143,7 @@ npm_cached() {
 # Манифест и скрипт кладём в кеш из репо: правка в репозитории переустановит зависимости.
 echo "make-app: ставлю MCP-сервер brigade (render_ui)…"
 mkdir -p "$CACHE/brigade-mcp"
-cp "$REPO/packaging/docker/agent/mcp/brigade-tools.mjs" \
+cp "$REPO/packaging/docker/agent/mcp/"*.mjs \
    "$REPO/packaging/docker/agent/mcp/package.json" "$CACHE/brigade-mcp/"
 npm_cached brigade-mcp "$RES/brigade-mcp"
 

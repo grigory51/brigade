@@ -875,7 +875,7 @@ func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token
 	rc := acpremote.New(addr, "", r.daemonTokenFn(sess.ID))
 	r.setACPHooks(sess, rc)
 	r.loadAgentSSHKey(ctx, sess.UserID, rc.SetSSHKey)
-	systemPrompt := instructionPrompt(sess.InstructionProfile, sess.ResponseInstructions)
+	systemPrompt := appendInstructions(instructionPrompt(sess.InstructionProfile, sess.ResponseInstructions), browserInstructions)
 	servers := r.mcpServers(ctx, sess)
 	var experienceMCP *acpsdk.McpServer
 	if sess.ExperienceID != "" {
@@ -1023,7 +1023,7 @@ func (r *Registry) acpPluginDirs(sess store.Session) []string {
 // сам поверх.
 func (r *Registry) acpLocalOptions(ctx context.Context, sess store.Session, token string) (acp.Options, error) {
 	servers := r.mcpServers(ctx, sess)
-	systemPrompt := instructionPrompt(sess.InstructionProfile, sess.ResponseInstructions)
+	systemPrompt := appendInstructions(instructionPrompt(sess.InstructionProfile, sess.ResponseInstructions), browserInstructions)
 	if sess.ExperienceID != "" {
 		installed, manifest, err := r.experience(ctx, sess)
 		if err != nil {
@@ -1037,13 +1037,14 @@ func (r *Registry) acpLocalOptions(ctx context.Context, sess store.Session, toke
 		systemPrompt = appendInstructions(systemPrompt, manifest.ExperienceInstructions())
 	}
 	return acp.Options{
-		Cwd:            sess.Cwd,
-		OAuthToken:     token,
-		AdapterCommand: agent.Get(sess.AgentType).CommandFor(store.SessionKindACP),
-		ExtraEnv:       r.agentEnvWithInstructions(ctx, sess, token, systemPrompt),
-		McpServers:     servers,
-		PluginDirs:     r.acpPluginDirs(sess),
-		SystemPrompt:   systemPrompt,
+		BrigadeSessionID: sess.ID,
+		Cwd:              sess.Cwd,
+		OAuthToken:       token,
+		AdapterCommand:   agent.Get(sess.AgentType).CommandFor(store.SessionKindACP),
+		ExtraEnv:         r.agentEnvWithInstructions(ctx, sess, token, systemPrompt),
+		McpServers:       servers,
+		PluginDirs:       r.acpPluginDirs(sess),
+		SystemPrompt:     systemPrompt,
 	}, nil
 }
 
@@ -1709,6 +1710,9 @@ func (r *Registry) PromptAutoApprove(ctx context.Context, sessionID, userID, tex
 			parts = append(parts, strings.TrimSpace(message.Content))
 		} else if message.Role == "tool_call" {
 			images = append(images, acp.GeneratedImageFiles(message.Result)...)
+			if strings.Contains(message.ToolName, "browser_handoff") && strings.Contains(message.Result, "browserRequestId") {
+				parts = append(parts, "Нужно ваше действие на сайте. Откройте эту сессию в Brigade, нажмите «Открыть браузер» в карточке и пройдите проверку или войдите. Затем нажмите «Продолжить». Не присылайте пароль или код в Telegram.")
+			}
 		}
 	}
 	return PromptResult{Messages: parts, Images: images}, nil

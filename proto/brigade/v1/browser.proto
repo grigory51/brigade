@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package brigade.v1;
+
+// Manual control of the session browser. All calls require session ownership.
+service BrowserService {
+  rpc Interact(BrowserRequest) returns (BrowserResponse) {}
+}
+
+enum BrowserAction {
+  BROWSER_ACTION_UNSPECIFIED = 0;
+  BROWSER_ACTION_STATUS = 1;
+  BROWSER_ACTION_FRAME = 2;
+  BROWSER_ACTION_INPUT = 3;
+  BROWSER_ACTION_RESUME = 4;
+  BROWSER_ACTION_CANCEL = 5;
+}
+
+message BrowserRequest {
+  string session_id = 1;
+  string request_id = 2;
+  BrowserAction action = 3;
+  // Mouse: move/down/up/wheel; keyboard: press/text.
+  string input = 4;
+  double x = 5;
+  double y = 6;
+  string text = 7;
+}
+
+message BrowserResponse {
+  string request_id = 1;
+  // human | agent | cancelled | expired
+  string state = 2;
+  string url = 3;
+  string title = 4;
+  bytes image = 5;
+  uint32 width = 6;
+  uint32 height = 7;
+}

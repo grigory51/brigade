@@ -6,6 +6,7 @@
 
 # Зависимости и сборки web.
 web/node_modules/
+packaging/docker/agent/mcp/node_modules/
 web/dist/
 site/node_modules/
 site/dist/

@@ -134,10 +134,11 @@ func selectedPermission(optionID acpsdk.PermissionOptionId) acpsdk.RequestPermis
 }
 
 var trustedBrigadeTools = map[string]bool{
-	"save_note":    true,
-	"render_ui":    true,
-	"show_choice":  true,
-	"publish_file": true,
+	"save_note":       true,
+	"render_ui":       true,
+	"show_choice":     true,
+	"publish_file":    true,
+	"browser_handoff": true,
 }
 
 func trustedBrigadeFrontendTool(call acpsdk.ToolCallUpdate) bool {

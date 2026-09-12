@@ -33,6 +33,9 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// AgentDaemonServiceBrowserInteractProcedure is the fully-qualified name of the
+	// AgentDaemonService's BrowserInteract RPC.
+	AgentDaemonServiceBrowserInteractProcedure = "/brigade.v1.AgentDaemonService/BrowserInteract"
 	// AgentDaemonServiceConfigureProcedure is the fully-qualified name of the AgentDaemonService's
 	// Configure RPC.
 	AgentDaemonServiceConfigureProcedure = "/brigade.v1.AgentDaemonService/Configure"
@@ -91,6 +94,7 @@ const (
 
 // AgentDaemonServiceClient is a client for the brigade.v1.AgentDaemonService service.
 type AgentDaemonServiceClient interface {
+	BrowserInteract(context.Context, *connect.Request[v1.BrowserRequest]) (*connect.Response[v1.BrowserResponse], error)
 	// Configure (пере)поднимает адаптер: секреты в env адаптера, resume_session_id непуст →
 	// session/load. Идемпотентна: на живой адаптер (reconnect) — no-op, адаптер не рестартуется.
 	Configure(context.Context, *connect.Request[v1.DaemonConfigureRequest]) (*connect.Response[v1.DaemonConfigureResponse], error)
@@ -150,6 +154,12 @@ func NewAgentDaemonServiceClient(httpClient connect.HTTPClient, baseURL string, 
 	baseURL = strings.TrimRight(baseURL, "/")
 	agentDaemonServiceMethods := v1.File_brigade_v1_agent_daemon_proto.Services().ByName("AgentDaemonService").Methods()
 	return &agentDaemonServiceClient{
+		browserInteract: connect.NewClient[v1.BrowserRequest, v1.BrowserResponse](
+			httpClient,
+			baseURL+AgentDaemonServiceBrowserInteractProcedure,
+			connect.WithSchema(agentDaemonServiceMethods.ByName("BrowserInteract")),
+			connect.WithClientOptions(opts...),
+		),
 		configure: connect.NewClient[v1.DaemonConfigureRequest, v1.DaemonConfigureResponse](
 			httpClient,
 			baseURL+AgentDaemonServiceConfigureProcedure,
@@ -263,6 +273,7 @@ func NewAgentDaemonServiceClient(httpClient connect.HTTPClient, baseURL string, 
 
 // agentDaemonServiceClient implements AgentDaemonServiceClient.
 type agentDaemonServiceClient struct {
+	browserInteract   *connect.Client[v1.BrowserRequest, v1.BrowserResponse]
 	configure         *connect.Client[v1.DaemonConfigureRequest, v1.DaemonConfigureResponse]
 	streamEvents      *connect.Client[v1.DaemonStreamEventsRequest, v1.DaemonEvent]
 	prompt            *connect.Client[v1.DaemonPromptRequest, v1.DaemonPromptResponse]
@@ -281,6 +292,11 @@ type agentDaemonServiceClient struct {
 	terminalInput     *connect.Client[v1.DaemonTerminalInputRequest, v1.Empty]
 	terminalResize    *connect.Client[v1.DaemonTerminalResizeRequest, v1.Empty]
 	pluginMCP         *connect.Client[v1.DaemonPluginMCPRequest, v1.DaemonPayloadResponse]
+}
+
+// BrowserInteract calls brigade.v1.AgentDaemonService.BrowserInteract.
+func (c *agentDaemonServiceClient) BrowserInteract(ctx context.Context, req *connect.Request[v1.BrowserRequest]) (*connect.Response[v1.BrowserResponse], error) {
+	return c.browserInteract.CallUnary(ctx, req)
 }
 
 // Configure calls brigade.v1.AgentDaemonService.Configure.
@@ -375,6 +391,7 @@ func (c *agentDaemonServiceClient) PluginMCP(ctx context.Context, req *connect.R
 
 // AgentDaemonServiceHandler is an implementation of the brigade.v1.AgentDaemonService service.
 type AgentDaemonServiceHandler interface {
+	BrowserInteract(context.Context, *connect.Request[v1.BrowserRequest]) (*connect.Response[v1.BrowserResponse], error)
 	// Configure (пере)поднимает адаптер: секреты в env адаптера, resume_session_id непуст →
 	// session/load. Идемпотентна: на живой адаптер (reconnect) — no-op, адаптер не рестартуется.
 	Configure(context.Context, *connect.Request[v1.DaemonConfigureRequest]) (*connect.Response[v1.DaemonConfigureResponse], error)
@@ -430,6 +447,12 @@ type AgentDaemonServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewAgentDaemonServiceHandler(svc AgentDaemonServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	agentDaemonServiceMethods := v1.File_brigade_v1_agent_daemon_proto.Services().ByName("AgentDaemonService").Methods()
+	agentDaemonServiceBrowserInteractHandler := connect.NewUnaryHandler(
+		AgentDaemonServiceBrowserInteractProcedure,
+		svc.BrowserInteract,
+		connect.WithSchema(agentDaemonServiceMethods.ByName("BrowserInteract")),
+		connect.WithHandlerOptions(opts...),
+	)
 	agentDaemonServiceConfigureHandler := connect.NewUnaryHandler(
 		AgentDaemonServiceConfigureProcedure,
 		svc.Configure,
@@ -540,6 +563,8 @@ func NewAgentDaemonServiceHandler(svc AgentDaemonServiceHandler, opts ...connect
 	)
 	return "/brigade.v1.AgentDaemonService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case AgentDaemonServiceBrowserInteractProcedure:
+			agentDaemonServiceBrowserInteractHandler.ServeHTTP(w, r)
 		case AgentDaemonServiceConfigureProcedure:
 			agentDaemonServiceConfigureHandler.ServeHTTP(w, r)
 		case AgentDaemonServiceStreamEventsProcedure:
@@ -584,6 +609,10 @@ func NewAgentDaemonServiceHandler(svc AgentDaemonServiceHandler, opts ...connect
 
 // UnimplementedAgentDaemonServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedAgentDaemonServiceHandler struct{}
+
+func (UnimplementedAgentDaemonServiceHandler) BrowserInteract(context.Context, *connect.Request[v1.BrowserRequest]) (*connect.Response[v1.BrowserResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AgentDaemonService.BrowserInteract is not implemented"))
+}
 
 func (UnimplementedAgentDaemonServiceHandler) Configure(context.Context, *connect.Request[v1.DaemonConfigureRequest]) (*connect.Response[v1.DaemonConfigureResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.AgentDaemonService.Configure is not implemented"))

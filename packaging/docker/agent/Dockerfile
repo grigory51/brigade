@@ -95,10 +95,19 @@ RUN npm install -g --prefix /opt/brigade-runtime/claude-cli @anthropic-ai/claude
 # игнорирует кастомный _meta, но пробрасывает ACP mcpServers в Claude Agent SDK; SDK
 # стартует этот сервер как stdio-subprocess. Зависимости ставятся рядом со скриптом, чтобы
 # резолв @modelcontextprotocol/sdk не зависел от cwd сессии.
-COPY packaging/docker/agent/mcp/ /opt/brigade-runtime/brigade-mcp/
+COPY packaging/docker/agent/mcp/package*.json /opt/brigade-runtime/brigade-mcp/
 RUN cd /opt/brigade-runtime/brigade-mcp \
-    && npm install --omit=dev \
+    && npm ci --omit=dev \
     && npm cache clean --force
+
+# Chromium is installed once in the base image, not downloaded at session startup.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/brigade-browser
+RUN cd /opt/brigade-runtime/brigade-mcp \
+    && npx playwright install --with-deps --no-shell chromium \
+    && chmod -R a+rX /opt/brigade-browser \
+    && rm -rf /var/lib/apt/lists/*
+COPY packaging/docker/agent/mcp/*.mjs /opt/brigade-runtime/brigade-mcp/
+RUN cd /opt/brigade-runtime/brigade-mcp && BRIGADE_BROWSER_SMOKE=1 node --test browser-live.test.mjs
 
 # daemon — бинарь brigade (`brigade acp-agent`, pid1 контейнеров сессий). Ему brigade
 # передаёт секреты по RPC, поэтому он ВСЕГДА приезжает слоем, а не берётся из образа

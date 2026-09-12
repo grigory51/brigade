@@ -171,8 +171,9 @@ func (d *Daemon) configure(ctx context.Context, req *v1ConfigureRequest) (string
 	}
 
 	client, err := acp.New(ctx, acp.Options{
-		Cwd:        req.Cwd,
-		OAuthToken: req.OauthToken,
+		BrigadeSessionID: d.sessionID,
+		Cwd:              req.Cwd,
+		OAuthToken:       req.OauthToken,
 		// sshEnv добавляет SSH_AUTH_SOCK: агент подписывает git-операции ключом из памяти
 		// демона, не имея самого ключа.
 		ExtraEnv:          append(append([]string{}, req.ExtraEnv...), d.sshEnvLocked()...),

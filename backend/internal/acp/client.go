@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/grigory51/brigade/backend/internal/agui"
+	"github.com/grigory51/brigade/backend/internal/browser"
 )
 
 // gracefulCloseTimeout — суммарный бюджет на штатное завершение adapter'а после запроса
@@ -39,6 +40,7 @@ type PermissionResolver func(ctx context.Context, req agui.PermissionRequest) (o
 
 // Options — параметры запуска ACP-клиента для одной сессии.
 type Options struct {
+	BrigadeSessionID string
 	// Cwd — рабочая директория агента (абсолютный путь). В docker-режиме это путь
 	// внутри контейнера; спавн самого процесса задаётся вызывающей стороной.
 	Cwd string
@@ -989,6 +991,7 @@ func (c *Client) Close() error {
 	}
 
 	c.closeOnce.Do(func() {
+		defer browser.Close(c.opts.BrigadeSessionID)
 		// 1. Просим агента штатно закрыть сессию, если он умеет session/close. Короткий
 		//    таймаут: это вежливая попытка, неуспех не критичен (дальше закрываем stdin).
 		if c.agentCaps.SessionCapabilities.Close != nil && c.sessionID != "" {

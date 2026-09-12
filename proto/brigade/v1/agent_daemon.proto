@@ -3,6 +3,7 @@ syntax = "proto3";
 package brigade.v1;
 
 import "brigade/v1/auth.proto";
+import "brigade/v1/browser.proto";
 
 // AgentDaemonService — ВНУТРЕННИЙ контракт brigade ↔ демон `brigade acp-agent`.
 //
@@ -22,6 +23,7 @@ import "brigade/v1/auth.proto";
 // preview-env) НЕ в окружении контейнера, а приходят в Configure — демон кладёт их только
 // в env дочернего процесса адаптера, поэтому `/ws/shell` (docker exec) их не видит.
 service AgentDaemonService {
+  rpc BrowserInteract(BrowserRequest) returns (BrowserResponse) {}
   // Configure (пере)поднимает адаптер: секреты в env адаптера, resume_session_id непуст →
   // session/load. Идемпотентна: на живой адаптер (reconnect) — no-op, адаптер не рестартуется.
   rpc Configure(DaemonConfigureRequest) returns (DaemonConfigureResponse) {}

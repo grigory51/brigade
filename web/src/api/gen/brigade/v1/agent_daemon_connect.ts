@@ -3,8 +3,9 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { DaemonConfigureRequest, DaemonConfigureResponse, DaemonEvent, DaemonOpenTerminalRequest, DaemonPayloadResponse, DaemonPluginMCPRequest, DaemonPromptRequest, DaemonPromptResponse, DaemonResolvePermissionRequest, DaemonSetConfigOptionRequest, DaemonSetSSHKeyRequest, DaemonStatusResponse, DaemonStreamEventsRequest, DaemonSummarizeRequest, DaemonSummarizeResponse, DaemonTerminalInputRequest, DaemonTerminalOutput, DaemonTerminalResizeRequest, DaemonWriteFileRequest } from "./agent_daemon_pb.js";
+import { BrowserRequest, BrowserResponse } from "./browser_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
+import { DaemonConfigureRequest, DaemonConfigureResponse, DaemonEvent, DaemonOpenTerminalRequest, DaemonPayloadResponse, DaemonPluginMCPRequest, DaemonPromptRequest, DaemonPromptResponse, DaemonResolvePermissionRequest, DaemonSetConfigOptionRequest, DaemonSetSSHKeyRequest, DaemonStatusResponse, DaemonStreamEventsRequest, DaemonSummarizeRequest, DaemonSummarizeResponse, DaemonTerminalInputRequest, DaemonTerminalOutput, DaemonTerminalResizeRequest, DaemonWriteFileRequest } from "./agent_daemon_pb.js";
 import { Empty } from "./auth_pb.js";
 
 /**
@@ -31,6 +32,15 @@ import { Empty } from "./auth_pb.js";
 export const AgentDaemonService = {
   typeName: "brigade.v1.AgentDaemonService",
   methods: {
+    /**
+     * @generated from rpc brigade.v1.AgentDaemonService.BrowserInteract
+     */
+    browserInteract: {
+      name: "BrowserInteract",
+      I: BrowserRequest,
+      O: BrowserResponse,
+      kind: MethodKind.Unary,
+    },
     /**
      * Configure (пере)поднимает адаптер: секреты в env адаптера, resume_session_id непуст →
      * session/load. Идемпотентна: на живой адаптер (reconnect) — no-op, адаптер не рестартуется.

@@ -12,6 +12,7 @@ export const SAVE_NOTE_TOOL_NAME = "save_note";
 
 // PUBLISH_FILE_TOOL_NAME — карточка скачивания файла через A2UI cardsCatalog.
 export const PUBLISH_FILE_TOOL_NAME = "publish_file";
+export const BROWSER_HANDOFF_TOOL_NAME = "browser_handoff";
 
 // bareToolName снимает MCP-префикс с имени инструмента. Claude использует
 // `mcp__<server>__<tool>`, Codex ACP — `mcp.<server>.<tool>`.

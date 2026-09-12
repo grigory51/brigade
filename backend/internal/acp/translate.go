@@ -218,7 +218,7 @@ func (c *Client) translateUpdate(u acpsdk.SessionUpdate) []agui.Event {
 
 func keepToolResult(name string) bool {
 	name = strings.ToLower(name)
-	return name == "terminal" || name == "read file" || strings.Contains(name, "publish_file")
+	return name == "terminal" || name == "read file" || strings.Contains(name, "publish_file") || strings.Contains(name, "browser_handoff")
 }
 
 // emitUserMessage транслирует реплику пользователя (ACP user_message_chunk) в

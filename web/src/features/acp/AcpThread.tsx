@@ -66,6 +66,8 @@ import { DiffCard } from "./tools/DiffCard";
 import { TerminalCard } from "./tools/TerminalCard";
 import { FileCard } from "./tools/FileCard";
 import { PlanPanel, type PlanEntry } from "./PlanPanel";
+import { BrowserHandoffCard } from "./browser/BrowserHandoffCard/BrowserHandoffCard";
+import { BROWSER_HANDOFF_TOOL_NAME } from "./frontendTools";
 
 // AcpThread — лента ACP-чата на готовом компоненте Thread из assistant-ui registry
 // (src/components/assistant-ui/thread.tsx). Здесь — только подключение наших
@@ -124,6 +126,7 @@ export function AcpThread({
         name === SAVE_NOTE_TOOL_NAME ||
         name === RENDER_UI_TOOL_NAME ||
         name === PUBLISH_FILE_TOOL_NAME ||
+        name === BROWSER_HANDOFF_TOOL_NAME ||
         FRONTEND_TOOL_NAMES.has(name) ||
         generatedImageFiles(part.result).length > 0 ||
         parseDiffResult(part.result) !== null ||
@@ -265,6 +268,11 @@ const ToolFallback: ToolCallMessagePartComponent = (props) => {
 
   if (toolName === PUBLISH_FILE_TOOL_NAME) {
     return <PublishFileCard {...toolProps} />;
+  }
+
+  if (toolName === BROWSER_HANDOFF_TOOL_NAME) {
+    const reason = (toolProps.args as { reason?: unknown } | undefined)?.reason;
+    return <BrowserHandoffCard sessionId={sessionId} result={toolProps.result} reason={typeof reason === "string" ? reason : undefined} />;
   }
 
   // A2UI-поверхность карточки (бэкенд синтезирует её из ACP-событий, surfaceId =

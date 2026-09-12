@@ -44,6 +44,11 @@ jobs:
           npm test
           npm run build
         working-directory: web
+      - name: browser tools
+        run: |
+          npm ci
+          node --test browser-*.test.mjs
+        working-directory: packaging/docker/agent/mcp
 
   verify:
     if: startsWith(github.ref, 'refs/tags/v')

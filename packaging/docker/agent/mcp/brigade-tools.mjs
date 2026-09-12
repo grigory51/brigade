@@ -12,6 +12,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
+import { browserTool } from "./browser-client.mjs";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -58,6 +59,20 @@ const RENDER_UI_DESCRIPTION = [
 ].join("\n");
 
 const TOOLS = [
+  {
+    name: "browser",
+    description: "Браузер сессии с JavaScript и cookies. Если curl/HTTP упирается в капчу или вход, открой исходный URL здесь через тот же proxy. Действия: open(url,proxy?), read, click(selector), fill(selector,text), press(key), close. После капчи/логина продолжай в этой же вкладке. Для ручного действия используй browser_handoff. Не запрашивай пароли/одноразовые коды в чате и не обходи проверки автоматически.",
+    inputSchema: { type: "object", properties: {
+      action: { type: "string", enum: ["open", "read", "click", "fill", "press", "close"] },
+      url: { type: "string" }, proxy: { type: "string", description: "HTTP(S) proxy URL without credentials; set on first open and reuse it." },
+      selector: { type: "string" }, text: { type: "string" }, key: { type: "string" },
+    }, required: ["action"] },
+  },
+  {
+    name: "browser_handoff",
+    description: "Передать открытую browser-вкладку пользователю для капчи, входа или другого ручного действия. Показывает карточку в чате. После вызова ЗАВЕРШИ ответ, не полли браузер: пользователь вернётся сообщением. Пароли и коды вводятся только в браузере, не в чате. После подтверждения используй browser/read — вкладка и cookies сохранены.",
+    inputSchema: { type: "object", properties: { reason: { type: "string", description: "Кратко объясни, что пользователь должен сделать на сайте." } }, required: ["reason"] },
+  },
   {
     name: "render_ui",
     description: RENDER_UI_DESCRIPTION,
@@ -190,6 +205,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
 // UI-вызовы возвращают подсказку: их результат рисует клиент. Для save_note сохранение целиком
 // на стороне пользователя; publish_file отдельно формирует download-ссылку выше.
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  if (["browser", "browser_handoff"].includes(request.params.name)) {
+    try {
+      const args = request.params.arguments?.arguments ?? request.params.arguments ?? {};
+      const result = await browserTool(args, request.params.name === "browser_handoff");
+      return { content: [{ type: "text", text: JSON.stringify(result) }] };
+    } catch (error) {
+      return { isError: true, content: [{ type: "text", text: error.message }] };
+    }
+  }
   if (request.params?.name === "publish_file") {
     // Codex deferred MCP оборачивает аргументы исходного инструмента в `arguments`.
     // Алиасы принимаем для уже установленных версий скилла, которые называли поле file.

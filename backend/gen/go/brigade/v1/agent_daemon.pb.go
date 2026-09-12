@@ -1194,7 +1194,7 @@ var File_brigade_v1_agent_daemon_proto protoreflect.FileDescriptor
 const file_brigade_v1_agent_daemon_proto_rawDesc = "" +
 	"\n" +
 	"\x1dbrigade/v1/agent_daemon.proto\x12\n" +
-	"brigade.v1\x1a\x15brigade/v1/auth.proto\"9\n" +
+	"brigade.v1\x1a\x15brigade/v1/auth.proto\x1a\x18brigade/v1/browser.proto\"9\n" +
 	"\x16DaemonSetSSHKeyRequest\x12\x1f\n" +
 	"\vprivate_key\x18\x01 \x01(\tR\n" +
 	"privateKey\"\xa3\x01\n" +
@@ -1282,8 +1282,9 @@ const file_brigade_v1_agent_daemon_proto_rawDesc = "" +
 	"\x16DaemonSummarizeRequest\x12\x16\n" +
 	"\x06prompt\x18\x01 \x01(\tR\x06prompt\"-\n" +
 	"\x17DaemonSummarizeResponse\x12\x12\n" +
-	"\x04text\x18\x01 \x01(\tR\x04text2\x82\v\n" +
-	"\x12AgentDaemonService\x12V\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text2\xd0\v\n" +
+	"\x12AgentDaemonService\x12L\n" +
+	"\x0fBrowserInteract\x12\x1a.brigade.v1.BrowserRequest\x1a\x1b.brigade.v1.BrowserResponse\"\x00\x12V\n" +
 	"\tConfigure\x12\".brigade.v1.DaemonConfigureRequest\x1a#.brigade.v1.DaemonConfigureResponse\"\x00\x12R\n" +
 	"\fStreamEvents\x12%.brigade.v1.DaemonStreamEventsRequest\x1a\x17.brigade.v1.DaemonEvent\"\x000\x01\x12M\n" +
 	"\x06Prompt\x12\x1f.brigade.v1.DaemonPromptRequest\x1a .brigade.v1.DaemonPromptResponse\"\x00\x120\n" +
@@ -1339,47 +1340,51 @@ var file_brigade_v1_agent_daemon_proto_goTypes = []any{
 	(*DaemonResolvePermissionRequest)(nil), // 16: brigade.v1.DaemonResolvePermissionRequest
 	(*DaemonSummarizeRequest)(nil),         // 17: brigade.v1.DaemonSummarizeRequest
 	(*DaemonSummarizeResponse)(nil),        // 18: brigade.v1.DaemonSummarizeResponse
-	(*Empty)(nil),                          // 19: brigade.v1.Empty
+	(*BrowserRequest)(nil),                 // 19: brigade.v1.BrowserRequest
+	(*Empty)(nil),                          // 20: brigade.v1.Empty
+	(*BrowserResponse)(nil),                // 21: brigade.v1.BrowserResponse
 }
 var file_brigade_v1_agent_daemon_proto_depIdxs = []int32{
-	6,  // 0: brigade.v1.AgentDaemonService.Configure:input_type -> brigade.v1.DaemonConfigureRequest
-	9,  // 1: brigade.v1.AgentDaemonService.StreamEvents:input_type -> brigade.v1.DaemonStreamEventsRequest
-	11, // 2: brigade.v1.AgentDaemonService.Prompt:input_type -> brigade.v1.DaemonPromptRequest
-	19, // 3: brigade.v1.AgentDaemonService.Cancel:input_type -> brigade.v1.Empty
-	19, // 4: brigade.v1.AgentDaemonService.FinishStreams:input_type -> brigade.v1.Empty
-	19, // 5: brigade.v1.AgentDaemonService.Status:input_type -> brigade.v1.Empty
-	19, // 6: brigade.v1.AgentDaemonService.GetMessages:input_type -> brigade.v1.Empty
-	19, // 7: brigade.v1.AgentDaemonService.GetCommands:input_type -> brigade.v1.Empty
-	19, // 8: brigade.v1.AgentDaemonService.GetConfigOptions:input_type -> brigade.v1.Empty
-	15, // 9: brigade.v1.AgentDaemonService.SetConfigOption:input_type -> brigade.v1.DaemonSetConfigOptionRequest
-	16, // 10: brigade.v1.AgentDaemonService.ResolvePermission:input_type -> brigade.v1.DaemonResolvePermissionRequest
-	17, // 11: brigade.v1.AgentDaemonService.Summarize:input_type -> brigade.v1.DaemonSummarizeRequest
-	5,  // 12: brigade.v1.AgentDaemonService.WriteFile:input_type -> brigade.v1.DaemonWriteFileRequest
-	0,  // 13: brigade.v1.AgentDaemonService.SetSSHKey:input_type -> brigade.v1.DaemonSetSSHKeyRequest
-	1,  // 14: brigade.v1.AgentDaemonService.OpenTerminal:input_type -> brigade.v1.DaemonOpenTerminalRequest
-	3,  // 15: brigade.v1.AgentDaemonService.TerminalInput:input_type -> brigade.v1.DaemonTerminalInputRequest
-	4,  // 16: brigade.v1.AgentDaemonService.TerminalResize:input_type -> brigade.v1.DaemonTerminalResizeRequest
-	7,  // 17: brigade.v1.AgentDaemonService.PluginMCP:input_type -> brigade.v1.DaemonPluginMCPRequest
-	8,  // 18: brigade.v1.AgentDaemonService.Configure:output_type -> brigade.v1.DaemonConfigureResponse
-	10, // 19: brigade.v1.AgentDaemonService.StreamEvents:output_type -> brigade.v1.DaemonEvent
-	12, // 20: brigade.v1.AgentDaemonService.Prompt:output_type -> brigade.v1.DaemonPromptResponse
-	19, // 21: brigade.v1.AgentDaemonService.Cancel:output_type -> brigade.v1.Empty
-	19, // 22: brigade.v1.AgentDaemonService.FinishStreams:output_type -> brigade.v1.Empty
-	13, // 23: brigade.v1.AgentDaemonService.Status:output_type -> brigade.v1.DaemonStatusResponse
-	14, // 24: brigade.v1.AgentDaemonService.GetMessages:output_type -> brigade.v1.DaemonPayloadResponse
-	14, // 25: brigade.v1.AgentDaemonService.GetCommands:output_type -> brigade.v1.DaemonPayloadResponse
-	14, // 26: brigade.v1.AgentDaemonService.GetConfigOptions:output_type -> brigade.v1.DaemonPayloadResponse
-	14, // 27: brigade.v1.AgentDaemonService.SetConfigOption:output_type -> brigade.v1.DaemonPayloadResponse
-	19, // 28: brigade.v1.AgentDaemonService.ResolvePermission:output_type -> brigade.v1.Empty
-	18, // 29: brigade.v1.AgentDaemonService.Summarize:output_type -> brigade.v1.DaemonSummarizeResponse
-	19, // 30: brigade.v1.AgentDaemonService.WriteFile:output_type -> brigade.v1.Empty
-	19, // 31: brigade.v1.AgentDaemonService.SetSSHKey:output_type -> brigade.v1.Empty
-	2,  // 32: brigade.v1.AgentDaemonService.OpenTerminal:output_type -> brigade.v1.DaemonTerminalOutput
-	19, // 33: brigade.v1.AgentDaemonService.TerminalInput:output_type -> brigade.v1.Empty
-	19, // 34: brigade.v1.AgentDaemonService.TerminalResize:output_type -> brigade.v1.Empty
-	14, // 35: brigade.v1.AgentDaemonService.PluginMCP:output_type -> brigade.v1.DaemonPayloadResponse
-	18, // [18:36] is the sub-list for method output_type
-	0,  // [0:18] is the sub-list for method input_type
+	19, // 0: brigade.v1.AgentDaemonService.BrowserInteract:input_type -> brigade.v1.BrowserRequest
+	6,  // 1: brigade.v1.AgentDaemonService.Configure:input_type -> brigade.v1.DaemonConfigureRequest
+	9,  // 2: brigade.v1.AgentDaemonService.StreamEvents:input_type -> brigade.v1.DaemonStreamEventsRequest
+	11, // 3: brigade.v1.AgentDaemonService.Prompt:input_type -> brigade.v1.DaemonPromptRequest
+	20, // 4: brigade.v1.AgentDaemonService.Cancel:input_type -> brigade.v1.Empty
+	20, // 5: brigade.v1.AgentDaemonService.FinishStreams:input_type -> brigade.v1.Empty
+	20, // 6: brigade.v1.AgentDaemonService.Status:input_type -> brigade.v1.Empty
+	20, // 7: brigade.v1.AgentDaemonService.GetMessages:input_type -> brigade.v1.Empty
+	20, // 8: brigade.v1.AgentDaemonService.GetCommands:input_type -> brigade.v1.Empty
+	20, // 9: brigade.v1.AgentDaemonService.GetConfigOptions:input_type -> brigade.v1.Empty
+	15, // 10: brigade.v1.AgentDaemonService.SetConfigOption:input_type -> brigade.v1.DaemonSetConfigOptionRequest
+	16, // 11: brigade.v1.AgentDaemonService.ResolvePermission:input_type -> brigade.v1.DaemonResolvePermissionRequest
+	17, // 12: brigade.v1.AgentDaemonService.Summarize:input_type -> brigade.v1.DaemonSummarizeRequest
+	5,  // 13: brigade.v1.AgentDaemonService.WriteFile:input_type -> brigade.v1.DaemonWriteFileRequest
+	0,  // 14: brigade.v1.AgentDaemonService.SetSSHKey:input_type -> brigade.v1.DaemonSetSSHKeyRequest
+	1,  // 15: brigade.v1.AgentDaemonService.OpenTerminal:input_type -> brigade.v1.DaemonOpenTerminalRequest
+	3,  // 16: brigade.v1.AgentDaemonService.TerminalInput:input_type -> brigade.v1.DaemonTerminalInputRequest
+	4,  // 17: brigade.v1.AgentDaemonService.TerminalResize:input_type -> brigade.v1.DaemonTerminalResizeRequest
+	7,  // 18: brigade.v1.AgentDaemonService.PluginMCP:input_type -> brigade.v1.DaemonPluginMCPRequest
+	21, // 19: brigade.v1.AgentDaemonService.BrowserInteract:output_type -> brigade.v1.BrowserResponse
+	8,  // 20: brigade.v1.AgentDaemonService.Configure:output_type -> brigade.v1.DaemonConfigureResponse
+	10, // 21: brigade.v1.AgentDaemonService.StreamEvents:output_type -> brigade.v1.DaemonEvent
+	12, // 22: brigade.v1.AgentDaemonService.Prompt:output_type -> brigade.v1.DaemonPromptResponse
+	20, // 23: brigade.v1.AgentDaemonService.Cancel:output_type -> brigade.v1.Empty
+	20, // 24: brigade.v1.AgentDaemonService.FinishStreams:output_type -> brigade.v1.Empty
+	13, // 25: brigade.v1.AgentDaemonService.Status:output_type -> brigade.v1.DaemonStatusResponse
+	14, // 26: brigade.v1.AgentDaemonService.GetMessages:output_type -> brigade.v1.DaemonPayloadResponse
+	14, // 27: brigade.v1.AgentDaemonService.GetCommands:output_type -> brigade.v1.DaemonPayloadResponse
+	14, // 28: brigade.v1.AgentDaemonService.GetConfigOptions:output_type -> brigade.v1.DaemonPayloadResponse
+	14, // 29: brigade.v1.AgentDaemonService.SetConfigOption:output_type -> brigade.v1.DaemonPayloadResponse
+	20, // 30: brigade.v1.AgentDaemonService.ResolvePermission:output_type -> brigade.v1.Empty
+	18, // 31: brigade.v1.AgentDaemonService.Summarize:output_type -> brigade.v1.DaemonSummarizeResponse
+	20, // 32: brigade.v1.AgentDaemonService.WriteFile:output_type -> brigade.v1.Empty
+	20, // 33: brigade.v1.AgentDaemonService.SetSSHKey:output_type -> brigade.v1.Empty
+	2,  // 34: brigade.v1.AgentDaemonService.OpenTerminal:output_type -> brigade.v1.DaemonTerminalOutput
+	20, // 35: brigade.v1.AgentDaemonService.TerminalInput:output_type -> brigade.v1.Empty
+	20, // 36: brigade.v1.AgentDaemonService.TerminalResize:output_type -> brigade.v1.Empty
+	14, // 37: brigade.v1.AgentDaemonService.PluginMCP:output_type -> brigade.v1.DaemonPayloadResponse
+	19, // [19:38] is the sub-list for method output_type
+	0,  // [0:19] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name
@@ -1391,6 +1396,7 @@ func file_brigade_v1_agent_daemon_proto_init() {
 		return
 	}
 	file_brigade_v1_auth_proto_init()
+	file_brigade_v1_browser_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

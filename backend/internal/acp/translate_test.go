@@ -337,6 +337,17 @@ func TestTranslateUsageUpdateNoCost(t *testing.T) {
 // TestTranslateToolCall проверяет tool_call: перед стартом закрываются открытые потоки
 // (finishStreams), затем TOOL_CALL_START. Аргументы (RawInput) эмитятся не на старте, а
 // одним TOOL_CALL_ARGS при закрытии вызова — см. toolCallState.argsJSON.
+func TestKeepBrowserHandoffResult(t *testing.T) {
+	for _, name := range []string{"mcp.brigade.browser_handoff", "mcp__brigade__browser_handoff"} {
+		if !keepToolResult(name) {
+			t.Errorf("handoff card result discarded: %s", name)
+		}
+	}
+	if keepToolResult("mcp.brigade.browser") {
+		t.Fatal("browser page content must not be retained as a UI tool result")
+	}
+}
+
 func TestTranslateToolCall(t *testing.T) {
 	c := &Client{}
 	// Откроем текстовый поток, чтобы убедиться, что он закрывается перед tool call.
