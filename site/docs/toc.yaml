@@ -30,6 +30,8 @@ items:
         items:
           - name: Файлы, preview и A2UI
             href: guides/files-and-ui.md
+          - name: Встроенные MCP и навыки
+            href: guides/builtin-agent-tools.md
       - name: Подключения агентов
         href: guides/agents.md
       - name: Среда агента
