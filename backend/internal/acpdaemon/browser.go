@@ -16,3 +16,11 @@ func (s *service) BrowserInteract(ctx context.Context, req *connect.Request[v1.B
 	}
 	return connect.NewResponse(resp), nil
 }
+
+func (s *service) GetBrowserDebug(ctx context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.BrowserDebugResponse], error) {
+	resp, err := browser.Debug(ctx, s.d.sessionID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+	return connect.NewResponse(resp), nil
+}

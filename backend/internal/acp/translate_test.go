@@ -365,6 +365,9 @@ func TestTranslateToolCall(t *testing.T) {
 	if got[1].ToolCallName != "Read file" {
 		t.Errorf("ToolCallName = %q, want %q", got[1].ToolCallName, "Read file")
 	}
+	if got[1].ParentMessageID != "" {
+		t.Fatal("tool call must not be moved ahead of intervening reasoning/text")
+	}
 
 	// Аргументы приходят при закрытии вызова: TOOL_CALL_ARGS с накопленным вводом, затем END.
 	done := acpsdk.ToolCallStatusCompleted

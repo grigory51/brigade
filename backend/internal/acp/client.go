@@ -179,13 +179,6 @@ type Client struct {
 	// stream отслеживает открытые потоковые сообщения (текст/размышление) для
 	// расстановки START/END вокруг чанков по смене messageId. Доступ — под mu.
 	stream streamState
-	// turnMsgID — messageId первого ассистентского сообщения текущего turn'а. Все
-	// tool call'ы turn'а получают его как parentMessageId (TOOL_CALL_START), чтобы
-	// клиентский агрегатор собрал их в единый блок «N tool calls» (см. translate.go и
-	// agui.Event.ParentMessageID). Сбрасывается в начале каждого turn'а (Prompt); пусто,
-	// пока в turn'е не появилось ни одного ассистентского сообщения (тогда вызовы
-	// группируются по смежности). Доступ — под mu.
-	turnMsgID string
 	// toolCalls — состояние tool call'ов по toolCallId: агент шлёт несколько
 	// tool_call_update на один вызов, а клиент требует ровно один TOOL_CALL_END и хранит
 	// один результат. Здесь копится содержательный результат (diff «липнет» — статусная
@@ -858,9 +851,6 @@ func (c *Client) prompt(ctx context.Context, text string, onTurnStart func(), re
 	c.mu.Lock()
 	c.promptActive = true
 	c.turnResolver = resolver
-	// Новый turn — сбрасываем якорь группировки tool call'ов: его задаст первое
-	// ассистентское сообщение этого turn'а (см. translate.go, turnMsgID).
-	c.turnMsgID = ""
 	// Записываем пользовательскую реплику в историю (без доставки в живой sink: фронт
 	// уже отрисовал её оптимистично при отправке). Без этого user-сообщения текущего
 	// процесса не попадали бы в AcpService.GetHistory — их эмитит лишь session/load при

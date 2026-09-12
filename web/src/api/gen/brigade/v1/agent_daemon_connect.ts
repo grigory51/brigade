@@ -3,10 +3,10 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BrowserRequest, BrowserResponse } from "./browser_pb.js";
+import { BrowserDebugResponse, BrowserRequest, BrowserResponse } from "./browser_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
-import { DaemonConfigureRequest, DaemonConfigureResponse, DaemonEvent, DaemonOpenTerminalRequest, DaemonPayloadResponse, DaemonPluginMCPRequest, DaemonPromptRequest, DaemonPromptResponse, DaemonResolvePermissionRequest, DaemonSetConfigOptionRequest, DaemonSetSSHKeyRequest, DaemonStatusResponse, DaemonStreamEventsRequest, DaemonSummarizeRequest, DaemonSummarizeResponse, DaemonTerminalInputRequest, DaemonTerminalOutput, DaemonTerminalResizeRequest, DaemonWriteFileRequest } from "./agent_daemon_pb.js";
 import { Empty } from "./auth_pb.js";
+import { DaemonConfigureRequest, DaemonConfigureResponse, DaemonEvent, DaemonOpenTerminalRequest, DaemonPayloadResponse, DaemonPluginMCPRequest, DaemonPromptRequest, DaemonPromptResponse, DaemonResolvePermissionRequest, DaemonSetConfigOptionRequest, DaemonSetSSHKeyRequest, DaemonStatusResponse, DaemonStreamEventsRequest, DaemonSummarizeRequest, DaemonSummarizeResponse, DaemonTerminalInputRequest, DaemonTerminalOutput, DaemonTerminalResizeRequest, DaemonWriteFileRequest } from "./agent_daemon_pb.js";
 
 /**
  * AgentDaemonService — ВНУТРЕННИЙ контракт brigade ↔ демон `brigade acp-agent`.
@@ -39,6 +39,15 @@ export const AgentDaemonService = {
       name: "BrowserInteract",
       I: BrowserRequest,
       O: BrowserResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.AgentDaemonService.GetBrowserDebug
+     */
+    getBrowserDebug: {
+      name: "GetBrowserDebug",
+      I: Empty,
+      O: BrowserDebugResponse,
       kind: MethodKind.Unary,
     },
     /**

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -15,6 +16,17 @@ import (
 
 // errStub — стабильная ошибка для проверки ветки RUN_ERROR.
 var errStub = errors.New("prompt failed")
+
+func TestReplayDropsLegacyToolAnchor(t *testing.T) {
+	w := httptest.NewRecorder()
+	rn := &run{w: w, flusher: w, cancel: func() {}}
+	if err := rn.send(aguimodel.Event{Type: aguimodel.EventToolCallStart, ToolCallID: "tool", ParentMessageID: "first-text"}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(w.Body.String(), "parentMessageId") {
+		t.Fatal("legacy parent anchor changes chronological order")
+	}
+}
 
 // fakeBindable — тестовая реализация Bindable. Фиксирует переданный Prompt-текст и
 // факт вызова FinishStreams; Prompt возвращает заранее заданные stopReason/err.

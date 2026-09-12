@@ -119,11 +119,8 @@ type Event struct {
 	ToolCallID string `json:"toolCallId,omitempty"`
 	// ToolCallName — имя вызываемого инструмента (TOOL_CALL_START).
 	ToolCallName string `json:"toolCallName,omitempty"`
-	// ParentMessageID (TOOL_CALL_START) привязывает вызов к ассистентскому сообщению
-	// turn'а. Клиентский агрегатор (@assistant-ui/react-ag-ui) по общему parentMessageId
-	// собирает подряд идущие вызовы одного turn'а в единый разворачивающийся блок
-	// «N tool calls»; без него каждый вызов, разделённый текстом-нарративом, рисуется
-	// отдельной карточкой. См. acp.Client.turnMsgID.
+	// ParentMessageID is retained for decoding historical daemon logs; the UI
+	// transport omits legacy anchors to preserve the ordered ACP event stream.
 	ParentMessageID string `json:"parentMessageId,omitempty"`
 	// Content — результат tool call строкой (TOOL_CALL_RESULT.content).
 	Content string `json:"content,omitempty"`

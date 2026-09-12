@@ -186,6 +186,11 @@ func (rn *run) sink(evt agui.Event) error {
 // send сериализует событие в SSE-кадр `data: {json}\n\n` и сбрасывает буфер. Запись
 // сериализована writeMu; ошибка отменяет ctx прогона (дальнейшая доставка бессмысленна).
 func (rn *run) send(evt agui.Event) error {
+	// Older daemon logs anchor every tool to the first text of the turn. The ACP
+	// stream is ordered; dropping that legacy anchor preserves reasoning/card order on replay.
+	if evt.Type == agui.EventToolCallStart {
+		evt.ParentMessageID = ""
+	}
 	data, err := json.Marshal(evt)
 	if err != nil {
 		return err

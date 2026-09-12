@@ -200,3 +200,163 @@ export class BrowserResponse extends Message<BrowserResponse> {
   }
 }
 
+/**
+ * Diagnostic snapshot only: no page content, query strings, headers or input values.
+ *
+ * @generated from message brigade.v1.BrowserDebugResponse
+ */
+export class BrowserDebugResponse extends Message<BrowserDebugResponse> {
+  /**
+   * @generated from field: string state = 1;
+   */
+  state = "";
+
+  /**
+   * @generated from field: string started_at = 2;
+   */
+  startedAt = "";
+
+  /**
+   * @generated from field: string browser_version = 3;
+   */
+  browserVersion = "";
+
+  /**
+   * @generated from field: string browsers_path = 4;
+   */
+  browsersPath = "";
+
+  /**
+   * @generated from field: string executable_path = 5;
+   */
+  executablePath = "";
+
+  /**
+   * @generated from field: string channel = 6;
+   */
+  channel = "";
+
+  /**
+   * @generated from field: string proxy = 7;
+   */
+  proxy = "";
+
+  /**
+   * @generated from field: string origin = 8;
+   */
+  origin = "";
+
+  /**
+   * @generated from field: string launch_error = 9;
+   */
+  launchError = "";
+
+  /**
+   * @generated from field: repeated brigade.v1.BrowserNetworkEvent network = 10;
+   */
+  network: BrowserNetworkEvent[] = [];
+
+  constructor(data?: PartialMessage<BrowserDebugResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.BrowserDebugResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "state", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "started_at", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "browser_version", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "browsers_path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "executable_path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "channel", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "proxy", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 8, name: "origin", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 9, name: "launch_error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 10, name: "network", kind: "message", T: BrowserNetworkEvent, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): BrowserDebugResponse {
+    return new BrowserDebugResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): BrowserDebugResponse {
+    return new BrowserDebugResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): BrowserDebugResponse {
+    return new BrowserDebugResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: BrowserDebugResponse | PlainMessage<BrowserDebugResponse> | undefined, b: BrowserDebugResponse | PlainMessage<BrowserDebugResponse> | undefined): boolean {
+    return proto3.util.equals(BrowserDebugResponse, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.BrowserNetworkEvent
+ */
+export class BrowserNetworkEvent extends Message<BrowserNetworkEvent> {
+  /**
+   * @generated from field: string at = 1;
+   */
+  at = "";
+
+  /**
+   * @generated from field: string origin = 2;
+   */
+  origin = "";
+
+  /**
+   * @generated from field: string resource_type = 3;
+   */
+  resourceType = "";
+
+  /**
+   * @generated from field: uint32 status = 4;
+   */
+  status = 0;
+
+  /**
+   * @generated from field: string error = 5;
+   */
+  error = "";
+
+  /**
+   * @generated from field: string method = 6;
+   */
+  method = "";
+
+  constructor(data?: PartialMessage<BrowserNetworkEvent>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.BrowserNetworkEvent";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "at", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "origin", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "resource_type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "status", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 5, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "method", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): BrowserNetworkEvent {
+    return new BrowserNetworkEvent().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): BrowserNetworkEvent {
+    return new BrowserNetworkEvent().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): BrowserNetworkEvent {
+    return new BrowserNetworkEvent().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: BrowserNetworkEvent | PlainMessage<BrowserNetworkEvent> | undefined, b: BrowserNetworkEvent | PlainMessage<BrowserNetworkEvent> | undefined): boolean {
+    return proto3.util.equals(BrowserNetworkEvent, a, b);
+  }
+}
+

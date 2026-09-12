@@ -3,8 +3,13 @@ import { chmod, lstat, unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { chromium } from "playwright";
 import { socketPath, requestBrowser } from "./browser-client.mjs";
+
+// ACP clients may start MCP servers with a minimal environment instead of inheriting Docker ENV.
+if (!process.env.PLAYWRIGHT_BROWSERS_PATH && existsSync("/opt/brigade-browser")) {
+  process.env.PLAYWRIGHT_BROWSERS_PATH = "/opt/brigade-browser";
+}
+const { chromium } = await import("playwright");
 
 const WIDTH = 1024, HEIGHT = 720;
 class BrowserError extends Error {}
@@ -18,6 +23,20 @@ export class SessionBrowser {
     this.requestId = "";
     this.state = "expired";
     this.proxy = "";
+    this.startedAt = new Date().toISOString();
+    this.launchInfo = {};
+    this.network = [];
+  }
+
+  diagnostics() {
+    return { state: this.state, startedAt: this.startedAt, browsersPath: process.env.PLAYWRIGHT_BROWSERS_PATH ?? "",
+      ...this.launchInfo, browserVersion: this.browser?.version?.() ?? "", origin: originOnly(this.page?.url()), network: [...this.network] };
+  }
+
+  recordNetwork(request, status = 0, error = "") {
+    this.network.push({ at: new Date().toISOString(), origin: originOnly(request.url()), resourceType: request.resourceType(),
+      method: request.method(), status, error });
+    if (this.network.length > 100) this.network.shift();
   }
 
   status() {
@@ -38,10 +57,17 @@ export class SessionBrowser {
         const options = { headless: true, channel: "chromium", chromiumSandbox: !existsSync("/.dockerenv"), ...(proxy ? { proxy: { server: proxy } } : {}) };
         // macOS uses an installed Chrome without downloading a browser on every session start.
         if (process.platform === "darwin") options.channel = "chrome";
+        this.launchInfo = { channel: options.channel, proxy: proxy ? originOnly(proxy) : "direct",
+          executablePath: process.platform === "darwin" ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : chromium.executablePath(), launchError: "" };
         try { this.browser = await this.launch(options); }
-        catch { throw new BrowserError("Не удалось запустить Chromium. В Docker обновите базовый образ сессии; в macOS установите Google Chrome. В своей Linux-среде выполните playwright install --with-deps chromium из каталога brigade-mcp."); }
+        catch (error) {
+          this.launchInfo.launchError = existsSync(this.launchInfo.executablePath) ? errorCode(error.message, "launch_failed") : "executable_missing";
+          throw new BrowserError("Не удалось запустить Chromium. В Docker обновите базовый образ сессии; в macOS установите Google Chrome. В своей Linux-среде выполните playwright install --with-deps chromium из каталога brigade-mcp. Диагностика доступна через dump debug session.");
+        }
         this.proxy = proxy;
         this.context = await this.browser.newContext({ viewport: { width: WIDTH, height: HEIGHT }, acceptDownloads: false });
+        this.context.on("response", response => this.recordNetwork(response.request(), response.status()));
+        this.context.on("requestfailed", request => this.recordNetwork(request, 0, errorCode(request.failure()?.errorText, "request_failed")));
         this.context.on("page", page => {
           this.page = page;
           page.on("dialog", dialog => dialog.dismiss().catch(() => {}));
@@ -139,6 +165,16 @@ function publicPageURL(value) {
   return url.href;
 }
 
+function originOnly(value) {
+  try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) ? url.origin : ""; }
+  catch { return ""; }
+}
+
+function errorCode(value, fallback) {
+  // Error messages may contain URLs or typed values; diagnostics retain only known error codes.
+  return String(value ?? "").match(/\bnet::ERR_[A-Z_]+\b|\b(?:ENOENT|EACCES|EPERM|ECONNREFUSED|ETIMEDOUT)\b/)?.[0] ?? fallback;
+}
+
 export async function serve(sessionID) {
   process.umask(0o077);
   const socket = socketPath(sessionID);
@@ -160,7 +196,7 @@ export async function serve(sessionID) {
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Cache-Control", "no-store");
     try {
-      if (req.method !== "POST" || !["/agent", "/user", "/close"].includes(req.url)) throw new Error("Unknown browser endpoint");
+      if (req.method !== "POST" || !["/agent", "/user", "/close", "/debug"].includes(req.url)) throw new Error("Unknown browser endpoint");
       let body = "";
       req.setEncoding("utf8");
       for await (const chunk of req) {
@@ -168,6 +204,7 @@ export async function serve(sessionID) {
         if (body.length > 65536) throw new Error("Browser request too large");
       }
       const args = JSON.parse(body);
+      if (req.url === "/debug") { res.end(JSON.stringify(browser.diagnostics())); return; }
       lastUsed = Date.now();
       const operation = queue.then(() => browser.dispatch(req.url.slice(1), args));
       queue = operation.catch(() => {});

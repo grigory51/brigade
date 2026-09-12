@@ -265,6 +265,207 @@ func (x *BrowserResponse) GetHeight() uint32 {
 	return 0
 }
 
+// Diagnostic snapshot only: no page content, query strings, headers or input values.
+type BrowserDebugResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	State          string                 `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
+	StartedAt      string                 `protobuf:"bytes,2,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	BrowserVersion string                 `protobuf:"bytes,3,opt,name=browser_version,json=browserVersion,proto3" json:"browser_version,omitempty"`
+	BrowsersPath   string                 `protobuf:"bytes,4,opt,name=browsers_path,json=browsersPath,proto3" json:"browsers_path,omitempty"`
+	ExecutablePath string                 `protobuf:"bytes,5,opt,name=executable_path,json=executablePath,proto3" json:"executable_path,omitempty"`
+	Channel        string                 `protobuf:"bytes,6,opt,name=channel,proto3" json:"channel,omitempty"`
+	Proxy          string                 `protobuf:"bytes,7,opt,name=proxy,proto3" json:"proxy,omitempty"`
+	Origin         string                 `protobuf:"bytes,8,opt,name=origin,proto3" json:"origin,omitempty"`
+	LaunchError    string                 `protobuf:"bytes,9,opt,name=launch_error,json=launchError,proto3" json:"launch_error,omitempty"`
+	Network        []*BrowserNetworkEvent `protobuf:"bytes,10,rep,name=network,proto3" json:"network,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *BrowserDebugResponse) Reset() {
+	*x = BrowserDebugResponse{}
+	mi := &file_brigade_v1_browser_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserDebugResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserDebugResponse) ProtoMessage() {}
+
+func (x *BrowserDebugResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_browser_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserDebugResponse.ProtoReflect.Descriptor instead.
+func (*BrowserDebugResponse) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_browser_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *BrowserDebugResponse) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *BrowserDebugResponse) GetStartedAt() string {
+	if x != nil {
+		return x.StartedAt
+	}
+	return ""
+}
+
+func (x *BrowserDebugResponse) GetBrowserVersion() string {
+	if x != nil {
+		return x.BrowserVersion
+	}
+	return ""
+}
+
+func (x *BrowserDebugResponse) GetBrowsersPath() string {
+	if x != nil {
+		return x.BrowsersPath
+	}
+	return ""
+}
+
+func (x *BrowserDebugResponse) GetExecutablePath() string {
+	if x != nil {
+		return x.ExecutablePath
+	}
+	return ""
+}
+
+func (x *BrowserDebugResponse) GetChannel() string {
+	if x != nil {
+		return x.Channel
+	}
+	return ""
+}
+
+func (x *BrowserDebugResponse) GetProxy() string {
+	if x != nil {
+		return x.Proxy
+	}
+	return ""
+}
+
+func (x *BrowserDebugResponse) GetOrigin() string {
+	if x != nil {
+		return x.Origin
+	}
+	return ""
+}
+
+func (x *BrowserDebugResponse) GetLaunchError() string {
+	if x != nil {
+		return x.LaunchError
+	}
+	return ""
+}
+
+func (x *BrowserDebugResponse) GetNetwork() []*BrowserNetworkEvent {
+	if x != nil {
+		return x.Network
+	}
+	return nil
+}
+
+type BrowserNetworkEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	At            string                 `protobuf:"bytes,1,opt,name=at,proto3" json:"at,omitempty"`
+	Origin        string                 `protobuf:"bytes,2,opt,name=origin,proto3" json:"origin,omitempty"`
+	ResourceType  string                 `protobuf:"bytes,3,opt,name=resource_type,json=resourceType,proto3" json:"resource_type,omitempty"`
+	Status        uint32                 `protobuf:"varint,4,opt,name=status,proto3" json:"status,omitempty"`
+	Error         string                 `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
+	Method        string                 `protobuf:"bytes,6,opt,name=method,proto3" json:"method,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BrowserNetworkEvent) Reset() {
+	*x = BrowserNetworkEvent{}
+	mi := &file_brigade_v1_browser_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserNetworkEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserNetworkEvent) ProtoMessage() {}
+
+func (x *BrowserNetworkEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_browser_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserNetworkEvent.ProtoReflect.Descriptor instead.
+func (*BrowserNetworkEvent) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_browser_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *BrowserNetworkEvent) GetAt() string {
+	if x != nil {
+		return x.At
+	}
+	return ""
+}
+
+func (x *BrowserNetworkEvent) GetOrigin() string {
+	if x != nil {
+		return x.Origin
+	}
+	return ""
+}
+
+func (x *BrowserNetworkEvent) GetResourceType() string {
+	if x != nil {
+		return x.ResourceType
+	}
+	return ""
+}
+
+func (x *BrowserNetworkEvent) GetStatus() uint32 {
+	if x != nil {
+		return x.Status
+	}
+	return 0
+}
+
+func (x *BrowserNetworkEvent) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *BrowserNetworkEvent) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
 var File_brigade_v1_browser_proto protoreflect.FileDescriptor
 
 const file_brigade_v1_browser_proto_rawDesc = "" +
@@ -289,7 +490,27 @@ const file_brigade_v1_browser_proto_rawDesc = "" +
 	"\x05title\x18\x04 \x01(\tR\x05title\x12\x14\n" +
 	"\x05image\x18\x05 \x01(\fR\x05image\x12\x14\n" +
 	"\x05width\x18\x06 \x01(\rR\x05width\x12\x16\n" +
-	"\x06height\x18\a \x01(\rR\x06height*\xb4\x01\n" +
+	"\x06height\x18\a \x01(\rR\x06height\"\xe8\x02\n" +
+	"\x14BrowserDebugResponse\x12\x14\n" +
+	"\x05state\x18\x01 \x01(\tR\x05state\x12\x1d\n" +
+	"\n" +
+	"started_at\x18\x02 \x01(\tR\tstartedAt\x12'\n" +
+	"\x0fbrowser_version\x18\x03 \x01(\tR\x0ebrowserVersion\x12#\n" +
+	"\rbrowsers_path\x18\x04 \x01(\tR\fbrowsersPath\x12'\n" +
+	"\x0fexecutable_path\x18\x05 \x01(\tR\x0eexecutablePath\x12\x18\n" +
+	"\achannel\x18\x06 \x01(\tR\achannel\x12\x14\n" +
+	"\x05proxy\x18\a \x01(\tR\x05proxy\x12\x16\n" +
+	"\x06origin\x18\b \x01(\tR\x06origin\x12!\n" +
+	"\flaunch_error\x18\t \x01(\tR\vlaunchError\x129\n" +
+	"\anetwork\x18\n" +
+	" \x03(\v2\x1f.brigade.v1.BrowserNetworkEventR\anetwork\"\xa8\x01\n" +
+	"\x13BrowserNetworkEvent\x12\x0e\n" +
+	"\x02at\x18\x01 \x01(\tR\x02at\x12\x16\n" +
+	"\x06origin\x18\x02 \x01(\tR\x06origin\x12#\n" +
+	"\rresource_type\x18\x03 \x01(\tR\fresourceType\x12\x16\n" +
+	"\x06status\x18\x04 \x01(\rR\x06status\x12\x14\n" +
+	"\x05error\x18\x05 \x01(\tR\x05error\x12\x16\n" +
+	"\x06method\x18\x06 \x01(\tR\x06method*\xb4\x01\n" +
 	"\rBrowserAction\x12\x1e\n" +
 	"\x1aBROWSER_ACTION_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15BROWSER_ACTION_STATUS\x10\x01\x12\x18\n" +
@@ -316,21 +537,24 @@ func file_brigade_v1_browser_proto_rawDescGZIP() []byte {
 }
 
 var file_brigade_v1_browser_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_brigade_v1_browser_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_brigade_v1_browser_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_brigade_v1_browser_proto_goTypes = []any{
-	(BrowserAction)(0),      // 0: brigade.v1.BrowserAction
-	(*BrowserRequest)(nil),  // 1: brigade.v1.BrowserRequest
-	(*BrowserResponse)(nil), // 2: brigade.v1.BrowserResponse
+	(BrowserAction)(0),           // 0: brigade.v1.BrowserAction
+	(*BrowserRequest)(nil),       // 1: brigade.v1.BrowserRequest
+	(*BrowserResponse)(nil),      // 2: brigade.v1.BrowserResponse
+	(*BrowserDebugResponse)(nil), // 3: brigade.v1.BrowserDebugResponse
+	(*BrowserNetworkEvent)(nil),  // 4: brigade.v1.BrowserNetworkEvent
 }
 var file_brigade_v1_browser_proto_depIdxs = []int32{
 	0, // 0: brigade.v1.BrowserRequest.action:type_name -> brigade.v1.BrowserAction
-	1, // 1: brigade.v1.BrowserService.Interact:input_type -> brigade.v1.BrowserRequest
-	2, // 2: brigade.v1.BrowserService.Interact:output_type -> brigade.v1.BrowserResponse
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	4, // 1: brigade.v1.BrowserDebugResponse.network:type_name -> brigade.v1.BrowserNetworkEvent
+	1, // 2: brigade.v1.BrowserService.Interact:input_type -> brigade.v1.BrowserRequest
+	2, // 3: brigade.v1.BrowserService.Interact:output_type -> brigade.v1.BrowserResponse
+	3, // [3:4] is the sub-list for method output_type
+	2, // [2:3] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_brigade_v1_browser_proto_init() }
@@ -344,7 +568,7 @@ func file_brigade_v1_browser_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_brigade_v1_browser_proto_rawDesc), len(file_brigade_v1_browser_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   2,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

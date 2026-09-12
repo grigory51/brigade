@@ -61,6 +61,21 @@ func Close(sessionID string) {
 	_, _ = call(ctx, sessionID, "close", []byte(`{}`))
 }
 
+func Debug(ctx context.Context, sessionID string) (*v1.BrowserDebugResponse, error) {
+	data, err := call(ctx, sessionID, "debug", []byte(`{}`))
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ECONNREFUSED) {
+		return &v1.BrowserDebugResponse{State: "not_started"}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	response := new(v1.BrowserDebugResponse)
+	if err := protojson.Unmarshal(data, response); err != nil {
+		return nil, fmt.Errorf("browser: invalid debug response: %w", err)
+	}
+	return response, nil
+}
+
 func call(ctx context.Context, sessionID, role string, body []byte) ([]byte, error) {
 	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", SocketPath(sessionID))

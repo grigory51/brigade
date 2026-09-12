@@ -111,7 +111,7 @@ export function BrowserWindow({ open, onOpenChange, sessionId, requestId, disabl
             onPaste={e => { e.preventDefault(); input("text", 0, 0, e.clipboardData.getData("text/plain")); }} />
         </div>}
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="outline" onClick={() => keyboard.current?.focus()}>Клавиатура</Button>
+        <Button variant="outline" className="hidden [@media(any-pointer:coarse)]:inline-flex" onClick={() => keyboard.current?.focus()} title="Показать клавиатуру телефона для ввода в выбранное поле сайта">Показать клавиатуру</Button>
         <Button variant="outline" onClick={() => input("press", 0, 0, "Tab")}>Tab</Button>
         <Button variant="outline" onClick={() => input("press", 0, 0, "Enter")}>Enter</Button>
         <Button variant="outline" onClick={() => input("wheel", 0, 450)}>↓</Button>
@@ -121,6 +121,7 @@ export function BrowserWindow({ open, onOpenChange, sessionId, requestId, disabl
           <Button disabled={disabled || frame?.state !== "human" || !!error} onClick={async () => { await queue.current; if (!inputFailed.current) await onFinish(false); }}>Продолжить</Button>
         </div>
       </div>
+      <p className="text-xs text-muted-foreground">Нажмите поле на странице и печатайте — ввод отправляется на сайт, не в чат.</p>
       {disabled && <p className="text-xs text-muted-foreground">Дождитесь завершения текущего ответа агента.</p>}
     </DialogContent>
   </Dialog>;

@@ -34,6 +34,8 @@ type sessionDebugDump struct {
 	Daemon         daemonDebugDump          `json:"daemon"`
 	Container      *spawn.ACPContainerDebug `json:"container,omitempty"`
 	ContainerError string                   `json:"containerError,omitempty"`
+	Browser        *v1.BrowserDebugResponse `json:"browser,omitempty"`
+	BrowserError   string                   `json:"browserError,omitempty"`
 	ConfigOptions  map[string]string        `json:"configOptions,omitempty"`
 	MessageCount   int                      `json:"messageCount"`
 	Messages       []debugMessage           `json:"messages,omitempty"`
@@ -161,6 +163,14 @@ func dumpDockerACP(ctx context.Context, cfg *config.Config, sessionID string, ou
 
 	signer := agentauth.NewSigner(cfg.JWT.Secret)
 	conn := daemonrpc.Dial(addr, "dump", func() (string, error) { return signer.Token(sessionID) })
+	browserCtx, cancelBrowser := context.WithTimeout(ctx, 5*time.Second)
+	browserDebug, browserErr := conn.RPC.GetBrowserDebug(browserCtx, daemonrpc.Req(conn.Sign(), &v1.Empty{}))
+	cancelBrowser()
+	if browserErr != nil {
+		out.BrowserError = browserErr.Error()
+	} else {
+		out.Browser = browserDebug.Msg
+	}
 	status, err := conn.RPC.Status(ctx, daemonrpc.Req(conn.Sign(), &v1.Empty{}))
 	if err != nil {
 		out.Daemon.Error = err.Error()

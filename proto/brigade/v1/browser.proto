@@ -37,3 +37,26 @@ message BrowserResponse {
   uint32 width = 6;
   uint32 height = 7;
 }
+
+// Diagnostic snapshot only: no page content, query strings, headers or input values.
+message BrowserDebugResponse {
+  string state = 1;
+  string started_at = 2;
+  string browser_version = 3;
+  string browsers_path = 4;
+  string executable_path = 5;
+  string channel = 6;
+  string proxy = 7;
+  string origin = 8;
+  string launch_error = 9;
+  repeated BrowserNetworkEvent network = 10;
+}
+
+message BrowserNetworkEvent {
+  string at = 1;
+  string origin = 2;
+  string resource_type = 3;
+  uint32 status = 4;
+  string error = 5;
+  string method = 6;
+}

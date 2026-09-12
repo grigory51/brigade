@@ -130,10 +130,9 @@ func (c *Client) translateUpdate(u acpsdk.SessionUpdate) []agui.Event {
 		// (см. closeToolCallEvents, toolCallState.argsJSON).
 		evts := c.finishStreams()
 		evts = append(evts, agui.Event{
-			Type:            agui.EventToolCallStart,
-			ToolCallID:      id,
-			ToolCallName:    tc.Title,
-			ParentMessageID: c.turnMsgID,
+			Type:         agui.EventToolCallStart,
+			ToolCallID:   id,
+			ToolCallName: tc.Title,
 		})
 		return evts
 
@@ -345,13 +344,6 @@ func (c *Client) streamText(id, delta string) []agui.Event {
 		}
 		c.stream.textID = id
 		evts = append(evts, agui.Event{Type: agui.EventTextMessageStart, MessageID: id, Role: "assistant"})
-		// Первое текстовое сообщение turn'а — якорь группировки tool call'ов: к нему
-		// клиентский агрегатор привяжет все вызовы turn'а (parentMessageId), собрав их в
-		// один блок. Якорь — именно текстовое сообщение: агрегатор кластеризует вызовы
-		// вокруг text-части (reasoning для этого не годится).
-		if c.turnMsgID == "" {
-			c.turnMsgID = id
-		}
 	}
 	evts = append(evts, agui.Event{
 		Type:      agui.EventTextMessageContent,

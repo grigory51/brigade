@@ -19,6 +19,36 @@ func TestSocketPathMatchesNode(t *testing.T) {
 	}
 }
 
+func TestDebugDoesNotStartBrowser(t *testing.T) {
+	resp, err := Debug(context.Background(), uuid.NewString())
+	if err != nil || resp.State != "not_started" {
+		t.Fatalf("debug: %v %v", resp, err)
+	}
+}
+
+func TestDebugReadsBrowserDiagnostics(t *testing.T) {
+	id := uuid.NewString()
+	listener, err := net.Listen("unix", SocketPath(id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/debug" {
+			t.Errorf("unexpected endpoint %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"state":"human","browsersPath":"/opt/brigade-browser","proxy":"http://127.0.0.1:3129","network":[{"origin":"https://example.org","resourceType":"document","status":403},{"origin":"https://example.org","error":"net::ERR_PROXY_CONNECTION_FAILED"}]}`))
+	})}
+	go server.Serve(listener)
+	t.Cleanup(func() { _ = server.Close() })
+	resp, err := Debug(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Proxy != "http://127.0.0.1:3129" || resp.BrowsersPath != "/opt/brigade-browser" || len(resp.Network) != 2 || resp.Network[0].Status != 403 || resp.Network[1].Error != "net::ERR_PROXY_CONNECTION_FAILED" {
+		t.Fatalf("unexpected diagnostics: %v", resp)
+	}
+}
+
 func TestInteractAndExpired(t *testing.T) {
 	id := uuid.NewString()
 	req := &v1.BrowserRequest{RequestId: "request", Action: v1.BrowserAction_BROWSER_ACTION_FRAME}

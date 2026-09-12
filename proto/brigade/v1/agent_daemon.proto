@@ -24,6 +24,7 @@ import "brigade/v1/browser.proto";
 // в env дочернего процесса адаптера, поэтому `/ws/shell` (docker exec) их не видит.
 service AgentDaemonService {
   rpc BrowserInteract(BrowserRequest) returns (BrowserResponse) {}
+  rpc GetBrowserDebug(Empty) returns (BrowserDebugResponse) {}
   // Configure (пере)поднимает адаптер: секреты в env адаптера, resume_session_id непуст →
   // session/load. Идемпотентна: на живой адаптер (reconnect) — no-op, адаптер не рестартуется.
   rpc Configure(DaemonConfigureRequest) returns (DaemonConfigureResponse) {}

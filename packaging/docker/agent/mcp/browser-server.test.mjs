@@ -59,3 +59,14 @@ test("rejects unsafe URLs, proxy credentials, invalid input and changed proxy", 
   await assert.rejects(browser.dispatch("user", { action: "input", requestId, input: "down", x: NaN, y: 0 }), /coordinates/);
   await assert.rejects(browser.dispatch("user", { action: "input", requestId, input: "evaluate", text: "document.cookie" }), /Unknown browser input/);
 });
+
+test("diagnostics are bounded and never contain URL paths, query values or input", async () => {
+  const { browser } = fixture();
+  for (let i = 0; i < 120; i++) {
+    browser.recordNetwork({ url: () => `https://example.org/secret/${i}?token=password#otp`, method: () => "POST", resourceType: () => "fetch" }, 403);
+  }
+  const debug = browser.diagnostics();
+  assert.equal(debug.network.length, 100);
+  assert.equal(debug.network[0].origin, "https://example.org");
+  assert.ok(!JSON.stringify(debug).match(/secret|token|password|otp/));
+});
