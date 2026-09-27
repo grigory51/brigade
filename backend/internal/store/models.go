@@ -29,6 +29,15 @@ const (
 	SessionStatusRunning SessionStatus = "running"
 	SessionStatusStopped SessionStatus = "stopped"
 	SessionStatusFailed  SessionStatus = "failed"
+	SessionStatusIdle    SessionStatus = "idle"
+)
+
+// SessionExecutionPolicy определяет срок жизни агента, не формат ленты.
+type SessionExecutionPolicy string
+
+const (
+	SessionExecutionPersistent SessionExecutionPolicy = "persistent"
+	SessionExecutionOnDemand   SessionExecutionPolicy = "on_demand"
 )
 
 // User — учётная запись. PasswordHash — bcrypt-хеш, не сам пароль.
@@ -119,6 +128,11 @@ type TelegramBot struct {
 	HasTopicsEnabled      bool
 	SessionMode           TelegramSessionMode
 	NewSessionAction      TelegramNewSessionAction
+	Purpose               string
+	BusinessConnectionID  string
+	BusinessOwnerID       int64
+	BusinessEnabled       bool
+	BusinessCanReply      bool
 	CreatedAt             time.Time
 }
 
@@ -149,16 +163,18 @@ type TelegramConversation struct {
 // Session — сессия агента. Поля agent_session_id и container_label несут
 // данные для восстановления (resume) после рестарта бэкенда.
 type Session struct {
-	ID             string
-	UserID         string
-	Mode           SessionMode
-	Kind           SessionKind
-	AgentType      string
-	AgentSessionID string
-	ContainerLabel string
-	Status         SessionStatus
-	Cwd            string
-	CreatedAt      time.Time
+	ID              string
+	UserID          string
+	Mode            SessionMode
+	Kind            SessionKind
+	AgentType       string
+	AgentSessionID  string
+	ContainerLabel  string
+	Status          SessionStatus
+	ExecutionPolicy SessionExecutionPolicy
+	HistoryRevision int64
+	Cwd             string
+	CreatedAt       time.Time
 	// Name — пользовательское имя сессии для отображения. Пустое — клиент показывает
 	// производную подпись (тип агента + вид).
 	Name string
@@ -182,6 +198,50 @@ type Session struct {
 	ExperienceID         string
 	ExperienceVersion    string
 }
+
+// SessionMessage — сообщение сессии, для которой Brigade владеет историей.
+type SessionMessage struct {
+	ID                string
+	SessionID         string
+	Author            MessageAuthor
+	Content           string
+	Source            string
+	ExternalID        string
+	IncludedInContext bool
+	Delivery          MessageDelivery
+	ReplyToID         string
+	CreatedAt         time.Time
+}
+
+type SessionRun struct {
+	ID             string
+	SessionID      string
+	Status         string
+	InputRevision  int64
+	DraftMessageID string
+	Error          string
+	CreatedAt      time.Time
+	CompletedAt    time.Time
+}
+
+type MessageAuthor string
+
+const (
+	MessageAuthorContact MessageAuthor = "contact"
+	MessageAuthorOwner   MessageAuthor = "owner"
+	MessageAuthorAgent   MessageAuthor = "agent"
+)
+
+type MessageDelivery string
+
+const (
+	MessageDeliveryReceived  MessageDelivery = "received"
+	MessageDeliveryDraft     MessageDelivery = "draft"
+	MessageDeliverySending   MessageDelivery = "sending"
+	MessageDeliverySent      MessageDelivery = "sent"
+	MessageDeliveryUncertain MessageDelivery = "uncertain"
+	MessageDeliveryFailed    MessageDelivery = "failed"
+)
 
 // Plugin — platform-вариант MCPB bundle. Пустой OwnerID означает системную CLI-установку.
 type Plugin struct {

@@ -24,15 +24,23 @@ const (
 // AcpMessage — сообщение ленты чата. role: user | assistant | system | tool_call.
 // Для role=tool_call заполнены tool_name/args_text/result (карточка инструмента).
 type AcpMessage struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Role          string                 `protobuf:"bytes,2,opt,name=role,proto3" json:"role,omitempty"`
-	Content       string                 `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`
-	ToolName      string                 `protobuf:"bytes,4,opt,name=tool_name,json=toolName,proto3" json:"tool_name,omitempty"`
-	ArgsText      string                 `protobuf:"bytes,5,opt,name=args_text,json=argsText,proto3" json:"args_text,omitempty"`
-	Result        string                 `protobuf:"bytes,6,opt,name=result,proto3" json:"result,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Id       string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Role     string                 `protobuf:"bytes,2,opt,name=role,proto3" json:"role,omitempty"`
+	Content  string                 `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`
+	ToolName string                 `protobuf:"bytes,4,opt,name=tool_name,json=toolName,proto3" json:"tool_name,omitempty"`
+	ArgsText string                 `protobuf:"bytes,5,opt,name=args_text,json=argsText,proto3" json:"args_text,omitempty"`
+	Result   string                 `protobuf:"bytes,6,opt,name=result,proto3" json:"result,omitempty"`
+	// Поля заполнены для истории, владельцем которой является Brigade.
+	Author            string `protobuf:"bytes,7,opt,name=author,proto3" json:"author,omitempty"`
+	Source            string `protobuf:"bytes,8,opt,name=source,proto3" json:"source,omitempty"`
+	ExternalId        string `protobuf:"bytes,9,opt,name=external_id,json=externalId,proto3" json:"external_id,omitempty"`
+	IncludedInContext bool   `protobuf:"varint,10,opt,name=included_in_context,json=includedInContext,proto3" json:"included_in_context,omitempty"`
+	Delivery          string `protobuf:"bytes,11,opt,name=delivery,proto3" json:"delivery,omitempty"`
+	ReplyToId         string `protobuf:"bytes,12,opt,name=reply_to_id,json=replyToId,proto3" json:"reply_to_id,omitempty"`
+	CreatedAt         int64  `protobuf:"varint,13,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *AcpMessage) Reset() {
@@ -105,6 +113,55 @@ func (x *AcpMessage) GetResult() string {
 		return x.Result
 	}
 	return ""
+}
+
+func (x *AcpMessage) GetAuthor() string {
+	if x != nil {
+		return x.Author
+	}
+	return ""
+}
+
+func (x *AcpMessage) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *AcpMessage) GetExternalId() string {
+	if x != nil {
+		return x.ExternalId
+	}
+	return ""
+}
+
+func (x *AcpMessage) GetIncludedInContext() bool {
+	if x != nil {
+		return x.IncludedInContext
+	}
+	return false
+}
+
+func (x *AcpMessage) GetDelivery() string {
+	if x != nil {
+		return x.Delivery
+	}
+	return ""
+}
+
+func (x *AcpMessage) GetReplyToId() string {
+	if x != nil {
+		return x.ReplyToId
+	}
+	return ""
+}
+
+func (x *AcpMessage) GetCreatedAt() int64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
 }
 
 // AcpCommand — slash-команда агента для автокомплита composer'а.
@@ -912,7 +969,7 @@ var File_brigade_v1_acp_proto protoreflect.FileDescriptor
 const file_brigade_v1_acp_proto_rawDesc = "" +
 	"\n" +
 	"\x14brigade/v1/acp.proto\x12\n" +
-	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\x9c\x01\n" +
+	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\xf8\x02\n" +
 	"\n" +
 	"AcpMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
@@ -920,7 +977,17 @@ const file_brigade_v1_acp_proto_rawDesc = "" +
 	"\acontent\x18\x03 \x01(\tR\acontent\x12\x1b\n" +
 	"\ttool_name\x18\x04 \x01(\tR\btoolName\x12\x1b\n" +
 	"\targs_text\x18\x05 \x01(\tR\bargsText\x12\x16\n" +
-	"\x06result\x18\x06 \x01(\tR\x06result\"V\n" +
+	"\x06result\x18\x06 \x01(\tR\x06result\x12\x16\n" +
+	"\x06author\x18\a \x01(\tR\x06author\x12\x16\n" +
+	"\x06source\x18\b \x01(\tR\x06source\x12\x1f\n" +
+	"\vexternal_id\x18\t \x01(\tR\n" +
+	"externalId\x12.\n" +
+	"\x13included_in_context\x18\n" +
+	" \x01(\bR\x11includedInContext\x12\x1a\n" +
+	"\bdelivery\x18\v \x01(\tR\bdelivery\x12\x1e\n" +
+	"\vreply_to_id\x18\f \x01(\tR\treplyToId\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\r \x01(\x03R\tcreatedAt\"V\n" +
 	"\n" +
 	"AcpCommand\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +

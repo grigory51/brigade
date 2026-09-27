@@ -147,9 +147,11 @@ func (d *DockerACPSpawner) StartDaemon(ctx context.Context, spec Spec, stateID, 
 		// .ssh не монтируется: приватный ключ живёт в ssh-agent демона, а ~/.ssh/config с
 		// путём к его сокету демон пишет сам внутри контейнера.
 		mounts = []mount.Mount{
-			{Type: mount.TypeBind, Source: spec.HomeHost + "/.claude", Target: AgentHome + "/.claude"},
 			{Type: mount.TypeBind, Source: spec.HomeHost + "/.brigade/" + spec.SessionID, Target: AgentHome + daemonLogDir + "/" + spec.SessionID},
 			{Type: mount.TypeBind, Source: spec.HomeHost + "/workspace/" + spec.SessionID, Target: ContainerWorkdir + "/" + spec.SessionID},
+		}
+		if !spec.Ephemeral {
+			mounts = append(mounts, mount.Mount{Type: mount.TypeBind, Source: spec.HomeHost + "/.claude", Target: AgentHome + "/.claude"})
 		}
 	} else {
 		// Fallback без персонального home: named volume per-session на весь home. Утечки между
@@ -334,4 +336,10 @@ func (d *DockerACPSpawner) RemoveContainer(ctx context.Context, sessionID string
 		return nil // контейнера нет — нечего удалять
 	}
 	return d.spawner.cli.ContainerRemove(ctx, id, container.RemoveOptions{Force: true})
+}
+
+// RemoveEphemeralState освобождает named volume одноразового ACP-запуска.
+// При настроенном bind-mount home volume отсутствует, и этот метод не вызывается.
+func (d *DockerACPSpawner) RemoveEphemeralState(ctx context.Context, runID string) error {
+	return d.spawner.cli.VolumeRemove(ctx, ACPVolumeName(runID), true)
 }

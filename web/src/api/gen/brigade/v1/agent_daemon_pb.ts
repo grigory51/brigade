@@ -387,6 +387,14 @@ export class DaemonConfigureRequest extends Message<DaemonConfigureRequest> {
    */
   experienceMcpJson = new Uint8Array(0);
 
+  /**
+   * Одноразовый запуск по недоверенной переписке: не включать Full Access и
+   * отклонять любые интерактивные запросы разрешения.
+   *
+   * @generated from field: bool untrusted_transcript = 12;
+   */
+  untrustedTranscript = false;
+
   constructor(data?: PartialMessage<DaemonConfigureRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -405,6 +413,7 @@ export class DaemonConfigureRequest extends Message<DaemonConfigureRequest> {
     { no: 9, name: "system_prompt", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 10, name: "credential_file", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 11, name: "experience_mcp_json", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
+    { no: 12, name: "untrusted_transcript", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaemonConfigureRequest {

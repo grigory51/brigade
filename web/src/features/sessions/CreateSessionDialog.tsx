@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ConnectError } from "@connectrpc/connect";
-import { Boxes, Check, Loader2, MessageCircle, Terminal } from "lucide-react";
+import { Boxes, Check, Loader2, MessageCircle, MessagesSquare, Terminal } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -14,7 +14,7 @@ import {
 import { AgentType, type AgentConnection } from "@/api/gen/brigade/v1/agent_pb";
 import type { AgentImagesSettings } from "@/api/gen/brigade/v1/auth_pb";
 import { McpServer } from "@/api/gen/brigade/v1/mcp_pb";
-import { Session, SessionKind } from "@/api/gen/brigade/v1/session_pb";
+import { Session, SessionExecutionPolicy, SessionKind } from "@/api/gen/brigade/v1/session_pb";
 import type { ResponseProfile } from "@/api/gen/brigade/v1/response_profile_pb";
 import type { Plugin } from "@/api/gen/brigade/v1/plugin_pb";
 import { cn } from "@/lib/utils";
@@ -141,6 +141,8 @@ export function CreateSessionDialog({
   const [connections, setConnections] = useState<AgentConnection[] | null>(null);
   const [connectionId, setConnectionId] = useState("");
   const [kind, setKind] = useState<SessionKind>(SessionKind.CLI);
+  const [onDemand, setOnDemand] = useState(false);
+  const [docker, setDocker] = useState(false);
   const [busy, setBusy] = useState(false);
   // MCP-серверы пользователя и выбранный набор. Выбор помнится между запусками: набор
   // инструментов у человека обычно постоянный, отмечать его заново каждый раз незачем.
@@ -176,6 +178,15 @@ export function CreateSessionDialog({
       cancelled = true;
     };
   }, [open, agents]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    authClient.getAgentRuntime({}).then((result) => {
+      if (!cancelled) setDocker(result.runningMode === "docker");
+    }).catch(() => { if (!cancelled) setDocker(false); });
+    return () => { cancelled = true; };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -252,16 +263,22 @@ export function CreateSessionDialog({
 
   const selectedConnection = connections?.find((connection) => connection.id === connectionId);
   const selectedAgent = agents?.find((agent) => agent.id === selectedConnection?.agentType);
-  const experience = experienceId ? `plugin:${experienceId}` : kind === SessionKind.CLI ? "cli" : "chat";
+  const experience = onDemand ? "shadow" : experienceId ? `plugin:${experienceId}` : kind === SessionKind.CLI ? "cli" : "chat";
   const acpDisabled = selectedAgent?.supportedKinds.length ? !selectedAgent.supportedKinds.includes("acp") : false;
 
   const selectExperience = (value: string) => {
     if (value === "cli") {
       setKind(SessionKind.CLI);
       setExperienceId("");
+      setOnDemand(false);
+    } else if (value === "shadow") {
+      setKind(SessionKind.ACP);
+      setExperienceId("");
+      setOnDemand(true);
     } else {
       setKind(SessionKind.ACP);
       setExperienceId(value.startsWith("plugin:") ? value.slice(7) : "");
+      setOnDemand(false);
     }
   };
 
@@ -274,17 +291,18 @@ export function CreateSessionDialog({
     if (!selectedConnection) return;
     setBusy(true);
     try {
-      saveMcpSelection(mcpSelected);
+      if (!onDemand) saveMcpSelection(mcpSelected);
       localStorage.setItem(IMAGE_KEY, image);
       const res = await sessionClient.create({
         agentType: selectedConnection.agentType,
         kind,
         prompt: "",
-        mcpServerIds: mcpSelected,
+        mcpServerIds: onDemand ? [] : mcpSelected,
         image,
         authProfile: selectedConnection.id,
-        responseProfileId: kind === SessionKind.ACP ? responseProfileId : "default",
+        responseProfileId: kind === SessionKind.ACP && !onDemand ? responseProfileId : "default",
         experienceId,
+        executionPolicy: onDemand ? SessionExecutionPolicy.ON_DEMAND : SessionExecutionPolicy.PERSISTENT,
       });
       const session = res.session;
       if (!session) throw new Error("пустой ответ Create");
@@ -375,6 +393,15 @@ export function CreateSessionDialog({
                     </div>
                   )}
                 />
+                <ExperienceTile
+                  value="shadow"
+                  selected={experience === "shadow"}
+                  disabled={acpDisabled || !docker}
+                  title="Переписка"
+                  description="Сообщения хранятся в Brigade; агент запускается только для черновика. Docker."
+                  onSelect={selectExperience}
+                  preview={<div className="flex size-full items-center justify-center bg-[#272624]"><MessagesSquare className="size-9 text-[#e38a68]" /></div>}
+                />
                 {plugins.filter((plugin) => plugin.compatible && plugin.configured).map((plugin) => (
                   <ExperienceTile
                     key={plugin.id}
@@ -390,7 +417,7 @@ export function CreateSessionDialog({
               </div>
             </div>
 
-            {kind === SessionKind.ACP && responseProfiles.length > 0 && (
+            {kind === SessionKind.ACP && !onDemand && responseProfiles.length > 0 && (
               <div className="space-y-2">
                 <Label>Профиль ответов</Label>
                 <Select value={responseProfileId} onValueChange={setResponseProfileId}>
@@ -436,7 +463,7 @@ export function CreateSessionDialog({
               </div>
             )}
 
-            {mcpServers.length > 0 && (
+            {!onDemand && mcpServers.length > 0 && (
               <div className="space-y-2">
                 <Label>MCP-серверы</Label>
                 <div className="flex flex-col gap-1">

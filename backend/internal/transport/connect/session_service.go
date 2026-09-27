@@ -45,9 +45,22 @@ func (s *SessionService) Create(ctx context.Context, req *connect.Request[v1.Cre
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
-	sess, err := s.registry.Create(ctx, userID,
-		kindFromProto(req.Msg.Kind),
-		req.Msg.AgentType, req.Msg.AuthProfile, req.Msg.Cwd, req.Msg.Prompt, req.Msg.McpServerIds, image, "", req.Msg.ResponseProfileId, "", req.Msg.ExperienceId)
+	var sess store.Session
+	if req.Msg.ExecutionPolicy != v1.SessionExecutionPolicy_SESSION_EXECUTION_POLICY_UNSPECIFIED &&
+		req.Msg.ExecutionPolicy != v1.SessionExecutionPolicy_SESSION_EXECUTION_POLICY_PERSISTENT &&
+		req.Msg.ExecutionPolicy != v1.SessionExecutionPolicy_SESSION_EXECUTION_POLICY_ON_DEMAND {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("unknown session execution policy"))
+	}
+	if req.Msg.ExecutionPolicy == v1.SessionExecutionPolicy_SESSION_EXECUTION_POLICY_ON_DEMAND {
+		if req.Msg.Kind != v1.SessionKind_SESSION_KIND_ACP || req.Msg.Prompt != "" || req.Msg.ExperienceId != "" || len(req.Msg.McpServerIds) != 0 {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("on-demand session supports ACP without initial prompt, MCP or experience"))
+		}
+		sess, err = s.registry.CreateShadow(ctx, userID, req.Msg.AgentType, req.Msg.AuthProfile, image, "", "")
+	} else {
+		sess, err = s.registry.Create(ctx, userID,
+			kindFromProto(req.Msg.Kind),
+			req.Msg.AgentType, req.Msg.AuthProfile, req.Msg.Cwd, req.Msg.Prompt, req.Msg.McpServerIds, image, "", req.Msg.ResponseProfileId, "", req.Msg.ExperienceId)
+	}
 	if err != nil {
 		if errors.Is(err, session.ErrClaudeTokenRequired) {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
@@ -121,6 +134,73 @@ func (s *SessionService) MarkRead(ctx context.Context, req *connect.Request[v1.M
 		return nil, err
 	}
 	if err := s.registry.MarkRead(ctx, req.Msg.SessionId, userID); err != nil {
+		return nil, sessionError(err)
+	}
+	return connect.NewResponse(&v1.Empty{}), nil
+}
+
+func (s *SessionService) AddMessage(ctx context.Context, req *connect.Request[v1.AddSessionMessageRequest]) (*connect.Response[v1.AddSessionMessageResponse], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	message, err := s.registry.AddShadowMessage(ctx, req.Msg.SessionId, userID, req.Msg.Content)
+	if err != nil {
+		return nil, sessionError(err)
+	}
+	return connect.NewResponse(&v1.AddSessionMessageResponse{MessageId: message.ID}), nil
+}
+
+func (s *SessionService) SetMessageIncluded(ctx context.Context, req *connect.Request[v1.SetSessionMessageIncludedRequest]) (*connect.Response[v1.Empty], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.registry.SetShadowMessageIncluded(ctx, req.Msg.SessionId, userID, req.Msg.MessageId, req.Msg.Included); err != nil {
+		return nil, sessionError(err)
+	}
+	return connect.NewResponse(&v1.Empty{}), nil
+}
+
+func (s *SessionService) GenerateDraft(ctx context.Context, req *connect.Request[v1.GenerateSessionDraftRequest]) (*connect.Response[v1.GenerateSessionDraftResponse], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	run, err := s.registry.StartShadowRun(ctx, req.Msg.SessionId, userID)
+	if err != nil {
+		if errors.Is(err, store.ErrSessionRunActive) {
+			return nil, connect.NewError(connect.CodeAlreadyExists, err)
+		}
+		if errors.Is(err, session.ErrContainerLimitReached) {
+			return nil, connect.NewError(connect.CodeResourceExhausted, err)
+		}
+		return nil, sessionError(err)
+	}
+	return connect.NewResponse(&v1.GenerateSessionDraftResponse{RunId: run.ID}), nil
+}
+
+func (s *SessionService) GetDraftRun(ctx context.Context, req *connect.Request[v1.GetSessionDraftRunRequest]) (*connect.Response[v1.GetSessionDraftRunResponse], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	run, err := s.registry.LatestShadowRun(ctx, req.Msg.SessionId, userID)
+	if err != nil {
+		return nil, sessionError(err)
+	}
+	return connect.NewResponse(&v1.GetSessionDraftRunResponse{
+		RunId: run.ID, Status: run.Status, Error: run.Error,
+		DraftMessageId: run.DraftMessageID, InputRevision: run.InputRevision,
+	}), nil
+}
+
+func (s *SessionService) EditDraft(ctx context.Context, req *connect.Request[v1.EditSessionDraftRequest]) (*connect.Response[v1.Empty], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.registry.EditShadowDraft(ctx, req.Msg.SessionId, userID, req.Msg.MessageId, req.Msg.Content); err != nil {
 		return nil, sessionError(err)
 	}
 	return connect.NewResponse(&v1.Empty{}), nil

@@ -40,8 +40,12 @@ type TelegramBot struct {
 	SessionMode string `protobuf:"bytes,13,opt,name=session_mode,json=sessionMode,proto3" json:"session_mode,omitempty"`
 	// archive (по умолчанию) | delete: действие /new в режиме chat.
 	NewSessionAction string `protobuf:"bytes,14,opt,name=new_session_action,json=newSessionAction,proto3" json:"new_session_action,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// assistant создаёт обычные ACP-сессии; secretary только сохраняет Business-переписку.
+	Purpose           string `protobuf:"bytes,15,opt,name=purpose,proto3" json:"purpose,omitempty"`
+	BusinessConnected bool   `protobuf:"varint,16,opt,name=business_connected,json=businessConnected,proto3" json:"business_connected,omitempty"`
+	BusinessCanReply  bool   `protobuf:"varint,17,opt,name=business_can_reply,json=businessCanReply,proto3" json:"business_can_reply,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *TelegramBot) Reset() {
@@ -172,6 +176,79 @@ func (x *TelegramBot) GetNewSessionAction() string {
 	return ""
 }
 
+func (x *TelegramBot) GetPurpose() string {
+	if x != nil {
+		return x.Purpose
+	}
+	return ""
+}
+
+func (x *TelegramBot) GetBusinessConnected() bool {
+	if x != nil {
+		return x.BusinessConnected
+	}
+	return false
+}
+
+func (x *TelegramBot) GetBusinessCanReply() bool {
+	if x != nil {
+		return x.BusinessCanReply
+	}
+	return false
+}
+
+type SendTelegramDraftRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	MessageId     string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SendTelegramDraftRequest) Reset() {
+	*x = SendTelegramDraftRequest{}
+	mi := &file_brigade_v1_telegram_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SendTelegramDraftRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SendTelegramDraftRequest) ProtoMessage() {}
+
+func (x *SendTelegramDraftRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_telegram_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SendTelegramDraftRequest.ProtoReflect.Descriptor instead.
+func (*SendTelegramDraftRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_telegram_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *SendTelegramDraftRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *SendTelegramDraftRequest) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
 type ListTelegramBotsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Bots  []*TelegramBot         `protobuf:"bytes,1,rep,name=bots,proto3" json:"bots,omitempty"`
@@ -183,7 +260,7 @@ type ListTelegramBotsResponse struct {
 
 func (x *ListTelegramBotsResponse) Reset() {
 	*x = ListTelegramBotsResponse{}
-	mi := &file_brigade_v1_telegram_proto_msgTypes[1]
+	mi := &file_brigade_v1_telegram_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -195,7 +272,7 @@ func (x *ListTelegramBotsResponse) String() string {
 func (*ListTelegramBotsResponse) ProtoMessage() {}
 
 func (x *ListTelegramBotsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_telegram_proto_msgTypes[1]
+	mi := &file_brigade_v1_telegram_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -208,7 +285,7 @@ func (x *ListTelegramBotsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTelegramBotsResponse.ProtoReflect.Descriptor instead.
 func (*ListTelegramBotsResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_telegram_proto_rawDescGZIP(), []int{1}
+	return file_brigade_v1_telegram_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ListTelegramBotsResponse) GetBots() []*TelegramBot {
@@ -236,7 +313,7 @@ type SaveTelegramBotRequest struct {
 
 func (x *SaveTelegramBotRequest) Reset() {
 	*x = SaveTelegramBotRequest{}
-	mi := &file_brigade_v1_telegram_proto_msgTypes[2]
+	mi := &file_brigade_v1_telegram_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -248,7 +325,7 @@ func (x *SaveTelegramBotRequest) String() string {
 func (*SaveTelegramBotRequest) ProtoMessage() {}
 
 func (x *SaveTelegramBotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_telegram_proto_msgTypes[2]
+	mi := &file_brigade_v1_telegram_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -261,7 +338,7 @@ func (x *SaveTelegramBotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveTelegramBotRequest.ProtoReflect.Descriptor instead.
 func (*SaveTelegramBotRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_telegram_proto_rawDescGZIP(), []int{2}
+	return file_brigade_v1_telegram_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *SaveTelegramBotRequest) GetBot() *TelegramBot {
@@ -287,7 +364,7 @@ type TelegramBotRequest struct {
 
 func (x *TelegramBotRequest) Reset() {
 	*x = TelegramBotRequest{}
-	mi := &file_brigade_v1_telegram_proto_msgTypes[3]
+	mi := &file_brigade_v1_telegram_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -299,7 +376,7 @@ func (x *TelegramBotRequest) String() string {
 func (*TelegramBotRequest) ProtoMessage() {}
 
 func (x *TelegramBotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_telegram_proto_msgTypes[3]
+	mi := &file_brigade_v1_telegram_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -312,7 +389,7 @@ func (x *TelegramBotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TelegramBotRequest.ProtoReflect.Descriptor instead.
 func (*TelegramBotRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_telegram_proto_rawDescGZIP(), []int{3}
+	return file_brigade_v1_telegram_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *TelegramBotRequest) GetId() string {
@@ -332,7 +409,7 @@ type TelegramBindingLink struct {
 
 func (x *TelegramBindingLink) Reset() {
 	*x = TelegramBindingLink{}
-	mi := &file_brigade_v1_telegram_proto_msgTypes[4]
+	mi := &file_brigade_v1_telegram_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -344,7 +421,7 @@ func (x *TelegramBindingLink) String() string {
 func (*TelegramBindingLink) ProtoMessage() {}
 
 func (x *TelegramBindingLink) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_telegram_proto_msgTypes[4]
+	mi := &file_brigade_v1_telegram_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -357,7 +434,7 @@ func (x *TelegramBindingLink) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TelegramBindingLink.ProtoReflect.Descriptor instead.
 func (*TelegramBindingLink) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_telegram_proto_rawDescGZIP(), []int{4}
+	return file_brigade_v1_telegram_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *TelegramBindingLink) GetUrl() string {
@@ -379,7 +456,7 @@ var File_brigade_v1_telegram_proto protoreflect.FileDescriptor
 const file_brigade_v1_telegram_proto_rawDesc = "" +
 	"\n" +
 	"\x19brigade/v1/telegram.proto\x12\n" +
-	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\xed\x03\n" +
+	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\xe4\x04\n" +
 	"\vTelegramBot\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12\x12\n" +
@@ -396,7 +473,15 @@ const file_brigade_v1_telegram_proto_rawDesc = "" +
 	"\x16supports_guest_queries\x18\v \x01(\bR\x14supportsGuestQueries\x12,\n" +
 	"\x12has_topics_enabled\x18\f \x01(\bR\x10hasTopicsEnabled\x12!\n" +
 	"\fsession_mode\x18\r \x01(\tR\vsessionMode\x12,\n" +
-	"\x12new_session_action\x18\x0e \x01(\tR\x10newSessionAction\"[\n" +
+	"\x12new_session_action\x18\x0e \x01(\tR\x10newSessionAction\x12\x18\n" +
+	"\apurpose\x18\x0f \x01(\tR\apurpose\x12-\n" +
+	"\x12business_connected\x18\x10 \x01(\bR\x11businessConnected\x12,\n" +
+	"\x12business_can_reply\x18\x11 \x01(\bR\x10businessCanReply\"X\n" +
+	"\x18SendTelegramDraftRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x02 \x01(\tR\tmessageId\"[\n" +
 	"\x18ListTelegramBotsResponse\x12+\n" +
 	"\x04bots\x18\x01 \x03(\v2\x17.brigade.v1.TelegramBotR\x04bots\x12\x12\n" +
 	"\x04mode\x18\x02 \x01(\tR\x04mode\"Y\n" +
@@ -408,12 +493,13 @@ const file_brigade_v1_telegram_proto_rawDesc = "" +
 	"\x13TelegramBindingLink\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x1d\n" +
 	"\n" +
-	"expires_at\x18\x02 \x01(\x03R\texpiresAt2\xbc\x02\n" +
+	"expires_at\x18\x02 \x01(\x03R\texpiresAt2\x84\x03\n" +
 	"\x0fTelegramService\x12E\n" +
 	"\bListBots\x12\x11.brigade.v1.Empty\x1a$.brigade.v1.ListTelegramBotsResponse\"\x00\x12H\n" +
 	"\aSaveBot\x12\".brigade.v1.SaveTelegramBotRequest\x1a\x17.brigade.v1.TelegramBot\"\x00\x12@\n" +
 	"\tDeleteBot\x12\x1e.brigade.v1.TelegramBotRequest\x1a\x11.brigade.v1.Empty\"\x00\x12V\n" +
-	"\x11CreateBindingLink\x12\x1e.brigade.v1.TelegramBotRequest\x1a\x1f.brigade.v1.TelegramBindingLink\"\x00B\xaa\x01\n" +
+	"\x11CreateBindingLink\x12\x1e.brigade.v1.TelegramBotRequest\x1a\x1f.brigade.v1.TelegramBindingLink\"\x00\x12F\n" +
+	"\tSendDraft\x12$.brigade.v1.SendTelegramDraftRequest\x1a\x11.brigade.v1.Empty\"\x00B\xaa\x01\n" +
 	"\x0ecom.brigade.v1B\rTelegramProtoP\x01Z@github.com/grigory51/brigade/backend/gen/go/brigade/v1;brigadev1\xa2\x02\x03BXX\xaa\x02\n" +
 	"Brigade.V1\xca\x02\n" +
 	"Brigade\\V1\xe2\x02\x16Brigade\\V1\\GPBMetadata\xea\x02\vBrigade::V1b\x06proto3"
@@ -430,28 +516,31 @@ func file_brigade_v1_telegram_proto_rawDescGZIP() []byte {
 	return file_brigade_v1_telegram_proto_rawDescData
 }
 
-var file_brigade_v1_telegram_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_brigade_v1_telegram_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_brigade_v1_telegram_proto_goTypes = []any{
 	(*TelegramBot)(nil),              // 0: brigade.v1.TelegramBot
-	(*ListTelegramBotsResponse)(nil), // 1: brigade.v1.ListTelegramBotsResponse
-	(*SaveTelegramBotRequest)(nil),   // 2: brigade.v1.SaveTelegramBotRequest
-	(*TelegramBotRequest)(nil),       // 3: brigade.v1.TelegramBotRequest
-	(*TelegramBindingLink)(nil),      // 4: brigade.v1.TelegramBindingLink
-	(*Empty)(nil),                    // 5: brigade.v1.Empty
+	(*SendTelegramDraftRequest)(nil), // 1: brigade.v1.SendTelegramDraftRequest
+	(*ListTelegramBotsResponse)(nil), // 2: brigade.v1.ListTelegramBotsResponse
+	(*SaveTelegramBotRequest)(nil),   // 3: brigade.v1.SaveTelegramBotRequest
+	(*TelegramBotRequest)(nil),       // 4: brigade.v1.TelegramBotRequest
+	(*TelegramBindingLink)(nil),      // 5: brigade.v1.TelegramBindingLink
+	(*Empty)(nil),                    // 6: brigade.v1.Empty
 }
 var file_brigade_v1_telegram_proto_depIdxs = []int32{
 	0, // 0: brigade.v1.ListTelegramBotsResponse.bots:type_name -> brigade.v1.TelegramBot
 	0, // 1: brigade.v1.SaveTelegramBotRequest.bot:type_name -> brigade.v1.TelegramBot
-	5, // 2: brigade.v1.TelegramService.ListBots:input_type -> brigade.v1.Empty
-	2, // 3: brigade.v1.TelegramService.SaveBot:input_type -> brigade.v1.SaveTelegramBotRequest
-	3, // 4: brigade.v1.TelegramService.DeleteBot:input_type -> brigade.v1.TelegramBotRequest
-	3, // 5: brigade.v1.TelegramService.CreateBindingLink:input_type -> brigade.v1.TelegramBotRequest
-	1, // 6: brigade.v1.TelegramService.ListBots:output_type -> brigade.v1.ListTelegramBotsResponse
-	0, // 7: brigade.v1.TelegramService.SaveBot:output_type -> brigade.v1.TelegramBot
-	5, // 8: brigade.v1.TelegramService.DeleteBot:output_type -> brigade.v1.Empty
-	4, // 9: brigade.v1.TelegramService.CreateBindingLink:output_type -> brigade.v1.TelegramBindingLink
-	6, // [6:10] is the sub-list for method output_type
-	2, // [2:6] is the sub-list for method input_type
+	6, // 2: brigade.v1.TelegramService.ListBots:input_type -> brigade.v1.Empty
+	3, // 3: brigade.v1.TelegramService.SaveBot:input_type -> brigade.v1.SaveTelegramBotRequest
+	4, // 4: brigade.v1.TelegramService.DeleteBot:input_type -> brigade.v1.TelegramBotRequest
+	4, // 5: brigade.v1.TelegramService.CreateBindingLink:input_type -> brigade.v1.TelegramBotRequest
+	1, // 6: brigade.v1.TelegramService.SendDraft:input_type -> brigade.v1.SendTelegramDraftRequest
+	2, // 7: brigade.v1.TelegramService.ListBots:output_type -> brigade.v1.ListTelegramBotsResponse
+	0, // 8: brigade.v1.TelegramService.SaveBot:output_type -> brigade.v1.TelegramBot
+	6, // 9: brigade.v1.TelegramService.DeleteBot:output_type -> brigade.v1.Empty
+	5, // 10: brigade.v1.TelegramService.CreateBindingLink:output_type -> brigade.v1.TelegramBindingLink
+	6, // 11: brigade.v1.TelegramService.SendDraft:output_type -> brigade.v1.Empty
+	7, // [7:12] is the sub-list for method output_type
+	2, // [2:7] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name
 	2, // [2:2] is the sub-list for extension extendee
 	0, // [0:2] is the sub-list for field type_name
@@ -469,7 +558,7 @@ func file_brigade_v1_telegram_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_brigade_v1_telegram_proto_rawDesc), len(file_brigade_v1_telegram_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

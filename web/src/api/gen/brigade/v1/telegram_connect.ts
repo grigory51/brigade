@@ -4,7 +4,7 @@
 // @ts-nocheck
 
 import { Empty } from "./auth_pb.js";
-import { ListTelegramBotsResponse, SaveTelegramBotRequest, TelegramBindingLink, TelegramBot, TelegramBotRequest } from "./telegram_pb.js";
+import { ListTelegramBotsResponse, SaveTelegramBotRequest, SendTelegramDraftRequest, TelegramBindingLink, TelegramBot, TelegramBotRequest } from "./telegram_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -47,6 +47,15 @@ export const TelegramService = {
       name: "CreateBindingLink",
       I: TelegramBotRequest,
       O: TelegramBindingLink,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.TelegramService.SendDraft
+     */
+    sendDraft: {
+      name: "SendDraft",
+      I: SendTelegramDraftRequest,
+      O: Empty,
       kind: MethodKind.Unary,
     },
   }

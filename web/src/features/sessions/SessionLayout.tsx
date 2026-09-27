@@ -34,6 +34,7 @@ import { toast } from "sonner";
 import { sessionClient } from "@/api/client";
 import {
   Session,
+  SessionExecutionPolicy,
   SessionKind,
 } from "@/api/gen/brigade/v1/session_pb";
 import { useAuth } from "@/features/auth/AuthContext";
@@ -631,7 +632,7 @@ function SessionItem({
   const fullLabel = session.name || fallback;
   const groupPrefix = `${session.groupLabel} · `;
   const refreshPinned =
-    session.kind === SessionKind.ACP && (session.agentOutdated || reloading);
+    session.kind === SessionKind.ACP && session.executionPolicy !== SessionExecutionPolicy.ON_DEMAND && (session.agentOutdated || reloading);
   const label = grouped && fullLabel === session.groupLabel
     ? "Личный чат"
     : grouped && fullLabel.startsWith(groupPrefix)
@@ -727,7 +728,7 @@ function SessionItem({
           />
         )}
       </SidebarMenuButton>
-      {session.kind === SessionKind.ACP && (
+      {session.kind === SessionKind.ACP && session.executionPolicy !== SessionExecutionPolicy.ON_DEMAND && (
         <Tooltip>
           <TooltipTrigger asChild>
             <SidebarMenuAction

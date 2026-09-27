@@ -406,9 +406,16 @@ type Message struct {
 	// из ленты при любом восстановлении истории (reload после фонового turn'а, рестарт
 	// бэкенда) — /history отдавал только текст. ArgsText — сырой JSON аргументов,
 	// Result — итоговый вывод вызова.
-	ToolName string `json:"toolName,omitempty"`
-	ArgsText string `json:"argsText,omitempty"`
-	Result   string `json:"result,omitempty"`
+	ToolName          string `json:"toolName,omitempty"`
+	ArgsText          string `json:"argsText,omitempty"`
+	Result            string `json:"result,omitempty"`
+	Author            string `json:"author,omitempty"`
+	Source            string `json:"source,omitempty"`
+	ExternalID        string `json:"externalId,omitempty"`
+	IncludedInContext bool   `json:"includedInContext,omitempty"`
+	Delivery          string `json:"delivery,omitempty"`
+	ReplyToID         string `json:"replyToId,omitempty"`
+	CreatedAt         int64  `json:"createdAt,omitempty"`
 }
 
 // MessagesSnapshot переводит серверную проекцию истории в канонический AG-UI snapshot.

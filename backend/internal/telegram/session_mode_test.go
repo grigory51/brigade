@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/grigory51/brigade/backend/internal/memory"
 	"github.com/grigory51/brigade/backend/internal/session"
@@ -19,6 +20,7 @@ import (
 type telegramTestRegistry struct {
 	*session.Registry
 	sessions                         map[string]store.Session
+	shadowStore                      *store.Store
 	created, archived, deleted       []string
 	prompts                          []string
 	archiveErr, deleteErr, createErr error
@@ -38,6 +40,24 @@ func (r *telegramTestRegistry) Create(_ context.Context, userID string, kind sto
 	}
 	id := fmt.Sprintf("new-%d", len(r.created)+1)
 	sess := store.Session{ID: id, UserID: userID, Kind: kind, AgentType: agentType, Status: store.SessionStatusRunning, InstructionProfile: instructionProfile}
+	r.sessions[id] = sess
+	r.created = append(r.created, id)
+	return sess, nil
+}
+
+func (r *telegramTestRegistry) CreateShadow(_ context.Context, userID, agentType, authProfile, image, name, groupLabel string) (store.Session, error) {
+	if r.createErr != nil {
+		return store.Session{}, r.createErr
+	}
+	id := fmt.Sprintf("shadow-%d", len(r.created)+1)
+	sess := store.Session{ID: id, UserID: userID, Kind: store.SessionKindACP, Mode: store.SessionModeDocker,
+		AgentType: agentType, ExecutionPolicy: store.SessionExecutionOnDemand, Status: store.SessionStatusIdle,
+		Name: name, GroupLabel: groupLabel, CreatedAt: time.Now()}
+	if r.shadowStore != nil {
+		if err := r.shadowStore.CreateSession(context.Background(), sess); err != nil {
+			return store.Session{}, err
+		}
+	}
 	r.sessions[id] = sess
 	r.created = append(r.created, id)
 	return sess, nil
@@ -163,6 +183,21 @@ func TestNewTelegramSession(t *testing.T) {
 				t.Fatalf("reply not ready: %+v %v", ready, err)
 			}
 		})
+	}
+}
+
+func TestNewTelegramSessionContainerLimit(t *testing.T) {
+	s, registry, bot := telegramModeFixture(t, store.TelegramSessionChat, store.TelegramNewSessionArchive)
+	registry.createErr = fmt.Errorf("create: %w", session.ErrContainerLimitReached)
+	in := queueTelegramMessage(t, s, bot, 1, "/new")
+	s.newSession(bot, in, "")
+	ready, err := s.store.ListTelegramUpdates(t.Context(), bot.ID, "ready")
+	if err != nil || len(ready) != 1 {
+		t.Fatalf("reply not ready: %+v, %v", ready, err)
+	}
+	want := "Не удалось создать новую сессию: достигнут лимит контейнеров. Архивируйте или удалите ненужные сессии в Brigade либо попросите администратора увеличить лимит. Затем повторите /new."
+	if ready[0].Response != want || ready[0].Error != registry.createErr.Error() {
+		t.Fatalf("unexpected reply: %+v", ready[0])
 	}
 }
 

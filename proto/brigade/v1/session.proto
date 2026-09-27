@@ -24,6 +24,13 @@ enum SessionStatus {
   SESSION_STATUS_RUNNING = 1;
   SESSION_STATUS_STOPPED = 2;
   SESSION_STATUS_FAILED = 3;
+  SESSION_STATUS_IDLE = 4;
+}
+
+enum SessionExecutionPolicy {
+  SESSION_EXECUTION_POLICY_UNSPECIFIED = 0;
+  SESSION_EXECUTION_POLICY_PERSISTENT = 1;
+  SESSION_EXECUTION_POLICY_ON_DEMAND = 2;
 }
 
 // Session — единица работы агента. Поля resume (agent_session_id, container_label)
@@ -76,6 +83,7 @@ message Session {
   string experience_id = 24;
   // Версия MCPB фиксируется при создании, чтобы обновление плагина не меняло живую сессию.
   string experience_version = 25;
+  SessionExecutionPolicy execution_policy = 26;
 }
 
 message CreateSessionRequest {
@@ -97,6 +105,8 @@ message CreateSessionRequest {
   string auth_profile = 8;
   string response_profile_id = 9;
   string experience_id = 10;
+  // on_demand создаёт сессию без запущенного агента; только для ACP и Docker.
+  SessionExecutionPolicy execution_policy = 11;
 }
 
 message CreateSessionResponse {
@@ -141,6 +151,47 @@ message ReloadAgentRequest {
 
 message MarkSessionReadRequest {
   string session_id = 1;
+}
+
+message AddSessionMessageRequest {
+  string session_id = 1;
+  string content = 2;
+}
+
+message AddSessionMessageResponse {
+  string message_id = 1;
+}
+
+message SetSessionMessageIncludedRequest {
+  string session_id = 1;
+  string message_id = 2;
+  bool included = 3;
+}
+
+message GenerateSessionDraftRequest {
+  string session_id = 1;
+}
+
+message GenerateSessionDraftResponse {
+  string run_id = 1;
+}
+
+message GetSessionDraftRunRequest {
+  string session_id = 1;
+}
+
+message GetSessionDraftRunResponse {
+  string run_id = 1;
+  string status = 2;
+  string error = 3;
+  string draft_message_id = 4;
+  int64 input_revision = 5;
+}
+
+message EditSessionDraftRequest {
+  string session_id = 1;
+  string message_id = 2;
+  string content = 3;
 }
 
 // SetSessionMcpServers задаёт набор включённых MCP-серверов сессии. Набор персистится и
@@ -206,6 +257,11 @@ service SessionService {
   rpc Get(GetSessionRequest) returns (GetSessionResponse) {}
   rpc Update(UpdateSessionRequest) returns (UpdateSessionResponse) {}
   rpc MarkRead(MarkSessionReadRequest) returns (Empty) {}
+  rpc AddMessage(AddSessionMessageRequest) returns (AddSessionMessageResponse) {}
+  rpc SetMessageIncluded(SetSessionMessageIncludedRequest) returns (Empty) {}
+  rpc GenerateDraft(GenerateSessionDraftRequest) returns (GenerateSessionDraftResponse) {}
+  rpc GetDraftRun(GetSessionDraftRunRequest) returns (GetSessionDraftRunResponse) {}
+  rpc EditDraft(EditSessionDraftRequest) returns (Empty) {}
   rpc Stop(StopSessionRequest) returns (Empty) {}
   rpc Delete(DeleteSessionRequest) returns (Empty) {}
   // ReloadAgent перезапускает ACP-агента сессии на актуальном окружении, сохраняя диалог

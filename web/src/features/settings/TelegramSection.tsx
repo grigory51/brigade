@@ -43,6 +43,7 @@ type Draft = {
   mcpServerIds: string[];
   sessionMode: "threads" | "chat";
   newSessionAction: "archive" | "delete";
+  purpose: "assistant" | "secretary";
 };
 
 const emptyDraft = (): Draft => ({
@@ -53,6 +54,7 @@ const emptyDraft = (): Draft => ({
   mcpServerIds: [],
   sessionMode: "threads",
   newSessionAction: "archive",
+  purpose: "assistant",
 });
 
 export function TelegramSection({
@@ -120,6 +122,7 @@ export function TelegramSection({
       mcpServerIds: bot.mcpServerIds,
       sessionMode: bot.sessionMode === "chat" ? "chat" : "threads",
       newSessionAction: bot.newSessionAction === "delete" ? "delete" : "archive",
+      purpose: bot.purpose === "secretary" ? "secretary" : "assistant",
     });
     setToken("");
     setBindingURL("");
@@ -159,6 +162,7 @@ export function TelegramSection({
           mcpServerIds: draft.mcpServerIds,
           sessionMode: draft.sessionMode,
           newSessionAction: draft.sessionMode === "threads" ? "archive" : draft.newSessionAction,
+          purpose: draft.purpose,
         },
         token,
       });
@@ -220,8 +224,10 @@ export function TelegramSection({
         )}
       >
         <Description>
-          Ваш бот становится персональным интерфейсом Brigade. В группах и Guest Mode он
-          отвечает только привязанному владельцу. Updates получает инстанс через {" "}
+          {draft.purpose === "secretary"
+            ? "Telegram Business сохраняет переписки в Brigade. Агент запускается только по вашей команде и готовит черновик; отправка требует отдельного подтверждения."
+            : "Ваш бот становится персональным интерфейсом Brigade. В группах и Guest Mode он отвечает только привязанному владельцу."}
+          {" "}Updates получает инстанс через {" "}
           <span className="font-mono">{mode}</span>.
         </Description>
       </SectionHeader>
@@ -240,6 +246,17 @@ export function TelegramSection({
       </div>
 
       <div className="flex flex-col gap-2">
+        <FieldLabel>Назначение</FieldLabel>
+        <Select value={draft.purpose} onValueChange={(value: Draft["purpose"]) => patch({ purpose: value })} disabled={saving}>
+          <SelectTrigger className="h-[41px] w-full"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="assistant">Ассистент — отвечает на обращения</SelectItem>
+            <SelectItem value="secretary">Секретарь — сохраняет Business-переписки</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex flex-col gap-2">
         <div className="flex flex-col gap-2">
           <FieldLabel>Агент</FieldLabel>
           <Select value={draft.authProfile} onValueChange={(id) => {
@@ -254,7 +271,7 @@ export function TelegramSection({
         </div>
       </div>
 
-      <div className="flex flex-col gap-2">
+      {draft.purpose === "assistant" && <div className="flex flex-col gap-2">
         <FieldLabel>Режим сессий</FieldLabel>
         <Select
           value={draft.sessionMode}
@@ -275,9 +292,9 @@ export function TelegramSection({
             : "Одна сессия на чат без разделения по топикам. /new архивирует или удаляет предыдущую и сразу создаёт новую."}
           {" "}Смена режима не удаляет старые сессии.
         </p>
-      </div>
+      </div>}
 
-      {draft.sessionMode === "chat" && (
+      {draft.purpose === "assistant" && draft.sessionMode === "chat" && (
         <div className="flex flex-col gap-2">
           <FieldLabel>При /new</FieldLabel>
           <Select
@@ -300,7 +317,7 @@ export function TelegramSection({
           </p>
         </div>
       )}
-      {draft.sessionMode === "threads" && (
+      {draft.purpose === "assistant" && draft.sessionMode === "threads" && (
         <Description>Для архивации нужен репозиторий заметок. При ошибке история не удаляется.</Description>
       )}
 
@@ -317,7 +334,7 @@ export function TelegramSection({
         </div>
       )}
 
-      {mcp.length > 0 && (
+      {draft.purpose === "assistant" && mcp.length > 0 && (
         <div className="flex flex-col gap-2">
           <FieldLabel>MCP-серверы</FieldLabel>
           <div className="divide-y overflow-hidden rounded-[11px] border bg-[#1c1b1a]">
@@ -381,15 +398,22 @@ export function TelegramSection({
             <span className="text-muted-foreground">Владелец</span>
             <span className="min-w-0 break-all text-right">{selected.ownerConnected ? `@${selected.ownerUsername || "подключён"}` : "не привязан"}</span>
           </div>
-          <div className="flex justify-between gap-3">
+          {draft.purpose === "secretary" && <div className="flex justify-between gap-3">
+            <span className="text-muted-foreground">Telegram Business</span>
+            <span>{selected.businessConnected ? (selected.businessCanReply ? "подключён · ответ разрешён" : "подключён · только чтение") : "ожидает подключения"}</span>
+          </div>}
+          {draft.purpose === "assistant" && <div className="flex justify-between gap-3">
             <span className="text-muted-foreground">Топики в личном чате</span>
             <span>{selected.hasTopicsEnabled ? "доступны" : "не включены"}</span>
-          </div>
-          <div className="flex justify-between gap-3">
+          </div>}
+          {draft.purpose === "assistant" && <div className="flex justify-between gap-3">
             <span className="text-muted-foreground">Guest Mode</span>
             <span>{selected.supportsGuestQueries ? "доступен" : "не включён"}</span>
-          </div>
-          {(!selected.hasTopicsEnabled || !selected.supportsGuestQueries) && (
+          </div>}
+          {draft.purpose === "secretary" && <p className="border-t pt-2 text-muted-foreground">
+            Сначала привяжите владельца по ссылке выше, затем подключите этого бота в настройках Telegram Business. Для отправки черновиков дайте боту право отвечать.
+          </p>}
+          {draft.purpose === "assistant" && (!selected.hasTopicsEnabled || !selected.supportsGuestQueries) && (
             <p className="border-t pt-2 text-[#6c695f]">
               Guest Mode и Threaded Mode включаются в <ExternalLink href="https://t.me/BotFather">@BotFather</ExternalLink>, затем сохраните бота ещё раз для обновления статуса.
             </p>

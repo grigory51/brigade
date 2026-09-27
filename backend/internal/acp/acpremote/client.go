@@ -70,16 +70,17 @@ func New(baseURL, sessionID string, signToken func() (string, error)) *Client {
 
 // ConfigureOptions — параметры Configure (спавн адаптера в демоне).
 type ConfigureOptions struct {
-	OAuthToken      string
-	ExtraEnv        []string
-	AdapterCommand  string
-	Cwd             string
-	ResumeSessionID string
-	PluginDirs      []string
-	McpServers      []acpsdk.McpServer
-	SystemPrompt    string
-	CredentialFile  string
-	ExperienceMCP   *acpsdk.McpServer
+	OAuthToken          string
+	ExtraEnv            []string
+	AdapterCommand      string
+	Cwd                 string
+	ResumeSessionID     string
+	PluginDirs          []string
+	McpServers          []acpsdk.McpServer
+	SystemPrompt        string
+	CredentialFile      string
+	ExperienceMCP       *acpsdk.McpServer
+	UntrustedTranscript bool
 }
 
 // Configure просит демон (пере)поднять адаптер (секреты — здесь, не в env контейнера).
@@ -94,16 +95,17 @@ func (c *Client) Configure(ctx context.Context, opts ConfigureOptions) (string, 
 		experienceJSON, _ = json.Marshal(opts.ExperienceMCP)
 	}
 	resp, err := c.RPC.Configure(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonConfigureRequest{
-		OauthToken:        opts.OAuthToken,
-		ExtraEnv:          opts.ExtraEnv,
-		AdapterCommand:    opts.AdapterCommand,
-		Cwd:               opts.Cwd,
-		ResumeSessionId:   opts.ResumeSessionID,
-		PluginDirs:        opts.PluginDirs,
-		McpServersJson:    mcpJSON,
-		SystemPrompt:      opts.SystemPrompt,
-		CredentialFile:    opts.CredentialFile,
-		ExperienceMcpJson: experienceJSON,
+		OauthToken:          opts.OAuthToken,
+		ExtraEnv:            opts.ExtraEnv,
+		AdapterCommand:      opts.AdapterCommand,
+		Cwd:                 opts.Cwd,
+		ResumeSessionId:     opts.ResumeSessionID,
+		PluginDirs:          opts.PluginDirs,
+		McpServersJson:      mcpJSON,
+		SystemPrompt:        opts.SystemPrompt,
+		CredentialFile:      opts.CredentialFile,
+		ExperienceMcpJson:   experienceJSON,
+		UntrustedTranscript: opts.UntrustedTranscript,
 	}))
 	if err != nil {
 		return "", err

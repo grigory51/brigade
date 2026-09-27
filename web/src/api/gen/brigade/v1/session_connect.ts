@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ArchiveSessionRequest, ArchiveSessionResponse, CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, MarkSessionReadRequest, ReloadAgentRequest, SetSessionMcpServersRequest, SetSessionResponseProfileRequest, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse, UploadFileRequest, UploadFileResponse } from "./session_pb.js";
+import { AddSessionMessageRequest, AddSessionMessageResponse, ArchiveSessionRequest, ArchiveSessionResponse, CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, EditSessionDraftRequest, GenerateSessionDraftRequest, GenerateSessionDraftResponse, GetSessionDraftRunRequest, GetSessionDraftRunResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, MarkSessionReadRequest, ReloadAgentRequest, SetSessionMcpServersRequest, SetSessionMessageIncludedRequest, SetSessionResponseProfileRequest, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse, UploadFileRequest, UploadFileResponse } from "./session_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { Empty } from "./auth_pb.js";
 
@@ -57,6 +57,51 @@ export const SessionService = {
     markRead: {
       name: "MarkRead",
       I: MarkSessionReadRequest,
+      O: Empty,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.SessionService.AddMessage
+     */
+    addMessage: {
+      name: "AddMessage",
+      I: AddSessionMessageRequest,
+      O: AddSessionMessageResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.SessionService.SetMessageIncluded
+     */
+    setMessageIncluded: {
+      name: "SetMessageIncluded",
+      I: SetSessionMessageIncludedRequest,
+      O: Empty,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.SessionService.GenerateDraft
+     */
+    generateDraft: {
+      name: "GenerateDraft",
+      I: GenerateSessionDraftRequest,
+      O: GenerateSessionDraftResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.SessionService.GetDraftRun
+     */
+    getDraftRun: {
+      name: "GetDraftRun",
+      I: GetSessionDraftRunRequest,
+      O: GetSessionDraftRunResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.SessionService.EditDraft
+     */
+    editDraft: {
+      name: "EditDraft",
+      I: EditSessionDraftRequest,
       O: Empty,
       kind: MethodKind.Unary,
     },

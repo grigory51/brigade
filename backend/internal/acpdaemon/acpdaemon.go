@@ -182,7 +182,7 @@ func (d *Daemon) configure(ctx context.Context, req *v1ConfigureRequest) (string
 		McpServers:        mcp,
 		PluginDirs:        req.PluginDirs,
 		SystemPrompt:      req.SystemPrompt,
-		DefaultFullAccess: true,
+		DefaultFullAccess: !req.UntrustedTranscript,
 		// SpawnProc nil → локальный subprocess адаптера внутри контейнера.
 	})
 	if err != nil {
@@ -194,7 +194,13 @@ func (d *Daemon) configure(ctx context.Context, req *v1ConfigureRequest) (string
 	}
 	// Постоянная привязка: sink журналит, resolver обслуживает permission. В отличие от
 	// brigade↔фронт, здесь привязка одна на всю жизнь демона (не per-WS-сеанс).
-	d.unbind = client.Bind(d.sink, d.resolve)
+	resolver := d.resolve
+	if req.UntrustedTranscript {
+		resolver = func(context.Context, agui.PermissionRequest) (string, error) {
+			return "", errPermissionCancelled
+		}
+	}
+	d.unbind = client.Bind(d.sink, resolver)
 	d.client = client
 	return client.SessionID(), nil
 }
@@ -304,16 +310,17 @@ func (d *Daemon) Close() {
 // v1ConfigureRequest — локальный алиас полей DaemonConfigureRequest (чтобы service.go не
 // тащил gen-типы в сигнатуру configure). Заполняется в хендлере.
 type v1ConfigureRequest struct {
-	OauthToken        string
-	ExtraEnv          []string
-	AdapterCommand    string
-	Cwd               string
-	ResumeSessionId   string
-	PluginDirs        []string
-	McpServersJson    []byte
-	SystemPrompt      string
-	CredentialFile    string
-	ExperienceMcpJson []byte
+	OauthToken          string
+	ExtraEnv            []string
+	AdapterCommand      string
+	Cwd                 string
+	ResumeSessionId     string
+	PluginDirs          []string
+	McpServersJson      []byte
+	SystemPrompt        string
+	CredentialFile      string
+	ExperienceMcpJson   []byte
+	UntrustedTranscript bool
 }
 
 // --- entrypoint ---

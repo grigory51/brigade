@@ -40,6 +40,14 @@ message AcpMessage {
   string tool_name = 4;
   string args_text = 5;
   string result = 6;
+  // Поля заполнены для истории, владельцем которой является Brigade.
+  string author = 7;
+  string source = 8;
+  string external_id = 9;
+  bool included_in_context = 10;
+  string delivery = 11;
+  string reply_to_id = 12;
+  int64 created_at = 13;
 }
 
 // AcpCommand — slash-команда агента для автокомплита composer'а.

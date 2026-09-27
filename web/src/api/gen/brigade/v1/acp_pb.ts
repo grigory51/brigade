@@ -43,6 +43,43 @@ export class AcpMessage extends Message<AcpMessage> {
    */
   result = "";
 
+  /**
+   * Поля заполнены для истории, владельцем которой является Brigade.
+   *
+   * @generated from field: string author = 7;
+   */
+  author = "";
+
+  /**
+   * @generated from field: string source = 8;
+   */
+  source = "";
+
+  /**
+   * @generated from field: string external_id = 9;
+   */
+  externalId = "";
+
+  /**
+   * @generated from field: bool included_in_context = 10;
+   */
+  includedInContext = false;
+
+  /**
+   * @generated from field: string delivery = 11;
+   */
+  delivery = "";
+
+  /**
+   * @generated from field: string reply_to_id = 12;
+   */
+  replyToId = "";
+
+  /**
+   * @generated from field: int64 created_at = 13;
+   */
+  createdAt = protoInt64.zero;
+
   constructor(data?: PartialMessage<AcpMessage>) {
     super();
     proto3.util.initPartial(data, this);
@@ -57,6 +94,13 @@ export class AcpMessage extends Message<AcpMessage> {
     { no: 4, name: "tool_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 5, name: "args_text", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 6, name: "result", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "author", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 8, name: "source", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 9, name: "external_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 10, name: "included_in_context", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 11, name: "delivery", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 12, name: "reply_to_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 13, name: "created_at", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): AcpMessage {

@@ -43,6 +43,21 @@ const (
 	SessionServiceUpdateProcedure = "/brigade.v1.SessionService/Update"
 	// SessionServiceMarkReadProcedure is the fully-qualified name of the SessionService's MarkRead RPC.
 	SessionServiceMarkReadProcedure = "/brigade.v1.SessionService/MarkRead"
+	// SessionServiceAddMessageProcedure is the fully-qualified name of the SessionService's AddMessage
+	// RPC.
+	SessionServiceAddMessageProcedure = "/brigade.v1.SessionService/AddMessage"
+	// SessionServiceSetMessageIncludedProcedure is the fully-qualified name of the SessionService's
+	// SetMessageIncluded RPC.
+	SessionServiceSetMessageIncludedProcedure = "/brigade.v1.SessionService/SetMessageIncluded"
+	// SessionServiceGenerateDraftProcedure is the fully-qualified name of the SessionService's
+	// GenerateDraft RPC.
+	SessionServiceGenerateDraftProcedure = "/brigade.v1.SessionService/GenerateDraft"
+	// SessionServiceGetDraftRunProcedure is the fully-qualified name of the SessionService's
+	// GetDraftRun RPC.
+	SessionServiceGetDraftRunProcedure = "/brigade.v1.SessionService/GetDraftRun"
+	// SessionServiceEditDraftProcedure is the fully-qualified name of the SessionService's EditDraft
+	// RPC.
+	SessionServiceEditDraftProcedure = "/brigade.v1.SessionService/EditDraft"
 	// SessionServiceStopProcedure is the fully-qualified name of the SessionService's Stop RPC.
 	SessionServiceStopProcedure = "/brigade.v1.SessionService/Stop"
 	// SessionServiceDeleteProcedure is the fully-qualified name of the SessionService's Delete RPC.
@@ -76,6 +91,11 @@ type SessionServiceClient interface {
 	Get(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error)
 	Update(context.Context, *connect.Request[v1.UpdateSessionRequest]) (*connect.Response[v1.UpdateSessionResponse], error)
 	MarkRead(context.Context, *connect.Request[v1.MarkSessionReadRequest]) (*connect.Response[v1.Empty], error)
+	AddMessage(context.Context, *connect.Request[v1.AddSessionMessageRequest]) (*connect.Response[v1.AddSessionMessageResponse], error)
+	SetMessageIncluded(context.Context, *connect.Request[v1.SetSessionMessageIncludedRequest]) (*connect.Response[v1.Empty], error)
+	GenerateDraft(context.Context, *connect.Request[v1.GenerateSessionDraftRequest]) (*connect.Response[v1.GenerateSessionDraftResponse], error)
+	GetDraftRun(context.Context, *connect.Request[v1.GetSessionDraftRunRequest]) (*connect.Response[v1.GetSessionDraftRunResponse], error)
+	EditDraft(context.Context, *connect.Request[v1.EditSessionDraftRequest]) (*connect.Response[v1.Empty], error)
 	Stop(context.Context, *connect.Request[v1.StopSessionRequest]) (*connect.Response[v1.Empty], error)
 	Delete(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.Empty], error)
 	// ReloadAgent перезапускает ACP-агента сессии на актуальном окружении, сохраняя диалог
@@ -136,6 +156,36 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+SessionServiceMarkReadProcedure,
 			connect.WithSchema(sessionServiceMethods.ByName("MarkRead")),
+			connect.WithClientOptions(opts...),
+		),
+		addMessage: connect.NewClient[v1.AddSessionMessageRequest, v1.AddSessionMessageResponse](
+			httpClient,
+			baseURL+SessionServiceAddMessageProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("AddMessage")),
+			connect.WithClientOptions(opts...),
+		),
+		setMessageIncluded: connect.NewClient[v1.SetSessionMessageIncludedRequest, v1.Empty](
+			httpClient,
+			baseURL+SessionServiceSetMessageIncludedProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("SetMessageIncluded")),
+			connect.WithClientOptions(opts...),
+		),
+		generateDraft: connect.NewClient[v1.GenerateSessionDraftRequest, v1.GenerateSessionDraftResponse](
+			httpClient,
+			baseURL+SessionServiceGenerateDraftProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("GenerateDraft")),
+			connect.WithClientOptions(opts...),
+		),
+		getDraftRun: connect.NewClient[v1.GetSessionDraftRunRequest, v1.GetSessionDraftRunResponse](
+			httpClient,
+			baseURL+SessionServiceGetDraftRunProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("GetDraftRun")),
+			connect.WithClientOptions(opts...),
+		),
+		editDraft: connect.NewClient[v1.EditSessionDraftRequest, v1.Empty](
+			httpClient,
+			baseURL+SessionServiceEditDraftProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("EditDraft")),
 			connect.WithClientOptions(opts...),
 		),
 		stop: connect.NewClient[v1.StopSessionRequest, v1.Empty](
@@ -202,6 +252,11 @@ type sessionServiceClient struct {
 	get                       *connect.Client[v1.GetSessionRequest, v1.GetSessionResponse]
 	update                    *connect.Client[v1.UpdateSessionRequest, v1.UpdateSessionResponse]
 	markRead                  *connect.Client[v1.MarkSessionReadRequest, v1.Empty]
+	addMessage                *connect.Client[v1.AddSessionMessageRequest, v1.AddSessionMessageResponse]
+	setMessageIncluded        *connect.Client[v1.SetSessionMessageIncludedRequest, v1.Empty]
+	generateDraft             *connect.Client[v1.GenerateSessionDraftRequest, v1.GenerateSessionDraftResponse]
+	getDraftRun               *connect.Client[v1.GetSessionDraftRunRequest, v1.GetSessionDraftRunResponse]
+	editDraft                 *connect.Client[v1.EditSessionDraftRequest, v1.Empty]
 	stop                      *connect.Client[v1.StopSessionRequest, v1.Empty]
 	delete                    *connect.Client[v1.DeleteSessionRequest, v1.Empty]
 	reloadAgent               *connect.Client[v1.ReloadAgentRequest, v1.Empty]
@@ -236,6 +291,31 @@ func (c *sessionServiceClient) Update(ctx context.Context, req *connect.Request[
 // MarkRead calls brigade.v1.SessionService.MarkRead.
 func (c *sessionServiceClient) MarkRead(ctx context.Context, req *connect.Request[v1.MarkSessionReadRequest]) (*connect.Response[v1.Empty], error) {
 	return c.markRead.CallUnary(ctx, req)
+}
+
+// AddMessage calls brigade.v1.SessionService.AddMessage.
+func (c *sessionServiceClient) AddMessage(ctx context.Context, req *connect.Request[v1.AddSessionMessageRequest]) (*connect.Response[v1.AddSessionMessageResponse], error) {
+	return c.addMessage.CallUnary(ctx, req)
+}
+
+// SetMessageIncluded calls brigade.v1.SessionService.SetMessageIncluded.
+func (c *sessionServiceClient) SetMessageIncluded(ctx context.Context, req *connect.Request[v1.SetSessionMessageIncludedRequest]) (*connect.Response[v1.Empty], error) {
+	return c.setMessageIncluded.CallUnary(ctx, req)
+}
+
+// GenerateDraft calls brigade.v1.SessionService.GenerateDraft.
+func (c *sessionServiceClient) GenerateDraft(ctx context.Context, req *connect.Request[v1.GenerateSessionDraftRequest]) (*connect.Response[v1.GenerateSessionDraftResponse], error) {
+	return c.generateDraft.CallUnary(ctx, req)
+}
+
+// GetDraftRun calls brigade.v1.SessionService.GetDraftRun.
+func (c *sessionServiceClient) GetDraftRun(ctx context.Context, req *connect.Request[v1.GetSessionDraftRunRequest]) (*connect.Response[v1.GetSessionDraftRunResponse], error) {
+	return c.getDraftRun.CallUnary(ctx, req)
+}
+
+// EditDraft calls brigade.v1.SessionService.EditDraft.
+func (c *sessionServiceClient) EditDraft(ctx context.Context, req *connect.Request[v1.EditSessionDraftRequest]) (*connect.Response[v1.Empty], error) {
+	return c.editDraft.CallUnary(ctx, req)
 }
 
 // Stop calls brigade.v1.SessionService.Stop.
@@ -290,6 +370,11 @@ type SessionServiceHandler interface {
 	Get(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error)
 	Update(context.Context, *connect.Request[v1.UpdateSessionRequest]) (*connect.Response[v1.UpdateSessionResponse], error)
 	MarkRead(context.Context, *connect.Request[v1.MarkSessionReadRequest]) (*connect.Response[v1.Empty], error)
+	AddMessage(context.Context, *connect.Request[v1.AddSessionMessageRequest]) (*connect.Response[v1.AddSessionMessageResponse], error)
+	SetMessageIncluded(context.Context, *connect.Request[v1.SetSessionMessageIncludedRequest]) (*connect.Response[v1.Empty], error)
+	GenerateDraft(context.Context, *connect.Request[v1.GenerateSessionDraftRequest]) (*connect.Response[v1.GenerateSessionDraftResponse], error)
+	GetDraftRun(context.Context, *connect.Request[v1.GetSessionDraftRunRequest]) (*connect.Response[v1.GetSessionDraftRunResponse], error)
+	EditDraft(context.Context, *connect.Request[v1.EditSessionDraftRequest]) (*connect.Response[v1.Empty], error)
 	Stop(context.Context, *connect.Request[v1.StopSessionRequest]) (*connect.Response[v1.Empty], error)
 	Delete(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.Empty], error)
 	// ReloadAgent перезапускает ACP-агента сессии на актуальном окружении, сохраняя диалог
@@ -346,6 +431,36 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		SessionServiceMarkReadProcedure,
 		svc.MarkRead,
 		connect.WithSchema(sessionServiceMethods.ByName("MarkRead")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceAddMessageHandler := connect.NewUnaryHandler(
+		SessionServiceAddMessageProcedure,
+		svc.AddMessage,
+		connect.WithSchema(sessionServiceMethods.ByName("AddMessage")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceSetMessageIncludedHandler := connect.NewUnaryHandler(
+		SessionServiceSetMessageIncludedProcedure,
+		svc.SetMessageIncluded,
+		connect.WithSchema(sessionServiceMethods.ByName("SetMessageIncluded")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceGenerateDraftHandler := connect.NewUnaryHandler(
+		SessionServiceGenerateDraftProcedure,
+		svc.GenerateDraft,
+		connect.WithSchema(sessionServiceMethods.ByName("GenerateDraft")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceGetDraftRunHandler := connect.NewUnaryHandler(
+		SessionServiceGetDraftRunProcedure,
+		svc.GetDraftRun,
+		connect.WithSchema(sessionServiceMethods.ByName("GetDraftRun")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceEditDraftHandler := connect.NewUnaryHandler(
+		SessionServiceEditDraftProcedure,
+		svc.EditDraft,
+		connect.WithSchema(sessionServiceMethods.ByName("EditDraft")),
 		connect.WithHandlerOptions(opts...),
 	)
 	sessionServiceStopHandler := connect.NewUnaryHandler(
@@ -414,6 +529,16 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 			sessionServiceUpdateHandler.ServeHTTP(w, r)
 		case SessionServiceMarkReadProcedure:
 			sessionServiceMarkReadHandler.ServeHTTP(w, r)
+		case SessionServiceAddMessageProcedure:
+			sessionServiceAddMessageHandler.ServeHTTP(w, r)
+		case SessionServiceSetMessageIncludedProcedure:
+			sessionServiceSetMessageIncludedHandler.ServeHTTP(w, r)
+		case SessionServiceGenerateDraftProcedure:
+			sessionServiceGenerateDraftHandler.ServeHTTP(w, r)
+		case SessionServiceGetDraftRunProcedure:
+			sessionServiceGetDraftRunHandler.ServeHTTP(w, r)
+		case SessionServiceEditDraftProcedure:
+			sessionServiceEditDraftHandler.ServeHTTP(w, r)
 		case SessionServiceStopProcedure:
 			sessionServiceStopHandler.ServeHTTP(w, r)
 		case SessionServiceDeleteProcedure:
@@ -459,6 +584,26 @@ func (UnimplementedSessionServiceHandler) Update(context.Context, *connect.Reque
 
 func (UnimplementedSessionServiceHandler) MarkRead(context.Context, *connect.Request[v1.MarkSessionReadRequest]) (*connect.Response[v1.Empty], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.MarkRead is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) AddMessage(context.Context, *connect.Request[v1.AddSessionMessageRequest]) (*connect.Response[v1.AddSessionMessageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.AddMessage is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) SetMessageIncluded(context.Context, *connect.Request[v1.SetSessionMessageIncludedRequest]) (*connect.Response[v1.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.SetMessageIncluded is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) GenerateDraft(context.Context, *connect.Request[v1.GenerateSessionDraftRequest]) (*connect.Response[v1.GenerateSessionDraftResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.GenerateDraft is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) GetDraftRun(context.Context, *connect.Request[v1.GetSessionDraftRunRequest]) (*connect.Response[v1.GetSessionDraftRunResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.GetDraftRun is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) EditDraft(context.Context, *connect.Request[v1.EditSessionDraftRequest]) (*connect.Response[v1.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.EditDraft is not implemented"))
 }
 
 func (UnimplementedSessionServiceHandler) Stop(context.Context, *connect.Request[v1.StopSessionRequest]) (*connect.Response[v1.Empty], error) {

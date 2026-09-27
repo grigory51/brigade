@@ -134,6 +134,9 @@ message DaemonConfigureRequest {
   string credential_file = 10;
   // experience_mcp_json — один JSON acpsdk.McpServer для UI-сеанса плагина.
   bytes experience_mcp_json = 11;
+  // Одноразовый запуск по недоверенной переписке: не включать Full Access и
+  // отклонять любые интерактивные запросы разрешения.
+  bool untrusted_transcript = 12;
 }
 
 message DaemonPluginMCPRequest {

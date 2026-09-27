@@ -128,6 +128,7 @@ export class Plugin extends Message<Plugin> {
     return proto3.util.equals(Plugin, a, b);
   }
 }
+
 /**
  * @generated from message brigade.v1.PluginVariant
  */

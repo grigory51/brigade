@@ -44,6 +44,9 @@ const (
 	// TelegramServiceCreateBindingLinkProcedure is the fully-qualified name of the TelegramService's
 	// CreateBindingLink RPC.
 	TelegramServiceCreateBindingLinkProcedure = "/brigade.v1.TelegramService/CreateBindingLink"
+	// TelegramServiceSendDraftProcedure is the fully-qualified name of the TelegramService's SendDraft
+	// RPC.
+	TelegramServiceSendDraftProcedure = "/brigade.v1.TelegramService/SendDraft"
 )
 
 // TelegramServiceClient is a client for the brigade.v1.TelegramService service.
@@ -52,6 +55,7 @@ type TelegramServiceClient interface {
 	SaveBot(context.Context, *connect.Request[v1.SaveTelegramBotRequest]) (*connect.Response[v1.TelegramBot], error)
 	DeleteBot(context.Context, *connect.Request[v1.TelegramBotRequest]) (*connect.Response[v1.Empty], error)
 	CreateBindingLink(context.Context, *connect.Request[v1.TelegramBotRequest]) (*connect.Response[v1.TelegramBindingLink], error)
+	SendDraft(context.Context, *connect.Request[v1.SendTelegramDraftRequest]) (*connect.Response[v1.Empty], error)
 }
 
 // NewTelegramServiceClient constructs a client for the brigade.v1.TelegramService service. By
@@ -89,6 +93,12 @@ func NewTelegramServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(telegramServiceMethods.ByName("CreateBindingLink")),
 			connect.WithClientOptions(opts...),
 		),
+		sendDraft: connect.NewClient[v1.SendTelegramDraftRequest, v1.Empty](
+			httpClient,
+			baseURL+TelegramServiceSendDraftProcedure,
+			connect.WithSchema(telegramServiceMethods.ByName("SendDraft")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -98,6 +108,7 @@ type telegramServiceClient struct {
 	saveBot           *connect.Client[v1.SaveTelegramBotRequest, v1.TelegramBot]
 	deleteBot         *connect.Client[v1.TelegramBotRequest, v1.Empty]
 	createBindingLink *connect.Client[v1.TelegramBotRequest, v1.TelegramBindingLink]
+	sendDraft         *connect.Client[v1.SendTelegramDraftRequest, v1.Empty]
 }
 
 // ListBots calls brigade.v1.TelegramService.ListBots.
@@ -120,12 +131,18 @@ func (c *telegramServiceClient) CreateBindingLink(ctx context.Context, req *conn
 	return c.createBindingLink.CallUnary(ctx, req)
 }
 
+// SendDraft calls brigade.v1.TelegramService.SendDraft.
+func (c *telegramServiceClient) SendDraft(ctx context.Context, req *connect.Request[v1.SendTelegramDraftRequest]) (*connect.Response[v1.Empty], error) {
+	return c.sendDraft.CallUnary(ctx, req)
+}
+
 // TelegramServiceHandler is an implementation of the brigade.v1.TelegramService service.
 type TelegramServiceHandler interface {
 	ListBots(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.ListTelegramBotsResponse], error)
 	SaveBot(context.Context, *connect.Request[v1.SaveTelegramBotRequest]) (*connect.Response[v1.TelegramBot], error)
 	DeleteBot(context.Context, *connect.Request[v1.TelegramBotRequest]) (*connect.Response[v1.Empty], error)
 	CreateBindingLink(context.Context, *connect.Request[v1.TelegramBotRequest]) (*connect.Response[v1.TelegramBindingLink], error)
+	SendDraft(context.Context, *connect.Request[v1.SendTelegramDraftRequest]) (*connect.Response[v1.Empty], error)
 }
 
 // NewTelegramServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -159,6 +176,12 @@ func NewTelegramServiceHandler(svc TelegramServiceHandler, opts ...connect.Handl
 		connect.WithSchema(telegramServiceMethods.ByName("CreateBindingLink")),
 		connect.WithHandlerOptions(opts...),
 	)
+	telegramServiceSendDraftHandler := connect.NewUnaryHandler(
+		TelegramServiceSendDraftProcedure,
+		svc.SendDraft,
+		connect.WithSchema(telegramServiceMethods.ByName("SendDraft")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/brigade.v1.TelegramService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TelegramServiceListBotsProcedure:
@@ -169,6 +192,8 @@ func NewTelegramServiceHandler(svc TelegramServiceHandler, opts ...connect.Handl
 			telegramServiceDeleteBotHandler.ServeHTTP(w, r)
 		case TelegramServiceCreateBindingLinkProcedure:
 			telegramServiceCreateBindingLinkHandler.ServeHTTP(w, r)
+		case TelegramServiceSendDraftProcedure:
+			telegramServiceSendDraftHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -192,4 +217,8 @@ func (UnimplementedTelegramServiceHandler) DeleteBot(context.Context, *connect.R
 
 func (UnimplementedTelegramServiceHandler) CreateBindingLink(context.Context, *connect.Request[v1.TelegramBotRequest]) (*connect.Response[v1.TelegramBindingLink], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.TelegramService.CreateBindingLink is not implemented"))
+}
+
+func (UnimplementedTelegramServiceHandler) SendDraft(context.Context, *connect.Request[v1.SendTelegramDraftRequest]) (*connect.Response[v1.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.TelegramService.SendDraft is not implemented"))
 }

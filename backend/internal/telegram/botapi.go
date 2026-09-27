@@ -64,36 +64,39 @@ type telegramChat struct {
 }
 
 type telegramMessage struct {
-	MessageID          int64              `json:"message_id"`
-	MessageThreadID    int64              `json:"message_thread_id"`
-	MediaGroupID       string             `json:"media_group_id"`
-	GuestQueryID       string             `json:"guest_query_id"`
-	From               *telegramUser      `json:"from"`
-	GuestBotCallerUser *telegramUser      `json:"guest_bot_caller_user"`
-	Chat               telegramChat       `json:"chat"`
-	Text               string             `json:"text"`
-	Caption            string             `json:"caption"`
-	Animation          *telegramFile      `json:"animation"`
-	Audio              *telegramFile      `json:"audio"`
-	Document           *telegramFile      `json:"document"`
-	LivePhoto          *telegramLivePhoto `json:"live_photo"`
-	Photo              []telegramFile     `json:"photo"`
-	Sticker            *telegramFile      `json:"sticker"`
-	Video              *telegramFile      `json:"video"`
-	VideoNote          *telegramFile      `json:"video_note"`
-	Voice              *telegramFile      `json:"voice"`
-	RichMessage        json.RawMessage    `json:"rich_message"`
-	PaidMedia          json.RawMessage    `json:"paid_media"`
-	Checklist          json.RawMessage    `json:"checklist"`
-	Contact            json.RawMessage    `json:"contact"`
-	Dice               json.RawMessage    `json:"dice"`
-	Game               json.RawMessage    `json:"game"`
-	Poll               json.RawMessage    `json:"poll"`
-	Venue              json.RawMessage    `json:"venue"`
-	Location           json.RawMessage    `json:"location"`
-	Story              json.RawMessage    `json:"story"`
-	WebAppData         json.RawMessage    `json:"web_app_data"`
-	ReplyToMessage     *telegramMessage   `json:"reply_to_message"`
+	MessageID            int64              `json:"message_id"`
+	Date                 int64              `json:"date"`
+	BusinessConnectionID string             `json:"business_connection_id"`
+	MessageThreadID      int64              `json:"message_thread_id"`
+	MediaGroupID         string             `json:"media_group_id"`
+	GuestQueryID         string             `json:"guest_query_id"`
+	From                 *telegramUser      `json:"from"`
+	SenderBusinessBot    *telegramUser      `json:"sender_business_bot"`
+	GuestBotCallerUser   *telegramUser      `json:"guest_bot_caller_user"`
+	Chat                 telegramChat       `json:"chat"`
+	Text                 string             `json:"text"`
+	Caption              string             `json:"caption"`
+	Animation            *telegramFile      `json:"animation"`
+	Audio                *telegramFile      `json:"audio"`
+	Document             *telegramFile      `json:"document"`
+	LivePhoto            *telegramLivePhoto `json:"live_photo"`
+	Photo                []telegramFile     `json:"photo"`
+	Sticker              *telegramFile      `json:"sticker"`
+	Video                *telegramFile      `json:"video"`
+	VideoNote            *telegramFile      `json:"video_note"`
+	Voice                *telegramFile      `json:"voice"`
+	RichMessage          json.RawMessage    `json:"rich_message"`
+	PaidMedia            json.RawMessage    `json:"paid_media"`
+	Checklist            json.RawMessage    `json:"checklist"`
+	Contact              json.RawMessage    `json:"contact"`
+	Dice                 json.RawMessage    `json:"dice"`
+	Game                 json.RawMessage    `json:"game"`
+	Poll                 json.RawMessage    `json:"poll"`
+	Venue                json.RawMessage    `json:"venue"`
+	Location             json.RawMessage    `json:"location"`
+	Story                json.RawMessage    `json:"story"`
+	WebAppData           json.RawMessage    `json:"web_app_data"`
+	ReplyToMessage       *telegramMessage   `json:"reply_to_message"`
 }
 
 type telegramFile struct {
@@ -119,10 +122,29 @@ type telegramRemoteFile struct {
 }
 
 type telegramUpdate struct {
-	UpdateID             int64            `json:"update_id"`
-	Message              *telegramMessage `json:"message"`
-	GuestMessage         *telegramMessage `json:"guest_message"`
-	GuestInlineMessageID string           `json:"brigade_guest_inline_message_id,omitempty"`
+	UpdateID                int64                            `json:"update_id"`
+	Message                 *telegramMessage                 `json:"message"`
+	BusinessConnection      *telegramBusinessConnection      `json:"business_connection"`
+	BusinessMessage         *telegramMessage                 `json:"business_message"`
+	EditedBusinessMessage   *telegramMessage                 `json:"edited_business_message"`
+	DeletedBusinessMessages *telegramBusinessMessagesDeleted `json:"deleted_business_messages"`
+	GuestMessage            *telegramMessage                 `json:"guest_message"`
+	GuestInlineMessageID    string                           `json:"brigade_guest_inline_message_id,omitempty"`
+}
+
+type telegramBusinessConnection struct {
+	ID      string       `json:"id"`
+	User    telegramUser `json:"user"`
+	Enabled bool         `json:"is_enabled"`
+	Rights  struct {
+		CanReply bool `json:"can_reply"`
+	} `json:"rights"`
+}
+
+type telegramBusinessMessagesDeleted struct {
+	BusinessConnectionID string       `json:"business_connection_id"`
+	Chat                 telegramChat `json:"chat"`
+	MessageIDs           []int64      `json:"message_ids"`
 }
 
 func (a *botAPI) call(ctx context.Context, token, method string, in, out any) error {
@@ -176,7 +198,7 @@ func (a *botAPI) do(req *http.Request, method string, out any) error {
 	return nil
 }
 
-func (a *botAPI) callMultipart(ctx context.Context, token, method string, fields map[string]string, filename string, data []byte, out any) error {
+func (a *botAPI) callMultipart(ctx context.Context, token, method string, fields map[string]string, fileField, filename string, data []byte, out any) error {
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	for name, value := range fields {
@@ -184,7 +206,7 @@ func (a *botAPI) callMultipart(ctx context.Context, token, method string, fields
 			return fmt.Errorf("telegram: encode %s: %w", method, err)
 		}
 	}
-	part, err := writer.CreateFormFile("photo", filename)
+	part, err := writer.CreateFormFile(fileField, filename)
 	if err != nil {
 		return fmt.Errorf("telegram: encode %s: %w", method, err)
 	}
@@ -214,7 +236,20 @@ func (a *botAPI) sendPhoto(ctx context.Context, token string, chatID, threadID, 
 		fields["reply_parameters"] = fmt.Sprintf(`{"message_id":%d}`, replyToMessageID)
 	}
 	var message telegramMessage
-	err := a.callMultipart(ctx, token, "sendPhoto", fields, filename, data, &message)
+	err := a.callMultipart(ctx, token, "sendPhoto", fields, "photo", filename, data, &message)
+	return message, err
+}
+
+func (a *botAPI) sendDocument(ctx context.Context, token string, chatID, threadID, replyToMessageID int64, filename string, data []byte) (telegramMessage, error) {
+	fields := map[string]string{"chat_id": strconv.FormatInt(chatID, 10)}
+	if threadID != 0 {
+		fields["message_thread_id"] = strconv.FormatInt(threadID, 10)
+	}
+	if replyToMessageID != 0 {
+		fields["reply_parameters"] = fmt.Sprintf(`{"message_id":%d}`, replyToMessageID)
+	}
+	var message telegramMessage
+	err := a.callMultipart(ctx, token, "sendDocument", fields, "document", filename, data, &message)
 	return message, err
 }
 
@@ -226,6 +261,29 @@ func (a *botAPI) getMe(ctx context.Context, token string) (telegramUser, error) 
 	var user telegramUser
 	err := a.call(ctx, token, "getMe", struct{}{}, &user)
 	return user, err
+}
+
+func (a *botAPI) getBusinessConnection(ctx context.Context, token, connectionID string) (telegramBusinessConnection, error) {
+	var connection telegramBusinessConnection
+	err := a.call(ctx, token, "getBusinessConnection", map[string]any{"business_connection_id": connectionID}, &connection)
+	return connection, err
+}
+
+func (a *botAPI) sendBusinessMessage(ctx context.Context, token, connectionID string, chatID, replyToID int64, text string) (telegramMessage, error) {
+	in := map[string]any{"business_connection_id": connectionID, "chat_id": chatID}
+	method := "sendMessage"
+	if hasRichMarkdown(text) {
+		method = "sendRichMessage"
+		in["rich_message"] = map[string]any{"markdown": text}
+	} else {
+		in["text"] = text
+	}
+	if replyToID != 0 {
+		in["reply_parameters"] = map[string]any{"message_id": replyToID}
+	}
+	var sent telegramMessage
+	err := a.call(ctx, token, method, in, &sent)
+	return sent, err
 }
 
 func (a *botAPI) downloadFile(ctx context.Context, token, fileID string, maxBytes int64) ([]byte, string, error) {
@@ -272,7 +330,7 @@ func (a *botAPI) getUpdates(ctx context.Context, token string, offset int64) ([]
 	var updates []telegramUpdate
 	err := a.call(ctx, token, "getUpdates", map[string]any{
 		"offset": offset, "timeout": 30,
-		"allowed_updates": []string{"message", "guest_message"},
+		"allowed_updates": []string{"message", "guest_message", "business_connection", "business_message", "edited_business_message", "deleted_business_messages"},
 	}, &updates)
 	return updates, err
 }
@@ -281,7 +339,7 @@ func (a *botAPI) setWebhook(ctx context.Context, token, webhookURL, secret strin
 	return a.call(ctx, token, "setWebhook", map[string]any{
 		"url": webhookURL, "secret_token": secret,
 		"max_connections": 1,
-		"allowed_updates": []string{"message", "guest_message"},
+		"allowed_updates": []string{"message", "guest_message", "business_connection", "business_message", "edited_business_message", "deleted_business_messages"},
 	}, nil)
 }
 

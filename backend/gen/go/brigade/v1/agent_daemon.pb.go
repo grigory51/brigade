@@ -403,8 +403,11 @@ type DaemonConfigureRequest struct {
 	CredentialFile string `protobuf:"bytes,10,opt,name=credential_file,json=credentialFile,proto3" json:"credential_file,omitempty"`
 	// experience_mcp_json — один JSON acpsdk.McpServer для UI-сеанса плагина.
 	ExperienceMcpJson []byte `protobuf:"bytes,11,opt,name=experience_mcp_json,json=experienceMcpJson,proto3" json:"experience_mcp_json,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Одноразовый запуск по недоверенной переписке: не включать Full Access и
+	// отклонять любые интерактивные запросы разрешения.
+	UntrustedTranscript bool `protobuf:"varint,12,opt,name=untrusted_transcript,json=untrustedTranscript,proto3" json:"untrusted_transcript,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *DaemonConfigureRequest) Reset() {
@@ -505,6 +508,13 @@ func (x *DaemonConfigureRequest) GetExperienceMcpJson() []byte {
 		return x.ExperienceMcpJson
 	}
 	return nil
+}
+
+func (x *DaemonConfigureRequest) GetUntrustedTranscript() bool {
+	if x != nil {
+		return x.UntrustedTranscript
+	}
+	return false
 }
 
 type DaemonPluginMCPRequest struct {
@@ -1219,7 +1229,7 @@ const file_brigade_v1_agent_daemon_proto_rawDesc = "" +
 	"\x04rows\x18\x03 \x01(\rR\x04rows\"F\n" +
 	"\x16DaemonWriteFileRequest\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
-	"\acontent\x18\x02 \x01(\fR\acontent\"\xa2\x03\n" +
+	"\acontent\x18\x02 \x01(\fR\acontent\"\xd5\x03\n" +
 	"\x16DaemonConfigureRequest\x12\x1f\n" +
 	"\voauth_token\x18\x01 \x01(\tR\n" +
 	"oauthToken\x12\x1b\n" +
@@ -1233,7 +1243,8 @@ const file_brigade_v1_agent_daemon_proto_rawDesc = "" +
 	"\rsystem_prompt\x18\t \x01(\tR\fsystemPrompt\x12'\n" +
 	"\x0fcredential_file\x18\n" +
 	" \x01(\tR\x0ecredentialFile\x12.\n" +
-	"\x13experience_mcp_json\x18\v \x01(\fR\x11experienceMcpJsonJ\x04\b\b\x10\tR\x14fork_from_session_id\"Q\n" +
+	"\x13experience_mcp_json\x18\v \x01(\fR\x11experienceMcpJson\x121\n" +
+	"\x14untrusted_transcript\x18\f \x01(\bR\x13untrustedTranscriptJ\x04\b\b\x10\tR\x14fork_from_session_id\"Q\n" +
 	"\x16DaemonPluginMCPRequest\x12\x16\n" +
 	"\x06method\x18\x01 \x01(\tR\x06method\x12\x1f\n" +
 	"\vparams_json\x18\x02 \x01(\fR\n" +

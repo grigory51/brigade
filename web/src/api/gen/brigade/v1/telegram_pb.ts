@@ -86,6 +86,23 @@ export class TelegramBot extends Message<TelegramBot> {
    */
   newSessionAction = "";
 
+  /**
+   * assistant создаёт обычные ACP-сессии; secretary только сохраняет Business-переписку.
+   *
+   * @generated from field: string purpose = 15;
+   */
+  purpose = "";
+
+  /**
+   * @generated from field: bool business_connected = 16;
+   */
+  businessConnected = false;
+
+  /**
+   * @generated from field: bool business_can_reply = 17;
+   */
+  businessCanReply = false;
+
   constructor(data?: PartialMessage<TelegramBot>) {
     super();
     proto3.util.initPartial(data, this);
@@ -108,6 +125,9 @@ export class TelegramBot extends Message<TelegramBot> {
     { no: 12, name: "has_topics_enabled", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 13, name: "session_mode", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 14, name: "new_session_action", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 15, name: "purpose", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 16, name: "business_connected", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 17, name: "business_can_reply", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): TelegramBot {
@@ -124,6 +144,49 @@ export class TelegramBot extends Message<TelegramBot> {
 
   static equals(a: TelegramBot | PlainMessage<TelegramBot> | undefined, b: TelegramBot | PlainMessage<TelegramBot> | undefined): boolean {
     return proto3.util.equals(TelegramBot, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.SendTelegramDraftRequest
+ */
+export class SendTelegramDraftRequest extends Message<SendTelegramDraftRequest> {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId = "";
+
+  /**
+   * @generated from field: string message_id = 2;
+   */
+  messageId = "";
+
+  constructor(data?: PartialMessage<SendTelegramDraftRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.SendTelegramDraftRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "message_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SendTelegramDraftRequest {
+    return new SendTelegramDraftRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SendTelegramDraftRequest {
+    return new SendTelegramDraftRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SendTelegramDraftRequest {
+    return new SendTelegramDraftRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SendTelegramDraftRequest | PlainMessage<SendTelegramDraftRequest> | undefined, b: SendTelegramDraftRequest | PlainMessage<SendTelegramDraftRequest> | undefined): boolean {
+    return proto3.util.equals(SendTelegramDraftRequest, a, b);
   }
 }
 

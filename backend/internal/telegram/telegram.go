@@ -36,6 +36,7 @@ import (
 const (
 	bindingTTL                 = 15 * time.Minute
 	maxTelegramPhotoSize       = 10 << 20
+	maxTelegramDocumentSize    = 50_000_000
 	maxTelegramInboundFileSize = 20 << 20
 )
 
@@ -49,6 +50,7 @@ type sessionRegistry interface {
 	PromptAutoApprove(context.Context, string, string, string) (session.PromptResult, error)
 	UploadFile(context.Context, string, string, string, []byte) (string, error)
 	OpenWorkspaceFile(context.Context, string, string, string) (*os.File, error)
+	CreateShadow(context.Context, string, string, string, string, string, string) (store.Session, error)
 }
 
 type Service struct {
@@ -87,6 +89,9 @@ func New(st *store.Store, registry *session.Registry, images *agentimage.Service
 func (s *Service) Mode() string { return s.mode }
 
 func (s *Service) Start(ctx context.Context) error {
+	if err := s.store.RecoverSendingDrafts(ctx); err != nil {
+		return err
+	}
 	bots, err := s.store.ListAllTelegramBots(ctx)
 	if err != nil {
 		return err
@@ -147,6 +152,13 @@ func (s *Service) Save(ctx context.Context, userID string, bot store.TelegramBot
 		bot.BindTokenExpiresAt = current.BindTokenExpiresAt
 		bot.UpdateOffset = current.UpdateOffset
 		bot.CreatedAt = current.CreatedAt
+		bot.BusinessConnectionID = current.BusinessConnectionID
+		bot.BusinessOwnerID = current.BusinessOwnerID
+		bot.BusinessEnabled = current.BusinessEnabled
+		bot.BusinessCanReply = current.BusinessCanReply
+		if bot.Purpose == "" {
+			bot.Purpose = current.Purpose
+		}
 		// Старый клиент не должен сбрасывать новые настройки при сохранении бота.
 		if bot.SessionMode == "" {
 			bot.SessionMode = current.SessionMode
@@ -159,6 +171,12 @@ func (s *Service) Save(ctx context.Context, userID string, bot store.TelegramBot
 		bot.CreatedAt = time.Now()
 	}
 	bot.UserID = userID
+	if bot.Purpose == "" {
+		bot.Purpose = "assistant"
+	}
+	if bot.Purpose != "assistant" && bot.Purpose != "secretary" {
+		return store.TelegramBot{}, errors.New("telegram: неизвестное назначение бота")
+	}
 	if bot.SessionMode != "" && bot.SessionMode != store.TelegramSessionThreads && bot.SessionMode != store.TelegramSessionChat {
 		return store.TelegramBot{}, errors.New("telegram: неизвестный режим сессий")
 	}
@@ -230,6 +248,9 @@ func (s *Service) validateTemplate(ctx context.Context, bot *store.TelegramBot) 
 		return err
 	}
 	bot.Image = image
+	if bot.Purpose == "secretary" {
+		return nil
+	}
 	servers, err := s.store.ListMcpServers(ctx, bot.UserID)
 	if err != nil {
 		return err
@@ -433,7 +454,7 @@ func (s *Service) process(botID string) {
 		if err != nil {
 			return
 		}
-		if !s.deliverReady(bot) {
+		if bot.Purpose != "secretary" && !s.deliverReady(bot) {
 			time.AfterFunc(3*time.Second, func() { s.kick(bot.ID) })
 			return
 		}
@@ -444,6 +465,14 @@ func (s *Service) process(botID string) {
 		}
 		if len(queued) == 0 {
 			return
+		}
+		if bot.Purpose == "secretary" {
+			if err := s.processSecretaryQueued(bot, queued[0]); err != nil {
+				log.Printf("telegram: secretary @%s update=%d: %v", bot.Username, queued[0].UpdateID, err)
+				time.AfterFunc(3*time.Second, func() { s.kick(bot.ID) })
+				return
+			}
+			continue
 		}
 		s.processQueued(bot, queued)
 	}
@@ -508,6 +537,7 @@ type replyEnvelope struct {
 	Messages  []string                 `json:"messages,omitempty"`
 	SessionID string                   `json:"sessionId"`
 	Images    []acp.GeneratedImageFile `json:"images"`
+	Files     []string                 `json:"files,omitempty"`
 }
 
 func (s *Service) rememberMessage(botID string, chatID, threadID, messageID int64) {
@@ -857,6 +887,15 @@ func (s *Service) bindOwner(bot store.TelegramBot, in inbound) {
 		s.finishWithReply(bot, []inbound{in}, "Не удалось привязать Telegram к Brigade.", err)
 		return
 	}
+	if bot.Purpose == "secretary" {
+		_, err := s.api.sendMessage(s.ctx, bot.Token, in.chatID, 0, in.message.MessageID,
+			"Brigade подключён. Теперь добавьте бота в Telegram Business. Входящие будут сохраняться без автоматических ответов.")
+		if err != nil {
+			log.Printf("telegram: secretary bind reply @%s: %v", bot.Username, err)
+		}
+		_ = s.store.DeleteTelegramUpdate(s.ctx, bot.ID, in.updateID)
+		return
+	}
 	message := "Telegram подключён к Brigade. Напишите задачу в личном чате; топики можно использовать для отдельных сессий."
 	if bot.SessionMode == store.TelegramSessionChat {
 		message = "Telegram подключён к Brigade. Напишите задачу в личном чате. Команда /new завершит текущую сессию и создаст новую."
@@ -1039,7 +1078,11 @@ func (s *Service) newSession(bot store.TelegramBot, in inbound, savedPlan string
 		_, err := s.session(bot, in)
 		stopTyping()
 		if err != nil {
-			s.finishWithReply(bot, []inbound{in}, completed+"Не удалось запустить новую сессию. Повторите /new или отправьте задачу ещё раз.", err)
+			message := "Не удалось запустить новую сессию. Повторите /new или отправьте задачу ещё раз."
+			if errors.Is(err, session.ErrContainerLimitReached) {
+				message = "Не удалось создать новую сессию: достигнут лимит контейнеров. Архивируйте или удалите ненужные сессии в Brigade либо попросите администратора увеличить лимит. Затем повторите /new."
+			}
+			s.finishWithReply(bot, []inbound{in}, completed+message, err)
 			return
 		}
 		s.finishWithReply(bot, []inbound{in}, completed+"Новая сессия готова. Напишите задачу.", nil)
@@ -1113,6 +1156,9 @@ func (s *Service) reply(ctx context.Context, bot store.TelegramBot, in inbound, 
 	}
 	if in.guest {
 		guestText := strings.Join(messages, "\n\n")
+		if len(reply.Files) > 0 {
+			guestText += "\n\nФайлы не отправляются в гостевом режиме. Они доступны владельцу бота в сессии Brigade: " + reply.SessionID
+		}
 		if in.guestInlineMessageID != "" {
 			if len(images) == 0 {
 				return s.api.editGuest(ctx, bot.Token, in.guestInlineMessageID, guestText)
@@ -1135,7 +1181,7 @@ func (s *Service) reply(ctx context.Context, bot store.TelegramBot, in inbound, 
 		return err
 	}
 	replyTo := s.replyToMessage(bot.ID, in)
-	if len(messages) == 0 && len(images) == 0 {
+	if len(messages) == 0 && len(images) == 0 && len(reply.Files) == 0 {
 		messages = []string{"Агент не вернул текстовый ответ."}
 	}
 	for _, message := range messages {
@@ -1157,14 +1203,45 @@ func (s *Service) reply(ctx context.Context, bot store.TelegramBot, in inbound, 
 		}
 		s.rememberMessage(bot.ID, in.chatID, in.threadID, sent.MessageID)
 	}
+	for index, name := range reply.Files {
+		file, err := s.registry.OpenWorkspaceFile(ctx, reply.SessionID, bot.UserID, name)
+		var data []byte
+		if err == nil {
+			data, err = io.ReadAll(io.LimitReader(file, maxTelegramDocumentSize+1))
+			file.Close()
+			if err == nil && len(data) > maxTelegramDocumentSize {
+				err = errors.New("file exceeds Telegram's 50 MB limit")
+			}
+		}
+		if err != nil {
+			log.Printf("telegram: published file %s: %v", name, err)
+			sent, sendErr := s.api.sendMessage(ctx, bot.Token, in.chatID, in.threadID, replyTo,
+				fmt.Sprintf("Не удалось отправить файл %s в Telegram. Он доступен в сессии %s в Brigade.", path.Base(name), reply.SessionID))
+			if sendErr != nil {
+				return sendErr
+			}
+			s.rememberMessage(bot.ID, in.chatID, in.threadID, sent.MessageID)
+			replyTo = 0
+			continue
+		}
+		documentReplyTo := int64(0)
+		if len(messages) == 0 && len(images) == 0 && index == 0 {
+			documentReplyTo = replyTo
+		}
+		sent, err := s.api.sendDocument(ctx, bot.Token, in.chatID, in.threadID, documentReplyTo, path.Base(name), data)
+		if err != nil {
+			return err
+		}
+		s.rememberMessage(bot.ID, in.chatID, in.threadID, sent.MessageID)
+	}
 	return nil
 }
 
 func encodeReply(result session.PromptResult, sessionID string) string {
-	if len(result.Messages) == 1 && len(result.Images) == 0 {
+	if len(result.Messages) == 1 && len(result.Images) == 0 && len(result.Files) == 0 {
 		return result.Messages[0]
 	}
-	encoded, _ := json.Marshal(replyEnvelope{Type: "brigade_reply", Messages: result.Messages, SessionID: sessionID, Images: result.Images})
+	encoded, _ := json.Marshal(replyEnvelope{Type: "brigade_reply", Messages: result.Messages, SessionID: sessionID, Images: result.Images, Files: result.Files})
 	return string(encoded)
 }
 

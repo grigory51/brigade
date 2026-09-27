@@ -3,12 +3,15 @@ package connectsvc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"connectrpc.com/connect"
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
 	"github.com/grigory51/brigade/backend/internal/acp"
+	"github.com/grigory51/brigade/backend/internal/session"
+	"github.com/grigory51/brigade/backend/internal/store"
 	"github.com/grigory51/brigade/backend/internal/transport/agui"
 )
 
@@ -18,13 +21,14 @@ import (
 // PermissionStore, что регистрирует ожидание SSE-резолвер.
 type AcpService struct {
 	provider  agui.ClientProvider
+	history   *session.Registry
 	workflows agui.WorkflowLister
 	perms     *agui.PermissionStore
 }
 
 // NewAcpService собирает реализацию AcpService.
-func NewAcpService(provider agui.ClientProvider, workflows agui.WorkflowLister, perms *agui.PermissionStore) *AcpService {
-	return &AcpService{provider: provider, workflows: workflows, perms: perms}
+func NewAcpService(provider agui.ClientProvider, history *session.Registry, workflows agui.WorkflowLister, perms *agui.PermissionStore) *AcpService {
+	return &AcpService{provider: provider, history: history, workflows: workflows, perms: perms}
 }
 
 // bindable отдаёт ACP-клиента сессии её владельцу либо connect-ошибку (Unauthenticated
@@ -41,47 +45,55 @@ func (s *AcpService) bindable(ctx context.Context, threadID string) (agui.Bindab
 	return b, nil
 }
 
-// ensureBindable — как bindable, но пере-поднимает мёртвую среду агента перед выдачей
-// (EnsureBindable). Для путей, где пользователь реально ОТКРЫВАЕТ сессию (история): если
-// контейнер/адаптер умер вне рестарта brigade, он оживает с resume, а не отдаёт пустую ленту.
-// GetStatus сюда НЕ переводим: его часто поллят (в т.ч. для индикации в списке), и респавн на
-// каждый полл будил бы остановленные контейнеры зря.
-func (s *AcpService) ensureBindable(ctx context.Context, threadID string) (agui.Bindable, error) {
+// GetHistory отдаёт ленту чата плюс снимки команд и опций сессии.
+func (s *AcpService) GetHistory(ctx context.Context, req *connect.Request[v1.GetHistoryRequest]) (*connect.Response[v1.GetHistoryResponse], error) {
 	userID, err := requireUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	b, ok := s.provider.EnsureBindable(ctx, threadID, userID)
-	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, errSessionNotFound)
-	}
-	return b, nil
-}
-
-// GetHistory отдаёт ленту чата плюс снимки команд и опций сессии.
-func (s *AcpService) GetHistory(ctx context.Context, req *connect.Request[v1.GetHistoryRequest]) (*connect.Response[v1.GetHistoryResponse], error) {
-	b, err := s.ensureBindable(ctx, req.Msg.ThreadId)
+	snapshot, err := s.history.History(ctx, req.Msg.ThreadId, userID)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, errSessionNotFound)
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	resp := &v1.GetHistoryResponse{}
-	for _, m := range b.Messages() {
+	for _, m := range snapshot.Messages {
 		resp.Messages = append(resp.Messages, &v1.AcpMessage{
 			Id: m.ID, Role: m.Role, Content: m.Content,
 			ToolName: m.ToolName, ArgsText: m.ArgsText, Result: m.Result,
+			Author: m.Author, Source: m.Source, ExternalId: m.ExternalID,
+			IncludedInContext: m.IncludedInContext, Delivery: m.Delivery,
+			ReplyToId: m.ReplyToID, CreatedAt: m.CreatedAt,
 		})
 	}
-	for _, c := range b.Commands() {
+	for _, c := range snapshot.Commands {
 		resp.Commands = append(resp.Commands, &v1.AcpCommand{
 			Name: c.Name, Description: c.Description, Hint: c.Hint,
 		})
 	}
-	resp.ConfigOptions = configOptionsToProto(b.ConfigOptions())
+	resp.ConfigOptions = configOptionsToProto(snapshot.ConfigOptions)
 	return connect.NewResponse(resp), nil
 }
 
 // GetStatus — снимок состояния сессии.
 func (s *AcpService) GetStatus(ctx context.Context, req *connect.Request[v1.GetStatusRequest]) (*connect.Response[v1.GetStatusResponse], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sess, err := s.history.Get(ctx, req.Msg.ThreadId, userID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, errSessionNotFound)
+	}
+	if sess.ExecutionPolicy == store.SessionExecutionOnDemand {
+		generating, seq, err := s.history.HistoryStatus(ctx, req.Msg.ThreadId, userID)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		return connect.NewResponse(&v1.GetStatusResponse{Generating: generating, Seq: seq}), nil
+	}
 	b, err := s.bindable(ctx, req.Msg.ThreadId)
 	if err != nil {
 		return nil, err

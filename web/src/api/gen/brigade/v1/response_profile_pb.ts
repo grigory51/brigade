@@ -72,6 +72,7 @@ export class ResponseProfile extends Message<ResponseProfile> {
     return proto3.util.equals(ResponseProfile, a, b);
   }
 }
+
 /**
  * @generated from message brigade.v1.ListResponseProfilesResponse
  */

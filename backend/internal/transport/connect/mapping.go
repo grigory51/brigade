@@ -51,9 +51,18 @@ func statusToProto(s store.SessionStatus) v1.SessionStatus {
 		return v1.SessionStatus_SESSION_STATUS_STOPPED
 	case store.SessionStatusFailed:
 		return v1.SessionStatus_SESSION_STATUS_FAILED
+	case store.SessionStatusIdle:
+		return v1.SessionStatus_SESSION_STATUS_IDLE
 	default:
 		return v1.SessionStatus_SESSION_STATUS_UNSPECIFIED
 	}
+}
+
+func executionPolicyToProto(policy store.SessionExecutionPolicy) v1.SessionExecutionPolicy {
+	if policy == store.SessionExecutionOnDemand {
+		return v1.SessionExecutionPolicy_SESSION_EXECUTION_POLICY_ON_DEMAND
+	}
+	return v1.SessionExecutionPolicy_SESSION_EXECUTION_POLICY_PERSISTENT
 }
 
 // sessionToProto переводит доменную сессию store в proto-сообщение.
@@ -67,6 +76,7 @@ func sessionToProto(s store.Session) *v1.Session {
 		AgentSessionId:      s.AgentSessionID,
 		ContainerLabel:      s.ContainerLabel,
 		Status:              statusToProto(s.Status),
+		ExecutionPolicy:     executionPolicyToProto(s.ExecutionPolicy),
 		Cwd:                 s.Cwd,
 		CreatedAt:           s.CreatedAt.Unix(),
 		Name:                s.Name,

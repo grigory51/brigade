@@ -240,7 +240,9 @@ func (s *Store) DeleteNotificationBackend(ctx context.Context, userID, id string
 const telegramBotSelect = `SELECT id, user_id, token, telegram_id, username, name,
 	owner_telegram_id, owner_telegram_username, agent_type, auth_profile, image, mcp_servers,
 	bind_token_hash, bind_token_expires_at, update_offset, supports_guest_queries,
-	has_topics_enabled, session_mode, new_session_action, created_at FROM telegram_bots`
+	has_topics_enabled, session_mode, new_session_action, purpose,
+	business_connection_id, business_owner_id, business_enabled, business_can_reply,
+	created_at FROM telegram_bots`
 
 func (s *Store) ListTelegramBots(ctx context.Context, userID string) ([]TelegramBot, error) {
 	rows, err := s.db.QueryContext(ctx, telegramBotSelect+` WHERE user_id = ? ORDER BY created_at`, userID)
@@ -283,7 +285,9 @@ func (s *Store) scanTelegramBot(row rowScanner) (TelegramBot, error) {
 	if err := row.Scan(&bot.ID, &bot.UserID, &token, &bot.TelegramID, &bot.Username, &bot.Name,
 		&bot.OwnerTelegramID, &bot.OwnerTelegramUsername, &bot.AgentType, &bot.AuthProfile,
 		&bot.Image, &mcp, &bot.BindTokenHash, &bindExpires, &bot.UpdateOffset,
-		&bot.SupportsGuestQueries, &bot.HasTopicsEnabled, &bot.SessionMode, &bot.NewSessionAction, &createdAt); err != nil {
+		&bot.SupportsGuestQueries, &bot.HasTopicsEnabled, &bot.SessionMode, &bot.NewSessionAction,
+		&bot.Purpose, &bot.BusinessConnectionID, &bot.BusinessOwnerID, &bot.BusinessEnabled,
+		&bot.BusinessCanReply, &createdAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return TelegramBot{}, ErrNotFound
 		}
@@ -309,29 +313,41 @@ func (s *Store) SaveTelegramBot(ctx context.Context, bot TelegramBot) error {
 	if bot.NewSessionAction == "" {
 		bot.NewSessionAction = TelegramNewSessionArchive
 	}
+	if bot.Purpose == "" {
+		bot.Purpose = "assistant"
+	}
 	now := toUnix(time.Now())
 	_, err := s.db.ExecContext(ctx, `INSERT INTO telegram_bots
 		(id, user_id, token, telegram_id, username, name, owner_telegram_id,
 		 owner_telegram_username, agent_type, auth_profile, image, mcp_servers,
 		 bind_token_hash, bind_token_expires_at, update_offset, supports_guest_queries,
-		 has_topics_enabled, session_mode, new_session_action, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 has_topics_enabled, session_mode, new_session_action, purpose, business_connection_id,
+		 business_owner_id, business_enabled, business_can_reply, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET token=excluded.token, telegram_id=excluded.telegram_id,
 		 username=excluded.username, name=excluded.name, agent_type=excluded.agent_type,
 		 auth_profile=excluded.auth_profile, image=excluded.image, mcp_servers=excluded.mcp_servers,
 		 supports_guest_queries=excluded.supports_guest_queries,
 		 has_topics_enabled=excluded.has_topics_enabled, session_mode=excluded.session_mode,
-		 new_session_action=excluded.new_session_action, updated_at=excluded.updated_at
+		 new_session_action=excluded.new_session_action, purpose=excluded.purpose,
+		 updated_at=excluded.updated_at
 		WHERE telegram_bots.user_id=excluded.user_id`,
 		bot.ID, bot.UserID, s.cipher.Encrypt(bot.Token), bot.TelegramID, bot.Username, bot.Name,
 		bot.OwnerTelegramID, bot.OwnerTelegramUsername, bot.AgentType, bot.AuthProfile,
 		bot.Image, strings.Join(bot.McpServers, ","), bot.BindTokenHash,
 		toUnix(bot.BindTokenExpiresAt), bot.UpdateOffset, bot.SupportsGuestQueries,
-		bot.HasTopicsEnabled, bot.SessionMode, bot.NewSessionAction, now, now)
+		bot.HasTopicsEnabled, bot.SessionMode, bot.NewSessionAction, bot.Purpose,
+		bot.BusinessConnectionID, bot.BusinessOwnerID, bot.BusinessEnabled, bot.BusinessCanReply, now, now)
 	if err != nil {
 		return fmt.Errorf("store: save telegram bot: %w", err)
 	}
 	return nil
+}
+
+func (s *Store) SetTelegramBusinessConnection(ctx context.Context, botID, connectionID string, ownerID int64, enabled, canReply bool) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE telegram_bots SET business_connection_id=?, business_owner_id=?, business_enabled=?, business_can_reply=?, updated_at=? WHERE id=? AND purpose='secretary'`,
+		connectionID, ownerID, enabled, canReply, toUnix(time.Now()), botID)
+	return err
 }
 
 func (s *Store) DeleteTelegramBot(ctx context.Context, userID, id string) error {
@@ -455,14 +471,17 @@ func (s *Store) DeleteTelegramConversation(ctx context.Context, botID, scope str
 
 // CreateSession вставляет новую сессию.
 func (s *Store) CreateSession(ctx context.Context, sess Session) error {
+	if sess.ExecutionPolicy == "" {
+		sess.ExecutionPolicy = SessionExecutionPersistent
+	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO sessions
-		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name, group_label, unread, mcp_servers, image, auth_profile, instruction_profile, response_profile_id, response_profile_name, response_instructions, experience_id, experience_version)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name, group_label, unread, mcp_servers, image, auth_profile, instruction_profile, response_profile_id, response_profile_name, response_instructions, experience_id, experience_version, execution_policy)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		sess.ID, sess.UserID, string(sess.Mode), string(sess.Kind), sess.AgentType,
 		sess.AgentSessionID, sess.ContainerLabel, string(sess.Status), sess.Cwd, toUnix(sess.CreatedAt), sess.Name, sess.GroupLabel, sess.Unread,
 		strings.Join(sess.McpServers, ","), sess.Image, sess.AuthProfile, sess.InstructionProfile,
-		sess.ResponseProfileID, sess.ResponseProfileName, sess.ResponseInstructions, sess.ExperienceID, sess.ExperienceVersion,
+		sess.ResponseProfileID, sess.ResponseProfileName, sess.ResponseInstructions, sess.ExperienceID, sess.ExperienceVersion, sess.ExecutionPolicy,
 	)
 	if err != nil {
 		return fmt.Errorf("store: create session: %w", err)
@@ -558,16 +577,30 @@ func (s *Store) UpdateSessionExperienceVersion(ctx context.Context, id, version 
 
 // DeleteSession удаляет сессию. Возвращает ErrNotFound, если сессии нет.
 func (s *Store) DeleteSession(ctx context.Context, id string) error {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE id = ?`, id)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: begin delete session: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM session_runs WHERE session_id = ?`, id); err != nil {
+		return fmt.Errorf("store: delete session runs: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM session_messages WHERE session_id = ?`, id); err != nil {
+		return fmt.Errorf("store: delete session messages: %w", err)
+	}
+	res, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("store: delete session: %w", err)
 	}
-	return affectedOne(res, "delete session")
+	if err := affectedOne(res, "delete session"); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 const sessionSelect = `SELECT id, user_id, mode, kind, agent_type, agent_session_id,
 	container_label, status, cwd, created_at, name, group_label, unread, mcp_servers, image, auth_profile, instruction_profile,
-	response_profile_id, response_profile_name, response_instructions, experience_id, experience_version FROM sessions`
+	response_profile_id, response_profile_name, response_instructions, experience_id, experience_version, execution_policy, history_revision FROM sessions`
 
 func (s *Store) querySessions(ctx context.Context, query string, args ...any) ([]Session, error) {
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -606,11 +639,11 @@ func (s *Store) scanSession(row *sql.Row) (Session, error) {
 
 func scanSessionRow(r rowScanner) (Session, error) {
 	var sess Session
-	var mode, kind, status, mcp string
+	var mode, kind, status, mcp, executionPolicy string
 	var createdAt int64
 	err := r.Scan(&sess.ID, &sess.UserID, &mode, &kind, &sess.AgentType,
 		&sess.AgentSessionID, &sess.ContainerLabel, &status, &sess.Cwd, &createdAt, &sess.Name, &sess.GroupLabel, &sess.Unread, &mcp, &sess.Image, &sess.AuthProfile, &sess.InstructionProfile,
-		&sess.ResponseProfileID, &sess.ResponseProfileName, &sess.ResponseInstructions, &sess.ExperienceID, &sess.ExperienceVersion)
+		&sess.ResponseProfileID, &sess.ResponseProfileName, &sess.ResponseInstructions, &sess.ExperienceID, &sess.ExperienceVersion, &executionPolicy, &sess.HistoryRevision)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Session{}, err
@@ -620,6 +653,7 @@ func scanSessionRow(r rowScanner) (Session, error) {
 	sess.Mode = SessionMode(mode)
 	sess.Kind = SessionKind(kind)
 	sess.Status = SessionStatus(status)
+	sess.ExecutionPolicy = SessionExecutionPolicy(executionPolicy)
 	sess.CreatedAt = fromUnix(createdAt)
 	if mcp != "" {
 		sess.McpServers = strings.Split(mcp, ",")

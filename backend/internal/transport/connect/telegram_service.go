@@ -48,6 +48,7 @@ func (s *TelegramService) SaveBot(ctx context.Context, req *connect.Request[v1.S
 		ID: in.Id, Token: req.Msg.Token, AgentType: in.AgentType, AuthProfile: in.AuthProfile,
 		Image: in.Image, McpServers: in.McpServerIds,
 		SessionMode: store.TelegramSessionMode(in.SessionMode), NewSessionAction: store.TelegramNewSessionAction(in.NewSessionAction),
+		Purpose: in.Purpose,
 	})
 	if err != nil {
 		code := connect.CodeInvalidArgument
@@ -57,6 +58,17 @@ func (s *TelegramService) SaveBot(ctx context.Context, req *connect.Request[v1.S
 		return nil, connect.NewError(code, err)
 	}
 	return connect.NewResponse(telegramBotToProto(saved)), nil
+}
+
+func (s *TelegramService) SendDraft(ctx context.Context, req *connect.Request[v1.SendTelegramDraftRequest]) (*connect.Response[v1.Empty], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.telegram.SendDraft(ctx, userID, req.Msg.SessionId, req.Msg.MessageId); err != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+	return connect.NewResponse(&v1.Empty{}), nil
 }
 
 func (s *TelegramService) DeleteBot(ctx context.Context, req *connect.Request[v1.TelegramBotRequest]) (*connect.Response[v1.Empty], error) {
@@ -90,5 +102,7 @@ func telegramBotToProto(bot store.TelegramBot) *v1.TelegramBot {
 		McpServerIds: bot.McpServers, SupportsGuestQueries: bot.SupportsGuestQueries,
 		HasTopicsEnabled: bot.HasTopicsEnabled,
 		SessionMode:      string(bot.SessionMode), NewSessionAction: string(bot.NewSessionAction),
+		Purpose: bot.Purpose, BusinessConnected: bot.BusinessEnabled,
+		BusinessCanReply: bot.BusinessCanReply,
 	}
 }

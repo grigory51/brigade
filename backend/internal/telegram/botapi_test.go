@@ -6,8 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -18,6 +21,15 @@ import (
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
+
+type fileReplyRegistry struct {
+	sessionRegistry
+	dir string
+}
+
+func (r fileReplyRegistry) OpenWorkspaceFile(_ context.Context, _, _, name string) (*os.File, error) {
+	return os.Open(filepath.Join(r.dir, name))
+}
 
 func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return f(request)
@@ -92,6 +104,70 @@ func TestReplyPreservesAssistantMessagesAndTracksConversation(t *testing.T) {
 		!strings.Contains(requests[1], `"text":"Второе"`) ||
 		strings.Contains(requests[1], `"reply_parameters"`) {
 		t.Fatalf("unexpected replies: %#v", requests)
+	}
+}
+
+func TestReplySendsPublishedPDFsWithoutText(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"first.pdf", "second.pdf"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(name), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	service := New(nil, nil, nil, "webhook", "", nil)
+	defer service.Close()
+	service.registry = fileReplyRegistry{dir: dir}
+	var sent []string
+	service.api.http.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Path != "/bottoken/sendDocument" {
+			t.Fatalf("unexpected method: %s", request.URL.Path)
+		}
+		_, params, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		reader := multipart.NewReader(request.Body, params["boundary"])
+		fields := make(map[string]string)
+		for {
+			part, err := reader.NextPart()
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, err := io.ReadAll(part)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if part.FormName() == "document" {
+				if part.FileName() != string(body) {
+					t.Fatalf("document %q contains %q", part.FileName(), body)
+				}
+				sent = append(sent, part.FileName())
+			} else {
+				fields[part.FormName()] = string(body)
+			}
+		}
+		if fields["chat_id"] != "42" || fields["message_thread_id"] != "7" {
+			t.Fatalf("unexpected fields: %+v", fields)
+		}
+		if len(sent) == 1 && fields["reply_parameters"] != `{"message_id":10}` {
+			t.Fatalf("first document must reply to request: %+v", fields)
+		}
+		if len(sent) == 2 && fields["reply_parameters"] != "" {
+			t.Fatalf("second document must not reply to request: %+v", fields)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"ok":true,"result":{"message_id":12}}`))}, nil
+	})
+	in := inbound{message: &telegramMessage{MessageID: 10}, chatID: 42, threadID: 7}
+	service.rememberMessage("bot", in.chatID, in.threadID, 11)
+	encoded := encodeReply(session.PromptResult{Files: []string{"first.pdf", "second.pdf"}}, "session")
+	if err := service.reply(t.Context(), store.TelegramBot{ID: "bot", UserID: "owner", Token: "token"}, in, encoded); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(sent, ",") != "first.pdf,second.pdf" {
+		t.Fatalf("sent documents: %v", sent)
 	}
 }
 

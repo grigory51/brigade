@@ -61,6 +61,22 @@ func TestOpenWorkspaceFile(t *testing.T) {
 	}
 }
 
+func TestPublishedFilePath(t *testing.T) {
+	for _, tc := range []struct {
+		result string
+		want   string
+	}{
+		{`{"content":[{"type":"text","text":"{\"name\":\"report.pdf\",\"url\":\"/api/sessions/session/files/reports/report%20one.pdf?v=123\"}"}]}`, "reports/report one.pdf"},
+		{`{"url":"/api/sessions/other/files/report.pdf"}`, ""},
+		{`{"url":"/api/sessions/session/files/../secret.pdf"}`, ""},
+		{`{"url":"/api/sessions/session/files/%ZZ"}`, ""},
+	} {
+		if got := publishedFilePath(tc.result, "session"); got != tc.want {
+			t.Errorf("publishedFilePath(%q) = %q, want %q", tc.result, got, tc.want)
+		}
+	}
+}
+
 func TestTelegramGuestInstructions(t *testing.T) {
 	r := newTestRegistry(t)
 	sess := store.Session{

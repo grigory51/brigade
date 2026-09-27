@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ConnectError, Code } from "@connectrpc/connect";
 import { sessionClient } from "@/api/client";
-import { SessionKind, type Session } from "@/api/gen/brigade/v1/session_pb";
+import { SessionExecutionPolicy, SessionKind, type Session } from "@/api/gen/brigade/v1/session_pb";
 import { RouteSpinner } from "@/lib/RouteSpinner";
 import { Button } from "@/components/ui/button";
 import { CliSession } from "@/features/cli/CliPage";
 import { AcpSession } from "@/features/acp/AcpPage";
 import { PluginSession } from "@/features/plugins/PluginSession";
+import { ShadowSession } from "@/features/sessions/ShadowSession";
 
 type Existence = "checking" | "found" | "notfound" | "error";
 
@@ -77,7 +78,9 @@ export function SessionGuard({ sessionId }: { sessionId: string | undefined }) {
   // тот же инстанс — и сообщения прежней сессии «прорастали» бы в новую. Смена key
   // гарантирует полный remount с чистым состоянием на каждую сессию.
   return session?.kind === SessionKind.ACP ? (
-    session.experienceId ? (
+    session.executionPolicy === SessionExecutionPolicy.ON_DEMAND ? (
+      <ShadowSession key={sessionId} sessionId={sessionId!} />
+    ) : session.experienceId ? (
       <PluginSession key={sessionId} session={session} />
     ) : (
       <AcpSession key={sessionId} sessionId={sessionId!} />

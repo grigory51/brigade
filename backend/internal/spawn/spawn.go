@@ -22,6 +22,8 @@ import (
 
 // Spec описывает параметры первичного запуска агента.
 type Spec struct {
+	// Ephemeral не монтирует общее состояние агента в одноразовый контейнер.
+	Ephemeral bool
 	// SessionID — идентификатор сессии brigade. Используется как значение label
 	// brigade.session.id для docker-контейнера и для сопоставления при Reattach.
 	SessionID string
