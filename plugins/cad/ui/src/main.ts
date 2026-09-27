@@ -55,6 +55,7 @@ let previewRevision = 0;
 let stateSignature = "";
 let busy = false;
 let error = "";
+let parameterRebuildTimer: number | undefined;
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -162,10 +163,10 @@ function renderPanel(): string {
           <span><strong>${escapeHtml(parameter.label)}</strong>${parameter.description ? `<small>${escapeHtml(parameter.description)}</small>` : ""}</span>
           <input name="${escapeHtml(parameter.id)}" type="checkbox" ${parameter.value ? "checked" : ""}>
         </label>` : `
-        <label class="cad-parameter">
+        <div class="cad-parameter">
           <span><strong>${escapeHtml(parameter.label)}</strong>${parameter.description ? `<small>${escapeHtml(parameter.description)}</small>` : ""}</span>
-          <div><input name="${escapeHtml(parameter.id)}" type="number" value="${escapeHtml(parameter.value)}" ${parameter.min !== undefined ? `min="${parameter.min}"` : ""} ${parameter.max !== undefined ? `max="${parameter.max}"` : ""} step="${parameter.step ?? "any"}"><em>${escapeHtml(parameter.unit || "")}</em></div>
-        </label>`).join("")}
+          <div class="cad-parameter-controls">${parameter.min !== undefined && parameter.max !== undefined ? `<input type="range" aria-label="${escapeHtml(parameter.label)}" min="${parameter.min}" max="${parameter.max}" step="${parameter.step ?? "any"}" value="${escapeHtml(parameter.value)}">` : ""}<input name="${escapeHtml(parameter.id)}" aria-label="${escapeHtml(parameter.label)}" type="number" value="${escapeHtml(parameter.value)}" ${parameter.min !== undefined ? `min="${parameter.min}"` : ""} ${parameter.max !== undefined ? `max="${parameter.max}"` : ""} step="${parameter.step ?? "any"}"><em>${escapeHtml(parameter.unit || "")}</em></div>
+        </div>`).join("")}
       <button class="cad-panel-action" type="submit">Rebuild with parameters</button>
     </form>`;
   }
@@ -189,6 +190,15 @@ function renderPanel(): string {
       </div>`).join("") || `<div class="cad-panel-empty"><strong>No revisions</strong><span>Every successful build is saved here.</span></div>`}</div>`;
   }
   return `<form class="cad-source"><textarea spellcheck="false" aria-label="build123d source">${escapeHtml(state.source || "# The generated build123d source will appear here")}</textarea><button class="cad-panel-action" type="submit" ${state.source ? "" : "disabled"}>Rebuild source</button></form>`;
+}
+
+function parameterValues(form: HTMLFormElement): Record<string, number | boolean> {
+  const values: Record<string, number | boolean> = {};
+  for (const parameter of state.parameters || []) {
+    const input = form.elements.namedItem(parameter.id) as HTMLInputElement;
+    values[parameter.id] = parameter.type === "boolean" ? input.checked : input.valueAsNumber;
+  }
+  return values;
 }
 
 function bind() {
@@ -239,12 +249,31 @@ function bind() {
   });
   root.querySelector<HTMLFormElement>(".cad-parameters")?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const values: Record<string, number | boolean> = {};
-    for (const parameter of state.parameters || []) {
-      const input = event.currentTarget.elements.namedItem(parameter.id) as HTMLInputElement;
-      values[parameter.id] = parameter.type === "boolean" ? input.checked : input.valueAsNumber;
-    }
-    await callAndApply("cad.update_parameters", { values });
+    window.clearTimeout(parameterRebuildTimer);
+    await callAndApply("cad.update_parameters", { values: parameterValues(event.currentTarget) });
+  });
+  root.querySelectorAll<HTMLElement>(".cad-parameter-controls").forEach((controls) => {
+    const slider = controls.querySelector<HTMLInputElement>('input[type="range"]');
+    const numberInput = controls.querySelector<HTMLInputElement>('input[type="number"]');
+    if (!slider || !numberInput) return;
+    slider.addEventListener("input", () => { numberInput.value = slider.value; });
+    numberInput.addEventListener("input", () => {
+      if (numberInput.validity.valid) slider.value = numberInput.value;
+    });
+    slider.addEventListener("change", () => {
+      window.clearTimeout(parameterRebuildTimer);
+      const form = slider.form;
+      if (!form || !form.checkValidity()) return;
+      const values = parameterValues(form);
+      const rebuild = () => {
+        if (busy) {
+          parameterRebuildTimer = window.setTimeout(rebuild, 400);
+        } else {
+          void callAndApply("cad.update_parameters", { values });
+        }
+      };
+      parameterRebuildTimer = window.setTimeout(rebuild, 400);
+    });
   });
   root.querySelector<HTMLFormElement>(".cad-source")?.addEventListener("submit", async (event) => {
     event.preventDefault();

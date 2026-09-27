@@ -102,6 +102,7 @@ function formatA2uiAction(action: A2uiClientAction): string {
 export type PendingPermission = {
   id: string;
   title: string;
+  command?: string;
   options: PermissionOption[];
 };
 
@@ -155,6 +156,7 @@ export type AcpRuntime = {
   resolvePermission: (id: string, decision: string) => void;
   commands: AvailableCommand[];
   plan: PlanEntry[];
+  usage: { used: number; size: number } | null;
   a2ui: A2uiState;
   configOptions: ConfigOption[];
   setConfigOption: (configId: string, value: string) => Promise<void>;
@@ -195,6 +197,7 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
   const resolvedPermIds = useRef<Set<string>>(new Set());
   const [commands, setCommands] = useState<AvailableCommand[]>([]);
   const [plan, setPlan] = useState<PlanEntry[]>([]);
+  const [usage, setUsage] = useState<{ used: number; size: number } | null>(null);
   const [configOptions, setConfigOptions] = useState<ConfigOption[]>([]);
   const [status, setStatus] = useState<AgentStatus>({
     generating: false,
@@ -280,6 +283,11 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
           setPermission(toPermission(event.value as CustomEventValue));
         } else if (event.name === "available_commands") {
           setCommands(toCommands(event.value as CustomEventValue));
+        } else if (event.name === "usage") {
+          const value = event.value as CustomEventValue;
+          if (typeof value?.used === "number" && typeof value.size === "number") {
+            setUsage({ used: value.used, size: value.size });
+          }
         } else if (event.name === "a2ui") {
           const messages = (event.value as CustomEventValue)?.messages;
           if (Array.isArray(messages)) {
@@ -512,6 +520,7 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
     resolvePermission,
     commands,
     plan,
+    usage,
     a2ui: { processor: a2uiProcessor, version: a2uiVersion },
     configOptions,
     setConfigOption,
@@ -547,6 +556,7 @@ function toPermission(value: CustomEventValue): PendingPermission {
   const id = typeof value?.id === "string" ? value.id : "";
   const title =
     typeof value?.title === "string" ? value.title : "Требуется разрешение";
+  const command = typeof value?.command === "string" ? value.command : undefined;
   const rawOptions = Array.isArray(value?.options) ? value.options : [];
   const options: PermissionOption[] = rawOptions
     .map((o) => o as Record<string, unknown>)
@@ -559,6 +569,7 @@ function toPermission(value: CustomEventValue): PendingPermission {
   return {
     id,
     title,
+    command,
     options:
       options.length > 0
         ? options

@@ -2,6 +2,7 @@ package acp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -79,6 +80,26 @@ func (c *Client) RequestPermission(ctx context.Context, params acpsdk.RequestPer
 	}
 	if params.ToolCall.Title != nil {
 		req.Title = *params.ToolCall.Title
+	}
+	if params.ToolCall.RawInput != nil {
+		var input map[string]json.RawMessage
+		if json.Unmarshal([]byte(rawJSON(params.ToolCall.RawInput)), &input) == nil {
+			if rawArgs, ok := input["arguments"]; ok {
+				var args map[string]json.RawMessage
+				if json.Unmarshal(rawArgs, &args) == nil {
+					input = args
+				}
+			}
+			for _, key := range []string{"command", "cmd"} {
+				if raw, ok := input[key]; ok {
+					var command string
+					if json.Unmarshal(raw, &command) == nil && command != "" {
+						req.Command = command
+						break
+					}
+				}
+			}
+		}
 	}
 	for _, opt := range params.Options {
 		req.Options = append(req.Options, agui.PermissionOption{

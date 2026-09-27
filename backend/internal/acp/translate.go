@@ -40,6 +40,8 @@ type toolCallState struct {
 	argsJSON string
 	// result — последний содержательный результат вызова.
 	result string
+	// failed — терминальный статус ACP-вызова; передаётся вместе с результатом.
+	failed bool
 	// isDiff — result несёт структурный diff: он важнее статусных строк и не
 	// затирается ими («липкий diff»).
 	isDiff bool
@@ -188,6 +190,7 @@ func (c *Client) translateUpdate(u acpsdk.SessionUpdate) []agui.Event {
 		if !terminal || !st.open {
 			return nil
 		}
+		st.failed = *tu.Status == acpsdk.ToolCallStatusFailed
 		st.open = false
 		return closeToolCallEvents(id, st)
 
@@ -431,13 +434,24 @@ func closeToolCallEvents(id string, st *toolCallState) []agui.Event {
 		})
 	}
 	evts = append(evts, agui.Event{Type: agui.EventToolCallEnd, ToolCallID: id})
-	if st.result != "" {
+	if st.result != "" || (st.failed && strings.EqualFold(st.name, "terminal")) {
+		result := st.result
+		if st.failed && strings.EqualFold(st.name, "terminal") {
+			var output any = result
+			if result != "" {
+				var decoded any
+				if json.Unmarshal([]byte(result), &decoded) == nil {
+					output = decoded
+				}
+			}
+			result = rawJSON(map[string]any{"isError": true, "output": output})
+		}
 		evts = append(evts, agui.Event{
 			Type:       agui.EventToolCallResult,
 			ToolCallID: id,
 			MessageID:  id,
 			Role:       "tool",
-			Content:    st.result,
+			Content:    result,
 		})
 	}
 	if len(st.diffs) > 0 {

@@ -378,6 +378,20 @@ func TestTranslateToolCall(t *testing.T) {
 	})
 }
 
+func TestTranslateFailedTerminal(t *testing.T) {
+	c := &Client{}
+	c.translateUpdate(acpsdk.StartToolCall("tc-failed", "Terminal"))
+	failed := acpsdk.ToolCallStatusFailed
+	got := c.translateUpdate(acpsdk.UpdateToolCall("tc-failed", acpsdk.WithUpdateRawOutput("boom"), acpsdk.WithUpdateStatus(failed)))
+	assertShapes(t, got, []eventShape{
+		{Type: agui.EventToolCallEnd, ToolCallID: "tc-failed"},
+		{Type: agui.EventToolCallResult, ToolCallID: "tc-failed", MessageID: "tc-failed", Role: "tool"},
+	})
+	if got[1].Content != `{"isError":true,"output":"boom"}` {
+		t.Errorf("failed Terminal result = %q", got[1].Content)
+	}
+}
+
 // TestTranslateToolCallMCPInput проверяет доставку аргументов MCP-инструмента: начальный
 // ToolCall.RawInput пуст, реальный ввод приходит ToolCallUpdate.RawInput (полным снимком)
 // и эмитится одним TOOL_CALL_ARGS при закрытии. Без этого аргументы render_ui/show_choice

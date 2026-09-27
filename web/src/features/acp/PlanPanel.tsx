@@ -25,6 +25,9 @@ export function PlanPanel({ plan }: { plan: PlanEntry[] }) {
         <span className="text-muted-foreground">
           {done}/{plan.length}
         </span>
+        <span className="ml-auto h-1 w-24 overflow-hidden rounded bg-muted" role="progressbar" aria-label="Прогресс плана" aria-valuenow={done} aria-valuemin={0} aria-valuemax={plan.length}>
+          <span className="block h-full rounded bg-success transition-[width]" style={{ width: `${(done / plan.length) * 100}%` }} />
+        </span>
       </summary>
       <ul className="space-y-1 border-t px-3 py-2">
         {plan.map((e, i) => (

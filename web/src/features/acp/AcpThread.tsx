@@ -1,11 +1,13 @@
 import {
+  Children,
   createContext,
   useCallback,
   useContext,
   type PropsWithChildren,
+  type ReactNode,
 } from "react";
-import { Activity, Download, Loader2, Wrench, ChevronRight } from "lucide-react";
-import { type ToolCallMessagePartComponent } from "@assistant-ui/react";
+import { Activity, Download, Loader2, Wrench, ChevronRight, LockKeyhole, FileText, Search, List } from "lucide-react";
+import { type ToolCallMessagePartComponent, useAuiState } from "@assistant-ui/react";
 import { A2uiSurface } from "@a2ui/react/v0_9";
 import { sessionClient } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -40,20 +42,39 @@ function AcpToolGroup({
   group,
 }: PropsWithChildren<{ group: ThreadGroupPart }>) {
   const running = group.status.type === "running";
-  return (
-    <details className="group/activity my-2 rounded-lg border border-border/60 bg-card/30">
+  const content = useAuiState((state) => state.message.content);
+  const calls = group.indices.map((index) => content[index] as ThreadToolPart | undefined);
+  const items = Children.toArray(children);
+  const activity = (parts: ReactNode, count: number, lastCall: ThreadToolPart | undefined, active: boolean, key: number) => (
+    <details key={key} className="group/activity rounded-lg border border-border/60 bg-card/30">
       <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 px-3 text-sm text-muted-foreground select-none hover:text-foreground">
         <Activity className="size-4 shrink-0" />
-        <span className="font-medium">Активность · {group.indices.length}</span>
-        {running ? (
-          <Loader2 className="ml-auto size-3.5 animate-spin" />
-        ) : (
-          <ChevronRight className="ml-auto size-4 transition-transform group-open/activity:rotate-90" />
-        )}
+        <span className="font-medium">Активность · {count}</span>
+        {active && lastCall?.type === "tool-call" && <span className="min-w-0 truncate text-xs">· {lastCall.toolName.replace(/ File$/i, "")} {toolPath(bareToolArgs(lastCall.args))}</span>}
+        {active ? <Loader2 className="ml-auto size-3.5 animate-spin" /> : <ChevronRight className="ml-auto size-4 transition-transform group-open/activity:rotate-90" />}
       </summary>
-      <div className="space-y-2 border-t border-border/50 p-2">{children}</div>
+      <div className="space-y-2 border-t border-border/50 p-2">{parts}</div>
     </details>
   );
+
+  if (items.length !== calls.length) {
+    const lastCall = calls[calls.length - 1];
+    const same = calls.length >= 3 && calls.every((call) => call?.type === "tool-call" && call.toolName === lastCall?.toolName);
+    return <div className="my-2 space-y-2">{same ? activity(children, calls.length, lastCall, running, 0) : children}</div>;
+  }
+
+  const rendered: ReactNode[] = [];
+  for (let start = 0; start < calls.length;) {
+    let end = start + 1;
+    while (end < calls.length && calls[end]?.toolName === calls[start]?.toolName) end++;
+    if (end - start >= 3 && calls[start]?.type === "tool-call") {
+      rendered.push(activity(items.slice(start, end), end - start, calls[end - 1], running && end === calls.length, start));
+    } else {
+      rendered.push(...items.slice(start, end));
+    }
+    start = end;
+  }
+  return <div className="my-2 space-y-2">{rendered}</div>;
 }
 import type {
   AvailableCommand,
@@ -64,7 +85,6 @@ import type {
 import { parseDiffResult } from "./tools/diff";
 import { DiffCard } from "./tools/DiffCard";
 import { TerminalCard } from "./tools/TerminalCard";
-import { FileCard } from "./tools/FileCard";
 import { PlanPanel, type PlanEntry } from "./PlanPanel";
 import { BrowserHandoffCard } from "./browser/BrowserHandoffCard/BrowserHandoffCard";
 import { BROWSER_HANDOFF_TOOL_NAME } from "./frontendTools";
@@ -77,6 +97,7 @@ import { BROWSER_HANDOFF_TOOL_NAME } from "./frontendTools";
 export function AcpThread({
   commands,
   plan,
+  usage,
   a2ui,
   configOptions,
   onConfigChange,
@@ -92,6 +113,7 @@ export function AcpThread({
 }: {
   commands: AvailableCommand[];
   plan: PlanEntry[];
+  usage?: { used: number; size: number } | null;
   a2ui: A2uiState;
   configOptions: ConfigOption[];
   onConfigChange: (configId: string, value: string) => void;
@@ -144,6 +166,7 @@ export function AcpThread({
         >
           <Thread
             commands={commands}
+            usage={usage}
             components={{
               ToolFallback,
               ToolGroup: AcpToolGroup,
@@ -180,25 +203,29 @@ export function PermissionComposer({
   permission: PendingPermission;
   onDecide: (decision: string) => void;
 }) {
+  const command = permission.command || /^(?:Run(?:ning)?|Execute|Выполнить)(?: command| команду)?[:：]\s*(.+)$/is.exec(permission.title)?.[1];
+  const question = command ? "Разрешить выполнение команды?" : permission.title;
   return (
-    <div className="border-border/60 dark:border-muted-foreground/15 flex w-full min-w-0 flex-col gap-3 rounded-(--composer-radius) border bg-(--composer-bg) p-3 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] dark:shadow-none">
+    <div className="flex w-full min-w-0 flex-col gap-3 rounded-(--composer-radius) border border-warning/45 bg-warning/5 p-3">
       <div className="min-w-0 px-1">
-        <div className="text-muted-foreground mb-1 text-xs font-medium">
-          Агент ждёт разрешения
+        <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-warning">
+          <LockKeyhole className="size-3.5" /> Агент ждёт разрешения
         </div>
-        <pre className="max-h-32 max-w-full overflow-auto font-mono text-sm leading-relaxed break-words whitespace-pre-wrap">
-          {permission.title}
-        </pre>
+        <div className="text-sm">{question}</div>
+        {command && <pre className="mt-2 max-h-32 max-w-full overflow-auto rounded border bg-background p-2 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all">{command}</pre>}
       </div>
       <div className="flex min-w-0 flex-wrap justify-end gap-2">
-        {permission.options.map((option) => {
+        {[...permission.options].sort((a, b) => {
+          const order = (kind?: string) => kind === "allow_once" ? 0 : kind === "allow_always" ? 1 : kind?.startsWith("reject") ? 2 : 1;
+          return order(a.kind) - order(b.kind);
+        }).map((option) => {
           const reject = option.kind?.startsWith("reject");
           return (
             <Button
               key={option.optionId}
               type="button"
-              variant={reject ? "outline" : "default"}
-              className={reject ? "max-w-full text-destructive" : "max-w-full"}
+              variant={reject ? "outline" : option.kind === "allow_always" ? "secondary" : "default"}
+              className={reject ? "max-w-full border-destructive/45 text-destructive" : "max-w-full"}
               onClick={() => onDecide(option.optionId)}
               title={option.name ?? option.optionId}
             >
@@ -217,14 +244,13 @@ export function PermissionComposer({
 // содержимому результата (структурный diff) и человекочитаемому имени инструмента от
 // ACP-адаптера («Terminal», «Read File»); всё прочее — generic-блок с раскрывающимися
 // аргументами и результатом.
-// Codex ACP передаёт rawInput MCP-вызова транспортным конвертом
-// {server, tool, arguments}; Claude отдаёт непосредственно arguments. Карточкам нужен
-// единый внутренний формат — только аргументы конкретного инструмента.
+// Codex ACP передаёт rawInput транспортным конвертом с server и arguments;
+// Claude отдаёт непосредственно arguments. Карточкам нужны аргументы инструмента.
 function bareToolArgs<T>(args: T): T {
   if (!args || typeof args !== "object" || Array.isArray(args)) return args;
   const input = args as Record<string, unknown>;
   if (
-    input.server === "brigade" &&
+    typeof input.server === "string" &&
     typeof input.arguments === "object" &&
     input.arguments !== null &&
     !Array.isArray(input.arguments)
@@ -287,8 +313,9 @@ const ToolFallback: ToolCallMessagePartComponent = (props) => {
     return <SnippetCard {...toolProps} />;
   }
 
-  const done = props.status.type === "complete" || props.result !== undefined;
+  const done = props.status.type === "complete" || props.status.type === "incomplete" || props.result !== undefined;
   const running = !done;
+  const state = running ? "running" : props.status.type === "incomplete" || (props.result && typeof props.result === "object" && "isError" in props.result && props.result.isError) ? "error" : "ok";
 
   const generatedImages = generatedImageFiles(props.result);
   if (generatedImages.length > 0 && sessionId) {
@@ -337,15 +364,55 @@ const ToolFallback: ToolCallMessagePartComponent = (props) => {
 
   const resultText =
     props.result === undefined ? null : formatResult(props.result);
-  switch (props.toolName) {
-    case "Terminal":
-      return <TerminalCard output={resultText} running={running} />;
-    case "Read File":
-      return <FileCard content={resultText} running={running} />;
+  switch (props.toolName.toLowerCase()) {
+    case "terminal": {
+      const result = terminalResult(props.result);
+      return <TerminalCard output={result?.output !== undefined ? result.output : resultText} command={terminalCommand(toolProps.args)} title={props.toolName} state={result?.isError ? "error" : state} />;
+    }
+    case "read file":
+    case "read":
+      return <ToolLine name="Read" path={toolPath(toolProps.args)} running={running} />;
+    case "search":
+      return <ToolLine name="Search" path={toolPath(toolProps.args)} running={running} />;
+    case "list":
+    case "list files":
+      return <ToolLine name="List" path={toolPath(toolProps.args)} running={running} />;
   }
 
   return <ToolInvocation name={props.toolName} argsText={props.argsText} done={done} />;
 };
+
+function terminalCommand(args: unknown): string | undefined {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return undefined;
+  const value = args as Record<string, unknown>;
+  return typeof value.command === "string" ? value.command : typeof value.cmd === "string" ? value.cmd : undefined;
+}
+
+function terminalResult(result: unknown): { isError: true; output?: string | null } | null {
+  try {
+    const value: unknown = typeof result === "string" ? JSON.parse(result) : result;
+    if (value && typeof value === "object" && "isError" in value && value.isError === true) {
+      return "output" in value ? { isError: true, output: formatResult(value.output) } : { isError: true };
+    }
+  } catch {
+    // Обычный текстовый вывод терминала не является JSON.
+  }
+  return null;
+}
+
+function toolPath(args: unknown): string | undefined {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return undefined;
+  const value = args as Record<string, unknown>;
+  for (const key of ["path", "file_path", "filePath", "pattern", "query"]) {
+    if (typeof value[key] === "string") return value[key];
+  }
+  return undefined;
+}
+
+function ToolLine({ name, path, running }: { name: string; path?: string; running: boolean }) {
+  const Icon = name.startsWith("Read") ? FileText : name.startsWith("Search") ? Search : List;
+  return <div className="my-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground"><Icon className="size-3.5 shrink-0" /><span>{name === "Read File" ? "Read" : name}</span>{path && <span className="min-w-0 truncate font-mono text-foreground" title={path}>{path}</span>}{running && <Loader2 className="size-3 animate-spin" />}</div>;
+}
 
 function ToolInvocation({
   name,

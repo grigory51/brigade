@@ -185,6 +185,8 @@ type PermissionRequest struct {
 	ID string `json:"id"`
 	// Title — человекочитаемое описание действия (заголовок tool call).
 	Title string `json:"title"`
+	// Command — команда shell, если адаптер передал её во входе tool call.
+	Command string `json:"command,omitempty"`
 	// ToolCallID — связанный tool call, если он есть.
 	ToolCallID string `json:"toolCallId,omitempty"`
 	// Options — варианты ответа (allow_once/reject_always/...).

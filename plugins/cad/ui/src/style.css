@@ -82,6 +82,8 @@ model-viewer { position: relative; z-index: 1; width: 100%; height: 100%; backgr
 .cad-parameter strong, .cad-toggle strong { font-size: 11px; font-weight: 560; }
 .cad-parameter small, .cad-toggle small { color: var(--cad-muted); font-size: 10px; line-height: 1.35; }
 .cad-parameter > div { display: flex; align-items: center; gap: 5px; }
+.cad-parameter-controls input[type="range"] { width: 64px; height: auto; padding: 0; border: 0; accent-color: var(--cad-accent); background: transparent; }
+.cad-parameter-controls input[type="number"] { width: 68px; }
 .cad-parameter input { width: 84px; height: 30px; border: 1px solid var(--cad-border); border-radius: 5px; outline: none; color: var(--cad-text); background: #1f1e1d; padding: 0 7px; font: 11px ui-monospace, monospace; text-align: right; }
 .cad-parameter input:focus { border-color: var(--cad-accent); }
 .cad-parameter em { min-width: 22px; color: var(--cad-muted); font: normal 9px ui-monospace, monospace; }

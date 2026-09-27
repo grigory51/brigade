@@ -103,6 +103,7 @@ export type ThreadProps = {
   components: ThreadComponents;
   // commands — slash-команды агента для автокомплита в composer'е (см. SlashMenu).
   commands?: AvailableCommand[] | undefined;
+  usage?: { used: number; size: number } | null;
   // footer — дополнительный блок над composer'ом (например, план агента).
   footer?: ReactNode | undefined;
   // composer — замена обычного ввода для другого ожидаемого действия, например
@@ -136,6 +137,7 @@ function useThreadComponents(): ThreadComponents {
 // Контекст списка slash-команд: проброшен от Thread до вложенного Composer без
 // передачи пропом через все промежуточные компоненты registry-разметки.
 const CommandsContext = createContext<AvailableCommand[]>([]);
+const UsageContext = createContext<{ used: number; size: number } | null>(null);
 
 // Контекст конфигурационных опций сессии для селекторов composer'а (см. ConfigSelectors).
 type ConfigContextValue = {
@@ -169,6 +171,7 @@ const isNewChatView = (s: AssistantState) =>
 export const Thread: FC<ThreadProps> = ({
   components,
   commands = [],
+  usage = null,
   footer,
   composer,
   configOptions = [],
@@ -198,17 +201,19 @@ export const Thread: FC<ThreadProps> = ({
   return (
     <ThreadComponentsContext.Provider value={components}>
       <CommandsContext.Provider value={commands}>
-        <ConfigContext.Provider value={configValue}>
-          <ResponseProfileContext.Provider value={profileValue}>
-            <ThreadRoot
-              isEmpty={isEmpty}
-              footer={footer}
-              composer={composer}
-              readonly={readonly}
-              workspace={workspace}
-            />
-          </ResponseProfileContext.Provider>
-        </ConfigContext.Provider>
+        <UsageContext.Provider value={usage}>
+          <ConfigContext.Provider value={configValue}>
+            <ResponseProfileContext.Provider value={profileValue}>
+              <ThreadRoot
+                isEmpty={isEmpty}
+                footer={footer}
+                composer={composer}
+                readonly={readonly}
+                workspace={workspace}
+              />
+            </ResponseProfileContext.Provider>
+          </ConfigContext.Provider>
+        </UsageContext.Provider>
       </CommandsContext.Provider>
     </ThreadComponentsContext.Provider>
   );
@@ -649,6 +654,7 @@ const SendButton: FC = () => {
 };
 
 const ComposerAction: FC = () => {
+  const usage = useContext(UsageContext);
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between gap-1">
       {/* min-w-0 + overflow-x-auto: на узких экранах (мобильный браузер) селекторы
@@ -660,6 +666,7 @@ const ComposerAction: FC = () => {
         <ConfigSelectors />
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
+        {usage && <span className="font-mono text-[11px] text-muted-foreground" title="Использовано токенов контекста">{`${new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(usage.used).toLowerCase()} · ${usage.size > 0 ? Math.round(usage.used / usage.size * 100) : 0}%`}</span>}
         <AuiIf condition={(s) => s.thread.capabilities.dictation}>
           <AuiIf condition={(s) => s.composer.dictation == null}>
             <ComposerPrimitive.Dictate asChild>
@@ -842,6 +849,7 @@ const AssistantMessageText: FC = () => {
         className={cn(!expanded && status.type === "complete" && "max-h-[80rem] overflow-hidden")}
       >
         <MarkdownText />
+        {status.type === "running" && <span className="ml-0.5 inline-block h-[1em] w-2 bg-primary/80 align-[-2px]" aria-label="Ответ печатается" />}
       </div>
       {overflowing && (
         <button

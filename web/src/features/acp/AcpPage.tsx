@@ -115,6 +115,7 @@ function AcpSessionInner({
     resolvePermission,
     commands,
     plan,
+    usage,
     a2ui,
     configOptions,
     setConfigOption,
@@ -141,6 +142,7 @@ function AcpSessionInner({
               workspace={workspace}
               commands={commands}
               plan={plan}
+              usage={usage}
               a2ui={a2ui}
               configOptions={configOptions}
               permission={permission}
