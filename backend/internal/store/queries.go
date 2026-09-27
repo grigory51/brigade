@@ -240,7 +240,7 @@ func (s *Store) DeleteNotificationBackend(ctx context.Context, userID, id string
 const telegramBotSelect = `SELECT id, user_id, token, telegram_id, username, name,
 	owner_telegram_id, owner_telegram_username, agent_type, auth_profile, image, mcp_servers,
 	bind_token_hash, bind_token_expires_at, update_offset, supports_guest_queries,
-	has_topics_enabled, session_mode, new_session_action, purpose,
+	has_topics_enabled, session_mode, new_session_action,
 	business_connection_id, business_owner_id, business_enabled, business_can_reply,
 	created_at FROM telegram_bots`
 
@@ -286,7 +286,7 @@ func (s *Store) scanTelegramBot(row rowScanner) (TelegramBot, error) {
 		&bot.OwnerTelegramID, &bot.OwnerTelegramUsername, &bot.AgentType, &bot.AuthProfile,
 		&bot.Image, &mcp, &bot.BindTokenHash, &bindExpires, &bot.UpdateOffset,
 		&bot.SupportsGuestQueries, &bot.HasTopicsEnabled, &bot.SessionMode, &bot.NewSessionAction,
-		&bot.Purpose, &bot.BusinessConnectionID, &bot.BusinessOwnerID, &bot.BusinessEnabled,
+		&bot.BusinessConnectionID, &bot.BusinessOwnerID, &bot.BusinessEnabled,
 		&bot.BusinessCanReply, &createdAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return TelegramBot{}, ErrNotFound
@@ -313,30 +313,27 @@ func (s *Store) SaveTelegramBot(ctx context.Context, bot TelegramBot) error {
 	if bot.NewSessionAction == "" {
 		bot.NewSessionAction = TelegramNewSessionArchive
 	}
-	if bot.Purpose == "" {
-		bot.Purpose = "assistant"
-	}
 	now := toUnix(time.Now())
 	_, err := s.db.ExecContext(ctx, `INSERT INTO telegram_bots
 		(id, user_id, token, telegram_id, username, name, owner_telegram_id,
 		 owner_telegram_username, agent_type, auth_profile, image, mcp_servers,
 		 bind_token_hash, bind_token_expires_at, update_offset, supports_guest_queries,
-		 has_topics_enabled, session_mode, new_session_action, purpose, business_connection_id,
+		 has_topics_enabled, session_mode, new_session_action, business_connection_id,
 		 business_owner_id, business_enabled, business_can_reply, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET token=excluded.token, telegram_id=excluded.telegram_id,
 		 username=excluded.username, name=excluded.name, agent_type=excluded.agent_type,
 		 auth_profile=excluded.auth_profile, image=excluded.image, mcp_servers=excluded.mcp_servers,
 		 supports_guest_queries=excluded.supports_guest_queries,
 		 has_topics_enabled=excluded.has_topics_enabled, session_mode=excluded.session_mode,
-		 new_session_action=excluded.new_session_action, purpose=excluded.purpose,
+		 new_session_action=excluded.new_session_action,
 		 updated_at=excluded.updated_at
 		WHERE telegram_bots.user_id=excluded.user_id`,
 		bot.ID, bot.UserID, s.cipher.Encrypt(bot.Token), bot.TelegramID, bot.Username, bot.Name,
 		bot.OwnerTelegramID, bot.OwnerTelegramUsername, bot.AgentType, bot.AuthProfile,
 		bot.Image, strings.Join(bot.McpServers, ","), bot.BindTokenHash,
 		toUnix(bot.BindTokenExpiresAt), bot.UpdateOffset, bot.SupportsGuestQueries,
-		bot.HasTopicsEnabled, bot.SessionMode, bot.NewSessionAction, bot.Purpose,
+		bot.HasTopicsEnabled, bot.SessionMode, bot.NewSessionAction,
 		bot.BusinessConnectionID, bot.BusinessOwnerID, bot.BusinessEnabled, bot.BusinessCanReply, now, now)
 	if err != nil {
 		return fmt.Errorf("store: save telegram bot: %w", err)
@@ -345,7 +342,7 @@ func (s *Store) SaveTelegramBot(ctx context.Context, bot TelegramBot) error {
 }
 
 func (s *Store) SetTelegramBusinessConnection(ctx context.Context, botID, connectionID string, ownerID int64, enabled, canReply bool) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE telegram_bots SET business_connection_id=?, business_owner_id=?, business_enabled=?, business_can_reply=?, updated_at=? WHERE id=? AND purpose='secretary'`,
+	_, err := s.db.ExecContext(ctx, `UPDATE telegram_bots SET business_connection_id=?, business_owner_id=?, business_enabled=?, business_can_reply=?, updated_at=? WHERE id=?`,
 		connectionID, ownerID, enabled, canReply, toUnix(time.Now()), botID)
 	return err
 }

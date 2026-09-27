@@ -39,9 +39,7 @@ type TelegramBot struct {
 	// threads: отдельная сессия на топик (по умолчанию); chat: одна на чат.
 	SessionMode string `protobuf:"bytes,13,opt,name=session_mode,json=sessionMode,proto3" json:"session_mode,omitempty"`
 	// archive (по умолчанию) | delete: действие /new в режиме chat.
-	NewSessionAction string `protobuf:"bytes,14,opt,name=new_session_action,json=newSessionAction,proto3" json:"new_session_action,omitempty"`
-	// assistant создаёт обычные ACP-сессии; secretary только сохраняет Business-переписку.
-	Purpose           string `protobuf:"bytes,15,opt,name=purpose,proto3" json:"purpose,omitempty"`
+	NewSessionAction  string `protobuf:"bytes,14,opt,name=new_session_action,json=newSessionAction,proto3" json:"new_session_action,omitempty"`
 	BusinessConnected bool   `protobuf:"varint,16,opt,name=business_connected,json=businessConnected,proto3" json:"business_connected,omitempty"`
 	BusinessCanReply  bool   `protobuf:"varint,17,opt,name=business_can_reply,json=businessCanReply,proto3" json:"business_can_reply,omitempty"`
 	unknownFields     protoimpl.UnknownFields
@@ -172,13 +170,6 @@ func (x *TelegramBot) GetSessionMode() string {
 func (x *TelegramBot) GetNewSessionAction() string {
 	if x != nil {
 		return x.NewSessionAction
-	}
-	return ""
-}
-
-func (x *TelegramBot) GetPurpose() string {
-	if x != nil {
-		return x.Purpose
 	}
 	return ""
 }
@@ -456,7 +447,7 @@ var File_brigade_v1_telegram_proto protoreflect.FileDescriptor
 const file_brigade_v1_telegram_proto_rawDesc = "" +
 	"\n" +
 	"\x19brigade/v1/telegram.proto\x12\n" +
-	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\xe4\x04\n" +
+	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\xd9\x04\n" +
 	"\vTelegramBot\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12\x12\n" +
@@ -473,10 +464,9 @@ const file_brigade_v1_telegram_proto_rawDesc = "" +
 	"\x16supports_guest_queries\x18\v \x01(\bR\x14supportsGuestQueries\x12,\n" +
 	"\x12has_topics_enabled\x18\f \x01(\bR\x10hasTopicsEnabled\x12!\n" +
 	"\fsession_mode\x18\r \x01(\tR\vsessionMode\x12,\n" +
-	"\x12new_session_action\x18\x0e \x01(\tR\x10newSessionAction\x12\x18\n" +
-	"\apurpose\x18\x0f \x01(\tR\apurpose\x12-\n" +
+	"\x12new_session_action\x18\x0e \x01(\tR\x10newSessionAction\x12-\n" +
 	"\x12business_connected\x18\x10 \x01(\bR\x11businessConnected\x12,\n" +
-	"\x12business_can_reply\x18\x11 \x01(\bR\x10businessCanReply\"X\n" +
+	"\x12business_can_reply\x18\x11 \x01(\bR\x10businessCanReplyJ\x04\b\x0f\x10\x10R\apurpose\"X\n" +
 	"\x18SendTelegramDraftRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1d\n" +

@@ -26,6 +26,13 @@ func TestTelegramStore(t *testing.T) {
 	if got.SessionMode != TelegramSessionThreads || got.NewSessionAction != TelegramNewSessionArchive {
 		t.Fatalf("legacy defaults changed: %+v", got)
 	}
+	if err := st.SetTelegramBusinessConnection(ctx, bot.ID, "business-1", 42, true, true); err != nil {
+		t.Fatal(err)
+	}
+	got, err = st.GetTelegramBot(ctx, bot.ID)
+	if err != nil || got.BusinessConnectionID != "business-1" || !got.BusinessEnabled || !got.BusinessCanReply {
+		t.Fatalf("business connection on ordinary bot: %+v, %v", got, err)
+	}
 	bot.SessionMode, bot.NewSessionAction = TelegramSessionChat, TelegramNewSessionDelete
 	if err := st.SaveTelegramBot(ctx, bot); err != nil {
 		t.Fatal(err)

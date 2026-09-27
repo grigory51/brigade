@@ -50,7 +50,7 @@ test("new bots default to threads and save archive", async () => {
   expect(telegramClient.saveBot).toHaveBeenCalledExactlyOnceWith({
     bot: {
       id: "", agentType: "claude", authProfile: "connection-1", image: "", mcpServerIds: [],
-      sessionMode: "threads", newSessionAction: "archive", purpose: "assistant",
+      sessionMode: "threads", newSessionAction: "archive",
     },
     token: "test-token",
   });
@@ -88,7 +88,7 @@ test.each([
   expect(telegramClient.saveBot).toHaveBeenCalledExactlyOnceWith({
     bot: {
       id: "", agentType: "claude", authProfile: "connection-1", image: "", mcpServerIds: [],
-      sessionMode: "chat", newSessionAction, purpose: "assistant",
+      sessionMode: "chat", newSessionAction,
     },
     token: "test-token",
   });
@@ -108,10 +108,22 @@ test("editing loads both fields and saves changes without replacing other settin
   expect(telegramClient.saveBot).toHaveBeenCalledExactlyOnceWith({
     bot: {
       id: "existing", agentType: "claude", authProfile: "connection-1", image: "custom:v1", mcpServerIds: ["mcp-1"],
-      sessionMode: "chat", newSessionAction: "archive", purpose: "assistant",
+      sessionMode: "chat", newSessionAction: "archive",
     },
     token: "",
   });
+});
+
+test("one bot shows ordinary chat settings and Business connection together", async () => {
+  const bot = new TelegramBot({
+    id: "both", username: "helper", tokenSet: true, ownerConnected: true,
+    agentType: "claude", authProfile: "connection-1", businessConnected: true, businessCanReply: true,
+  });
+  const view = await mountSection([bot], bot.id);
+  expect(view.queryByRole("combobox", { name: "Назначение" })).toBeNull();
+  expect(view.getByRole("combobox", { name: "Режим сессий" })).toBeTruthy();
+  expect(view.getByText("Telegram Business")).toBeTruthy();
+  expect(view.getByText("подключён · ответ разрешён")).toBeTruthy();
 });
 
 test("selecting legacy and new bots resets fields to threads/archive", async () => {

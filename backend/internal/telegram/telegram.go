@@ -156,9 +156,6 @@ func (s *Service) Save(ctx context.Context, userID string, bot store.TelegramBot
 		bot.BusinessOwnerID = current.BusinessOwnerID
 		bot.BusinessEnabled = current.BusinessEnabled
 		bot.BusinessCanReply = current.BusinessCanReply
-		if bot.Purpose == "" {
-			bot.Purpose = current.Purpose
-		}
 		// Старый клиент не должен сбрасывать новые настройки при сохранении бота.
 		if bot.SessionMode == "" {
 			bot.SessionMode = current.SessionMode
@@ -171,12 +168,6 @@ func (s *Service) Save(ctx context.Context, userID string, bot store.TelegramBot
 		bot.CreatedAt = time.Now()
 	}
 	bot.UserID = userID
-	if bot.Purpose == "" {
-		bot.Purpose = "assistant"
-	}
-	if bot.Purpose != "assistant" && bot.Purpose != "secretary" {
-		return store.TelegramBot{}, errors.New("telegram: неизвестное назначение бота")
-	}
 	if bot.SessionMode != "" && bot.SessionMode != store.TelegramSessionThreads && bot.SessionMode != store.TelegramSessionChat {
 		return store.TelegramBot{}, errors.New("telegram: неизвестный режим сессий")
 	}
@@ -248,9 +239,6 @@ func (s *Service) validateTemplate(ctx context.Context, bot *store.TelegramBot) 
 		return err
 	}
 	bot.Image = image
-	if bot.Purpose == "secretary" {
-		return nil
-	}
 	servers, err := s.store.ListMcpServers(ctx, bot.UserID)
 	if err != nil {
 		return err
@@ -454,25 +442,28 @@ func (s *Service) process(botID string) {
 		if err != nil {
 			return
 		}
-		if bot.Purpose != "secretary" && !s.deliverReady(bot) {
-			time.AfterFunc(3*time.Second, func() { s.kick(bot.ID) })
-			return
-		}
 		queued, err := s.store.ListTelegramUpdates(s.ctx, botID, "queued")
 		if err != nil {
 			time.AfterFunc(3*time.Second, func() { s.kick(bot.ID) })
 			return
 		}
-		if len(queued) == 0 {
+		if len(queued) != 0 {
+			var update telegramUpdate
+			if err := json.Unmarshal([]byte(queued[0].Payload), &update); err == nil && isBusinessUpdate(update) {
+				if err := s.processBusinessQueued(bot, queued[0], update); err != nil {
+					log.Printf("telegram: business @%s update=%d: %v", bot.Username, queued[0].UpdateID, err)
+					time.AfterFunc(3*time.Second, func() { s.kick(bot.ID) })
+					return
+				}
+				continue
+			}
+		}
+		if !s.deliverReady(bot) {
+			time.AfterFunc(3*time.Second, func() { s.kick(bot.ID) })
 			return
 		}
-		if bot.Purpose == "secretary" {
-			if err := s.processSecretaryQueued(bot, queued[0]); err != nil {
-				log.Printf("telegram: secretary @%s update=%d: %v", bot.Username, queued[0].UpdateID, err)
-				time.AfterFunc(3*time.Second, func() { s.kick(bot.ID) })
-				return
-			}
-			continue
+		if len(queued) == 0 {
+			return
 		}
 		s.processQueued(bot, queued)
 	}
@@ -885,15 +876,6 @@ func (s *Service) bindOwner(bot store.TelegramBot, in inbound) {
 	}
 	if err := s.store.BindTelegramOwner(s.ctx, bot.ID, in.from.ID, in.from.Username); err != nil {
 		s.finishWithReply(bot, []inbound{in}, "Не удалось привязать Telegram к Brigade.", err)
-		return
-	}
-	if bot.Purpose == "secretary" {
-		_, err := s.api.sendMessage(s.ctx, bot.Token, in.chatID, 0, in.message.MessageID,
-			"Brigade подключён. Теперь добавьте бота в Telegram Business. Входящие будут сохраняться без автоматических ответов.")
-		if err != nil {
-			log.Printf("telegram: secretary bind reply @%s: %v", bot.Username, err)
-		}
-		_ = s.store.DeleteTelegramUpdate(s.ctx, bot.ID, in.updateID)
 		return
 	}
 	message := "Telegram подключён к Brigade. Напишите задачу в личном чате; топики можно использовать для отдельных сессий."

@@ -128,7 +128,6 @@ type TelegramBot struct {
 	HasTopicsEnabled      bool
 	SessionMode           TelegramSessionMode
 	NewSessionAction      TelegramNewSessionAction
-	Purpose               string
 	BusinessConnectionID  string
 	BusinessOwnerID       int64
 	BusinessEnabled       bool

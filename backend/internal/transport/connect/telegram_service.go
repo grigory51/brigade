@@ -48,7 +48,6 @@ func (s *TelegramService) SaveBot(ctx context.Context, req *connect.Request[v1.S
 		ID: in.Id, Token: req.Msg.Token, AgentType: in.AgentType, AuthProfile: in.AuthProfile,
 		Image: in.Image, McpServers: in.McpServerIds,
 		SessionMode: store.TelegramSessionMode(in.SessionMode), NewSessionAction: store.TelegramNewSessionAction(in.NewSessionAction),
-		Purpose: in.Purpose,
 	})
 	if err != nil {
 		code := connect.CodeInvalidArgument
@@ -102,7 +101,7 @@ func telegramBotToProto(bot store.TelegramBot) *v1.TelegramBot {
 		McpServerIds: bot.McpServers, SupportsGuestQueries: bot.SupportsGuestQueries,
 		HasTopicsEnabled: bot.HasTopicsEnabled,
 		SessionMode:      string(bot.SessionMode), NewSessionAction: string(bot.NewSessionAction),
-		Purpose: bot.Purpose, BusinessConnected: bot.BusinessEnabled,
-		BusinessCanReply: bot.BusinessCanReply,
+		BusinessConnected: bot.BusinessEnabled && bot.OwnerTelegramID != 0 && bot.BusinessOwnerID == bot.OwnerTelegramID,
+		BusinessCanReply:  bot.BusinessEnabled && bot.BusinessCanReply && bot.OwnerTelegramID != 0 && bot.BusinessOwnerID == bot.OwnerTelegramID,
 	}
 }

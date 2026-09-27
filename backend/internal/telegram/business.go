@@ -2,7 +2,6 @@ package telegram
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -19,24 +18,17 @@ func businessSource(botID, connectionID string, chatID int64) string {
 	return "telegram-business/" + botID + "/" + url.PathEscape(connectionID) + "/" + strconv.FormatInt(chatID, 10)
 }
 
-func (s *Service) processSecretaryQueued(bot store.TelegramBot, stored store.TelegramUpdate) error {
-	var update telegramUpdate
-	if err := json.Unmarshal([]byte(stored.Payload), &update); err != nil {
-		return s.store.DeleteTelegramUpdate(s.ctx, bot.ID, stored.UpdateID)
-	}
+func isBusinessUpdate(update telegramUpdate) bool {
+	return update.BusinessConnection != nil || update.BusinessMessage != nil ||
+		update.EditedBusinessMessage != nil || update.DeletedBusinessMessages != nil
+}
+
+func (s *Service) processBusinessQueued(bot store.TelegramBot, stored store.TelegramUpdate, update telegramUpdate) error {
 	if connection := update.BusinessConnection; connection != nil {
 		if bot.OwnerTelegramID != 0 && connection.User.ID == bot.OwnerTelegramID {
 			if err := s.store.SetTelegramBusinessConnection(s.ctx, bot.ID, connection.ID, connection.User.ID, connection.Enabled, connection.Rights.CanReply); err != nil {
 				return err
 			}
-		}
-		return s.store.DeleteTelegramUpdate(s.ctx, bot.ID, stored.UpdateID)
-	}
-	if update.Message != nil {
-		in := inboundFrom(update)
-		if strings.HasPrefix(in.text, "/start ") {
-			s.bindOwner(bot, in)
-			return nil
 		}
 		return s.store.DeleteTelegramUpdate(s.ctx, bot.ID, stored.UpdateID)
 	}
@@ -54,7 +46,7 @@ func (s *Service) processSecretaryQueued(bot store.TelegramBot, stored store.Tel
 	if connectionID == "" || chatID == 0 || bot.OwnerTelegramID == 0 {
 		return s.store.DeleteTelegramUpdate(s.ctx, bot.ID, stored.UpdateID)
 	}
-	if !bot.BusinessEnabled || bot.BusinessConnectionID != connectionID {
+	if !bot.BusinessEnabled || bot.BusinessConnectionID != connectionID || bot.BusinessOwnerID != bot.OwnerTelegramID {
 		connection, err := s.api.getBusinessConnection(s.ctx, bot.Token, connectionID)
 		if err != nil {
 			return err
@@ -101,7 +93,7 @@ func (s *Service) processSecretaryQueued(bot store.TelegramBot, stored store.Tel
 		if message == nil {
 			return s.store.DeleteTelegramUpdate(s.ctx, bot.ID, stored.UpdateID)
 		}
-		return s.processSecretaryQueued(bot, stored)
+		return s.processBusinessQueued(bot, stored, update)
 	}
 	if err != nil {
 		return err
@@ -206,7 +198,7 @@ func (s *Service) SendDraft(ctx context.Context, userID, sessionID, messageID st
 	if err != nil {
 		return err
 	}
-	if bot.UserID != userID || bot.Purpose != "secretary" || !bot.BusinessEnabled || !bot.BusinessCanReply || bot.BusinessConnectionID != connectionID {
+	if bot.UserID != userID || !bot.BusinessEnabled || !bot.BusinessCanReply || bot.BusinessOwnerID != bot.OwnerTelegramID || bot.BusinessConnectionID != connectionID {
 		return errors.New("telegram: бот не подключён или не имеет права отвечать")
 	}
 	conversation, err := s.store.TelegramConversation(ctx, bot.ID, "business:"+connectionID, chatID, 0)

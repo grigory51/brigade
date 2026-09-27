@@ -87,13 +87,6 @@ export class TelegramBot extends Message<TelegramBot> {
   newSessionAction = "";
 
   /**
-   * assistant создаёт обычные ACP-сессии; secretary только сохраняет Business-переписку.
-   *
-   * @generated from field: string purpose = 15;
-   */
-  purpose = "";
-
-  /**
    * @generated from field: bool business_connected = 16;
    */
   businessConnected = false;
@@ -125,7 +118,6 @@ export class TelegramBot extends Message<TelegramBot> {
     { no: 12, name: "has_topics_enabled", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 13, name: "session_mode", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 14, name: "new_session_action", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 15, name: "purpose", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 16, name: "business_connected", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 17, name: "business_can_reply", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
