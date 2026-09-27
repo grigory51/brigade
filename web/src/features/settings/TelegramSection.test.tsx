@@ -50,7 +50,7 @@ test("new bots default to threads and save archive", async () => {
   expect(telegramClient.saveBot).toHaveBeenCalledExactlyOnceWith({
     bot: {
       id: "", agentType: "claude", authProfile: "connection-1", image: "", mcpServerIds: [],
-      sessionMode: "threads", newSessionAction: "archive",
+      sessionMode: "threads", newSessionAction: "archive", purpose: "assistant",
     },
     token: "test-token",
   });
@@ -88,7 +88,7 @@ test.each([
   expect(telegramClient.saveBot).toHaveBeenCalledExactlyOnceWith({
     bot: {
       id: "", agentType: "claude", authProfile: "connection-1", image: "", mcpServerIds: [],
-      sessionMode: "chat", newSessionAction,
+      sessionMode: "chat", newSessionAction, purpose: "assistant",
     },
     token: "test-token",
   });
@@ -108,7 +108,7 @@ test("editing loads both fields and saves changes without replacing other settin
   expect(telegramClient.saveBot).toHaveBeenCalledExactlyOnceWith({
     bot: {
       id: "existing", agentType: "claude", authProfile: "connection-1", image: "custom:v1", mcpServerIds: ["mcp-1"],
-      sessionMode: "chat", newSessionAction: "archive",
+      sessionMode: "chat", newSessionAction: "archive", purpose: "assistant",
     },
     token: "",
   });
