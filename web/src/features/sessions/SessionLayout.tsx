@@ -304,23 +304,25 @@ export function SessionLayout() {
     sessions.find((s) => s.id === activeId)?.kind === SessionKind.ACP;
 
   // Первая (самая новая) сессия определяет положение группы, внутри порядок тоже остаётся
-  // от новых к старым. Сессии без подписи остаются самостоятельными строками.
+  // от новых к старым. При наличии именованных групп остальные образуют общую группу.
   const groups = useMemo(() => {
-    const out: { label: string; sessions: Session[] }[] = [];
+    const out: { key: string; label: string; sessions: Session[] }[] = [];
     const byLabel = new Map<string, Session[]>();
+    const hasNamedGroups = sessions.some((session) => session.groupLabel !== "");
     for (const s of sessions) {
-      if (!s.groupLabel) {
-        out.push({ label: "", sessions: [s] });
+      if (!s.groupLabel && !hasNamedGroups) {
+        out.push({ key: s.id, label: "", sessions: [s] });
         continue;
       }
-      const existing = byLabel.get(s.groupLabel);
+      const key = s.groupLabel || "\0";
+      const existing = byLabel.get(key);
       if (existing) {
         existing.push(s);
         continue;
       }
       const grouped = [s];
-      byLabel.set(s.groupLabel, grouped);
-      out.push({ label: s.groupLabel, sessions: grouped });
+      byLabel.set(key, grouped);
+      out.push({ key, label: s.groupLabel || "Без группы", sessions: grouped });
     }
     return out;
   }, [sessions]);
@@ -425,22 +427,22 @@ export function SessionLayout() {
                     )}
 
                     {state === "ready" && groups.map((group) => (
-                      <Fragment key={group.label || group.sessions[0].id}>
+                      <Fragment key={group.key}>
                         {group.label && (
                           <SidebarMenuItem>
-                            <button type="button" aria-expanded={!collapsedGroups.has(group.label)} onClick={() => setCollapsedGroups((current) => { const next = new Set(current); if (next.has(group.label)) next.delete(group.label); else next.add(group.label); return next; })} className="mx-1 mt-1 flex h-7 w-[calc(100%-8px)] items-center gap-2 rounded-[8px] bg-sidebar-accent/60 px-2 text-left text-[12px] font-medium text-sidebar-foreground/75 hover:bg-sidebar-accent group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-                              <ChevronDown className={cn("size-3.5 shrink-0 transition-transform", collapsedGroups.has(group.label) && "-rotate-90")} />
-                              <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">{group.label.startsWith("Telegram Business · ") ? "Telegram Business" : group.label}</span>
-                              <span className="text-[10px] tabular-nums text-sidebar-foreground/45 group-data-[collapsible=icon]:hidden">{group.label.startsWith("Telegram Business · ") ? group.label.slice("Telegram Business · ".length) : group.sessions.length}</span>
+                            <button type="button" aria-expanded={!collapsedGroups.has(group.key)} title={group.label} onClick={() => setCollapsedGroups((current) => { const next = new Set(current); if (next.has(group.key)) next.delete(group.key); else next.add(group.key); return next; })} className="mx-1 mt-1 flex h-7 w-[calc(100%-8px)] items-center gap-2 rounded-[8px] bg-sidebar-accent/60 px-2 text-left text-[12px] font-medium text-sidebar-foreground/75 hover:bg-sidebar-accent group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+                              <ChevronDown className={cn("size-3.5 shrink-0 transition-transform", collapsedGroups.has(group.key) && "-rotate-90")} />
+                              <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">{group.label}</span>
+                              <span className="text-[10px] tabular-nums text-sidebar-foreground/45 group-data-[collapsible=icon]:hidden">{group.sessions.length}</span>
                             </button>
                           </SidebarMenuItem>
                         )}
-                        {!collapsedGroups.has(group.label) && group.sessions.map((s) => (
+                        {!collapsedGroups.has(group.key) && group.sessions.map((s) => (
                           <SessionItem
                             key={s.id}
                             session={s}
                             grouped={Boolean(group.label)}
-                            business={group.label.startsWith("Telegram Business · ")}
+                            business={s.executionPolicy === SessionExecutionPolicy.ON_DEMAND}
                             busy={
                               deletingIds.has(s.id) ||
                               archivingIds.has(s.id) ||

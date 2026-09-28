@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AddSessionMessageRequest, AddSessionMessageResponse, ArchiveSessionRequest, ArchiveSessionResponse, CancelSessionDraftRequest, CreateSessionDraftRequest, CreateSessionDraftResponse, CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, EditSessionDraftRequest, GenerateSessionDraftRequest, GenerateSessionDraftResponse, GetSessionDraftRunRequest, GetSessionDraftRunResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, MarkSessionReadRequest, ReloadAgentRequest, SetSessionMcpServersRequest, SetSessionMessageIncludedRequest, SetSessionResponseProfileRequest, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse, UploadFileRequest, UploadFileResponse } from "./session_pb.js";
+import { AddSessionMessageRequest, AddSessionMessageResponse, ArchiveSessionRequest, ArchiveSessionResponse, CancelSessionDraftRequest, CreateSessionDraftRequest, CreateSessionDraftResponse, CreateSessionRequest, CreateSessionResponse, DeleteSessionMessageRequest, DeleteSessionRequest, EditSessionDraftRequest, EditSessionMessageRequest, GenerateSessionDraftRequest, GenerateSessionDraftResponse, GetSessionDraftRunRequest, GetSessionDraftRunResponse, GetSessionModelsRequest, GetSessionModelsResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, MarkSessionReadRequest, ReloadAgentRequest, SetSessionMcpServersRequest, SetSessionMessageIncludedRequest, SetSessionModelRequest, SetSessionResponseProfileRequest, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse, UploadFileRequest, UploadFileResponse } from "./session_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { Empty } from "./auth_pb.js";
 
@@ -67,6 +67,42 @@ export const SessionService = {
       name: "AddMessage",
       I: AddSessionMessageRequest,
       O: AddSessionMessageResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.SessionService.EditMessage
+     */
+    editMessage: {
+      name: "EditMessage",
+      I: EditSessionMessageRequest,
+      O: Empty,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.SessionService.DeleteMessage
+     */
+    deleteMessage: {
+      name: "DeleteMessage",
+      I: DeleteSessionMessageRequest,
+      O: Empty,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.SessionService.GetModels
+     */
+    getModels: {
+      name: "GetModels",
+      I: GetSessionModelsRequest,
+      O: GetSessionModelsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.SessionService.SetModel
+     */
+    setModel: {
+      name: "SetModel",
+      I: SetSessionModelRequest,
+      O: Empty,
       kind: MethodKind.Unary,
     },
     /**

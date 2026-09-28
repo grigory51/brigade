@@ -186,7 +186,7 @@ type Session struct {
 	LastMessageAt       time.Time
 	LastMessageAuthor   MessageAuthor
 	LastMessageDelivery MessageDelivery
-	UnreadCount        uint32
+	UnreadCount         uint32
 	// McpServers — идентификаторы MCP-серверов пользователя, включённых в этой сессии
 	// (только ACP). В БД лежат CSV-строкой.
 	McpServers []string
@@ -194,6 +194,8 @@ type Session struct {
 	Image string
 	// AuthProfile фиксирует способ авторизации агента на весь срок жизни сессии.
 	AuthProfile string
+	// ModelID — выбранная ACP-модель для одноразовых запусков shadow-сессии.
+	ModelID string
 	// InstructionProfile — внутренний профиль поведения агента. Он применяется как
 	// system/developer instructions и не добавляется в историю сообщений.
 	InstructionProfile   string

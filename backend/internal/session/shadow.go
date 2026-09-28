@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	acpsdk "github.com/coder/acp-go-sdk"
+
 	"github.com/google/uuid"
 
 	"github.com/grigory51/brigade/backend/internal/agent"
@@ -126,6 +128,48 @@ func (r *Registry) StartShadowRun(ctx context.Context, sessionID, userID string,
 	return run, nil
 }
 
+// ShadowModels получает поддерживаемые модели из ACP-адаптера по явному запросу пользователя.
+func (r *Registry) ShadowModels(ctx context.Context, sessionID, userID string) ([]acpsdk.SessionConfigOption, error) {
+	sess, err := r.Get(ctx, sessionID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if sess.ExecutionPolicy != store.SessionExecutionOnDemand || sess.Mode != store.SessionModeDocker {
+		return nil, errors.New("session: on-demand Docker session required")
+	}
+	if r.atContainerLimit(userID, store.SessionKindACP) {
+		return nil, ErrContainerLimitReached
+	}
+	job := sess
+	job.ID = uuid.NewString()
+	job.Cwd = spawn.ContainerWorkdir + "/" + job.ID
+	job.HistoryRevision = 0
+	defer r.cleanupShadowRun(job)
+	probeCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+	live, _, _, err := r.spawnFor(probeCtx, job, "")
+	if err != nil {
+		return nil, err
+	}
+	defer live.client.Close()
+	return live.client.ConfigOptions(), nil
+}
+
+func (r *Registry) SetShadowModel(ctx context.Context, sessionID, userID, modelID string) error {
+	sess, err := r.Get(ctx, sessionID, userID)
+	if err != nil {
+		return err
+	}
+	if sess.ExecutionPolicy != store.SessionExecutionOnDemand {
+		return errors.New("session: not an on-demand session")
+	}
+	modelID = strings.TrimSpace(modelID)
+	if len(modelID) > 128 {
+		return errors.New("session: model ID is too long")
+	}
+	return r.store.UpdateShadowModel(ctx, sessionID, modelID)
+}
+
 func (r *Registry) CancelShadowRun(ctx context.Context, sessionID, userID string) error {
 	sess, err := r.Get(ctx, sessionID, userID)
 	if err != nil {
@@ -224,6 +268,23 @@ func (r *Registry) executeShadowRun(runContext context.Context, sess store.Sessi
 	if job.AgentType == agent.Codex.ID {
 		if _, err := live.client.SetConfigOption(ctx, "mode", "read-only"); err != nil {
 			failure = fmt.Sprintf("Не удалось включить безопасный режим агента: %v", err)
+			return
+		}
+	}
+	if job.ModelID != "" {
+		modelOptionID := ""
+		for _, option := range live.client.ConfigOptions() {
+			if option.Select != nil && option.Select.Category != nil && string(*option.Select.Category) == "model" {
+				modelOptionID = string(option.Select.Id)
+				break
+			}
+		}
+		if modelOptionID == "" {
+			failure = "Выбранный агент не поддерживает выбор модели через ACP"
+			return
+		}
+		if _, err := live.client.SetConfigOption(ctx, modelOptionID, job.ModelID); err != nil {
+			failure = fmt.Sprintf("Не удалось выбрать модель %q: %v", job.ModelID, err)
 			return
 		}
 	}
@@ -326,6 +387,32 @@ func (r *Registry) AddShadowMessage(ctx context.Context, sessionID, userID, cont
 	}
 	_, err = r.store.AddSessionMessage(ctx, message)
 	return message, err
+}
+
+func (r *Registry) EditShadowMessage(ctx context.Context, sessionID, userID, messageID, content string) error {
+	sess, err := r.Get(ctx, sessionID, userID)
+	if err != nil {
+		return err
+	}
+	if sess.ExecutionPolicy != store.SessionExecutionOnDemand {
+		return errors.New("session: message history belongs to agent")
+	}
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return errors.New("session: empty message")
+	}
+	return r.store.EditLocalSessionMessage(ctx, sessionID, messageID, content)
+}
+
+func (r *Registry) DeleteShadowMessage(ctx context.Context, sessionID, userID, messageID string) error {
+	sess, err := r.Get(ctx, sessionID, userID)
+	if err != nil {
+		return err
+	}
+	if sess.ExecutionPolicy != store.SessionExecutionOnDemand {
+		return errors.New("session: message history belongs to agent")
+	}
+	return r.store.DeleteLocalSessionMessage(ctx, sessionID, messageID)
 }
 
 // CreateShadowDraft сохраняет ручной ответ без отправки в Telegram.

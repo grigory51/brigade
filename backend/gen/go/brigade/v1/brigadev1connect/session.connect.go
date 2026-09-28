@@ -46,6 +46,17 @@ const (
 	// SessionServiceAddMessageProcedure is the fully-qualified name of the SessionService's AddMessage
 	// RPC.
 	SessionServiceAddMessageProcedure = "/brigade.v1.SessionService/AddMessage"
+	// SessionServiceEditMessageProcedure is the fully-qualified name of the SessionService's
+	// EditMessage RPC.
+	SessionServiceEditMessageProcedure = "/brigade.v1.SessionService/EditMessage"
+	// SessionServiceDeleteMessageProcedure is the fully-qualified name of the SessionService's
+	// DeleteMessage RPC.
+	SessionServiceDeleteMessageProcedure = "/brigade.v1.SessionService/DeleteMessage"
+	// SessionServiceGetModelsProcedure is the fully-qualified name of the SessionService's GetModels
+	// RPC.
+	SessionServiceGetModelsProcedure = "/brigade.v1.SessionService/GetModels"
+	// SessionServiceSetModelProcedure is the fully-qualified name of the SessionService's SetModel RPC.
+	SessionServiceSetModelProcedure = "/brigade.v1.SessionService/SetModel"
 	// SessionServiceSetMessageIncludedProcedure is the fully-qualified name of the SessionService's
 	// SetMessageIncluded RPC.
 	SessionServiceSetMessageIncludedProcedure = "/brigade.v1.SessionService/SetMessageIncluded"
@@ -98,6 +109,10 @@ type SessionServiceClient interface {
 	Update(context.Context, *connect.Request[v1.UpdateSessionRequest]) (*connect.Response[v1.UpdateSessionResponse], error)
 	MarkRead(context.Context, *connect.Request[v1.MarkSessionReadRequest]) (*connect.Response[v1.Empty], error)
 	AddMessage(context.Context, *connect.Request[v1.AddSessionMessageRequest]) (*connect.Response[v1.AddSessionMessageResponse], error)
+	EditMessage(context.Context, *connect.Request[v1.EditSessionMessageRequest]) (*connect.Response[v1.Empty], error)
+	DeleteMessage(context.Context, *connect.Request[v1.DeleteSessionMessageRequest]) (*connect.Response[v1.Empty], error)
+	GetModels(context.Context, *connect.Request[v1.GetSessionModelsRequest]) (*connect.Response[v1.GetSessionModelsResponse], error)
+	SetModel(context.Context, *connect.Request[v1.SetSessionModelRequest]) (*connect.Response[v1.Empty], error)
 	SetMessageIncluded(context.Context, *connect.Request[v1.SetSessionMessageIncludedRequest]) (*connect.Response[v1.Empty], error)
 	GenerateDraft(context.Context, *connect.Request[v1.GenerateSessionDraftRequest]) (*connect.Response[v1.GenerateSessionDraftResponse], error)
 	CancelDraft(context.Context, *connect.Request[v1.CancelSessionDraftRequest]) (*connect.Response[v1.Empty], error)
@@ -170,6 +185,30 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+SessionServiceAddMessageProcedure,
 			connect.WithSchema(sessionServiceMethods.ByName("AddMessage")),
+			connect.WithClientOptions(opts...),
+		),
+		editMessage: connect.NewClient[v1.EditSessionMessageRequest, v1.Empty](
+			httpClient,
+			baseURL+SessionServiceEditMessageProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("EditMessage")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteMessage: connect.NewClient[v1.DeleteSessionMessageRequest, v1.Empty](
+			httpClient,
+			baseURL+SessionServiceDeleteMessageProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("DeleteMessage")),
+			connect.WithClientOptions(opts...),
+		),
+		getModels: connect.NewClient[v1.GetSessionModelsRequest, v1.GetSessionModelsResponse](
+			httpClient,
+			baseURL+SessionServiceGetModelsProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("GetModels")),
+			connect.WithClientOptions(opts...),
+		),
+		setModel: connect.NewClient[v1.SetSessionModelRequest, v1.Empty](
+			httpClient,
+			baseURL+SessionServiceSetModelProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("SetModel")),
 			connect.WithClientOptions(opts...),
 		),
 		setMessageIncluded: connect.NewClient[v1.SetSessionMessageIncludedRequest, v1.Empty](
@@ -273,6 +312,10 @@ type sessionServiceClient struct {
 	update                    *connect.Client[v1.UpdateSessionRequest, v1.UpdateSessionResponse]
 	markRead                  *connect.Client[v1.MarkSessionReadRequest, v1.Empty]
 	addMessage                *connect.Client[v1.AddSessionMessageRequest, v1.AddSessionMessageResponse]
+	editMessage               *connect.Client[v1.EditSessionMessageRequest, v1.Empty]
+	deleteMessage             *connect.Client[v1.DeleteSessionMessageRequest, v1.Empty]
+	getModels                 *connect.Client[v1.GetSessionModelsRequest, v1.GetSessionModelsResponse]
+	setModel                  *connect.Client[v1.SetSessionModelRequest, v1.Empty]
 	setMessageIncluded        *connect.Client[v1.SetSessionMessageIncludedRequest, v1.Empty]
 	generateDraft             *connect.Client[v1.GenerateSessionDraftRequest, v1.GenerateSessionDraftResponse]
 	cancelDraft               *connect.Client[v1.CancelSessionDraftRequest, v1.Empty]
@@ -318,6 +361,26 @@ func (c *sessionServiceClient) MarkRead(ctx context.Context, req *connect.Reques
 // AddMessage calls brigade.v1.SessionService.AddMessage.
 func (c *sessionServiceClient) AddMessage(ctx context.Context, req *connect.Request[v1.AddSessionMessageRequest]) (*connect.Response[v1.AddSessionMessageResponse], error) {
 	return c.addMessage.CallUnary(ctx, req)
+}
+
+// EditMessage calls brigade.v1.SessionService.EditMessage.
+func (c *sessionServiceClient) EditMessage(ctx context.Context, req *connect.Request[v1.EditSessionMessageRequest]) (*connect.Response[v1.Empty], error) {
+	return c.editMessage.CallUnary(ctx, req)
+}
+
+// DeleteMessage calls brigade.v1.SessionService.DeleteMessage.
+func (c *sessionServiceClient) DeleteMessage(ctx context.Context, req *connect.Request[v1.DeleteSessionMessageRequest]) (*connect.Response[v1.Empty], error) {
+	return c.deleteMessage.CallUnary(ctx, req)
+}
+
+// GetModels calls brigade.v1.SessionService.GetModels.
+func (c *sessionServiceClient) GetModels(ctx context.Context, req *connect.Request[v1.GetSessionModelsRequest]) (*connect.Response[v1.GetSessionModelsResponse], error) {
+	return c.getModels.CallUnary(ctx, req)
+}
+
+// SetModel calls brigade.v1.SessionService.SetModel.
+func (c *sessionServiceClient) SetModel(ctx context.Context, req *connect.Request[v1.SetSessionModelRequest]) (*connect.Response[v1.Empty], error) {
+	return c.setModel.CallUnary(ctx, req)
 }
 
 // SetMessageIncluded calls brigade.v1.SessionService.SetMessageIncluded.
@@ -403,6 +466,10 @@ type SessionServiceHandler interface {
 	Update(context.Context, *connect.Request[v1.UpdateSessionRequest]) (*connect.Response[v1.UpdateSessionResponse], error)
 	MarkRead(context.Context, *connect.Request[v1.MarkSessionReadRequest]) (*connect.Response[v1.Empty], error)
 	AddMessage(context.Context, *connect.Request[v1.AddSessionMessageRequest]) (*connect.Response[v1.AddSessionMessageResponse], error)
+	EditMessage(context.Context, *connect.Request[v1.EditSessionMessageRequest]) (*connect.Response[v1.Empty], error)
+	DeleteMessage(context.Context, *connect.Request[v1.DeleteSessionMessageRequest]) (*connect.Response[v1.Empty], error)
+	GetModels(context.Context, *connect.Request[v1.GetSessionModelsRequest]) (*connect.Response[v1.GetSessionModelsResponse], error)
+	SetModel(context.Context, *connect.Request[v1.SetSessionModelRequest]) (*connect.Response[v1.Empty], error)
 	SetMessageIncluded(context.Context, *connect.Request[v1.SetSessionMessageIncludedRequest]) (*connect.Response[v1.Empty], error)
 	GenerateDraft(context.Context, *connect.Request[v1.GenerateSessionDraftRequest]) (*connect.Response[v1.GenerateSessionDraftResponse], error)
 	CancelDraft(context.Context, *connect.Request[v1.CancelSessionDraftRequest]) (*connect.Response[v1.Empty], error)
@@ -471,6 +538,30 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		SessionServiceAddMessageProcedure,
 		svc.AddMessage,
 		connect.WithSchema(sessionServiceMethods.ByName("AddMessage")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceEditMessageHandler := connect.NewUnaryHandler(
+		SessionServiceEditMessageProcedure,
+		svc.EditMessage,
+		connect.WithSchema(sessionServiceMethods.ByName("EditMessage")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceDeleteMessageHandler := connect.NewUnaryHandler(
+		SessionServiceDeleteMessageProcedure,
+		svc.DeleteMessage,
+		connect.WithSchema(sessionServiceMethods.ByName("DeleteMessage")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceGetModelsHandler := connect.NewUnaryHandler(
+		SessionServiceGetModelsProcedure,
+		svc.GetModels,
+		connect.WithSchema(sessionServiceMethods.ByName("GetModels")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceSetModelHandler := connect.NewUnaryHandler(
+		SessionServiceSetModelProcedure,
+		svc.SetModel,
+		connect.WithSchema(sessionServiceMethods.ByName("SetModel")),
 		connect.WithHandlerOptions(opts...),
 	)
 	sessionServiceSetMessageIncludedHandler := connect.NewUnaryHandler(
@@ -577,6 +668,14 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 			sessionServiceMarkReadHandler.ServeHTTP(w, r)
 		case SessionServiceAddMessageProcedure:
 			sessionServiceAddMessageHandler.ServeHTTP(w, r)
+		case SessionServiceEditMessageProcedure:
+			sessionServiceEditMessageHandler.ServeHTTP(w, r)
+		case SessionServiceDeleteMessageProcedure:
+			sessionServiceDeleteMessageHandler.ServeHTTP(w, r)
+		case SessionServiceGetModelsProcedure:
+			sessionServiceGetModelsHandler.ServeHTTP(w, r)
+		case SessionServiceSetModelProcedure:
+			sessionServiceSetModelHandler.ServeHTTP(w, r)
 		case SessionServiceSetMessageIncludedProcedure:
 			sessionServiceSetMessageIncludedHandler.ServeHTTP(w, r)
 		case SessionServiceGenerateDraftProcedure:
@@ -638,6 +737,22 @@ func (UnimplementedSessionServiceHandler) MarkRead(context.Context, *connect.Req
 
 func (UnimplementedSessionServiceHandler) AddMessage(context.Context, *connect.Request[v1.AddSessionMessageRequest]) (*connect.Response[v1.AddSessionMessageResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.AddMessage is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) EditMessage(context.Context, *connect.Request[v1.EditSessionMessageRequest]) (*connect.Response[v1.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.EditMessage is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) DeleteMessage(context.Context, *connect.Request[v1.DeleteSessionMessageRequest]) (*connect.Response[v1.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.DeleteMessage is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) GetModels(context.Context, *connect.Request[v1.GetSessionModelsRequest]) (*connect.Response[v1.GetSessionModelsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.GetModels is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) SetModel(context.Context, *connect.Request[v1.SetSessionModelRequest]) (*connect.Response[v1.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.SetModel is not implemented"))
 }
 
 func (UnimplementedSessionServiceHandler) SetMessageIncluded(context.Context, *connect.Request[v1.SetSessionMessageIncludedRequest]) (*connect.Response[v1.Empty], error) {

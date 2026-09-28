@@ -21,6 +21,13 @@ func TestShadowMessageRevisionAndRunExclusivity(t *testing.T) {
 	if err := st.CreateSession(ctx, sess); err != nil {
 		t.Fatal(err)
 	}
+	if err := st.UpdateShadowModel(ctx, sess.ID, "model-from-acp"); err != nil {
+		t.Fatal(err)
+	}
+	configured, err := st.GetSession(ctx, sess.ID)
+	if err != nil || configured.ModelID != "model-from-acp" {
+		t.Fatalf("shadow model: %+v, %v", configured, err)
+	}
 	message := SessionMessage{ID: "m1", SessionID: sess.ID, Author: MessageAuthorContact, Content: "Привет", Source: "telegram-business/bot/conn/1", ExternalID: "7", IncludedInContext: true, Delivery: MessageDeliveryReceived, CreatedAt: time.Now()}
 	if inserted, err := st.AddSessionMessage(ctx, message); err != nil || !inserted {
 		t.Fatalf("insert: %v %v", inserted, err)
@@ -100,5 +107,54 @@ func TestMarkSessionDraftSentAfterBusinessEcho(t *testing.T) {
 	messages, err := st.SessionMessages(ctx, sess.ID)
 	if err != nil || len(messages) != 1 || messages[0].ID != "draft" || messages[0].Delivery != MessageDeliverySent {
 		t.Fatalf("messages: %+v, %v", messages, err)
+	}
+}
+
+func TestEditAndDeleteLocalSessionMessage(t *testing.T) {
+	st, err := Open(filepath.Join(t.TempDir(), "brigade.db"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	ctx := t.Context()
+	if _, err := st.DB().Exec(`INSERT INTO users (id, username, password_hash, created_at) VALUES ('owner', 'owner', '', 0)`); err != nil {
+		t.Fatal(err)
+	}
+	sess := Session{ID: "s1", UserID: "owner", Kind: SessionKindACP, Mode: SessionModeDocker, Status: SessionStatusIdle,
+		ExecutionPolicy: SessionExecutionOnDemand, AgentType: "codex", CreatedAt: time.Now()}
+	if err := st.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	for _, message := range []SessionMessage{
+		{ID: "note", SessionID: sess.ID, Author: MessageAuthorOwner, Content: "Старая заметка", Source: "brigade", Delivery: MessageDeliveryReceived, CreatedAt: time.Now()},
+		{ID: "contact", SessionID: sess.ID, Author: MessageAuthorContact, Content: "Привет", Source: "telegram-business/bot/conn/1", Delivery: MessageDeliveryReceived, CreatedAt: time.Now()},
+		{ID: "draft", SessionID: sess.ID, Author: MessageAuthorOwner, Content: "Ответ", Source: "brigade", Delivery: MessageDeliveryDraft, CreatedAt: time.Now()},
+	} {
+		if _, err := st.AddSessionMessage(ctx, message); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.EditLocalSessionMessage(ctx, sess.ID, "contact", "Нельзя"); err != ErrNotFound {
+		t.Fatalf("edit contact: %v", err)
+	}
+	if err := st.DeleteLocalSessionMessage(ctx, sess.ID, "draft"); err != ErrNotFound {
+		t.Fatalf("delete draft: %v", err)
+	}
+	if err := st.EditLocalSessionMessage(ctx, sess.ID, "note", "Новая заметка"); err != nil {
+		t.Fatal(err)
+	}
+	note, err := st.SessionMessage(ctx, sess.ID, "note")
+	if err != nil || note.Content != "Новая заметка" {
+		t.Fatalf("edited note: %+v, %v", note, err)
+	}
+	if err := st.DeleteLocalSessionMessage(ctx, sess.ID, "note"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.SessionMessage(ctx, sess.ID, "note"); err != ErrNotFound {
+		t.Fatalf("deleted note: %v", err)
+	}
+	got, err := st.GetSession(ctx, sess.ID)
+	if err != nil || got.HistoryRevision != 5 {
+		t.Fatalf("revision: %+v, %v", got, err)
 	}
 }

@@ -3,6 +3,7 @@ syntax = "proto3";
 package brigade.v1;
 
 import "brigade/v1/auth.proto";
+import "brigade/v1/acp.proto";
 
 // Режим запуска агента: локальный процесс на хосте или отдельный Docker-контейнер.
 enum SessionMode {
@@ -90,6 +91,8 @@ message Session {
   string last_message_author = 29;
   string last_message_delivery = 30;
   uint32 unread_count = 31;
+  // ACP-модель для одноразовых запусков shadow-сессии. Пусто — модель агента по умолчанию.
+  string model_id = 32;
 }
 
 message CreateSessionRequest {
@@ -166,6 +169,31 @@ message AddSessionMessageRequest {
 
 message AddSessionMessageResponse {
   string message_id = 1;
+}
+
+message EditSessionMessageRequest {
+  string session_id = 1;
+  string message_id = 2;
+  string content = 3;
+}
+
+message DeleteSessionMessageRequest {
+  string session_id = 1;
+  string message_id = 2;
+}
+
+message GetSessionModelsRequest {
+  string session_id = 1;
+}
+
+message GetSessionModelsResponse {
+  repeated AcpConfigOptionValue models = 1;
+  string default_model_id = 2;
+}
+
+message SetSessionModelRequest {
+  string session_id = 1;
+  string model_id = 2;
 }
 
 message SetSessionMessageIncludedRequest {
@@ -281,6 +309,10 @@ service SessionService {
   rpc Update(UpdateSessionRequest) returns (UpdateSessionResponse) {}
   rpc MarkRead(MarkSessionReadRequest) returns (Empty) {}
   rpc AddMessage(AddSessionMessageRequest) returns (AddSessionMessageResponse) {}
+  rpc EditMessage(EditSessionMessageRequest) returns (Empty) {}
+  rpc DeleteMessage(DeleteSessionMessageRequest) returns (Empty) {}
+  rpc GetModels(GetSessionModelsRequest) returns (GetSessionModelsResponse) {}
+  rpc SetModel(SetSessionModelRequest) returns (Empty) {}
   rpc SetMessageIncluded(SetSessionMessageIncludedRequest) returns (Empty) {}
   rpc GenerateDraft(GenerateSessionDraftRequest) returns (GenerateSessionDraftResponse) {}
   rpc CancelDraft(CancelSessionDraftRequest) returns (Empty) {}

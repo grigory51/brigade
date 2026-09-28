@@ -72,6 +72,50 @@ func (s *Store) SessionMessages(ctx context.Context, sessionID string) ([]Sessio
 	return messages, rows.Err()
 }
 
+// EditLocalSessionMessage меняет только локальную заметку владельца, не внешний ответ.
+func (s *Store) EditLocalSessionMessage(ctx context.Context, sessionID, messageID, content string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE session_messages SET content = ?
+		WHERE session_id = ? AND id = ? AND author = 'owner' AND source = 'brigade' AND delivery = 'received'`,
+		content, sessionID, messageID)
+	if err != nil {
+		return fmt.Errorf("store: edit local message: %w", err)
+	}
+	if err := affectedOne(result, "edit local message"); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE sessions SET history_revision = history_revision + 1 WHERE id = ?`, sessionID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// DeleteLocalSessionMessage удаляет только локальную заметку владельца.
+func (s *Store) DeleteLocalSessionMessage(ctx context.Context, sessionID, messageID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `DELETE FROM session_messages
+		WHERE session_id = ? AND id = ? AND author = 'owner' AND source = 'brigade' AND delivery = 'received'`,
+		sessionID, messageID)
+	if err != nil {
+		return fmt.Errorf("store: delete local message: %w", err)
+	}
+	if err := affectedOne(result, "delete local message"); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE sessions SET history_revision = history_revision + 1 WHERE id = ?`, sessionID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // LastShadowMessages возвращает превью одним запросом для списка переписок владельца.
 type ShadowPreview struct {
 	Message     SessionMessage

@@ -282,8 +282,10 @@ type Session struct {
 	LastMessageAuthor   string `protobuf:"bytes,29,opt,name=last_message_author,json=lastMessageAuthor,proto3" json:"last_message_author,omitempty"`
 	LastMessageDelivery string `protobuf:"bytes,30,opt,name=last_message_delivery,json=lastMessageDelivery,proto3" json:"last_message_delivery,omitempty"`
 	UnreadCount         uint32 `protobuf:"varint,31,opt,name=unread_count,json=unreadCount,proto3" json:"unread_count,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// ACP-модель для одноразовых запусков shadow-сессии. Пусто — модель агента по умолчанию.
+	ModelId       string `protobuf:"bytes,32,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Session) Reset() {
@@ -524,6 +526,13 @@ func (x *Session) GetUnreadCount() uint32 {
 		return x.UnreadCount
 	}
 	return 0
+}
+
+func (x *Session) GetModelId() string {
+	if x != nil {
+		return x.ModelId
+	}
+	return ""
 }
 
 type CreateSessionRequest struct {
@@ -1229,6 +1238,266 @@ func (x *AddSessionMessageResponse) GetMessageId() string {
 	return ""
 }
 
+type EditSessionMessageRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	MessageId     string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	Content       string                 `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EditSessionMessageRequest) Reset() {
+	*x = EditSessionMessageRequest{}
+	mi := &file_brigade_v1_session_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EditSessionMessageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EditSessionMessageRequest) ProtoMessage() {}
+
+func (x *EditSessionMessageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_session_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EditSessionMessageRequest.ProtoReflect.Descriptor instead.
+func (*EditSessionMessageRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *EditSessionMessageRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *EditSessionMessageRequest) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+func (x *EditSessionMessageRequest) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+type DeleteSessionMessageRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	MessageId     string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteSessionMessageRequest) Reset() {
+	*x = DeleteSessionMessageRequest{}
+	mi := &file_brigade_v1_session_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteSessionMessageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteSessionMessageRequest) ProtoMessage() {}
+
+func (x *DeleteSessionMessageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_session_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteSessionMessageRequest.ProtoReflect.Descriptor instead.
+func (*DeleteSessionMessageRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *DeleteSessionMessageRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *DeleteSessionMessageRequest) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+type GetSessionModelsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSessionModelsRequest) Reset() {
+	*x = GetSessionModelsRequest{}
+	mi := &file_brigade_v1_session_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSessionModelsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSessionModelsRequest) ProtoMessage() {}
+
+func (x *GetSessionModelsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_session_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSessionModelsRequest.ProtoReflect.Descriptor instead.
+func (*GetSessionModelsRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *GetSessionModelsRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+type GetSessionModelsResponse struct {
+	state          protoimpl.MessageState  `protogen:"open.v1"`
+	Models         []*AcpConfigOptionValue `protobuf:"bytes,1,rep,name=models,proto3" json:"models,omitempty"`
+	DefaultModelId string                  `protobuf:"bytes,2,opt,name=default_model_id,json=defaultModelId,proto3" json:"default_model_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *GetSessionModelsResponse) Reset() {
+	*x = GetSessionModelsResponse{}
+	mi := &file_brigade_v1_session_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSessionModelsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSessionModelsResponse) ProtoMessage() {}
+
+func (x *GetSessionModelsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_session_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSessionModelsResponse.ProtoReflect.Descriptor instead.
+func (*GetSessionModelsResponse) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *GetSessionModelsResponse) GetModels() []*AcpConfigOptionValue {
+	if x != nil {
+		return x.Models
+	}
+	return nil
+}
+
+func (x *GetSessionModelsResponse) GetDefaultModelId() string {
+	if x != nil {
+		return x.DefaultModelId
+	}
+	return ""
+}
+
+type SetSessionModelRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	ModelId       string                 `protobuf:"bytes,2,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetSessionModelRequest) Reset() {
+	*x = SetSessionModelRequest{}
+	mi := &file_brigade_v1_session_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetSessionModelRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetSessionModelRequest) ProtoMessage() {}
+
+func (x *SetSessionModelRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_session_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetSessionModelRequest.ProtoReflect.Descriptor instead.
+func (*SetSessionModelRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *SetSessionModelRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *SetSessionModelRequest) GetModelId() string {
+	if x != nil {
+		return x.ModelId
+	}
+	return ""
+}
+
 type SetSessionMessageIncludedRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
@@ -1240,7 +1509,7 @@ type SetSessionMessageIncludedRequest struct {
 
 func (x *SetSessionMessageIncludedRequest) Reset() {
 	*x = SetSessionMessageIncludedRequest{}
-	mi := &file_brigade_v1_session_proto_msgTypes[15]
+	mi := &file_brigade_v1_session_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1252,7 +1521,7 @@ func (x *SetSessionMessageIncludedRequest) String() string {
 func (*SetSessionMessageIncludedRequest) ProtoMessage() {}
 
 func (x *SetSessionMessageIncludedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[15]
+	mi := &file_brigade_v1_session_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1265,7 +1534,7 @@ func (x *SetSessionMessageIncludedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSessionMessageIncludedRequest.ProtoReflect.Descriptor instead.
 func (*SetSessionMessageIncludedRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{15}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SetSessionMessageIncludedRequest) GetSessionId() string {
@@ -1301,7 +1570,7 @@ type GenerateSessionDraftRequest struct {
 
 func (x *GenerateSessionDraftRequest) Reset() {
 	*x = GenerateSessionDraftRequest{}
-	mi := &file_brigade_v1_session_proto_msgTypes[16]
+	mi := &file_brigade_v1_session_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1313,7 +1582,7 @@ func (x *GenerateSessionDraftRequest) String() string {
 func (*GenerateSessionDraftRequest) ProtoMessage() {}
 
 func (x *GenerateSessionDraftRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[16]
+	mi := &file_brigade_v1_session_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1326,7 +1595,7 @@ func (x *GenerateSessionDraftRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GenerateSessionDraftRequest.ProtoReflect.Descriptor instead.
 func (*GenerateSessionDraftRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{16}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GenerateSessionDraftRequest) GetSessionId() string {
@@ -1352,7 +1621,7 @@ type GenerateSessionDraftResponse struct {
 
 func (x *GenerateSessionDraftResponse) Reset() {
 	*x = GenerateSessionDraftResponse{}
-	mi := &file_brigade_v1_session_proto_msgTypes[17]
+	mi := &file_brigade_v1_session_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1364,7 +1633,7 @@ func (x *GenerateSessionDraftResponse) String() string {
 func (*GenerateSessionDraftResponse) ProtoMessage() {}
 
 func (x *GenerateSessionDraftResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[17]
+	mi := &file_brigade_v1_session_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1377,7 +1646,7 @@ func (x *GenerateSessionDraftResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GenerateSessionDraftResponse.ProtoReflect.Descriptor instead.
 func (*GenerateSessionDraftResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{17}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *GenerateSessionDraftResponse) GetRunId() string {
@@ -1396,7 +1665,7 @@ type CancelSessionDraftRequest struct {
 
 func (x *CancelSessionDraftRequest) Reset() {
 	*x = CancelSessionDraftRequest{}
-	mi := &file_brigade_v1_session_proto_msgTypes[18]
+	mi := &file_brigade_v1_session_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1408,7 +1677,7 @@ func (x *CancelSessionDraftRequest) String() string {
 func (*CancelSessionDraftRequest) ProtoMessage() {}
 
 func (x *CancelSessionDraftRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[18]
+	mi := &file_brigade_v1_session_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1421,7 +1690,7 @@ func (x *CancelSessionDraftRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelSessionDraftRequest.ProtoReflect.Descriptor instead.
 func (*CancelSessionDraftRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{18}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *CancelSessionDraftRequest) GetSessionId() string {
@@ -1442,7 +1711,7 @@ type CreateSessionDraftRequest struct {
 
 func (x *CreateSessionDraftRequest) Reset() {
 	*x = CreateSessionDraftRequest{}
-	mi := &file_brigade_v1_session_proto_msgTypes[19]
+	mi := &file_brigade_v1_session_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1454,7 +1723,7 @@ func (x *CreateSessionDraftRequest) String() string {
 func (*CreateSessionDraftRequest) ProtoMessage() {}
 
 func (x *CreateSessionDraftRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[19]
+	mi := &file_brigade_v1_session_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1467,7 +1736,7 @@ func (x *CreateSessionDraftRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSessionDraftRequest.ProtoReflect.Descriptor instead.
 func (*CreateSessionDraftRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{19}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *CreateSessionDraftRequest) GetSessionId() string {
@@ -1500,7 +1769,7 @@ type CreateSessionDraftResponse struct {
 
 func (x *CreateSessionDraftResponse) Reset() {
 	*x = CreateSessionDraftResponse{}
-	mi := &file_brigade_v1_session_proto_msgTypes[20]
+	mi := &file_brigade_v1_session_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1512,7 +1781,7 @@ func (x *CreateSessionDraftResponse) String() string {
 func (*CreateSessionDraftResponse) ProtoMessage() {}
 
 func (x *CreateSessionDraftResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[20]
+	mi := &file_brigade_v1_session_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1525,7 +1794,7 @@ func (x *CreateSessionDraftResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSessionDraftResponse.ProtoReflect.Descriptor instead.
 func (*CreateSessionDraftResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{20}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *CreateSessionDraftResponse) GetMessageId() string {
@@ -1544,7 +1813,7 @@ type GetSessionDraftRunRequest struct {
 
 func (x *GetSessionDraftRunRequest) Reset() {
 	*x = GetSessionDraftRunRequest{}
-	mi := &file_brigade_v1_session_proto_msgTypes[21]
+	mi := &file_brigade_v1_session_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1556,7 +1825,7 @@ func (x *GetSessionDraftRunRequest) String() string {
 func (*GetSessionDraftRunRequest) ProtoMessage() {}
 
 func (x *GetSessionDraftRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[21]
+	mi := &file_brigade_v1_session_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1569,7 +1838,7 @@ func (x *GetSessionDraftRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSessionDraftRunRequest.ProtoReflect.Descriptor instead.
 func (*GetSessionDraftRunRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{21}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GetSessionDraftRunRequest) GetSessionId() string {
@@ -1592,7 +1861,7 @@ type GetSessionDraftRunResponse struct {
 
 func (x *GetSessionDraftRunResponse) Reset() {
 	*x = GetSessionDraftRunResponse{}
-	mi := &file_brigade_v1_session_proto_msgTypes[22]
+	mi := &file_brigade_v1_session_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1604,7 +1873,7 @@ func (x *GetSessionDraftRunResponse) String() string {
 func (*GetSessionDraftRunResponse) ProtoMessage() {}
 
 func (x *GetSessionDraftRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[22]
+	mi := &file_brigade_v1_session_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1617,7 +1886,7 @@ func (x *GetSessionDraftRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSessionDraftRunResponse.ProtoReflect.Descriptor instead.
 func (*GetSessionDraftRunResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{22}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *GetSessionDraftRunResponse) GetRunId() string {
@@ -1666,7 +1935,7 @@ type EditSessionDraftRequest struct {
 
 func (x *EditSessionDraftRequest) Reset() {
 	*x = EditSessionDraftRequest{}
-	mi := &file_brigade_v1_session_proto_msgTypes[23]
+	mi := &file_brigade_v1_session_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1678,7 +1947,7 @@ func (x *EditSessionDraftRequest) String() string {
 func (*EditSessionDraftRequest) ProtoMessage() {}
 
 func (x *EditSessionDraftRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[23]
+	mi := &file_brigade_v1_session_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1691,7 +1960,7 @@ func (x *EditSessionDraftRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EditSessionDraftRequest.ProtoReflect.Descriptor instead.
 func (*EditSessionDraftRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{23}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *EditSessionDraftRequest) GetSessionId() string {
@@ -1728,7 +1997,7 @@ type SetSessionMcpServersRequest struct {
 
 func (x *SetSessionMcpServersRequest) Reset() {
 	*x = SetSessionMcpServersRequest{}
-	mi := &file_brigade_v1_session_proto_msgTypes[24]
+	mi := &file_brigade_v1_session_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1740,7 +2009,7 @@ func (x *SetSessionMcpServersRequest) String() string {
 func (*SetSessionMcpServersRequest) ProtoMessage() {}
 
 func (x *SetSessionMcpServersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[24]
+	mi := &file_brigade_v1_session_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1753,7 +2022,7 @@ func (x *SetSessionMcpServersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSessionMcpServersRequest.ProtoReflect.Descriptor instead.
 func (*SetSessionMcpServersRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{24}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *SetSessionMcpServersRequest) GetSessionId() string {
@@ -1780,7 +2049,7 @@ type SetSessionResponseProfileRequest struct {
 
 func (x *SetSessionResponseProfileRequest) Reset() {
 	*x = SetSessionResponseProfileRequest{}
-	mi := &file_brigade_v1_session_proto_msgTypes[25]
+	mi := &file_brigade_v1_session_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1792,7 +2061,7 @@ func (x *SetSessionResponseProfileRequest) String() string {
 func (*SetSessionResponseProfileRequest) ProtoMessage() {}
 
 func (x *SetSessionResponseProfileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[25]
+	mi := &file_brigade_v1_session_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1805,7 +2074,7 @@ func (x *SetSessionResponseProfileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSessionResponseProfileRequest.ProtoReflect.Descriptor instead.
 func (*SetSessionResponseProfileRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{25}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *SetSessionResponseProfileRequest) GetSessionId() string {
@@ -1833,7 +2102,7 @@ type ArchiveSessionRequest struct {
 
 func (x *ArchiveSessionRequest) Reset() {
 	*x = ArchiveSessionRequest{}
-	mi := &file_brigade_v1_session_proto_msgTypes[26]
+	mi := &file_brigade_v1_session_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1845,7 +2114,7 @@ func (x *ArchiveSessionRequest) String() string {
 func (*ArchiveSessionRequest) ProtoMessage() {}
 
 func (x *ArchiveSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[26]
+	mi := &file_brigade_v1_session_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1858,7 +2127,7 @@ func (x *ArchiveSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArchiveSessionRequest.ProtoReflect.Descriptor instead.
 func (*ArchiveSessionRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{26}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ArchiveSessionRequest) GetSessionId() string {
@@ -1877,7 +2146,7 @@ type ArchiveSessionResponse struct {
 
 func (x *ArchiveSessionResponse) Reset() {
 	*x = ArchiveSessionResponse{}
-	mi := &file_brigade_v1_session_proto_msgTypes[27]
+	mi := &file_brigade_v1_session_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1889,7 +2158,7 @@ func (x *ArchiveSessionResponse) String() string {
 func (*ArchiveSessionResponse) ProtoMessage() {}
 
 func (x *ArchiveSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[27]
+	mi := &file_brigade_v1_session_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1902,7 +2171,7 @@ func (x *ArchiveSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArchiveSessionResponse.ProtoReflect.Descriptor instead.
 func (*ArchiveSessionResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{27}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ArchiveSessionResponse) GetSession() *Session {
@@ -1928,7 +2197,7 @@ type Preview struct {
 
 func (x *Preview) Reset() {
 	*x = Preview{}
-	mi := &file_brigade_v1_session_proto_msgTypes[28]
+	mi := &file_brigade_v1_session_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1940,7 +2209,7 @@ func (x *Preview) String() string {
 func (*Preview) ProtoMessage() {}
 
 func (x *Preview) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[28]
+	mi := &file_brigade_v1_session_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1953,7 +2222,7 @@ func (x *Preview) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Preview.ProtoReflect.Descriptor instead.
 func (*Preview) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{28}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *Preview) GetPort() int32 {
@@ -1986,7 +2255,7 @@ type ListPreviewsRequest struct {
 
 func (x *ListPreviewsRequest) Reset() {
 	*x = ListPreviewsRequest{}
-	mi := &file_brigade_v1_session_proto_msgTypes[29]
+	mi := &file_brigade_v1_session_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1998,7 +2267,7 @@ func (x *ListPreviewsRequest) String() string {
 func (*ListPreviewsRequest) ProtoMessage() {}
 
 func (x *ListPreviewsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[29]
+	mi := &file_brigade_v1_session_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2011,7 +2280,7 @@ func (x *ListPreviewsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPreviewsRequest.ProtoReflect.Descriptor instead.
 func (*ListPreviewsRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{29}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ListPreviewsRequest) GetSessionId() string {
@@ -2030,7 +2299,7 @@ type ListPreviewsResponse struct {
 
 func (x *ListPreviewsResponse) Reset() {
 	*x = ListPreviewsResponse{}
-	mi := &file_brigade_v1_session_proto_msgTypes[30]
+	mi := &file_brigade_v1_session_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2042,7 +2311,7 @@ func (x *ListPreviewsResponse) String() string {
 func (*ListPreviewsResponse) ProtoMessage() {}
 
 func (x *ListPreviewsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[30]
+	mi := &file_brigade_v1_session_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2055,7 +2324,7 @@ func (x *ListPreviewsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPreviewsResponse.ProtoReflect.Descriptor instead.
 func (*ListPreviewsResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{30}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ListPreviewsResponse) GetPreviews() []*Preview {
@@ -2078,7 +2347,7 @@ type IssueStreamTicketRequest struct {
 
 func (x *IssueStreamTicketRequest) Reset() {
 	*x = IssueStreamTicketRequest{}
-	mi := &file_brigade_v1_session_proto_msgTypes[31]
+	mi := &file_brigade_v1_session_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2090,7 +2359,7 @@ func (x *IssueStreamTicketRequest) String() string {
 func (*IssueStreamTicketRequest) ProtoMessage() {}
 
 func (x *IssueStreamTicketRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[31]
+	mi := &file_brigade_v1_session_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2103,7 +2372,7 @@ func (x *IssueStreamTicketRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueStreamTicketRequest.ProtoReflect.Descriptor instead.
 func (*IssueStreamTicketRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{31}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *IssueStreamTicketRequest) GetSessionId() string {
@@ -2131,7 +2400,7 @@ type IssueStreamTicketResponse struct {
 
 func (x *IssueStreamTicketResponse) Reset() {
 	*x = IssueStreamTicketResponse{}
-	mi := &file_brigade_v1_session_proto_msgTypes[32]
+	mi := &file_brigade_v1_session_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2143,7 +2412,7 @@ func (x *IssueStreamTicketResponse) String() string {
 func (*IssueStreamTicketResponse) ProtoMessage() {}
 
 func (x *IssueStreamTicketResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[32]
+	mi := &file_brigade_v1_session_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2156,7 +2425,7 @@ func (x *IssueStreamTicketResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueStreamTicketResponse.ProtoReflect.Descriptor instead.
 func (*IssueStreamTicketResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{32}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *IssueStreamTicketResponse) GetTicket() string {
@@ -2184,7 +2453,7 @@ type UploadFileRequest struct {
 
 func (x *UploadFileRequest) Reset() {
 	*x = UploadFileRequest{}
-	mi := &file_brigade_v1_session_proto_msgTypes[33]
+	mi := &file_brigade_v1_session_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2196,7 +2465,7 @@ func (x *UploadFileRequest) String() string {
 func (*UploadFileRequest) ProtoMessage() {}
 
 func (x *UploadFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[33]
+	mi := &file_brigade_v1_session_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2209,7 +2478,7 @@ func (x *UploadFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UploadFileRequest.ProtoReflect.Descriptor instead.
 func (*UploadFileRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{33}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *UploadFileRequest) GetSessionId() string {
@@ -2242,7 +2511,7 @@ type UploadFileResponse struct {
 
 func (x *UploadFileResponse) Reset() {
 	*x = UploadFileResponse{}
-	mi := &file_brigade_v1_session_proto_msgTypes[34]
+	mi := &file_brigade_v1_session_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2254,7 +2523,7 @@ func (x *UploadFileResponse) String() string {
 func (*UploadFileResponse) ProtoMessage() {}
 
 func (x *UploadFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_session_proto_msgTypes[34]
+	mi := &file_brigade_v1_session_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2267,7 +2536,7 @@ func (x *UploadFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UploadFileResponse.ProtoReflect.Descriptor instead.
 func (*UploadFileResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_session_proto_rawDescGZIP(), []int{34}
+	return file_brigade_v1_session_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *UploadFileResponse) GetPath() string {
@@ -2282,7 +2551,7 @@ var File_brigade_v1_session_proto protoreflect.FileDescriptor
 const file_brigade_v1_session_proto_rawDesc = "" +
 	"\n" +
 	"\x18brigade/v1/session.proto\x12\n" +
-	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\xfa\b\n" +
+	"brigade.v1\x1a\x15brigade/v1/auth.proto\x1a\x14brigade/v1/acp.proto\"\x95\t\n" +
 	"\aSession\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12+\n" +
@@ -2317,7 +2586,8 @@ const file_brigade_v1_session_proto_rawDesc = "" +
 	"\x0flast_message_at\x18\x1c \x01(\x03R\rlastMessageAt\x12.\n" +
 	"\x13last_message_author\x18\x1d \x01(\tR\x11lastMessageAuthor\x122\n" +
 	"\x15last_message_delivery\x18\x1e \x01(\tR\x13lastMessageDelivery\x12!\n" +
-	"\funread_count\x18\x1f \x01(\rR\vunreadCountJ\x04\b\f\x10\rR\tparent_id\"\x9b\x03\n" +
+	"\funread_count\x18\x1f \x01(\rR\vunreadCount\x12\x19\n" +
+	"\bmodel_id\x18  \x01(\tR\amodelIdJ\x04\b\f\x10\rR\tparent_id\"\x9b\x03\n" +
 	"\x14CreateSessionRequest\x12\x1d\n" +
 	"\n" +
 	"agent_type\x18\x01 \x01(\tR\tagentType\x12+\n" +
@@ -2365,7 +2635,28 @@ const file_brigade_v1_session_proto_rawDesc = "" +
 	"\acontent\x18\x02 \x01(\tR\acontent\":\n" +
 	"\x19AddSessionMessageResponse\x12\x1d\n" +
 	"\n" +
-	"message_id\x18\x01 \x01(\tR\tmessageId\"|\n" +
+	"message_id\x18\x01 \x01(\tR\tmessageId\"s\n" +
+	"\x19EditSessionMessageRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x02 \x01(\tR\tmessageId\x12\x18\n" +
+	"\acontent\x18\x03 \x01(\tR\acontent\"[\n" +
+	"\x1bDeleteSessionMessageRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x02 \x01(\tR\tmessageId\"8\n" +
+	"\x17GetSessionModelsRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"~\n" +
+	"\x18GetSessionModelsResponse\x128\n" +
+	"\x06models\x18\x01 \x03(\v2 .brigade.v1.AcpConfigOptionValueR\x06models\x12(\n" +
+	"\x10default_model_id\x18\x02 \x01(\tR\x0edefaultModelId\"R\n" +
+	"\x16SetSessionModelRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x19\n" +
+	"\bmodel_id\x18\x02 \x01(\tR\amodelId\"|\n" +
 	" SetSessionMessageIncludedRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1d\n" +
@@ -2458,7 +2749,7 @@ const file_brigade_v1_session_proto_rawDesc = "" +
 	"\x16SessionExecutionPolicy\x12(\n" +
 	"$SESSION_EXECUTION_POLICY_UNSPECIFIED\x10\x00\x12'\n" +
 	"#SESSION_EXECUTION_POLICY_PERSISTENT\x10\x01\x12&\n" +
-	"\"SESSION_EXECUTION_POLICY_ON_DEMAND\x10\x022\xde\r\n" +
+	"\"SESSION_EXECUTION_POLICY_ON_DEMAND\x10\x022\x97\x10\n" +
 	"\x0eSessionService\x12O\n" +
 	"\x06Create\x12 .brigade.v1.CreateSessionRequest\x1a!.brigade.v1.CreateSessionResponse\"\x00\x12K\n" +
 	"\x04List\x12\x1f.brigade.v1.ListSessionsRequest\x1a .brigade.v1.ListSessionsResponse\"\x00\x12F\n" +
@@ -2466,7 +2757,11 @@ const file_brigade_v1_session_proto_rawDesc = "" +
 	"\x06Update\x12 .brigade.v1.UpdateSessionRequest\x1a!.brigade.v1.UpdateSessionResponse\"\x00\x12C\n" +
 	"\bMarkRead\x12\".brigade.v1.MarkSessionReadRequest\x1a\x11.brigade.v1.Empty\"\x00\x12[\n" +
 	"\n" +
-	"AddMessage\x12$.brigade.v1.AddSessionMessageRequest\x1a%.brigade.v1.AddSessionMessageResponse\"\x00\x12W\n" +
+	"AddMessage\x12$.brigade.v1.AddSessionMessageRequest\x1a%.brigade.v1.AddSessionMessageResponse\"\x00\x12I\n" +
+	"\vEditMessage\x12%.brigade.v1.EditSessionMessageRequest\x1a\x11.brigade.v1.Empty\"\x00\x12M\n" +
+	"\rDeleteMessage\x12'.brigade.v1.DeleteSessionMessageRequest\x1a\x11.brigade.v1.Empty\"\x00\x12X\n" +
+	"\tGetModels\x12#.brigade.v1.GetSessionModelsRequest\x1a$.brigade.v1.GetSessionModelsResponse\"\x00\x12C\n" +
+	"\bSetModel\x12\".brigade.v1.SetSessionModelRequest\x1a\x11.brigade.v1.Empty\"\x00\x12W\n" +
 	"\x12SetMessageIncluded\x12,.brigade.v1.SetSessionMessageIncludedRequest\x1a\x11.brigade.v1.Empty\"\x00\x12d\n" +
 	"\rGenerateDraft\x12'.brigade.v1.GenerateSessionDraftRequest\x1a(.brigade.v1.GenerateSessionDraftResponse\"\x00\x12I\n" +
 	"\vCancelDraft\x12%.brigade.v1.CancelSessionDraftRequest\x1a\x11.brigade.v1.Empty\"\x00\x12^\n" +
@@ -2500,7 +2795,7 @@ func file_brigade_v1_session_proto_rawDescGZIP() []byte {
 }
 
 var file_brigade_v1_session_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_brigade_v1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
+var file_brigade_v1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
 var file_brigade_v1_session_proto_goTypes = []any{
 	(SessionMode)(0),                         // 0: brigade.v1.SessionMode
 	(SessionKind)(0),                         // 1: brigade.v1.SessionKind
@@ -2521,27 +2816,33 @@ var file_brigade_v1_session_proto_goTypes = []any{
 	(*MarkSessionReadRequest)(nil),           // 16: brigade.v1.MarkSessionReadRequest
 	(*AddSessionMessageRequest)(nil),         // 17: brigade.v1.AddSessionMessageRequest
 	(*AddSessionMessageResponse)(nil),        // 18: brigade.v1.AddSessionMessageResponse
-	(*SetSessionMessageIncludedRequest)(nil), // 19: brigade.v1.SetSessionMessageIncludedRequest
-	(*GenerateSessionDraftRequest)(nil),      // 20: brigade.v1.GenerateSessionDraftRequest
-	(*GenerateSessionDraftResponse)(nil),     // 21: brigade.v1.GenerateSessionDraftResponse
-	(*CancelSessionDraftRequest)(nil),        // 22: brigade.v1.CancelSessionDraftRequest
-	(*CreateSessionDraftRequest)(nil),        // 23: brigade.v1.CreateSessionDraftRequest
-	(*CreateSessionDraftResponse)(nil),       // 24: brigade.v1.CreateSessionDraftResponse
-	(*GetSessionDraftRunRequest)(nil),        // 25: brigade.v1.GetSessionDraftRunRequest
-	(*GetSessionDraftRunResponse)(nil),       // 26: brigade.v1.GetSessionDraftRunResponse
-	(*EditSessionDraftRequest)(nil),          // 27: brigade.v1.EditSessionDraftRequest
-	(*SetSessionMcpServersRequest)(nil),      // 28: brigade.v1.SetSessionMcpServersRequest
-	(*SetSessionResponseProfileRequest)(nil), // 29: brigade.v1.SetSessionResponseProfileRequest
-	(*ArchiveSessionRequest)(nil),            // 30: brigade.v1.ArchiveSessionRequest
-	(*ArchiveSessionResponse)(nil),           // 31: brigade.v1.ArchiveSessionResponse
-	(*Preview)(nil),                          // 32: brigade.v1.Preview
-	(*ListPreviewsRequest)(nil),              // 33: brigade.v1.ListPreviewsRequest
-	(*ListPreviewsResponse)(nil),             // 34: brigade.v1.ListPreviewsResponse
-	(*IssueStreamTicketRequest)(nil),         // 35: brigade.v1.IssueStreamTicketRequest
-	(*IssueStreamTicketResponse)(nil),        // 36: brigade.v1.IssueStreamTicketResponse
-	(*UploadFileRequest)(nil),                // 37: brigade.v1.UploadFileRequest
-	(*UploadFileResponse)(nil),               // 38: brigade.v1.UploadFileResponse
-	(*Empty)(nil),                            // 39: brigade.v1.Empty
+	(*EditSessionMessageRequest)(nil),        // 19: brigade.v1.EditSessionMessageRequest
+	(*DeleteSessionMessageRequest)(nil),      // 20: brigade.v1.DeleteSessionMessageRequest
+	(*GetSessionModelsRequest)(nil),          // 21: brigade.v1.GetSessionModelsRequest
+	(*GetSessionModelsResponse)(nil),         // 22: brigade.v1.GetSessionModelsResponse
+	(*SetSessionModelRequest)(nil),           // 23: brigade.v1.SetSessionModelRequest
+	(*SetSessionMessageIncludedRequest)(nil), // 24: brigade.v1.SetSessionMessageIncludedRequest
+	(*GenerateSessionDraftRequest)(nil),      // 25: brigade.v1.GenerateSessionDraftRequest
+	(*GenerateSessionDraftResponse)(nil),     // 26: brigade.v1.GenerateSessionDraftResponse
+	(*CancelSessionDraftRequest)(nil),        // 27: brigade.v1.CancelSessionDraftRequest
+	(*CreateSessionDraftRequest)(nil),        // 28: brigade.v1.CreateSessionDraftRequest
+	(*CreateSessionDraftResponse)(nil),       // 29: brigade.v1.CreateSessionDraftResponse
+	(*GetSessionDraftRunRequest)(nil),        // 30: brigade.v1.GetSessionDraftRunRequest
+	(*GetSessionDraftRunResponse)(nil),       // 31: brigade.v1.GetSessionDraftRunResponse
+	(*EditSessionDraftRequest)(nil),          // 32: brigade.v1.EditSessionDraftRequest
+	(*SetSessionMcpServersRequest)(nil),      // 33: brigade.v1.SetSessionMcpServersRequest
+	(*SetSessionResponseProfileRequest)(nil), // 34: brigade.v1.SetSessionResponseProfileRequest
+	(*ArchiveSessionRequest)(nil),            // 35: brigade.v1.ArchiveSessionRequest
+	(*ArchiveSessionResponse)(nil),           // 36: brigade.v1.ArchiveSessionResponse
+	(*Preview)(nil),                          // 37: brigade.v1.Preview
+	(*ListPreviewsRequest)(nil),              // 38: brigade.v1.ListPreviewsRequest
+	(*ListPreviewsResponse)(nil),             // 39: brigade.v1.ListPreviewsResponse
+	(*IssueStreamTicketRequest)(nil),         // 40: brigade.v1.IssueStreamTicketRequest
+	(*IssueStreamTicketResponse)(nil),        // 41: brigade.v1.IssueStreamTicketResponse
+	(*UploadFileRequest)(nil),                // 42: brigade.v1.UploadFileRequest
+	(*UploadFileResponse)(nil),               // 43: brigade.v1.UploadFileResponse
+	(*AcpConfigOptionValue)(nil),             // 44: brigade.v1.AcpConfigOptionValue
+	(*Empty)(nil),                            // 45: brigade.v1.Empty
 }
 var file_brigade_v1_session_proto_depIdxs = []int32{
 	0,  // 0: brigade.v1.Session.mode:type_name -> brigade.v1.SessionMode
@@ -2554,55 +2855,64 @@ var file_brigade_v1_session_proto_depIdxs = []int32{
 	4,  // 7: brigade.v1.ListSessionsResponse.sessions:type_name -> brigade.v1.Session
 	4,  // 8: brigade.v1.GetSessionResponse.session:type_name -> brigade.v1.Session
 	4,  // 9: brigade.v1.UpdateSessionResponse.session:type_name -> brigade.v1.Session
-	4,  // 10: brigade.v1.ArchiveSessionResponse.session:type_name -> brigade.v1.Session
-	32, // 11: brigade.v1.ListPreviewsResponse.previews:type_name -> brigade.v1.Preview
-	5,  // 12: brigade.v1.SessionService.Create:input_type -> brigade.v1.CreateSessionRequest
-	7,  // 13: brigade.v1.SessionService.List:input_type -> brigade.v1.ListSessionsRequest
-	9,  // 14: brigade.v1.SessionService.Get:input_type -> brigade.v1.GetSessionRequest
-	11, // 15: brigade.v1.SessionService.Update:input_type -> brigade.v1.UpdateSessionRequest
-	16, // 16: brigade.v1.SessionService.MarkRead:input_type -> brigade.v1.MarkSessionReadRequest
-	17, // 17: brigade.v1.SessionService.AddMessage:input_type -> brigade.v1.AddSessionMessageRequest
-	19, // 18: brigade.v1.SessionService.SetMessageIncluded:input_type -> brigade.v1.SetSessionMessageIncludedRequest
-	20, // 19: brigade.v1.SessionService.GenerateDraft:input_type -> brigade.v1.GenerateSessionDraftRequest
-	22, // 20: brigade.v1.SessionService.CancelDraft:input_type -> brigade.v1.CancelSessionDraftRequest
-	23, // 21: brigade.v1.SessionService.CreateDraft:input_type -> brigade.v1.CreateSessionDraftRequest
-	25, // 22: brigade.v1.SessionService.GetDraftRun:input_type -> brigade.v1.GetSessionDraftRunRequest
-	27, // 23: brigade.v1.SessionService.EditDraft:input_type -> brigade.v1.EditSessionDraftRequest
-	13, // 24: brigade.v1.SessionService.Stop:input_type -> brigade.v1.StopSessionRequest
-	14, // 25: brigade.v1.SessionService.Delete:input_type -> brigade.v1.DeleteSessionRequest
-	15, // 26: brigade.v1.SessionService.ReloadAgent:input_type -> brigade.v1.ReloadAgentRequest
-	28, // 27: brigade.v1.SessionService.SetSessionMcpServers:input_type -> brigade.v1.SetSessionMcpServersRequest
-	29, // 28: brigade.v1.SessionService.SetSessionResponseProfile:input_type -> brigade.v1.SetSessionResponseProfileRequest
-	30, // 29: brigade.v1.SessionService.Archive:input_type -> brigade.v1.ArchiveSessionRequest
-	35, // 30: brigade.v1.SessionService.IssueStreamTicket:input_type -> brigade.v1.IssueStreamTicketRequest
-	33, // 31: brigade.v1.SessionService.ListPreviews:input_type -> brigade.v1.ListPreviewsRequest
-	37, // 32: brigade.v1.SessionService.UploadFile:input_type -> brigade.v1.UploadFileRequest
-	6,  // 33: brigade.v1.SessionService.Create:output_type -> brigade.v1.CreateSessionResponse
-	8,  // 34: brigade.v1.SessionService.List:output_type -> brigade.v1.ListSessionsResponse
-	10, // 35: brigade.v1.SessionService.Get:output_type -> brigade.v1.GetSessionResponse
-	12, // 36: brigade.v1.SessionService.Update:output_type -> brigade.v1.UpdateSessionResponse
-	39, // 37: brigade.v1.SessionService.MarkRead:output_type -> brigade.v1.Empty
-	18, // 38: brigade.v1.SessionService.AddMessage:output_type -> brigade.v1.AddSessionMessageResponse
-	39, // 39: brigade.v1.SessionService.SetMessageIncluded:output_type -> brigade.v1.Empty
-	21, // 40: brigade.v1.SessionService.GenerateDraft:output_type -> brigade.v1.GenerateSessionDraftResponse
-	39, // 41: brigade.v1.SessionService.CancelDraft:output_type -> brigade.v1.Empty
-	24, // 42: brigade.v1.SessionService.CreateDraft:output_type -> brigade.v1.CreateSessionDraftResponse
-	26, // 43: brigade.v1.SessionService.GetDraftRun:output_type -> brigade.v1.GetSessionDraftRunResponse
-	39, // 44: brigade.v1.SessionService.EditDraft:output_type -> brigade.v1.Empty
-	39, // 45: brigade.v1.SessionService.Stop:output_type -> brigade.v1.Empty
-	39, // 46: brigade.v1.SessionService.Delete:output_type -> brigade.v1.Empty
-	39, // 47: brigade.v1.SessionService.ReloadAgent:output_type -> brigade.v1.Empty
-	39, // 48: brigade.v1.SessionService.SetSessionMcpServers:output_type -> brigade.v1.Empty
-	12, // 49: brigade.v1.SessionService.SetSessionResponseProfile:output_type -> brigade.v1.UpdateSessionResponse
-	31, // 50: brigade.v1.SessionService.Archive:output_type -> brigade.v1.ArchiveSessionResponse
-	36, // 51: brigade.v1.SessionService.IssueStreamTicket:output_type -> brigade.v1.IssueStreamTicketResponse
-	34, // 52: brigade.v1.SessionService.ListPreviews:output_type -> brigade.v1.ListPreviewsResponse
-	38, // 53: brigade.v1.SessionService.UploadFile:output_type -> brigade.v1.UploadFileResponse
-	33, // [33:54] is the sub-list for method output_type
-	12, // [12:33] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	44, // 10: brigade.v1.GetSessionModelsResponse.models:type_name -> brigade.v1.AcpConfigOptionValue
+	4,  // 11: brigade.v1.ArchiveSessionResponse.session:type_name -> brigade.v1.Session
+	37, // 12: brigade.v1.ListPreviewsResponse.previews:type_name -> brigade.v1.Preview
+	5,  // 13: brigade.v1.SessionService.Create:input_type -> brigade.v1.CreateSessionRequest
+	7,  // 14: brigade.v1.SessionService.List:input_type -> brigade.v1.ListSessionsRequest
+	9,  // 15: brigade.v1.SessionService.Get:input_type -> brigade.v1.GetSessionRequest
+	11, // 16: brigade.v1.SessionService.Update:input_type -> brigade.v1.UpdateSessionRequest
+	16, // 17: brigade.v1.SessionService.MarkRead:input_type -> brigade.v1.MarkSessionReadRequest
+	17, // 18: brigade.v1.SessionService.AddMessage:input_type -> brigade.v1.AddSessionMessageRequest
+	19, // 19: brigade.v1.SessionService.EditMessage:input_type -> brigade.v1.EditSessionMessageRequest
+	20, // 20: brigade.v1.SessionService.DeleteMessage:input_type -> brigade.v1.DeleteSessionMessageRequest
+	21, // 21: brigade.v1.SessionService.GetModels:input_type -> brigade.v1.GetSessionModelsRequest
+	23, // 22: brigade.v1.SessionService.SetModel:input_type -> brigade.v1.SetSessionModelRequest
+	24, // 23: brigade.v1.SessionService.SetMessageIncluded:input_type -> brigade.v1.SetSessionMessageIncludedRequest
+	25, // 24: brigade.v1.SessionService.GenerateDraft:input_type -> brigade.v1.GenerateSessionDraftRequest
+	27, // 25: brigade.v1.SessionService.CancelDraft:input_type -> brigade.v1.CancelSessionDraftRequest
+	28, // 26: brigade.v1.SessionService.CreateDraft:input_type -> brigade.v1.CreateSessionDraftRequest
+	30, // 27: brigade.v1.SessionService.GetDraftRun:input_type -> brigade.v1.GetSessionDraftRunRequest
+	32, // 28: brigade.v1.SessionService.EditDraft:input_type -> brigade.v1.EditSessionDraftRequest
+	13, // 29: brigade.v1.SessionService.Stop:input_type -> brigade.v1.StopSessionRequest
+	14, // 30: brigade.v1.SessionService.Delete:input_type -> brigade.v1.DeleteSessionRequest
+	15, // 31: brigade.v1.SessionService.ReloadAgent:input_type -> brigade.v1.ReloadAgentRequest
+	33, // 32: brigade.v1.SessionService.SetSessionMcpServers:input_type -> brigade.v1.SetSessionMcpServersRequest
+	34, // 33: brigade.v1.SessionService.SetSessionResponseProfile:input_type -> brigade.v1.SetSessionResponseProfileRequest
+	35, // 34: brigade.v1.SessionService.Archive:input_type -> brigade.v1.ArchiveSessionRequest
+	40, // 35: brigade.v1.SessionService.IssueStreamTicket:input_type -> brigade.v1.IssueStreamTicketRequest
+	38, // 36: brigade.v1.SessionService.ListPreviews:input_type -> brigade.v1.ListPreviewsRequest
+	42, // 37: brigade.v1.SessionService.UploadFile:input_type -> brigade.v1.UploadFileRequest
+	6,  // 38: brigade.v1.SessionService.Create:output_type -> brigade.v1.CreateSessionResponse
+	8,  // 39: brigade.v1.SessionService.List:output_type -> brigade.v1.ListSessionsResponse
+	10, // 40: brigade.v1.SessionService.Get:output_type -> brigade.v1.GetSessionResponse
+	12, // 41: brigade.v1.SessionService.Update:output_type -> brigade.v1.UpdateSessionResponse
+	45, // 42: brigade.v1.SessionService.MarkRead:output_type -> brigade.v1.Empty
+	18, // 43: brigade.v1.SessionService.AddMessage:output_type -> brigade.v1.AddSessionMessageResponse
+	45, // 44: brigade.v1.SessionService.EditMessage:output_type -> brigade.v1.Empty
+	45, // 45: brigade.v1.SessionService.DeleteMessage:output_type -> brigade.v1.Empty
+	22, // 46: brigade.v1.SessionService.GetModels:output_type -> brigade.v1.GetSessionModelsResponse
+	45, // 47: brigade.v1.SessionService.SetModel:output_type -> brigade.v1.Empty
+	45, // 48: brigade.v1.SessionService.SetMessageIncluded:output_type -> brigade.v1.Empty
+	26, // 49: brigade.v1.SessionService.GenerateDraft:output_type -> brigade.v1.GenerateSessionDraftResponse
+	45, // 50: brigade.v1.SessionService.CancelDraft:output_type -> brigade.v1.Empty
+	29, // 51: brigade.v1.SessionService.CreateDraft:output_type -> brigade.v1.CreateSessionDraftResponse
+	31, // 52: brigade.v1.SessionService.GetDraftRun:output_type -> brigade.v1.GetSessionDraftRunResponse
+	45, // 53: brigade.v1.SessionService.EditDraft:output_type -> brigade.v1.Empty
+	45, // 54: brigade.v1.SessionService.Stop:output_type -> brigade.v1.Empty
+	45, // 55: brigade.v1.SessionService.Delete:output_type -> brigade.v1.Empty
+	45, // 56: brigade.v1.SessionService.ReloadAgent:output_type -> brigade.v1.Empty
+	45, // 57: brigade.v1.SessionService.SetSessionMcpServers:output_type -> brigade.v1.Empty
+	12, // 58: brigade.v1.SessionService.SetSessionResponseProfile:output_type -> brigade.v1.UpdateSessionResponse
+	36, // 59: brigade.v1.SessionService.Archive:output_type -> brigade.v1.ArchiveSessionResponse
+	41, // 60: brigade.v1.SessionService.IssueStreamTicket:output_type -> brigade.v1.IssueStreamTicketResponse
+	39, // 61: brigade.v1.SessionService.ListPreviews:output_type -> brigade.v1.ListPreviewsResponse
+	43, // 62: brigade.v1.SessionService.UploadFile:output_type -> brigade.v1.UploadFileResponse
+	38, // [38:63] is the sub-list for method output_type
+	13, // [13:38] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_brigade_v1_session_proto_init() }
@@ -2611,13 +2921,14 @@ func file_brigade_v1_session_proto_init() {
 		return
 	}
 	file_brigade_v1_auth_proto_init()
+	file_brigade_v1_acp_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_brigade_v1_session_proto_rawDesc), len(file_brigade_v1_session_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   35,
+			NumMessages:   40,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -151,6 +151,59 @@ func (s *SessionService) AddMessage(ctx context.Context, req *connect.Request[v1
 	return connect.NewResponse(&v1.AddSessionMessageResponse{MessageId: message.ID}), nil
 }
 
+func (s *SessionService) EditMessage(ctx context.Context, req *connect.Request[v1.EditSessionMessageRequest]) (*connect.Response[v1.Empty], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.registry.EditShadowMessage(ctx, req.Msg.SessionId, userID, req.Msg.MessageId, req.Msg.Content); err != nil {
+		return nil, sessionError(err)
+	}
+	return connect.NewResponse(&v1.Empty{}), nil
+}
+
+func (s *SessionService) DeleteMessage(ctx context.Context, req *connect.Request[v1.DeleteSessionMessageRequest]) (*connect.Response[v1.Empty], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.registry.DeleteShadowMessage(ctx, req.Msg.SessionId, userID, req.Msg.MessageId); err != nil {
+		return nil, sessionError(err)
+	}
+	return connect.NewResponse(&v1.Empty{}), nil
+}
+
+func (s *SessionService) GetModels(ctx context.Context, req *connect.Request[v1.GetSessionModelsRequest]) (*connect.Response[v1.GetSessionModelsResponse], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	options, err := s.registry.ShadowModels(ctx, req.Msg.SessionId, userID)
+	if err != nil {
+		return nil, sessionError(err)
+	}
+	response := &v1.GetSessionModelsResponse{}
+	for _, option := range configOptionsToProto(options) {
+		if option.Category == "model" {
+			response.Models = option.Options
+			response.DefaultModelId = option.CurrentValue
+			break
+		}
+	}
+	return connect.NewResponse(response), nil
+}
+
+func (s *SessionService) SetModel(ctx context.Context, req *connect.Request[v1.SetSessionModelRequest]) (*connect.Response[v1.Empty], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.registry.SetShadowModel(ctx, req.Msg.SessionId, userID, req.Msg.ModelId); err != nil {
+		return nil, sessionError(err)
+	}
+	return connect.NewResponse(&v1.Empty{}), nil
+}
+
 func (s *SessionService) SetMessageIncluded(ctx context.Context, req *connect.Request[v1.SetSessionMessageIncludedRequest]) (*connect.Response[v1.Empty], error) {
 	userID, err := requireUser(ctx)
 	if err != nil {

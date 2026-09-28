@@ -473,11 +473,11 @@ func (s *Store) CreateSession(ctx context.Context, sess Session) error {
 	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO sessions
-		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name, group_label, unread, mcp_servers, image, auth_profile, instruction_profile, response_profile_id, response_profile_name, response_instructions, experience_id, experience_version, execution_policy)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name, group_label, unread, mcp_servers, image, auth_profile, model_id, instruction_profile, response_profile_id, response_profile_name, response_instructions, experience_id, experience_version, execution_policy)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		sess.ID, sess.UserID, string(sess.Mode), string(sess.Kind), sess.AgentType,
 		sess.AgentSessionID, sess.ContainerLabel, string(sess.Status), sess.Cwd, toUnix(sess.CreatedAt), sess.Name, sess.GroupLabel, sess.Unread,
-		strings.Join(sess.McpServers, ","), sess.Image, sess.AuthProfile, sess.InstructionProfile,
+		strings.Join(sess.McpServers, ","), sess.Image, sess.AuthProfile, sess.ModelID, sess.InstructionProfile,
 		sess.ResponseProfileID, sess.ResponseProfileName, sess.ResponseInstructions, sess.ExperienceID, sess.ExperienceVersion, sess.ExecutionPolicy,
 	)
 	if err != nil {
@@ -520,6 +520,14 @@ func (s *Store) UpdateSessionName(ctx context.Context, id, name string) error {
 		return fmt.Errorf("store: update session name: %w", err)
 	}
 	return affectedOne(res, "update session name")
+}
+
+func (s *Store) UpdateShadowModel(ctx context.Context, id, modelID string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE sessions SET model_id = ? WHERE id = ? AND execution_policy = 'on_demand'`, modelID, id)
+	if err != nil {
+		return fmt.Errorf("store: update shadow model: %w", err)
+	}
+	return affectedOne(res, "update shadow model")
 }
 
 // UpdateSessionNameIfEmpty сохраняет имя от агента, не перетирая ручное переименование.
@@ -599,7 +607,7 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 
 const sessionSelect = `SELECT id, user_id, mode, kind, agent_type, agent_session_id,
 	container_label, status, cwd, created_at, name, group_label, unread, mcp_servers, image, auth_profile, instruction_profile,
-	response_profile_id, response_profile_name, response_instructions, experience_id, experience_version, execution_policy, history_revision FROM sessions`
+	response_profile_id, response_profile_name, response_instructions, experience_id, experience_version, execution_policy, history_revision, model_id FROM sessions`
 
 func (s *Store) querySessions(ctx context.Context, query string, args ...any) ([]Session, error) {
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -642,7 +650,7 @@ func scanSessionRow(r rowScanner) (Session, error) {
 	var createdAt int64
 	err := r.Scan(&sess.ID, &sess.UserID, &mode, &kind, &sess.AgentType,
 		&sess.AgentSessionID, &sess.ContainerLabel, &status, &sess.Cwd, &createdAt, &sess.Name, &sess.GroupLabel, &sess.Unread, &mcp, &sess.Image, &sess.AuthProfile, &sess.InstructionProfile,
-		&sess.ResponseProfileID, &sess.ResponseProfileName, &sess.ResponseInstructions, &sess.ExperienceID, &sess.ExperienceVersion, &executionPolicy, &sess.HistoryRevision)
+		&sess.ResponseProfileID, &sess.ResponseProfileName, &sess.ResponseInstructions, &sess.ExperienceID, &sess.ExperienceVersion, &executionPolicy, &sess.HistoryRevision, &sess.ModelID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Session{}, err
