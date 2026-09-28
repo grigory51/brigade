@@ -72,6 +72,38 @@ func (s *Store) SessionMessages(ctx context.Context, sessionID string) ([]Sessio
 	return messages, rows.Err()
 }
 
+// LastShadowMessages возвращает превью одним запросом для списка переписок владельца.
+type ShadowPreview struct {
+	Message     SessionMessage
+	UnreadCount uint32
+}
+
+func (s *Store) LastShadowMessages(ctx context.Context, userID string) (map[string]ShadowPreview, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT m.session_id, m.content, m.author, m.delivery, m.created_at,
+		(SELECT COUNT(*) FROM session_messages unread WHERE unread.session_id = m.session_id
+		 AND unread.author = 'contact' AND unread.seq > s.last_read_seq)
+		FROM session_messages m
+		JOIN (SELECT session_id, MAX(seq) AS seq FROM session_messages GROUP BY session_id) latest
+		  ON latest.session_id = m.session_id AND latest.seq = m.seq
+		JOIN sessions s ON s.id = m.session_id
+		WHERE s.user_id = ? AND s.execution_policy = 'on_demand'`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("store: list shadow previews: %w", err)
+	}
+	defer rows.Close()
+	previews := make(map[string]ShadowPreview)
+	for rows.Next() {
+		var preview ShadowPreview
+		var createdAt int64
+		if err := rows.Scan(&preview.Message.SessionID, &preview.Message.Content, &preview.Message.Author, &preview.Message.Delivery, &createdAt, &preview.UnreadCount); err != nil {
+			return nil, fmt.Errorf("store: scan shadow preview: %w", err)
+		}
+		preview.Message.CreatedAt = fromUnix(createdAt)
+		previews[preview.Message.SessionID] = preview
+	}
+	return previews, rows.Err()
+}
+
 func (s *Store) SetMessageIncluded(ctx context.Context, sessionID, messageID string, included bool) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

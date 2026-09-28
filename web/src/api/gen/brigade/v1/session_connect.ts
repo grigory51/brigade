@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AddSessionMessageRequest, AddSessionMessageResponse, ArchiveSessionRequest, ArchiveSessionResponse, CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, EditSessionDraftRequest, GenerateSessionDraftRequest, GenerateSessionDraftResponse, GetSessionDraftRunRequest, GetSessionDraftRunResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, MarkSessionReadRequest, ReloadAgentRequest, SetSessionMcpServersRequest, SetSessionMessageIncludedRequest, SetSessionResponseProfileRequest, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse, UploadFileRequest, UploadFileResponse } from "./session_pb.js";
+import { AddSessionMessageRequest, AddSessionMessageResponse, ArchiveSessionRequest, ArchiveSessionResponse, CancelSessionDraftRequest, CreateSessionDraftRequest, CreateSessionDraftResponse, CreateSessionRequest, CreateSessionResponse, DeleteSessionRequest, EditSessionDraftRequest, GenerateSessionDraftRequest, GenerateSessionDraftResponse, GetSessionDraftRunRequest, GetSessionDraftRunResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, MarkSessionReadRequest, ReloadAgentRequest, SetSessionMcpServersRequest, SetSessionMessageIncludedRequest, SetSessionResponseProfileRequest, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse, UploadFileRequest, UploadFileResponse } from "./session_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { Empty } from "./auth_pb.js";
 
@@ -85,6 +85,24 @@ export const SessionService = {
       name: "GenerateDraft",
       I: GenerateSessionDraftRequest,
       O: GenerateSessionDraftResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.SessionService.CancelDraft
+     */
+    cancelDraft: {
+      name: "CancelDraft",
+      I: CancelSessionDraftRequest,
+      O: Empty,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.SessionService.CreateDraft
+     */
+    createDraft: {
+      name: "CreateDraft",
+      I: CreateSessionDraftRequest,
+      O: CreateSessionDraftResponse,
       kind: MethodKind.Unary,
     },
     /**

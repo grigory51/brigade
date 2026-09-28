@@ -241,7 +241,7 @@ const telegramBotSelect = `SELECT id, user_id, token, telegram_id, username, nam
 	owner_telegram_id, owner_telegram_username, agent_type, auth_profile, image, mcp_servers,
 	bind_token_hash, bind_token_expires_at, update_offset, supports_guest_queries,
 	has_topics_enabled, session_mode, new_session_action,
-	business_connection_id, business_owner_id, business_enabled, business_can_reply,
+	business_connection_id, business_owner_id, business_enabled, business_can_reply, send_delay_seconds,
 	created_at FROM telegram_bots`
 
 func (s *Store) ListTelegramBots(ctx context.Context, userID string) ([]TelegramBot, error) {
@@ -287,7 +287,7 @@ func (s *Store) scanTelegramBot(row rowScanner) (TelegramBot, error) {
 		&bot.Image, &mcp, &bot.BindTokenHash, &bindExpires, &bot.UpdateOffset,
 		&bot.SupportsGuestQueries, &bot.HasTopicsEnabled, &bot.SessionMode, &bot.NewSessionAction,
 		&bot.BusinessConnectionID, &bot.BusinessOwnerID, &bot.BusinessEnabled,
-		&bot.BusinessCanReply, &createdAt); err != nil {
+		&bot.BusinessCanReply, &bot.SendDelaySeconds, &createdAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return TelegramBot{}, ErrNotFound
 		}
@@ -319,14 +319,14 @@ func (s *Store) SaveTelegramBot(ctx context.Context, bot TelegramBot) error {
 		 owner_telegram_username, agent_type, auth_profile, image, mcp_servers,
 		 bind_token_hash, bind_token_expires_at, update_offset, supports_guest_queries,
 		 has_topics_enabled, session_mode, new_session_action, business_connection_id,
-		 business_owner_id, business_enabled, business_can_reply, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 business_owner_id, business_enabled, business_can_reply, send_delay_seconds, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET token=excluded.token, telegram_id=excluded.telegram_id,
 		 username=excluded.username, name=excluded.name, agent_type=excluded.agent_type,
 		 auth_profile=excluded.auth_profile, image=excluded.image, mcp_servers=excluded.mcp_servers,
 		 supports_guest_queries=excluded.supports_guest_queries,
 		 has_topics_enabled=excluded.has_topics_enabled, session_mode=excluded.session_mode,
-		 new_session_action=excluded.new_session_action,
+		 new_session_action=excluded.new_session_action, send_delay_seconds=excluded.send_delay_seconds,
 		 updated_at=excluded.updated_at
 		WHERE telegram_bots.user_id=excluded.user_id`,
 		bot.ID, bot.UserID, s.cipher.Encrypt(bot.Token), bot.TelegramID, bot.Username, bot.Name,
@@ -334,7 +334,7 @@ func (s *Store) SaveTelegramBot(ctx context.Context, bot TelegramBot) error {
 		bot.Image, strings.Join(bot.McpServers, ","), bot.BindTokenHash,
 		toUnix(bot.BindTokenExpiresAt), bot.UpdateOffset, bot.SupportsGuestQueries,
 		bot.HasTopicsEnabled, bot.SessionMode, bot.NewSessionAction,
-		bot.BusinessConnectionID, bot.BusinessOwnerID, bot.BusinessEnabled, bot.BusinessCanReply, now, now)
+		bot.BusinessConnectionID, bot.BusinessOwnerID, bot.BusinessEnabled, bot.BusinessCanReply, bot.SendDelaySeconds, now, now)
 	if err != nil {
 		return fmt.Errorf("store: save telegram bot: %w", err)
 	}
@@ -544,7 +544,9 @@ func (s *Store) MarkSessionUnread(ctx context.Context, id string) error {
 }
 
 func (s *Store) MarkSessionRead(ctx context.Context, id, userID string) error {
-	res, err := s.db.ExecContext(ctx, `UPDATE sessions SET unread = 0 WHERE id = ? AND user_id = ?`, id, userID)
+	res, err := s.db.ExecContext(ctx, `UPDATE sessions SET unread = 0,
+		last_read_seq = COALESCE((SELECT MAX(seq) FROM session_messages WHERE session_id = ?), 0)
+		WHERE id = ? AND user_id = ?`, id, id, userID)
 	if err != nil {
 		return fmt.Errorf("store: mark session read: %w", err)
 	}

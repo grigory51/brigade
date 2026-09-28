@@ -36,6 +36,17 @@ func TestShadowMessageRevisionAndRunExclusivity(t *testing.T) {
 	if err := st.SetMessageIncluded(ctx, sess.ID, "m1", false); err != nil {
 		t.Fatal(err)
 	}
+	previews, err := st.LastShadowMessages(ctx, "owner")
+	if err != nil || previews[sess.ID].Message.Content != "Привет" || previews[sess.ID].Message.Author != MessageAuthorContact || previews[sess.ID].UnreadCount != 1 {
+		t.Fatalf("shadow preview: %+v, %v", previews, err)
+	}
+	if err := st.MarkSessionRead(ctx, sess.ID, "owner"); err != nil {
+		t.Fatal(err)
+	}
+	previews, err = st.LastShadowMessages(ctx, "owner")
+	if err != nil || previews[sess.ID].UnreadCount != 0 {
+		t.Fatalf("read shadow preview: %+v, %v", previews, err)
+	}
 	got, _ = st.GetSession(ctx, sess.ID)
 	if got.HistoryRevision != 2 {
 		t.Fatalf("revision after inclusion: %d", got.HistoryRevision)

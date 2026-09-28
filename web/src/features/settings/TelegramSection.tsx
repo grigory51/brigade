@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useState } from "react";
-import { Check, Copy, ExternalLinkIcon, Loader2, Trash2 } from "lucide-react";
+import { Bot, Briefcase, Check, Copy, ExternalLinkIcon, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   agentClient,
@@ -43,6 +43,7 @@ type Draft = {
   mcpServerIds: string[];
   sessionMode: "threads" | "chat";
   newSessionAction: "archive" | "delete";
+  sendDelaySeconds: number;
 };
 
 const emptyDraft = (): Draft => ({
@@ -53,6 +54,7 @@ const emptyDraft = (): Draft => ({
   mcpServerIds: [],
   sessionMode: "threads",
   newSessionAction: "archive",
+  sendDelaySeconds: 5,
 });
 
 export function TelegramSection({
@@ -120,6 +122,7 @@ export function TelegramSection({
       mcpServerIds: bot.mcpServerIds,
       sessionMode: bot.sessionMode === "chat" ? "chat" : "threads",
       newSessionAction: bot.newSessionAction === "delete" ? "delete" : "archive",
+      sendDelaySeconds: bot.sendDelaySeconds ?? 5,
     });
     setToken("");
     setBindingURL("");
@@ -159,6 +162,7 @@ export function TelegramSection({
           mcpServerIds: draft.mcpServerIds,
           sessionMode: draft.sessionMode,
           newSessionAction: draft.sessionMode === "threads" ? "archive" : draft.newSessionAction,
+          sendDelaySeconds: draft.sendDelaySeconds,
         },
         token,
       });
@@ -220,39 +224,28 @@ export function TelegramSection({
         )}
       >
         <Description>
-          Бот отвечает на ваши обращения в чате и может сохранять переписки Telegram Business без автоответа.
+          Один бот работает в двух режимах: вы общаетесь с агентом в чате с ботом, а переписки с клиентами из Telegram Business сохраняются в Brigade.
           {" "}Updates получает инстанс через {" "}
           <span className="font-mono">{mode}</span>.
         </Description>
       </SectionHeader>
 
-      <div className="flex flex-col gap-2">
-        <FieldLabel>{selected?.tokenSet ? "Новый BotFather token" : "BotFather token"}</FieldLabel>
-        <Input
-          type="password"
-          value={token}
-          onChange={(event) => setToken(event.target.value)}
-          placeholder={selected?.tokenSet ? "Пусто — не менять" : "123456:ABC…"}
-          autoComplete="off"
-          className="h-[41px] bg-[#1c1b1a] font-mono text-[12.5px]"
-        />
-        <SecretNote>Шифруется на сервере и обратно не отдаётся</SecretNote>
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <div className="flex flex-col gap-2">
-          <FieldLabel>Агент</FieldLabel>
-          <Select value={draft.authProfile} onValueChange={(id) => {
-            const connection = connections.find((item) => item.id === id);
-            if (connection) patch({ agentType: connection.agentType, authProfile: connection.id });
-          }}>
-            <SelectTrigger className="h-[41px] w-full"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {connections.map((connection) => <SelectItem key={connection.id} value={connection.id}>{connection.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+      <div className="space-y-4 rounded-xl border bg-card/40 p-4">
+        <div className="flex items-start gap-2.5"><Briefcase className="mt-0.5 size-4 shrink-0 text-primary" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-semibold">Telegram Business</h3>{selected?.businessConnected && <span className={selected.businessCanReply ? "rounded-full bg-success/10 px-2 py-0.5 text-[11px] text-success" : "rounded-full bg-warning/10 px-2 py-0.5 text-[11px] text-warning"}>{selected.businessCanReply ? "подключён" : "только чтение"}</span>}</div><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Каждый чат с клиентом появляется в боковом списке. Автоответа нет: агент готовит черновик по кнопке, отправляете вы.</p></div></div>
+        <div className="divide-y rounded-xl border px-4">
+          {[
+            { ready: Boolean(selected?.ownerConnected), title: "Бот привязан к вашему аккаунту", hint: selected?.ownerUsername ? `@${selected.ownerUsername}` : "Откройте ссылку привязки после сохранения бота" },
+            { ready: Boolean(selected?.businessConnected), title: "Бот добавлен в Telegram Business", hint: "Telegram → Настройки → Telegram для бизнеса → Чат-боты" },
+            { ready: Boolean(selected?.businessCanReply), title: "Боту разрешено отвечать", hint: "В настройках чат-бота включите право отвечать. Без него черновик можно скопировать." },
+          ].map((step, index) => <div key={step.title} className="flex gap-3 py-3.5"><span className={step.ready ? "flex size-[22px] shrink-0 items-center justify-center rounded-full bg-success/15 text-success" : "flex size-[22px] shrink-0 items-center justify-center rounded-full bg-warning/15 text-xs font-semibold text-warning"}>{step.ready ? <Check className="size-3.5" /> : index + 1}</span><div className="min-w-0"><p className="text-[13px]">{step.title}</p><p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{step.hint}</p></div></div>)}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-2"><FieldLabel>Агент для чата и черновиков</FieldLabel><Select value={draft.authProfile} onValueChange={(id) => { const connection = connections.find((item) => item.id === id); if (connection) patch({ agentType: connection.agentType, authProfile: connection.id }); }}><SelectTrigger className="h-[41px] w-full"><SelectValue /></SelectTrigger><SelectContent>{connections.map((connection) => <SelectItem key={connection.id} value={connection.id}>{connection.name}</SelectItem>)}</SelectContent></Select></div>
+          <div className="space-y-2"><FieldLabel>Отмена отправки</FieldLabel><Select value={String(draft.sendDelaySeconds)} onValueChange={(value) => patch({ sendDelaySeconds: Number(value) })}><SelectTrigger aria-label="Отмена отправки" className="h-[41px] w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="0">Без задержки</SelectItem><SelectItem value="5">5 секунд</SelectItem><SelectItem value="10">10 секунд</SelectItem></SelectContent></Select></div>
         </div>
       </div>
+
+      <div className="flex items-center gap-2 pt-2"><Bot className="size-4 text-primary" /><h3 className="text-sm font-semibold">Чат с ботом</h3></div>
 
       <div className="flex flex-col gap-2">
         <FieldLabel>Режим сессий</FieldLabel>
@@ -344,6 +337,12 @@ export function TelegramSection({
         </div>
       )}
 
+      <div className="flex flex-col gap-2">
+        <FieldLabel>{selected?.tokenSet ? "Новый BotFather token" : "BotFather token"}</FieldLabel>
+        <Input type="password" value={token} onChange={(event) => setToken(event.target.value)} placeholder={selected?.tokenSet ? "Пусто — не менять" : "123456:ABC…"} autoComplete="off" className="h-[41px] bg-[#1c1b1a] font-mono text-[12.5px]" />
+        <SecretNote>Шифруется на сервере и обратно не отдаётся</SecretNote>
+      </div>
+
       <div className="flex flex-wrap items-center gap-2">
         <Button disabled={saving || !draft.agentType || (!draft.id && !token.trim())} onClick={() => void save()}>
           {saving && <Loader2 className="size-4 animate-spin" />}
@@ -380,10 +379,6 @@ export function TelegramSection({
           <div className="flex justify-between gap-3">
             <span className="text-muted-foreground">Владелец</span>
             <span className="min-w-0 break-all text-right">{selected.ownerConnected ? `@${selected.ownerUsername || "подключён"}` : "не привязан"}</span>
-          </div>
-          <div className="flex justify-between gap-3">
-            <span className="text-muted-foreground">Telegram Business</span>
-            <span>{selected.businessConnected ? (selected.businessCanReply ? "подключён · ответ разрешён" : "подключён · только чтение") : "не подключён"}</span>
           </div>
           <div className="flex justify-between gap-3">
             <span className="text-muted-foreground">Топики в личном чате</span>

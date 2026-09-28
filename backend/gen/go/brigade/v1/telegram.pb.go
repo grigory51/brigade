@@ -42,8 +42,10 @@ type TelegramBot struct {
 	NewSessionAction  string `protobuf:"bytes,14,opt,name=new_session_action,json=newSessionAction,proto3" json:"new_session_action,omitempty"`
 	BusinessConnected bool   `protobuf:"varint,16,opt,name=business_connected,json=businessConnected,proto3" json:"business_connected,omitempty"`
 	BusinessCanReply  bool   `protobuf:"varint,17,opt,name=business_can_reply,json=businessCanReply,proto3" json:"business_can_reply,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// 0, 5 или 10 секунд на отмену отправки Business-ответа.
+	SendDelaySeconds *uint32 `protobuf:"varint,18,opt,name=send_delay_seconds,json=sendDelaySeconds,proto3,oneof" json:"send_delay_seconds,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *TelegramBot) Reset() {
@@ -188,12 +190,21 @@ func (x *TelegramBot) GetBusinessCanReply() bool {
 	return false
 }
 
+func (x *TelegramBot) GetSendDelaySeconds() uint32 {
+	if x != nil && x.SendDelaySeconds != nil {
+		return *x.SendDelaySeconds
+	}
+	return 0
+}
+
 type SendTelegramDraftRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	MessageId     string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	MessageId string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	// Входящее Business-сообщение, на которое пользователь явно отправляет ответ.
+	ReplyToMessageId string `protobuf:"bytes,3,opt,name=reply_to_message_id,json=replyToMessageId,proto3" json:"reply_to_message_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *SendTelegramDraftRequest) Reset() {
@@ -236,6 +247,13 @@ func (x *SendTelegramDraftRequest) GetSessionId() string {
 func (x *SendTelegramDraftRequest) GetMessageId() string {
 	if x != nil {
 		return x.MessageId
+	}
+	return ""
+}
+
+func (x *SendTelegramDraftRequest) GetReplyToMessageId() string {
+	if x != nil {
+		return x.ReplyToMessageId
 	}
 	return ""
 }
@@ -447,7 +465,7 @@ var File_brigade_v1_telegram_proto protoreflect.FileDescriptor
 const file_brigade_v1_telegram_proto_rawDesc = "" +
 	"\n" +
 	"\x19brigade/v1/telegram.proto\x12\n" +
-	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\xd9\x04\n" +
+	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\xa3\x05\n" +
 	"\vTelegramBot\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12\x12\n" +
@@ -466,12 +484,15 @@ const file_brigade_v1_telegram_proto_rawDesc = "" +
 	"\fsession_mode\x18\r \x01(\tR\vsessionMode\x12,\n" +
 	"\x12new_session_action\x18\x0e \x01(\tR\x10newSessionAction\x12-\n" +
 	"\x12business_connected\x18\x10 \x01(\bR\x11businessConnected\x12,\n" +
-	"\x12business_can_reply\x18\x11 \x01(\bR\x10businessCanReplyJ\x04\b\x0f\x10\x10R\apurpose\"X\n" +
+	"\x12business_can_reply\x18\x11 \x01(\bR\x10businessCanReply\x121\n" +
+	"\x12send_delay_seconds\x18\x12 \x01(\rH\x00R\x10sendDelaySeconds\x88\x01\x01B\x15\n" +
+	"\x13_send_delay_secondsJ\x04\b\x0f\x10\x10R\apurpose\"\x87\x01\n" +
 	"\x18SendTelegramDraftRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1d\n" +
 	"\n" +
-	"message_id\x18\x02 \x01(\tR\tmessageId\"[\n" +
+	"message_id\x18\x02 \x01(\tR\tmessageId\x12-\n" +
+	"\x13reply_to_message_id\x18\x03 \x01(\tR\x10replyToMessageId\"[\n" +
 	"\x18ListTelegramBotsResponse\x12+\n" +
 	"\x04bots\x18\x01 \x03(\v2\x17.brigade.v1.TelegramBotR\x04bots\x12\x12\n" +
 	"\x04mode\x18\x02 \x01(\tR\x04mode\"Y\n" +
@@ -542,6 +563,7 @@ func file_brigade_v1_telegram_proto_init() {
 		return
 	}
 	file_brigade_v1_auth_proto_init()
+	file_brigade_v1_telegram_proto_msgTypes[0].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

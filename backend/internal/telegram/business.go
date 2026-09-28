@@ -163,7 +163,7 @@ func (s *Service) processBusinessQueued(bot store.TelegramBot, stored store.Tele
 
 // SendDraft — единственная точка исходящей Business-доставки: явное действие
 // владельца, проверка прав и 24-часового окна до обращения к Bot API.
-func (s *Service) SendDraft(ctx context.Context, userID, sessionID, messageID string) error {
+func (s *Service) SendDraft(ctx context.Context, userID, sessionID, messageID, replyToMessageID string) error {
 	sess, err := s.registry.Get(ctx, sessionID, userID)
 	if err != nil {
 		return err
@@ -175,12 +175,21 @@ func (s *Service) SendDraft(ctx context.Context, userID, sessionID, messageID st
 	if err != nil {
 		return err
 	}
-	if draft.Delivery != store.MessageDeliveryDraft || draft.ReplyToID == "" {
-		return errors.New("telegram: нет подготовленного ответа на входящее сообщение")
+	if draft.Delivery != store.MessageDeliveryDraft {
+		return errors.New("telegram: черновик уже отправлен или недоступен")
 	}
-	target, err := s.store.SessionMessage(ctx, sessionID, draft.ReplyToID)
+	if replyToMessageID == "" {
+		replyToMessageID = draft.ReplyToID
+	}
+	if replyToMessageID == "" {
+		return errors.New("telegram: выберите входящее сообщение для ответа")
+	}
+	target, err := s.store.SessionMessage(ctx, sessionID, replyToMessageID)
 	if err != nil {
 		return err
+	}
+	if target.Author != store.MessageAuthorContact || target.ExternalID == "" {
+		return errors.New("telegram: отвечать можно только на входящее сообщение")
 	}
 	parts := strings.Split(target.Source, "/")
 	if len(parts) != 4 || parts[0] != "telegram-business" {
@@ -198,8 +207,11 @@ func (s *Service) SendDraft(ctx context.Context, userID, sessionID, messageID st
 	if err != nil {
 		return err
 	}
-	if bot.UserID != userID || !bot.BusinessEnabled || !bot.BusinessCanReply || bot.BusinessOwnerID != bot.OwnerTelegramID || bot.BusinessConnectionID != connectionID {
-		return errors.New("telegram: бот не подключён или не имеет права отвечать")
+	if bot.UserID != userID || !bot.BusinessEnabled || bot.BusinessOwnerID != bot.OwnerTelegramID || bot.BusinessConnectionID != connectionID {
+		return errors.New("telegram: этот бот больше не подключён к вашему Telegram Business")
+	}
+	if !bot.BusinessCanReply {
+		return errors.New("telegram: разрешите боту отвечать в настройках Telegram Business")
 	}
 	conversation, err := s.store.TelegramConversation(ctx, bot.ID, "business:"+connectionID, chatID, 0)
 	if err != nil || conversation.SessionID != sessionID {
@@ -215,10 +227,13 @@ func (s *Service) SendDraft(ctx context.Context, userID, sessionID, messageID st
 	if len([]rune(draft.Content)) > 4096 {
 		return errors.New("telegram: ответ длиннее 4096 символов; сократите черновик")
 	}
+	replyID, err := strconv.ParseInt(target.ExternalID, 10, 64)
+	if err != nil || replyID <= 0 {
+		return errors.New("telegram: у входящего сообщения нет корректного Telegram ID")
+	}
 	if err := s.store.SetSessionDraftDelivery(ctx, sessionID, messageID, store.MessageDeliveryDraft, store.MessageDeliverySending); err != nil {
 		return err
 	}
-	replyID, _ := strconv.ParseInt(target.ExternalID, 10, 64)
 	sent, err := s.api.sendBusinessMessage(ctx, bot.Token, connectionID, chatID, replyID, draft.Content)
 	if err != nil {
 		state := store.MessageDeliveryUncertain

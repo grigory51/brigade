@@ -132,6 +132,7 @@ type TelegramBot struct {
 	BusinessOwnerID       int64
 	BusinessEnabled       bool
 	BusinessCanReply      bool
+	SendDelaySeconds      int32
 	CreatedAt             time.Time
 }
 
@@ -180,7 +181,12 @@ type Session struct {
 	// GroupLabel объединяет связанные сессии в боковом списке.
 	GroupLabel string
 	// Unread выставляется после завершения turn и снимается при просмотре сессии.
-	Unread bool
+	Unread              bool
+	LastMessage         string
+	LastMessageAt       time.Time
+	LastMessageAuthor   MessageAuthor
+	LastMessageDelivery MessageDelivery
+	UnreadCount        uint32
 	// McpServers — идентификаторы MCP-серверов пользователя, включённых в этой сессии
 	// (только ACP). В БД лежат CSV-строкой.
 	McpServers []string

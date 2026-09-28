@@ -52,6 +52,12 @@ const (
 	// SessionServiceGenerateDraftProcedure is the fully-qualified name of the SessionService's
 	// GenerateDraft RPC.
 	SessionServiceGenerateDraftProcedure = "/brigade.v1.SessionService/GenerateDraft"
+	// SessionServiceCancelDraftProcedure is the fully-qualified name of the SessionService's
+	// CancelDraft RPC.
+	SessionServiceCancelDraftProcedure = "/brigade.v1.SessionService/CancelDraft"
+	// SessionServiceCreateDraftProcedure is the fully-qualified name of the SessionService's
+	// CreateDraft RPC.
+	SessionServiceCreateDraftProcedure = "/brigade.v1.SessionService/CreateDraft"
 	// SessionServiceGetDraftRunProcedure is the fully-qualified name of the SessionService's
 	// GetDraftRun RPC.
 	SessionServiceGetDraftRunProcedure = "/brigade.v1.SessionService/GetDraftRun"
@@ -94,6 +100,8 @@ type SessionServiceClient interface {
 	AddMessage(context.Context, *connect.Request[v1.AddSessionMessageRequest]) (*connect.Response[v1.AddSessionMessageResponse], error)
 	SetMessageIncluded(context.Context, *connect.Request[v1.SetSessionMessageIncludedRequest]) (*connect.Response[v1.Empty], error)
 	GenerateDraft(context.Context, *connect.Request[v1.GenerateSessionDraftRequest]) (*connect.Response[v1.GenerateSessionDraftResponse], error)
+	CancelDraft(context.Context, *connect.Request[v1.CancelSessionDraftRequest]) (*connect.Response[v1.Empty], error)
+	CreateDraft(context.Context, *connect.Request[v1.CreateSessionDraftRequest]) (*connect.Response[v1.CreateSessionDraftResponse], error)
 	GetDraftRun(context.Context, *connect.Request[v1.GetSessionDraftRunRequest]) (*connect.Response[v1.GetSessionDraftRunResponse], error)
 	EditDraft(context.Context, *connect.Request[v1.EditSessionDraftRequest]) (*connect.Response[v1.Empty], error)
 	Stop(context.Context, *connect.Request[v1.StopSessionRequest]) (*connect.Response[v1.Empty], error)
@@ -176,6 +184,18 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(sessionServiceMethods.ByName("GenerateDraft")),
 			connect.WithClientOptions(opts...),
 		),
+		cancelDraft: connect.NewClient[v1.CancelSessionDraftRequest, v1.Empty](
+			httpClient,
+			baseURL+SessionServiceCancelDraftProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("CancelDraft")),
+			connect.WithClientOptions(opts...),
+		),
+		createDraft: connect.NewClient[v1.CreateSessionDraftRequest, v1.CreateSessionDraftResponse](
+			httpClient,
+			baseURL+SessionServiceCreateDraftProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("CreateDraft")),
+			connect.WithClientOptions(opts...),
+		),
 		getDraftRun: connect.NewClient[v1.GetSessionDraftRunRequest, v1.GetSessionDraftRunResponse](
 			httpClient,
 			baseURL+SessionServiceGetDraftRunProcedure,
@@ -255,6 +275,8 @@ type sessionServiceClient struct {
 	addMessage                *connect.Client[v1.AddSessionMessageRequest, v1.AddSessionMessageResponse]
 	setMessageIncluded        *connect.Client[v1.SetSessionMessageIncludedRequest, v1.Empty]
 	generateDraft             *connect.Client[v1.GenerateSessionDraftRequest, v1.GenerateSessionDraftResponse]
+	cancelDraft               *connect.Client[v1.CancelSessionDraftRequest, v1.Empty]
+	createDraft               *connect.Client[v1.CreateSessionDraftRequest, v1.CreateSessionDraftResponse]
 	getDraftRun               *connect.Client[v1.GetSessionDraftRunRequest, v1.GetSessionDraftRunResponse]
 	editDraft                 *connect.Client[v1.EditSessionDraftRequest, v1.Empty]
 	stop                      *connect.Client[v1.StopSessionRequest, v1.Empty]
@@ -306,6 +328,16 @@ func (c *sessionServiceClient) SetMessageIncluded(ctx context.Context, req *conn
 // GenerateDraft calls brigade.v1.SessionService.GenerateDraft.
 func (c *sessionServiceClient) GenerateDraft(ctx context.Context, req *connect.Request[v1.GenerateSessionDraftRequest]) (*connect.Response[v1.GenerateSessionDraftResponse], error) {
 	return c.generateDraft.CallUnary(ctx, req)
+}
+
+// CancelDraft calls brigade.v1.SessionService.CancelDraft.
+func (c *sessionServiceClient) CancelDraft(ctx context.Context, req *connect.Request[v1.CancelSessionDraftRequest]) (*connect.Response[v1.Empty], error) {
+	return c.cancelDraft.CallUnary(ctx, req)
+}
+
+// CreateDraft calls brigade.v1.SessionService.CreateDraft.
+func (c *sessionServiceClient) CreateDraft(ctx context.Context, req *connect.Request[v1.CreateSessionDraftRequest]) (*connect.Response[v1.CreateSessionDraftResponse], error) {
+	return c.createDraft.CallUnary(ctx, req)
 }
 
 // GetDraftRun calls brigade.v1.SessionService.GetDraftRun.
@@ -373,6 +405,8 @@ type SessionServiceHandler interface {
 	AddMessage(context.Context, *connect.Request[v1.AddSessionMessageRequest]) (*connect.Response[v1.AddSessionMessageResponse], error)
 	SetMessageIncluded(context.Context, *connect.Request[v1.SetSessionMessageIncludedRequest]) (*connect.Response[v1.Empty], error)
 	GenerateDraft(context.Context, *connect.Request[v1.GenerateSessionDraftRequest]) (*connect.Response[v1.GenerateSessionDraftResponse], error)
+	CancelDraft(context.Context, *connect.Request[v1.CancelSessionDraftRequest]) (*connect.Response[v1.Empty], error)
+	CreateDraft(context.Context, *connect.Request[v1.CreateSessionDraftRequest]) (*connect.Response[v1.CreateSessionDraftResponse], error)
 	GetDraftRun(context.Context, *connect.Request[v1.GetSessionDraftRunRequest]) (*connect.Response[v1.GetSessionDraftRunResponse], error)
 	EditDraft(context.Context, *connect.Request[v1.EditSessionDraftRequest]) (*connect.Response[v1.Empty], error)
 	Stop(context.Context, *connect.Request[v1.StopSessionRequest]) (*connect.Response[v1.Empty], error)
@@ -449,6 +483,18 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		SessionServiceGenerateDraftProcedure,
 		svc.GenerateDraft,
 		connect.WithSchema(sessionServiceMethods.ByName("GenerateDraft")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceCancelDraftHandler := connect.NewUnaryHandler(
+		SessionServiceCancelDraftProcedure,
+		svc.CancelDraft,
+		connect.WithSchema(sessionServiceMethods.ByName("CancelDraft")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceCreateDraftHandler := connect.NewUnaryHandler(
+		SessionServiceCreateDraftProcedure,
+		svc.CreateDraft,
+		connect.WithSchema(sessionServiceMethods.ByName("CreateDraft")),
 		connect.WithHandlerOptions(opts...),
 	)
 	sessionServiceGetDraftRunHandler := connect.NewUnaryHandler(
@@ -535,6 +581,10 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 			sessionServiceSetMessageIncludedHandler.ServeHTTP(w, r)
 		case SessionServiceGenerateDraftProcedure:
 			sessionServiceGenerateDraftHandler.ServeHTTP(w, r)
+		case SessionServiceCancelDraftProcedure:
+			sessionServiceCancelDraftHandler.ServeHTTP(w, r)
+		case SessionServiceCreateDraftProcedure:
+			sessionServiceCreateDraftHandler.ServeHTTP(w, r)
 		case SessionServiceGetDraftRunProcedure:
 			sessionServiceGetDraftRunHandler.ServeHTTP(w, r)
 		case SessionServiceEditDraftProcedure:
@@ -596,6 +646,14 @@ func (UnimplementedSessionServiceHandler) SetMessageIncluded(context.Context, *c
 
 func (UnimplementedSessionServiceHandler) GenerateDraft(context.Context, *connect.Request[v1.GenerateSessionDraftRequest]) (*connect.Response[v1.GenerateSessionDraftResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.GenerateDraft is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) CancelDraft(context.Context, *connect.Request[v1.CancelSessionDraftRequest]) (*connect.Response[v1.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.CancelDraft is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) CreateDraft(context.Context, *connect.Request[v1.CreateSessionDraftRequest]) (*connect.Response[v1.CreateSessionDraftResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.CreateDraft is not implemented"))
 }
 
 func (UnimplementedSessionServiceHandler) GetDraftRun(context.Context, *connect.Request[v1.GetSessionDraftRunRequest]) (*connect.Response[v1.GetSessionDraftRunResponse], error) {

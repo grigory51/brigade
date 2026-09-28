@@ -235,7 +235,8 @@ type Registry struct {
 	// sessionLocks сериализует ленивую пере-подъёмку среды сессии (EnsureACPClient):
 	// без лока два параллельных turn'а на мёртвую сессию подняли бы два контейнера/адаптера.
 	// Доступ к map — под mu; сам лок держится на время respawn. Ключ — sessionID.
-	sessionLocks map[string]*sync.Mutex
+	sessionLocks  map[string]*sync.Mutex
+	shadowCancels map[string]context.CancelFunc
 }
 
 // NewRegistry собирает реестр. spawner соответствует режиму инстанса (mode); mode
@@ -259,6 +260,7 @@ func NewRegistry(st *store.Store, spawner spawn.Spawner, mode store.SessionMode,
 		tearingDown:   make(map[string]struct{}),
 		userLocks:     make(map[string]*sync.Mutex),
 		sessionLocks:  make(map[string]*sync.Mutex),
+		shadowCancels: make(map[string]context.CancelFunc),
 	}
 }
 
@@ -2071,7 +2073,24 @@ func (r *Registry) reinit(ctx context.Context, lv *live, sess store.Session, ref
 
 // List возвращает сессии пользователя из store (включая остановленные/упавшие).
 func (r *Registry) List(ctx context.Context, userID string) ([]store.Session, error) {
-	return r.store.ListSessionsByUser(ctx, userID)
+	sessions, err := r.store.ListSessionsByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	previews, err := r.store.LastShadowMessages(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range sessions {
+		if preview, ok := previews[sessions[i].ID]; ok {
+			sessions[i].LastMessage = preview.Message.Content
+			sessions[i].LastMessageAt = preview.Message.CreatedAt
+			sessions[i].LastMessageAuthor = preview.Message.Author
+			sessions[i].LastMessageDelivery = preview.Message.Delivery
+			sessions[i].UnreadCount = preview.UnreadCount
+		}
+	}
+	return sessions, nil
 }
 
 func (r *Registry) MarkRead(ctx context.Context, sessionID, userID string) error {

@@ -26,11 +26,15 @@ message TelegramBot {
   reserved "purpose";
   bool business_connected = 16;
   bool business_can_reply = 17;
+  // 0, 5 или 10 секунд на отмену отправки Business-ответа.
+  optional uint32 send_delay_seconds = 18;
 }
 
 message SendTelegramDraftRequest {
   string session_id = 1;
   string message_id = 2;
+  // Входящее Business-сообщение, на которое пользователь явно отправляет ответ.
+  string reply_to_message_id = 3;
 }
 
 message ListTelegramBotsResponse {

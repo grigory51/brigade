@@ -167,7 +167,7 @@ func (s *SessionService) GenerateDraft(ctx context.Context, req *connect.Request
 	if err != nil {
 		return nil, err
 	}
-	run, err := s.registry.StartShadowRun(ctx, req.Msg.SessionId, userID)
+	run, err := s.registry.StartShadowRun(ctx, req.Msg.SessionId, userID, req.Msg.SelectedMessageIds)
 	if err != nil {
 		if errors.Is(err, store.ErrSessionRunActive) {
 			return nil, connect.NewError(connect.CodeAlreadyExists, err)
@@ -178,6 +178,29 @@ func (s *SessionService) GenerateDraft(ctx context.Context, req *connect.Request
 		return nil, sessionError(err)
 	}
 	return connect.NewResponse(&v1.GenerateSessionDraftResponse{RunId: run.ID}), nil
+}
+
+func (s *SessionService) CreateDraft(ctx context.Context, req *connect.Request[v1.CreateSessionDraftRequest]) (*connect.Response[v1.CreateSessionDraftResponse], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	message, err := s.registry.CreateShadowDraft(ctx, req.Msg.SessionId, userID, req.Msg.Content, req.Msg.ReplyToMessageId)
+	if err != nil {
+		return nil, sessionError(err)
+	}
+	return connect.NewResponse(&v1.CreateSessionDraftResponse{MessageId: message.ID}), nil
+}
+
+func (s *SessionService) CancelDraft(ctx context.Context, req *connect.Request[v1.CancelSessionDraftRequest]) (*connect.Response[v1.Empty], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.registry.CancelShadowRun(ctx, req.Msg.SessionId, userID); err != nil {
+		return nil, sessionError(err)
+	}
+	return connect.NewResponse(&v1.Empty{}), nil
 }
 
 func (s *SessionService) GetDraftRun(ctx context.Context, req *connect.Request[v1.GetSessionDraftRunRequest]) (*connect.Response[v1.GetSessionDraftRunResponse], error) {

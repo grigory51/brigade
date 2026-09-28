@@ -296,6 +296,33 @@ export class Session extends Message<Session> {
    */
   executionPolicy = SessionExecutionPolicy.UNSPECIFIED;
 
+  /**
+   * Краткое состояние последнего сообщения shadow-сессии для списка.
+   *
+   * @generated from field: string last_message = 27;
+   */
+  lastMessage = "";
+
+  /**
+   * @generated from field: int64 last_message_at = 28;
+   */
+  lastMessageAt = protoInt64.zero;
+
+  /**
+   * @generated from field: string last_message_author = 29;
+   */
+  lastMessageAuthor = "";
+
+  /**
+   * @generated from field: string last_message_delivery = 30;
+   */
+  lastMessageDelivery = "";
+
+  /**
+   * @generated from field: uint32 unread_count = 31;
+   */
+  unreadCount = 0;
+
   constructor(data?: PartialMessage<Session>) {
     super();
     proto3.util.initPartial(data, this);
@@ -329,6 +356,11 @@ export class Session extends Message<Session> {
     { no: 24, name: "experience_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 25, name: "experience_version", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 26, name: "execution_policy", kind: "enum", T: proto3.getEnumType(SessionExecutionPolicy) },
+    { no: 27, name: "last_message", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 28, name: "last_message_at", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 29, name: "last_message_author", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 30, name: "last_message_delivery", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 31, name: "unread_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Session {
@@ -997,6 +1029,14 @@ export class GenerateSessionDraftRequest extends Message<GenerateSessionDraftReq
    */
   sessionId = "";
 
+  /**
+   * Пусто сохраняет прежний режим included_in_context; непустой набор задаёт
+   * снимок контекста для этого запуска в порядке сообщений сессии.
+   *
+   * @generated from field: repeated string selected_message_ids = 2;
+   */
+  selectedMessageIds: string[] = [];
+
   constructor(data?: PartialMessage<GenerateSessionDraftRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -1006,6 +1046,7 @@ export class GenerateSessionDraftRequest extends Message<GenerateSessionDraftReq
   static readonly typeName = "brigade.v1.GenerateSessionDraftRequest";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "selected_message_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GenerateSessionDraftRequest {
@@ -1059,6 +1100,129 @@ export class GenerateSessionDraftResponse extends Message<GenerateSessionDraftRe
 
   static equals(a: GenerateSessionDraftResponse | PlainMessage<GenerateSessionDraftResponse> | undefined, b: GenerateSessionDraftResponse | PlainMessage<GenerateSessionDraftResponse> | undefined): boolean {
     return proto3.util.equals(GenerateSessionDraftResponse, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.CancelSessionDraftRequest
+ */
+export class CancelSessionDraftRequest extends Message<CancelSessionDraftRequest> {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId = "";
+
+  constructor(data?: PartialMessage<CancelSessionDraftRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.CancelSessionDraftRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CancelSessionDraftRequest {
+    return new CancelSessionDraftRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): CancelSessionDraftRequest {
+    return new CancelSessionDraftRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): CancelSessionDraftRequest {
+    return new CancelSessionDraftRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: CancelSessionDraftRequest | PlainMessage<CancelSessionDraftRequest> | undefined, b: CancelSessionDraftRequest | PlainMessage<CancelSessionDraftRequest> | undefined): boolean {
+    return proto3.util.equals(CancelSessionDraftRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.CreateSessionDraftRequest
+ */
+export class CreateSessionDraftRequest extends Message<CreateSessionDraftRequest> {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId = "";
+
+  /**
+   * @generated from field: string content = 2;
+   */
+  content = "";
+
+  /**
+   * @generated from field: string reply_to_message_id = 3;
+   */
+  replyToMessageId = "";
+
+  constructor(data?: PartialMessage<CreateSessionDraftRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.CreateSessionDraftRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "content", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "reply_to_message_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CreateSessionDraftRequest {
+    return new CreateSessionDraftRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): CreateSessionDraftRequest {
+    return new CreateSessionDraftRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): CreateSessionDraftRequest {
+    return new CreateSessionDraftRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: CreateSessionDraftRequest | PlainMessage<CreateSessionDraftRequest> | undefined, b: CreateSessionDraftRequest | PlainMessage<CreateSessionDraftRequest> | undefined): boolean {
+    return proto3.util.equals(CreateSessionDraftRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.CreateSessionDraftResponse
+ */
+export class CreateSessionDraftResponse extends Message<CreateSessionDraftResponse> {
+  /**
+   * @generated from field: string message_id = 1;
+   */
+  messageId = "";
+
+  constructor(data?: PartialMessage<CreateSessionDraftResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.CreateSessionDraftResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "message_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CreateSessionDraftResponse {
+    return new CreateSessionDraftResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): CreateSessionDraftResponse {
+    return new CreateSessionDraftResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): CreateSessionDraftResponse {
+    return new CreateSessionDraftResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: CreateSessionDraftResponse | PlainMessage<CreateSessionDraftResponse> | undefined, b: CreateSessionDraftResponse | PlainMessage<CreateSessionDraftResponse> | undefined): boolean {
+    return proto3.util.equals(CreateSessionDraftResponse, a, b);
   }
 }
 

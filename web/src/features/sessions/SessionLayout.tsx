@@ -19,6 +19,7 @@ import {
 import { ConnectError } from "@connectrpc/connect";
 import {
   Archive,
+  ChevronDown,
   CircleArrowUp,
   Loader2,
   LogOut,
@@ -31,6 +32,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { sessionClient } from "@/api/client";
 import {
   Session,
@@ -118,6 +120,7 @@ export function SessionLayout() {
     ? undefined
     : routeSessionId;
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(new Set());
   const [state, setState] = useState<LoadState>("loading");
   const [createOpen, setCreateOpen] = useState(false);
   // deletingIds — сессии, удаление которых сейчас выполняется на сервере. Teardown
@@ -140,9 +143,7 @@ export function SessionLayout() {
     try {
       const res = await sessionClient.list({});
       // Новые сверху: бэкенд не гарантирует порядок, сортируем по created_at.
-      const sorted = [...res.sessions].sort((a, b) =>
-        Number(b.createdAt - a.createdAt),
-      );
+      const sorted = [...res.sessions].sort((a, b) => Number((b.lastMessageAt > 0n ? b.lastMessageAt : b.createdAt) - (a.lastMessageAt > 0n ? a.lastMessageAt : a.createdAt)));
       setSessions(sorted);
       setState("ready");
     } catch {
@@ -427,18 +428,19 @@ export function SessionLayout() {
                       <Fragment key={group.label || group.sessions[0].id}>
                         {group.label && (
                           <SidebarMenuItem>
-                            <div className="mx-1 mt-1 flex h-7 items-center gap-2 rounded-[8px] bg-sidebar-accent/60 px-2 text-[12px] font-medium text-sidebar-foreground/75 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-                              <MessagesSquare className="size-3.5 shrink-0" />
-                              <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">{group.label}</span>
-                              <span className="text-[10px] tabular-nums text-sidebar-foreground/45 group-data-[collapsible=icon]:hidden">{group.sessions.length}</span>
-                            </div>
+                            <button type="button" aria-expanded={!collapsedGroups.has(group.label)} onClick={() => setCollapsedGroups((current) => { const next = new Set(current); if (next.has(group.label)) next.delete(group.label); else next.add(group.label); return next; })} className="mx-1 mt-1 flex h-7 w-[calc(100%-8px)] items-center gap-2 rounded-[8px] bg-sidebar-accent/60 px-2 text-left text-[12px] font-medium text-sidebar-foreground/75 hover:bg-sidebar-accent group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+                              <ChevronDown className={cn("size-3.5 shrink-0 transition-transform", collapsedGroups.has(group.label) && "-rotate-90")} />
+                              <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">{group.label.startsWith("Telegram Business · ") ? "Telegram Business" : group.label}</span>
+                              <span className="text-[10px] tabular-nums text-sidebar-foreground/45 group-data-[collapsible=icon]:hidden">{group.label.startsWith("Telegram Business · ") ? group.label.slice("Telegram Business · ".length) : group.sessions.length}</span>
+                            </button>
                           </SidebarMenuItem>
                         )}
-                        {group.sessions.map((s) => (
+                        {!collapsedGroups.has(group.label) && group.sessions.map((s) => (
                           <SessionItem
                             key={s.id}
                             session={s}
                             grouped={Boolean(group.label)}
+                            business={group.label.startsWith("Telegram Business · ")}
                             busy={
                               deletingIds.has(s.id) ||
                               archivingIds.has(s.id) ||
@@ -600,6 +602,7 @@ function withName(s: Session, id: string, name: string): Session {
 function SessionItem({
   session,
   grouped = false,
+  business = false,
   busy,
   deleting = false,
   archiving = false,
@@ -612,6 +615,7 @@ function SessionItem({
 }: {
   session: Session;
   grouped?: boolean;
+  business?: boolean;
   busy: boolean;
   deleting?: boolean;
   archiving?: boolean;
@@ -638,6 +642,7 @@ function SessionItem({
     : grouped && fullLabel.startsWith(groupPrefix)
       ? fullLabel.slice(groupPrefix.length)
       : fullLabel;
+  const displayLabel = business ? label.replace(/^Telegram\s*·\s*/, "") : label;
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(fullLabel);
@@ -698,7 +703,7 @@ function SessionItem({
           e.stopPropagation();
           if (!locked) startEdit();
         }}
-        tooltip={label}
+        tooltip={displayLabel}
         // Правый паддинг под ряд hover-иконок применяем ТОЛЬКО при наведении/фокусе (как и
         // появление самих иконок): иконки абсолютные (вне потока), поэтому ширину имени задаёт
         // лишь padding — постоянный отступ вечно сжимал бы название. На hover имя ужимается,
@@ -709,7 +714,7 @@ function SessionItem({
         // кнопки: иконки-сиблинги (absolute, поверх) перехватывают hover, между ними щели —
         // из-за этого фон кнопки мигал бы. transition-none: паддинг меняется мгновенно, в такт
         // мгновенному появлению иконок (иначе имя доанимировалось бы уже после их показа).
-        className={`rounded-[8px] text-[13px] transition-none! group-hover/menu-item:bg-sidebar-accent group-hover/menu-item:text-sidebar-accent-foreground ${
+        className={`rounded-[8px] text-[13px] transition-none! group-hover/menu-item:bg-sidebar-accent group-hover/menu-item:text-sidebar-accent-foreground ${business ? "h-auto min-h-[52px] py-1.5 " : ""}${
           refreshPinned
             ? "pr-28! md:pr-8! md:group-hover/menu-item:pr-28! md:group-focus-within/menu-item:pr-28!"
             : session.kind === SessionKind.ACP
@@ -718,10 +723,22 @@ function SessionItem({
         }${locked ? " opacity-60" : ""}`}
       >
         <span className="hidden size-4 shrink-0 items-center justify-center text-[10px] font-medium uppercase group-data-[collapsible=icon]:flex">
-          {label[0]}
+          {displayLabel[0]}
         </span>
-        <span className="truncate group-data-[collapsible=icon]:hidden">{label}</span>
-        {session.unread && !active && (
+        {business ? <>
+          <span className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-accent text-xs font-medium group-data-[collapsible=icon]:hidden">{displayLabel[0]?.toUpperCase()}</span>
+          <span className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
+            <span className="flex items-center justify-between gap-1">
+              <span className={cn("truncate", session.unread && "font-medium")}>{displayLabel}</span>
+              {session.lastMessageAt > 0n && <time className="shrink-0 text-[11px] text-muted-foreground group-hover/menu-item:hidden" dateTime={new Date(Number(session.lastMessageAt) * 1000).toISOString()}>{new Date(Number(session.lastMessageAt) * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</time>}
+            </span>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <span className="min-w-0 flex-1 truncate">{session.lastMessageDelivery === "draft" ? "Черновик: " : session.lastMessageDelivery === "uncertain" ? "Не подтверждено · " : session.lastMessageAuthor === "owner" ? "Вы: " : ""}{session.lastMessage || "Переписка"}</span>
+              {!active && session.unreadCount > 0 && <span className="flex min-w-[17px] shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">{session.unreadCount}</span>}
+            </span>
+          </span>
+        </> : <span className="truncate group-data-[collapsible=icon]:hidden">{label}</span>}
+        {session.unread && !active && (!business || session.unreadCount === 0) && (
           <span
             title="Есть непрочитанный ответ"
             className="absolute top-1.5 right-2 size-2 rounded-full bg-primary transition-opacity group-hover/menu-item:opacity-0 group-focus-within/menu-item:opacity-0 group-data-[collapsible=icon]:top-1 group-data-[collapsible=icon]:right-1"

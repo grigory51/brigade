@@ -96,6 +96,13 @@ export class TelegramBot extends Message<TelegramBot> {
    */
   businessCanReply = false;
 
+  /**
+   * 0, 5 или 10 секунд на отмену отправки Business-ответа.
+   *
+   * @generated from field: optional uint32 send_delay_seconds = 18;
+   */
+  sendDelaySeconds?: number;
+
   constructor(data?: PartialMessage<TelegramBot>) {
     super();
     proto3.util.initPartial(data, this);
@@ -120,6 +127,7 @@ export class TelegramBot extends Message<TelegramBot> {
     { no: 14, name: "new_session_action", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 16, name: "business_connected", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 17, name: "business_can_reply", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 18, name: "send_delay_seconds", kind: "scalar", T: 13 /* ScalarType.UINT32 */, opt: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): TelegramBot {
@@ -153,6 +161,13 @@ export class SendTelegramDraftRequest extends Message<SendTelegramDraftRequest> 
    */
   messageId = "";
 
+  /**
+   * Входящее Business-сообщение, на которое пользователь явно отправляет ответ.
+   *
+   * @generated from field: string reply_to_message_id = 3;
+   */
+  replyToMessageId = "";
+
   constructor(data?: PartialMessage<SendTelegramDraftRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -163,6 +178,7 @@ export class SendTelegramDraftRequest extends Message<SendTelegramDraftRequest> 
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "message_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "reply_to_message_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SendTelegramDraftRequest {

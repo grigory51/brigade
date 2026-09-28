@@ -84,6 +84,12 @@ message Session {
   // Версия MCPB фиксируется при создании, чтобы обновление плагина не меняло живую сессию.
   string experience_version = 25;
   SessionExecutionPolicy execution_policy = 26;
+  // Краткое состояние последнего сообщения shadow-сессии для списка.
+  string last_message = 27;
+  int64 last_message_at = 28;
+  string last_message_author = 29;
+  string last_message_delivery = 30;
+  uint32 unread_count = 31;
 }
 
 message CreateSessionRequest {
@@ -170,10 +176,27 @@ message SetSessionMessageIncludedRequest {
 
 message GenerateSessionDraftRequest {
   string session_id = 1;
+  // Пусто сохраняет прежний режим included_in_context; непустой набор задаёт
+  // снимок контекста для этого запуска в порядке сообщений сессии.
+  repeated string selected_message_ids = 2;
 }
 
 message GenerateSessionDraftResponse {
   string run_id = 1;
+}
+
+message CancelSessionDraftRequest {
+  string session_id = 1;
+}
+
+message CreateSessionDraftRequest {
+  string session_id = 1;
+  string content = 2;
+  string reply_to_message_id = 3;
+}
+
+message CreateSessionDraftResponse {
+  string message_id = 1;
 }
 
 message GetSessionDraftRunRequest {
@@ -260,6 +283,8 @@ service SessionService {
   rpc AddMessage(AddSessionMessageRequest) returns (AddSessionMessageResponse) {}
   rpc SetMessageIncluded(SetSessionMessageIncludedRequest) returns (Empty) {}
   rpc GenerateDraft(GenerateSessionDraftRequest) returns (GenerateSessionDraftResponse) {}
+  rpc CancelDraft(CancelSessionDraftRequest) returns (Empty) {}
+  rpc CreateDraft(CreateSessionDraftRequest) returns (CreateSessionDraftResponse) {}
   rpc GetDraftRun(GetSessionDraftRunRequest) returns (GetSessionDraftRunResponse) {}
   rpc EditDraft(EditSessionDraftRequest) returns (Empty) {}
   rpc Stop(StopSessionRequest) returns (Empty) {}

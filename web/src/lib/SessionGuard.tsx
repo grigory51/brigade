@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { CliSession } from "@/features/cli/CliPage";
 import { AcpSession } from "@/features/acp/AcpPage";
 import { PluginSession } from "@/features/plugins/PluginSession";
-import { ShadowSession } from "@/features/sessions/ShadowSession";
+import { ShadowSession } from "@/features/sessions/ShadowSession/ShadowSession";
 
 type Existence = "checking" | "found" | "notfound" | "error";
 

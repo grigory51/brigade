@@ -44,10 +44,18 @@ func (s *TelegramService) SaveBot(ctx context.Context, req *connect.Request[v1.S
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("telegram bot required"))
 	}
 	in := req.Msg.Bot
+	sendDelay := int32(-1)
+	if in.SendDelaySeconds != nil {
+		if *in.SendDelaySeconds != 0 && *in.SendDelaySeconds != 5 && *in.SendDelaySeconds != 10 {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("telegram: invalid send delay"))
+		}
+		sendDelay = int32(*in.SendDelaySeconds)
+	}
 	saved, err := s.telegram.Save(ctx, userID, store.TelegramBot{
 		ID: in.Id, Token: req.Msg.Token, AgentType: in.AgentType, AuthProfile: in.AuthProfile,
 		Image: in.Image, McpServers: in.McpServerIds,
 		SessionMode: store.TelegramSessionMode(in.SessionMode), NewSessionAction: store.TelegramNewSessionAction(in.NewSessionAction),
+		SendDelaySeconds: sendDelay,
 	})
 	if err != nil {
 		code := connect.CodeInvalidArgument
@@ -64,7 +72,7 @@ func (s *TelegramService) SendDraft(ctx context.Context, req *connect.Request[v1
 	if err != nil {
 		return nil, err
 	}
-	if err := s.telegram.SendDraft(ctx, userID, req.Msg.SessionId, req.Msg.MessageId); err != nil {
+	if err := s.telegram.SendDraft(ctx, userID, req.Msg.SessionId, req.Msg.MessageId, req.Msg.ReplyToMessageId); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 	return connect.NewResponse(&v1.Empty{}), nil
@@ -94,6 +102,7 @@ func (s *TelegramService) CreateBindingLink(ctx context.Context, req *connect.Re
 }
 
 func telegramBotToProto(bot store.TelegramBot) *v1.TelegramBot {
+	delay := uint32(bot.SendDelaySeconds)
 	return &v1.TelegramBot{
 		Id: bot.ID, Username: bot.Username, Name: bot.Name, TokenSet: bot.Token != "",
 		OwnerConnected: bot.OwnerTelegramID != 0, OwnerUsername: bot.OwnerTelegramUsername,
@@ -103,5 +112,6 @@ func telegramBotToProto(bot store.TelegramBot) *v1.TelegramBot {
 		SessionMode:      string(bot.SessionMode), NewSessionAction: string(bot.NewSessionAction),
 		BusinessConnected: bot.BusinessEnabled && bot.OwnerTelegramID != 0 && bot.BusinessOwnerID == bot.OwnerTelegramID,
 		BusinessCanReply:  bot.BusinessEnabled && bot.BusinessCanReply && bot.OwnerTelegramID != 0 && bot.BusinessOwnerID == bot.OwnerTelegramID,
+		SendDelaySeconds:  &delay,
 	}
 }

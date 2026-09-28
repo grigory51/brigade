@@ -156,6 +156,9 @@ func (s *Service) Save(ctx context.Context, userID string, bot store.TelegramBot
 		bot.BusinessOwnerID = current.BusinessOwnerID
 		bot.BusinessEnabled = current.BusinessEnabled
 		bot.BusinessCanReply = current.BusinessCanReply
+		if bot.SendDelaySeconds < 0 {
+			bot.SendDelaySeconds = current.SendDelaySeconds
+		}
 		// Старый клиент не должен сбрасывать новые настройки при сохранении бота.
 		if bot.SessionMode == "" {
 			bot.SessionMode = current.SessionMode
@@ -166,6 +169,9 @@ func (s *Service) Save(ctx context.Context, userID string, bot store.TelegramBot
 	} else {
 		bot.ID = uuid.NewString()
 		bot.CreatedAt = time.Now()
+		if bot.SendDelaySeconds < 0 {
+			bot.SendDelaySeconds = 5
+		}
 	}
 	bot.UserID = userID
 	if bot.SessionMode != "" && bot.SessionMode != store.TelegramSessionThreads && bot.SessionMode != store.TelegramSessionChat {
@@ -173,6 +179,9 @@ func (s *Service) Save(ctx context.Context, userID string, bot store.TelegramBot
 	}
 	if bot.NewSessionAction != "" && bot.NewSessionAction != store.TelegramNewSessionArchive && bot.NewSessionAction != store.TelegramNewSessionDelete {
 		return store.TelegramBot{}, errors.New("telegram: неизвестное действие /new")
+	}
+	if bot.SendDelaySeconds != 0 && bot.SendDelaySeconds != 5 && bot.SendDelaySeconds != 10 {
+		return store.TelegramBot{}, errors.New("telegram: задержка отправки должна быть 0, 5 или 10 секунд")
 	}
 	bot.Token = strings.TrimSpace(bot.Token)
 	if bot.Token == "" {

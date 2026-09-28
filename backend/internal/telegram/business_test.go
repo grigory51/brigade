@@ -70,11 +70,14 @@ func TestOneBotHandlesBusinessAndAssistantMessages(t *testing.T) {
 	if got, err := st.GetSession(ctx, sessionID); err != nil || got.HistoryRevision != 1 {
 		t.Fatalf("revision: %+v, %v", got, err)
 	}
-	draft := store.SessionMessage{ID: uuid.NewString(), SessionID: sessionID, Author: store.MessageAuthorAgent, Content: "Здравствуйте!", Source: "agent", Delivery: store.MessageDeliveryDraft, ReplyToID: messages[0].ID, CreatedAt: time.Now()}
+	draft := store.SessionMessage{ID: uuid.NewString(), SessionID: sessionID, Author: store.MessageAuthorAgent, Content: "Здравствуйте!", Source: "agent", Delivery: store.MessageDeliveryDraft, CreatedAt: time.Now()}
 	if _, err := st.AddSessionMessage(ctx, draft); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.SendDraft(ctx, "owner", sessionID, draft.ID); err != nil {
+	if err := service.SendDraft(ctx, "owner", sessionID, draft.ID, draft.ID); err == nil {
+		t.Fatal("draft cannot be used as a reply target")
+	}
+	if err := service.SendDraft(ctx, "owner", sessionID, draft.ID, messages[0].ID); err != nil {
 		t.Fatal(err)
 	}
 	if sentBody["business_connection_id"] != "connection" || sentBody["chat_id"] != float64(123) {

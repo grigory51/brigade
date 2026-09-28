@@ -80,7 +80,7 @@ func (r *Registry) CreateShadow(ctx context.Context, userID, agentType, authProf
 }
 
 // StartShadowRun фиксирует снимок переписки и запускает один одноразовый turn.
-func (r *Registry) StartShadowRun(ctx context.Context, sessionID, userID string) (store.SessionRun, error) {
+func (r *Registry) StartShadowRun(ctx context.Context, sessionID, userID string, selectedIDs []string) (store.SessionRun, error) {
 	sess, err := r.Get(ctx, sessionID, userID)
 	if err != nil {
 		return store.SessionRun{}, err
@@ -95,15 +95,9 @@ func (r *Registry) StartShadowRun(ctx context.Context, sessionID, userID string)
 	if err != nil {
 		return store.SessionRun{}, err
 	}
-	var selected []store.SessionMessage
-	latestContactID := ""
-	for _, message := range messages {
-		if message.IncludedInContext && message.Delivery != store.MessageDeliveryDraft && message.Delivery != store.MessageDeliverySending {
-			selected = append(selected, message)
-			if message.Author == store.MessageAuthorContact {
-				latestContactID = message.ID
-			}
-		}
+	selected, latestContactID, err := shadowRunInput(messages, selectedIDs)
+	if err != nil {
+		return store.SessionRun{}, err
 	}
 	if len(selected) == 0 {
 		return store.SessionRun{}, errors.New("session: нет сообщений, включённых в контекст")
@@ -121,15 +115,91 @@ func (r *Registry) StartShadowRun(ctx context.Context, sessionID, userID string)
 	if err := r.store.StartSessionRun(ctx, run); err != nil {
 		return store.SessionRun{}, err
 	}
-	go r.executeShadowRun(sess, run, string(payload), latestContactID)
+	runContext, cancel := context.WithCancel(context.Background())
+	r.mu.Lock()
+	if r.shadowCancels == nil {
+		r.shadowCancels = make(map[string]context.CancelFunc)
+	}
+	r.shadowCancels[run.ID] = cancel
+	r.mu.Unlock()
+	go r.executeShadowRun(runContext, sess, run, string(payload), latestContactID)
 	return run, nil
 }
 
-func (r *Registry) executeShadowRun(sess store.Session, run store.SessionRun, transcript, replyToID string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+func (r *Registry) CancelShadowRun(ctx context.Context, sessionID, userID string) error {
+	sess, err := r.Get(ctx, sessionID, userID)
+	if err != nil {
+		return err
+	}
+	if sess.ExecutionPolicy != store.SessionExecutionOnDemand {
+		return errors.New("session: not an on-demand session")
+	}
+	run, err := r.store.LatestSessionRun(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	if run.Status != "running" {
+		return errors.New("session: no active draft generation")
+	}
+	r.mu.Lock()
+	cancel := r.shadowCancels[run.ID]
+	r.mu.Unlock()
+	if cancel == nil {
+		return errors.New("session: draft generation is no longer active")
+	}
+	cancel()
+	return nil
+}
+
+func shadowRunInput(messages []store.SessionMessage, selectedIDs []string) ([]store.SessionMessage, string, error) {
+	var selected []store.SessionMessage
+	latestContactID := ""
+	requested := make(map[string]bool, len(selectedIDs))
+	for _, id := range selectedIDs {
+		requested[id] = true
+	}
+	for _, message := range messages {
+		if message.Author == store.MessageAuthorContact && strings.HasPrefix(message.Source, "telegram-business/") {
+			latestContactID = message.ID
+		}
+		if message.Delivery == store.MessageDeliveryDraft || message.Delivery == store.MessageDeliverySending || message.Delivery == store.MessageDeliveryFailed || message.Delivery == store.MessageDeliveryUncertain {
+			continue
+		}
+		if (len(selectedIDs) == 0 && message.IncludedInContext) || (len(selectedIDs) != 0 && requested[message.ID]) {
+			message.IncludedInContext = true
+			selected = append(selected, message)
+			delete(requested, message.ID)
+		}
+	}
+	if len(requested) != 0 {
+		return nil, "", errors.New("session: выбранное сообщение больше недоступно для контекста")
+	}
+	if len(selectedIDs) != 0 && latestContactID != "" {
+		found := false
+		for _, message := range selected {
+			if message.ID == latestContactID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, "", errors.New("session: включите последнее входящее сообщение в контекст ответа")
+		}
+	}
+	return selected, latestContactID, nil
+}
+
+func (r *Registry) executeShadowRun(runContext context.Context, sess store.Session, run store.SessionRun, transcript, replyToID string) {
+	ctx, cancel := context.WithTimeout(runContext, 4*time.Minute)
 	defer cancel()
 	status, draftID, failure := "failed", "", ""
 	defer func() {
+		if errors.Is(ctx.Err(), context.Canceled) {
+			status, failure = "interrupted", "Подготовка ответа остановлена"
+		}
+		r.mu.Lock()
+		delete(r.shadowCancels, run.ID)
+		r.mu.Unlock()
 		if err := r.store.FinishSessionRun(context.Background(), run.ID, status, draftID, failure); err != nil {
 			log.Printf("session: finish shadow run %s: %v", run.ID, err)
 		}
@@ -253,6 +323,35 @@ func (r *Registry) AddShadowMessage(ctx context.Context, sessionID, userID, cont
 		ID: uuid.NewString(), SessionID: sessionID, Author: store.MessageAuthorOwner,
 		Content: content, Source: "brigade", IncludedInContext: true,
 		Delivery: store.MessageDeliveryReceived, CreatedAt: time.Now(),
+	}
+	_, err = r.store.AddSessionMessage(ctx, message)
+	return message, err
+}
+
+// CreateShadowDraft сохраняет ручной ответ без отправки в Telegram.
+func (r *Registry) CreateShadowDraft(ctx context.Context, sessionID, userID, content, replyToID string) (store.SessionMessage, error) {
+	sess, err := r.Get(ctx, sessionID, userID)
+	if err != nil {
+		return store.SessionMessage{}, err
+	}
+	if sess.ExecutionPolicy != store.SessionExecutionOnDemand {
+		return store.SessionMessage{}, errors.New("session: not an on-demand session")
+	}
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return store.SessionMessage{}, errors.New("session: empty draft")
+	}
+	target, err := r.store.SessionMessage(ctx, sessionID, replyToID)
+	if err != nil {
+		return store.SessionMessage{}, err
+	}
+	if target.Author != store.MessageAuthorContact || !strings.HasPrefix(target.Source, "telegram-business/") || target.ExternalID == "" {
+		return store.SessionMessage{}, errors.New("session: reply target is not a Telegram Business contact message")
+	}
+	message := store.SessionMessage{
+		ID: uuid.NewString(), SessionID: sessionID, Author: store.MessageAuthorOwner,
+		Content: content, Source: "brigade", IncludedInContext: false,
+		Delivery: store.MessageDeliveryDraft, ReplyToID: target.ID, CreatedAt: time.Now(),
 	}
 	_, err = r.store.AddSessionMessage(ctx, message)
 	return message, err

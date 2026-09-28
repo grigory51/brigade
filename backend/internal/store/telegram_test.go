@@ -15,12 +15,13 @@ func TestTelegramStore(t *testing.T) {
 		ID: "bot-1", UserID: "u1", Token: "secret", TelegramID: 42,
 		Username: "brigade_bot", Name: "Brigade", AgentType: "codex",
 		AuthProfile: "chatgpt", McpServers: []string{"mcp-1", "mcp-2"}, CreatedAt: time.Now(),
+		SendDelaySeconds: 10,
 	}
 	if err := st.SaveTelegramBot(ctx, bot); err != nil {
 		t.Fatalf("SaveTelegramBot: %v", err)
 	}
 	got, err := st.GetTelegramBot(ctx, bot.ID)
-	if err != nil || got.Token != bot.Token || len(got.McpServers) != 2 {
+	if err != nil || got.Token != bot.Token || len(got.McpServers) != 2 || got.SendDelaySeconds != 10 {
 		t.Fatalf("GetTelegramBot: %+v, %v", got, err)
 	}
 	if got.SessionMode != TelegramSessionThreads || got.NewSessionAction != TelegramNewSessionArchive {

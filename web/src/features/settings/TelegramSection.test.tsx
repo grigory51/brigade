@@ -50,7 +50,7 @@ test("new bots default to threads and save archive", async () => {
   expect(telegramClient.saveBot).toHaveBeenCalledExactlyOnceWith({
     bot: {
       id: "", agentType: "claude", authProfile: "connection-1", image: "", mcpServerIds: [],
-      sessionMode: "threads", newSessionAction: "archive",
+      sessionMode: "threads", newSessionAction: "archive", sendDelaySeconds: 5,
     },
     token: "test-token",
   });
@@ -88,7 +88,7 @@ test.each([
   expect(telegramClient.saveBot).toHaveBeenCalledExactlyOnceWith({
     bot: {
       id: "", agentType: "claude", authProfile: "connection-1", image: "", mcpServerIds: [],
-      sessionMode: "chat", newSessionAction,
+      sessionMode: "chat", newSessionAction, sendDelaySeconds: 5,
     },
     token: "test-token",
   });
@@ -98,7 +98,7 @@ test("editing loads both fields and saves changes without replacing other settin
   const bot = new TelegramBot({
     id: "existing", username: "helper", tokenSet: true, ownerConnected: true,
     agentType: "claude", authProfile: "connection-1", image: "custom:v1", mcpServerIds: ["mcp-1"],
-    sessionMode: "chat", newSessionAction: "delete",
+    sessionMode: "chat", newSessionAction: "delete", sendDelaySeconds: 10,
   });
   const view = await mountSection([bot], bot.id);
   expect(view.getByRole("combobox", { name: "Режим сессий" }).textContent).toContain("Обычный");
@@ -108,7 +108,7 @@ test("editing loads both fields and saves changes without replacing other settin
   expect(telegramClient.saveBot).toHaveBeenCalledExactlyOnceWith({
     bot: {
       id: "existing", agentType: "claude", authProfile: "connection-1", image: "custom:v1", mcpServerIds: ["mcp-1"],
-      sessionMode: "chat", newSessionAction: "archive",
+      sessionMode: "chat", newSessionAction: "archive", sendDelaySeconds: 10,
     },
     token: "",
   });
@@ -123,7 +123,8 @@ test("one bot shows ordinary chat settings and Business connection together", as
   expect(view.queryByRole("combobox", { name: "Назначение" })).toBeNull();
   expect(view.getByRole("combobox", { name: "Режим сессий" })).toBeTruthy();
   expect(view.getByText("Telegram Business")).toBeTruthy();
-  expect(view.getByText("подключён · ответ разрешён")).toBeTruthy();
+  expect(view.getAllByText("подключён")).toHaveLength(2);
+  expect(view.getByRole("combobox", { name: "Отмена отправки" })).toBeTruthy();
 });
 
 test("selecting legacy and new bots resets fields to threads/archive", async () => {
