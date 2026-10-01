@@ -243,7 +243,9 @@ type MessageDelivery string
 
 const (
 	MessageDeliveryReceived  MessageDelivery = "received"
+	MessageDeliveryDeleted   MessageDelivery = "deleted"
 	MessageDeliveryDraft     MessageDelivery = "draft"
+	MessageDeliveryStale     MessageDelivery = "stale"
 	MessageDeliverySending   MessageDelivery = "sending"
 	MessageDeliverySent      MessageDelivery = "sent"
 	MessageDeliveryUncertain MessageDelivery = "uncertain"

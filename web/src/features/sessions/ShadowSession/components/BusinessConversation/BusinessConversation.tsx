@@ -63,8 +63,9 @@ export function BusinessConversation({ sessionId, messages, run, busy, loadError
     return () => window.clearInterval(timer);
   }, []);
 
-  const contacts = useMemo(() => messages.filter((message) => message.author === "contact" && message.source.startsWith("telegram-business/")), [messages]);
-  const latestContact = contacts.at(-1) ?? null;
+  const contacts = useMemo(() => messages.filter((message) => message.author === "contact" && message.delivery !== "deleted" && message.source.startsWith("telegram-business/")), [messages]);
+  const lastBusinessContact = [...messages].reverse().find((message) => message.author === "contact" && message.source.startsWith("telegram-business/"));
+  const latestContact = lastBusinessContact?.delivery === "deleted" ? null : contacts.at(-1) ?? null;
   const target = contacts.find((message) => message.id === targetId) ?? latestContact;
   const lastSentIndex = messages.reduce((index, message, position) => message.author === "owner" && message.delivery === "sent" ? position : index, -1);
   const today = new Date(now).toDateString();
@@ -79,7 +80,7 @@ export function BusinessConversation({ sessionId, messages, run, busy, loadError
   const drafts = messages.filter((message) => message.delivery === "draft" && !hiddenDraftIds.has(message.id));
   const draft = drafts.at(-1) ?? null;
   const latestOutgoing = [...messages].reverse().find((message) => message.author === "owner" && message.delivery !== "draft");
-  const shown = useMemo(() => messages.slice(-visibleCount).filter((message) => message.delivery !== "draft"), [messages, visibleCount]);
+  const shown = useMemo(() => messages.slice(-visibleCount).filter((message) => message.delivery !== "draft" && message.delivery !== "stale"), [messages, visibleCount]);
   const earlierCount = Math.max(0, messages.length - visibleCount);
   const canReply = bot?.businessCanReply === true;
   const sendDelay = bot?.sendDelaySeconds ?? 5;
@@ -147,6 +148,10 @@ export function BusinessConversation({ sessionId, messages, run, busy, loadError
   }
 
   async function generate() {
+    if (!latestContact) {
+      toast.error("Нет входящего сообщения для ответа");
+      return;
+    }
     if (!contextIds.length || (latestContact && !contextIds.includes(latestContact.id))) {
       toast.error("Включите последнее входящее сообщение в контекст");
       return;
@@ -205,7 +210,7 @@ export function BusinessConversation({ sessionId, messages, run, busy, loadError
             {newDay && <div className="my-4 text-center"><span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground">{dateKey === today ? "Сегодня" : date.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}</span></div>}
             {absoluteIndex === Math.max(0, boundary) && <div className="my-3 flex items-center gap-2 text-primary"><span className="h-px flex-1 bg-primary/45" /><span className="flex items-center gap-1 rounded-full border border-primary/45 bg-primary/10 px-2 py-1 text-[11px]"><GripHorizontal className="size-3" />Агент учитывает отсюда · {selectedCount} {plural(selectedCount, ["сообщение", "сообщения", "сообщений"])}{noteCount ? ` и ${noteCount} ${plural(noteCount, ["заметка", "заметки", "заметок"])}` : ""}</span><span className="h-px flex-1 bg-primary/45" /></div>}
             <div className={cn("group relative flex items-center gap-2", isNote ? "justify-center" : outgoing ? "justify-end" : "justify-start", absoluteIndex < boundary && "opacity-45")}>
-              {!isNote && !outgoing && <div className="flex shrink-0 gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+              {!isNote && !outgoing && message.delivery !== "deleted" && <div className="flex shrink-0 gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                 <button type="button" title="Ответить на это сообщение" aria-label="Ответить на это сообщение" className="rounded-md p-1.5 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring" onClick={() => { setTargetId(message.id); setMode("reply"); }}><Reply className="size-3.5" /></button>
                 <button type="button" title="Контекст отсюда" aria-label="Контекст отсюда" className="rounded-md p-1.5 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setBoundaryId(message.id)}><ArrowDownToLine className="size-3.5" /></button>
               </div>}
@@ -242,7 +247,7 @@ export function BusinessConversation({ sessionId, messages, run, busy, loadError
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {replyOpen ? <Button size="sm" disabled={busy !== "" || [...draft.content].length > 4096} onClick={() => queueSend(draft.content, draft.id, draft.replyToId || target?.id)}><Send className="size-3.5" />Отправить</Button> : <Button size="sm" variant="outline" onClick={() => void navigator.clipboard.writeText(draft.content).then(() => toast.success("Текст скопирован"))}><Copy className="size-3.5" />Скопировать</Button>}
               <Button size="sm" variant="outline" onClick={() => { setText(draft.content); setEditingDraftId(draft.id); setTargetId(draft.replyToId); setMode("reply"); }}><Pencil className="size-3.5" />Изменить</Button>
-              <Button size="sm" variant="ghost" disabled={busy !== "" || run?.status === "running"} onClick={() => void generate()}><Sparkles className="size-3.5" />Другой вариант</Button>
+              <Button size="sm" variant="ghost" disabled={busy !== "" || run?.status === "running" || !latestContact} onClick={() => void generate()}><Sparkles className="size-3.5" />Другой вариант</Button>
             </div>
             {[...draft.content].length > 4096 && <p className="mt-2 text-xs text-warning">Ответ длиннее 4096 символов. Сократите его перед отправкой.</p>}
           </section>}
@@ -265,7 +270,7 @@ export function BusinessConversation({ sessionId, messages, run, busy, loadError
           <Textarea aria-label={mode === "note" ? "Заметка" : "Ответ"} value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void submitComposer(); } }} placeholder={mode === "note" ? "Заметка для себя и агента — собеседник её не увидит" : replyOpen ? `Ответить ${person} самому…` : "Ответить через бота сейчас нельзя"} disabled={mode === "reply" && !replyOpen} className="min-h-12 max-h-36 resize-y border-0 bg-transparent px-2 text-[15px] shadow-none focus-visible:ring-0" />
           <div className="mt-2 flex items-center justify-between gap-2">
             <div className="inline-flex rounded-full bg-secondary p-0.5 text-xs"><button type="button" aria-pressed={mode === "reply"} disabled={!replyOpen} onClick={() => { setText(""); setMode("reply"); }} className={cn("rounded-full px-3 py-1.5 disabled:opacity-40", mode === "reply" && "bg-accent")}>Ответ</button><button type="button" aria-pressed={mode === "note"} onClick={() => { setText(""); setMode("note"); }} className={cn("rounded-full px-3 py-1.5", mode === "note" && "bg-accent")}>Заметка</button></div>
-            <div className="flex items-center gap-1">{mode === "reply" && <Button size="sm" variant="ghost" disabled={busy !== "" || run?.status === "running" || !contextIds.length} onClick={() => void generate()}><Sparkles className="size-3.5" />Черновик</Button>}<button type="button" aria-label={mode === "note" ? "Добавить заметку" : "Отправить ответ"} disabled={!text.trim() || busy !== "" || !!pending || (mode === "reply" && (!replyOpen || [...text].length > 4096))} onClick={() => void submitComposer()} className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-50"><ArrowUp className="size-4" /></button></div>
+            <div className="flex items-center gap-1">{mode === "reply" && <Button size="sm" variant="ghost" disabled={busy !== "" || run?.status === "running" || !contextIds.length || !latestContact} onClick={() => void generate()}><Sparkles className="size-3.5" />Черновик</Button>}<button type="button" aria-label={mode === "note" ? "Добавить заметку" : "Отправить ответ"} disabled={!text.trim() || busy !== "" || !!pending || (mode === "reply" && (!replyOpen || [...text].length > 4096))} onClick={() => void submitComposer()} className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-50"><ArrowUp className="size-4" /></button></div>
           </div>
         </div>
         {mode === "reply" && [...text].length > 4096 && <p className="text-xs text-warning">Ответ длиннее 4096 символов. Сократите его перед отправкой.</p>}

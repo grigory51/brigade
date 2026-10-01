@@ -441,7 +441,8 @@ func sessionError(err error) error {
 		return connect.NewError(connect.CodeNotFound, err)
 	}
 	if errors.Is(err, session.ErrTeardownInProgress) ||
-		errors.Is(err, session.ErrReloadWhileGenerating) {
+		errors.Is(err, session.ErrReloadWhileGenerating) ||
+		errors.Is(err, store.ErrSessionHistoryChanged) {
 		return connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 	return connect.NewError(connect.CodeInternal, err)

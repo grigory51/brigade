@@ -6,7 +6,7 @@ export type ContextSelection =
   | { kind: "custom"; ids: Set<string> };
 
 export function canUseAsContext(message: AcpMessage): boolean {
-  return !["draft", "sending", "failed", "uncertain"].includes(message.delivery);
+  return !["draft", "stale", "sending", "failed", "uncertain", "deleted"].includes(message.delivery);
 }
 
 export function selectedMessageIds(messages: AcpMessage[], selection: ContextSelection): string[] {

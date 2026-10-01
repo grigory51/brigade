@@ -49,3 +49,14 @@ test("owner can edit and delete a local note", async () => {
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Удалить" })); });
   expect(sessionClient.deleteMessage).toHaveBeenCalledWith({ sessionId: "session", messageId: "note" });
 });
+
+test("outdated agent draft is not offered as a reply", async () => {
+  const stale = new AcpMessage({
+    id: "old-draft", author: "agent", content: "Старый ответ", source: "agent",
+    delivery: "stale", createdAt: BigInt(Math.floor(Date.now() / 1000)),
+  });
+  render(<MemoryRouter><BusinessConversation sessionId="session" messages={[incoming, stale]} run={null} busy="" loadError={false} act={perform} /></MemoryRouter>);
+  await act(async () => {});
+  expect(screen.queryByText("Старый ответ")).toBeNull();
+  expect(screen.queryByText("Черновик агента")).toBeNull();
+});

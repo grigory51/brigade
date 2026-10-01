@@ -86,7 +86,7 @@ export function ShadowSession({ sessionId }: { sessionId: string }) {
   const replyTarget = businessContacts.find((message) => message.id === pendingDraft?.replyToId) ?? latestContact;
   const targetMissingFromContext = latestContact !== null && !selectedSet.has(latestContact.id);
   const earlierCount = Math.max(0, (messages?.length ?? 0) - visibleCount);
-  const visibleMessages = messages?.slice(-visibleCount).filter((message) => message.id !== pendingDraft?.id) ?? [];
+  const visibleMessages = messages?.slice(-visibleCount).filter((message) => message.id !== pendingDraft?.id && message.delivery !== "stale") ?? [];
   const isBusiness = messages?.some((message) => message.source.startsWith("telegram-business/")) ?? false;
 
   function toggleMessage(messageId: string) {

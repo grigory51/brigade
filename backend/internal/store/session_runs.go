@@ -9,6 +9,7 @@ import (
 )
 
 var ErrSessionRunActive = errors.New("store: session run already active")
+var ErrSessionHistoryChanged = errors.New("переписка изменилась; запустите подготовку черновика заново")
 
 func (s *Store) StartSessionRun(ctx context.Context, run SessionRun) error {
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -17,7 +18,8 @@ func (s *Store) StartSessionRun(ctx context.Context, run SessionRun) error {
 	}
 	defer tx.Rollback()
 	var policy SessionExecutionPolicy
-	if err := tx.QueryRowContext(ctx, `SELECT execution_policy FROM sessions WHERE id = ?`, run.SessionID).Scan(&policy); err != nil {
+	var revision int64
+	if err := tx.QueryRowContext(ctx, `SELECT execution_policy, history_revision FROM sessions WHERE id = ?`, run.SessionID).Scan(&policy, &revision); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -25,6 +27,9 @@ func (s *Store) StartSessionRun(ctx context.Context, run SessionRun) error {
 	}
 	if policy != SessionExecutionOnDemand {
 		return errors.New("store: session does not support one-shot runs")
+	}
+	if revision != run.InputRevision {
+		return ErrSessionHistoryChanged
 	}
 	var active int
 	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM session_runs WHERE session_id = ? AND status = 'running'`, run.SessionID).Scan(&active); err != nil {
@@ -37,6 +42,39 @@ func (s *Store) StartSessionRun(ctx context.Context, run SessionRun) error {
 		run.ID, run.SessionID, run.InputRevision, toUnix(run.CreatedAt))
 	if err != nil {
 		return fmt.Errorf("store: start session run: %w", err)
+	}
+	return tx.Commit()
+}
+
+// AddSessionRunDraft сохраняет черновик только пока входная история не изменилась.
+func (s *Store) AddSessionRunDraft(ctx context.Context, run SessionRun, message SessionMessage) error {
+	if message.SessionID != run.SessionID || message.Delivery != MessageDeliveryDraft {
+		return errors.New("store: invalid session run draft")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE sessions SET history_revision=history_revision+1
+		WHERE id=? AND history_revision=? AND execution_policy='on_demand'`, run.SessionID, run.InputRevision)
+	if err != nil {
+		return fmt.Errorf("store: check draft input revision: %w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return ErrSessionHistoryChanged
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO session_messages
+		(id, session_id, author, content, source, external_id, included_in_context, delivery, reply_to_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, message.ID, run.SessionID, message.Author,
+		message.Content, message.Source, message.ExternalID, message.IncludedInContext,
+		message.Delivery, message.ReplyToID, toUnix(message.CreatedAt))
+	if err != nil {
+		return fmt.Errorf("store: insert draft: %w", err)
 	}
 	return tx.Commit()
 }

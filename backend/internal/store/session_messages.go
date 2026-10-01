@@ -51,7 +51,10 @@ func (s *Store) AddSessionMessage(ctx context.Context, message SessionMessage) (
 
 func (s *Store) SessionMessages(ctx context.Context, sessionID string) ([]SessionMessage, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, session_id, author, content, source, external_id,
-		included_in_context, delivery, reply_to_id, created_at FROM session_messages
+		included_in_context, CASE WHEN delivery='draft' AND source='agent' AND EXISTS (
+			SELECT 1 FROM session_runs r JOIN sessions s ON s.id=session_messages.session_id
+			WHERE r.draft_message_id=session_messages.id AND s.history_revision>r.input_revision+1
+		) THEN 'stale' ELSE delivery END, reply_to_id, created_at FROM session_messages
 		WHERE session_id = ? ORDER BY seq`, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("store: list session messages: %w", err)
@@ -127,7 +130,13 @@ func (s *Store) LastShadowMessages(ctx context.Context, userID string) (map[stri
 		(SELECT COUNT(*) FROM session_messages unread WHERE unread.session_id = m.session_id
 		 AND unread.author = 'contact' AND unread.seq > s.last_read_seq)
 		FROM session_messages m
-		JOIN (SELECT session_id, MAX(seq) AS seq FROM session_messages GROUP BY session_id) latest
+		JOIN (SELECT candidate.session_id, MAX(candidate.seq) AS seq
+			FROM session_messages candidate JOIN sessions owner ON owner.id=candidate.session_id
+			WHERE NOT (candidate.delivery='draft' AND candidate.source='agent' AND EXISTS (
+				SELECT 1 FROM session_runs r WHERE r.draft_message_id=candidate.id
+				AND owner.history_revision>r.input_revision+1
+			))
+			GROUP BY candidate.session_id) latest
 		  ON latest.session_id = m.session_id AND latest.seq = m.seq
 		JOIN sessions s ON s.id = m.session_id
 		WHERE s.user_id = ? AND s.execution_policy = 'on_demand'`, userID)
@@ -155,7 +164,7 @@ func (s *Store) SetMessageIncluded(ctx context.Context, sessionID, messageID str
 	}
 	defer tx.Rollback()
 	result, err := tx.ExecContext(ctx, `UPDATE session_messages SET included_in_context = ?
-		WHERE session_id = ? AND id = ? AND included_in_context <> ?`, included, sessionID, messageID, included)
+		WHERE session_id = ? AND id = ? AND included_in_context <> ? AND delivery <> 'deleted'`, included, sessionID, messageID, included)
 	if err != nil {
 		return fmt.Errorf("store: set message inclusion: %w", err)
 	}
@@ -177,7 +186,15 @@ func (s *Store) EditSessionDraft(ctx context.Context, sessionID, messageID, cont
 		return err
 	}
 	defer tx.Rollback()
-	result, err := tx.ExecContext(ctx, `UPDATE session_messages SET content = ? WHERE session_id = ? AND id = ? AND delivery = 'draft'`, content, sessionID, messageID)
+	result, err := tx.ExecContext(ctx, `UPDATE session_messages SET content = ?,
+		source = CASE WHEN source = 'agent' THEN 'brigade' ELSE source END,
+		author = CASE WHEN author = 'agent' THEN 'owner' ELSE author END
+		WHERE session_id = ? AND id = ? AND delivery = 'draft' AND (
+			source <> 'agent' OR NOT EXISTS (
+				SELECT 1 FROM session_runs r JOIN sessions s ON s.id=session_messages.session_id
+				WHERE r.draft_message_id=session_messages.id AND s.history_revision>r.input_revision+1
+			)
+		)`, content, sessionID, messageID)
 	if err != nil {
 		return fmt.Errorf("store: edit draft: %w", err)
 	}
@@ -221,7 +238,10 @@ func (s *Store) SessionMessage(ctx context.Context, sessionID, messageID string)
 	var message SessionMessage
 	var createdAt int64
 	err := s.db.QueryRowContext(ctx, `SELECT id, session_id, author, content, source, external_id,
-		included_in_context, delivery, reply_to_id, created_at FROM session_messages WHERE session_id = ? AND id = ?`, sessionID, messageID).
+		included_in_context, CASE WHEN delivery='draft' AND source='agent' AND EXISTS (
+			SELECT 1 FROM session_runs r JOIN sessions s ON s.id=session_messages.session_id
+			WHERE r.draft_message_id=session_messages.id AND s.history_revision>r.input_revision+1
+		) THEN 'stale' ELSE delivery END, reply_to_id, created_at FROM session_messages WHERE session_id = ? AND id = ?`, sessionID, messageID).
 		Scan(&message.ID, &message.SessionID, &message.Author, &message.Content, &message.Source,
 			&message.ExternalID, &message.IncludedInContext, &message.Delivery, &message.ReplyToID, &createdAt)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -252,9 +272,34 @@ func (s *Store) UpdateExternalSessionMessage(ctx context.Context, sessionID, sou
 		return err
 	}
 	defer tx.Rollback()
-	result, err := tx.ExecContext(ctx, `UPDATE session_messages SET content=? WHERE session_id=? AND source=? AND external_id=? AND content<>?`, content, sessionID, source, externalID, content)
+	result, err := tx.ExecContext(ctx, `UPDATE session_messages SET content=? WHERE session_id=? AND source=? AND external_id=? AND content<>? AND delivery<>'deleted'`, content, sessionID, source, externalID, content)
 	if err != nil {
 		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count != 0 {
+		if _, err := tx.ExecContext(ctx, `UPDATE sessions SET history_revision=history_revision+1 WHERE id=?`, sessionID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// DeleteExternalSessionMessage оставляет запись для истории, но исключает её из контекста агента.
+func (s *Store) DeleteExternalSessionMessage(ctx context.Context, sessionID, source, externalID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE session_messages
+		SET content='[Сообщение удалено в Telegram]', delivery='deleted', included_in_context=0
+		WHERE session_id=? AND source=? AND external_id=? AND delivery<>'deleted'`, sessionID, source, externalID)
+	if err != nil {
+		return fmt.Errorf("store: delete external message: %w", err)
 	}
 	count, err := result.RowsAffected()
 	if err != nil {

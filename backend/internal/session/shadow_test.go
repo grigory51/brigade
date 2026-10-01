@@ -30,6 +30,24 @@ func TestShadowRunInputSelectionDoesNotChangeReplyTarget(t *testing.T) {
 	}
 }
 
+func TestShadowRunInputRejectsDeletedBusinessMessage(t *testing.T) {
+	messages := []store.SessionMessage{
+		{ID: "old", Author: store.MessageAuthorContact, Source: "telegram-business/bot/conn/1", Delivery: store.MessageDeliveryReceived, IncludedInContext: true},
+		{ID: "deleted", Author: store.MessageAuthorContact, Source: "telegram-business/bot/conn/1", Delivery: store.MessageDeliveryDeleted},
+	}
+	if _, _, err := shadowRunInput(messages, nil); err == nil {
+		t.Fatal("a deleted latest incoming message must not produce a reply")
+	}
+	if _, _, err := shadowRunInput(messages, []string{"deleted"}); err == nil {
+		t.Fatal("a deleted message must not be selectable as context")
+	}
+	messages = append(messages, store.SessionMessage{ID: "new", Author: store.MessageAuthorContact, Source: "telegram-business/bot/conn/1", Delivery: store.MessageDeliveryReceived, IncludedInContext: true})
+	selected, replyTo, err := shadowRunInput(messages, nil)
+	if err != nil || len(selected) != 2 || replyTo != "new" {
+		t.Fatalf("selection=%+v replyTo=%q err=%v", selected, replyTo, err)
+	}
+}
+
 func TestCreateShadowDraftRequiresOwnedBusinessReplyTarget(t *testing.T) {
 	st, err := store.Open(filepath.Join(t.TempDir(), "brigade.db"), nil)
 	if err != nil {

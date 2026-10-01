@@ -104,7 +104,7 @@ func (s *Service) processBusinessQueued(bot store.TelegramBot, stored store.Tele
 	source := businessSource(bot.ID, connectionID, chatID)
 	if update.DeletedBusinessMessages != nil {
 		for _, id := range update.DeletedBusinessMessages.MessageIDs {
-			if err := s.store.UpdateExternalSessionMessage(s.ctx, sess.ID, source, strconv.FormatInt(id, 10), "[Сообщение удалено в Telegram]"); err != nil {
+			if err := s.store.DeleteExternalSessionMessage(s.ctx, sess.ID, source, strconv.FormatInt(id, 10)); err != nil {
 				return err
 			}
 		}
@@ -176,6 +176,9 @@ func (s *Service) SendDraft(ctx context.Context, userID, sessionID, messageID, r
 		return err
 	}
 	if draft.Delivery != store.MessageDeliveryDraft {
+		if draft.Delivery == store.MessageDeliveryStale {
+			return errors.New("telegram: черновик устарел, потому что переписка изменилась; подготовьте новый ответ")
+		}
 		return errors.New("telegram: черновик уже отправлен или недоступен")
 	}
 	if replyToMessageID == "" {
@@ -188,7 +191,7 @@ func (s *Service) SendDraft(ctx context.Context, userID, sessionID, messageID, r
 	if err != nil {
 		return err
 	}
-	if target.Author != store.MessageAuthorContact || target.ExternalID == "" {
+	if target.Author != store.MessageAuthorContact || target.Delivery == store.MessageDeliveryDeleted || target.ExternalID == "" {
 		return errors.New("telegram: отвечать можно только на входящее сообщение")
 	}
 	parts := strings.Split(target.Source, "/")

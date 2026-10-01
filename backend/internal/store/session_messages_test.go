@@ -72,6 +72,19 @@ func TestShadowMessageRevisionAndRunExclusivity(t *testing.T) {
 	if err := st.StartSessionRun(ctx, run); err != nil {
 		t.Fatal(err)
 	}
+	draft := SessionMessage{ID: "draft", SessionID: sess.ID, Author: MessageAuthorAgent, Content: "Ответ", Source: "agent", Delivery: MessageDeliveryDraft, CreatedAt: time.Now()}
+	if err := st.AddSessionRunDraft(ctx, run, draft); err != nil {
+		t.Fatal(err)
+	}
+	if persisted, err := st.SessionMessage(ctx, sess.ID, draft.ID); err != nil || persisted.Content != draft.Content {
+		t.Fatalf("run draft: %+v, %v", persisted, err)
+	}
+	if err := st.EditSessionDraft(ctx, sess.ID, draft.ID, "Отредактированный ответ"); err != nil {
+		t.Fatal(err)
+	}
+	if edited, err := st.SessionMessage(ctx, sess.ID, draft.ID); err != nil || edited.Source != "brigade" || edited.Author != MessageAuthorOwner || edited.Delivery != MessageDeliveryDraft {
+		t.Fatalf("edited draft: %+v, %v", edited, err)
+	}
 }
 
 func TestMarkSessionDraftSentAfterBusinessEcho(t *testing.T) {
@@ -156,5 +169,105 @@ func TestEditAndDeleteLocalSessionMessage(t *testing.T) {
 	got, err := st.GetSession(ctx, sess.ID)
 	if err != nil || got.HistoryRevision != 5 {
 		t.Fatalf("revision: %+v, %v", got, err)
+	}
+}
+
+func TestDeletedBusinessMessageInvalidatesRunningDraft(t *testing.T) {
+	st, err := Open(filepath.Join(t.TempDir(), "brigade.db"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	ctx := t.Context()
+	if _, err := st.DB().Exec(`INSERT INTO users (id, username, password_hash, created_at) VALUES ('owner', 'owner', '', 0)`); err != nil {
+		t.Fatal(err)
+	}
+	sess := Session{ID: "s1", UserID: "owner", Kind: SessionKindACP, Mode: SessionModeDocker, Status: SessionStatusIdle,
+		ExecutionPolicy: SessionExecutionOnDemand, AgentType: "codex", CreatedAt: time.Now()}
+	if err := st.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	source := "telegram-business/bot/conn/1"
+	message := SessionMessage{ID: "incoming", SessionID: sess.ID, Author: MessageAuthorContact, Content: "Спокойной ночи", Source: source, ExternalID: "7", IncludedInContext: true, Delivery: MessageDeliveryReceived, CreatedAt: time.Now()}
+	if _, err := st.AddSessionMessage(ctx, message); err != nil {
+		t.Fatal(err)
+	}
+	run := SessionRun{ID: "run", SessionID: sess.ID, InputRevision: 1, CreatedAt: time.Now()}
+	if err := st.StartSessionRun(ctx, run); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DeleteExternalSessionMessage(ctx, sess.ID, source, "7"); err != nil {
+		t.Fatal(err)
+	}
+	deleted, err := st.SessionMessage(ctx, sess.ID, message.ID)
+	if err != nil || deleted.Delivery != MessageDeliveryDeleted || deleted.IncludedInContext || deleted.Content == message.Content {
+		t.Fatalf("deleted message: %+v, %v", deleted, err)
+	}
+	if err := st.UpdateExternalSessionMessage(ctx, sess.ID, source, "7", "edited text"); err != nil {
+		t.Fatal(err)
+	}
+	deleted, _ = st.SessionMessage(ctx, sess.ID, message.ID)
+	if deleted.Content == "edited text" {
+		t.Fatal("an edit must not revive a deleted message")
+	}
+	draft := SessionMessage{ID: "draft", SessionID: sess.ID, Author: MessageAuthorAgent, Content: "Сладких снов", Source: "agent", Delivery: MessageDeliveryDraft, CreatedAt: time.Now()}
+	if err := st.AddSessionRunDraft(ctx, run, draft); err != ErrSessionHistoryChanged {
+		t.Fatalf("stale draft: %v", err)
+	}
+	if _, err := st.SessionMessage(ctx, sess.ID, draft.ID); err != ErrNotFound {
+		t.Fatalf("stale draft was persisted: %v", err)
+	}
+}
+
+func TestAgentDraftBecomesStaleAfterContextChanges(t *testing.T) {
+	st, err := Open(filepath.Join(t.TempDir(), "brigade.db"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	ctx := t.Context()
+	if _, err := st.DB().Exec(`INSERT INTO users (id, username, password_hash, created_at) VALUES ('owner', 'owner', '', 0)`); err != nil {
+		t.Fatal(err)
+	}
+	sess := Session{ID: "s1", UserID: "owner", Kind: SessionKindACP, Mode: SessionModeDocker, Status: SessionStatusIdle,
+		ExecutionPolicy: SessionExecutionOnDemand, AgentType: "codex", CreatedAt: time.Now()}
+	if err := st.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	incoming := SessionMessage{ID: "incoming", SessionID: sess.ID, Author: MessageAuthorContact, Content: "Привет", Source: "telegram-business/bot/conn/1", ExternalID: "7", IncludedInContext: true, Delivery: MessageDeliveryReceived, CreatedAt: time.Now()}
+	if _, err := st.AddSessionMessage(ctx, incoming); err != nil {
+		t.Fatal(err)
+	}
+	run := SessionRun{ID: "run", SessionID: sess.ID, InputRevision: 1, CreatedAt: time.Now()}
+	if err := st.StartSessionRun(ctx, run); err != nil {
+		t.Fatal(err)
+	}
+	draft := SessionMessage{ID: "draft", SessionID: sess.ID, Author: MessageAuthorAgent, Content: "Спокойной ночи", Source: "agent", Delivery: MessageDeliveryDraft, CreatedAt: time.Now()}
+	if err := st.AddSessionRunDraft(ctx, run, draft); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.FinishSessionRun(ctx, run.ID, "completed", draft.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if current, err := st.SessionMessage(ctx, sess.ID, draft.ID); err != nil || current.Delivery != MessageDeliveryDraft {
+		t.Fatalf("fresh draft: %+v, %v", current, err)
+	}
+	if err := st.DeleteExternalSessionMessage(ctx, sess.ID, incoming.Source, incoming.ExternalID); err != nil {
+		t.Fatal(err)
+	}
+	stale, err := st.SessionMessage(ctx, sess.ID, draft.ID)
+	if err != nil || stale.Delivery != MessageDeliveryStale {
+		t.Fatalf("stale draft: %+v, %v", stale, err)
+	}
+	messages, err := st.SessionMessages(ctx, sess.ID)
+	if err != nil || len(messages) != 2 || messages[1].Delivery != MessageDeliveryStale {
+		t.Fatalf("history: %+v, %v", messages, err)
+	}
+	if err := st.EditSessionDraft(ctx, sess.ID, draft.ID, "new text"); err != ErrNotFound {
+		t.Fatalf("stale draft should not be editable: %v", err)
+	}
+	previews, err := st.LastShadowMessages(ctx, "owner")
+	if err != nil || previews[sess.ID].Message.Content != "[Сообщение удалено в Telegram]" {
+		t.Fatalf("stale draft should not be previewed: %+v, %v", previews, err)
 	}
 }

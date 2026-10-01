@@ -198,15 +198,20 @@ func (r *Registry) CancelShadowRun(ctx context.Context, sessionID, userID string
 func shadowRunInput(messages []store.SessionMessage, selectedIDs []string) ([]store.SessionMessage, string, error) {
 	var selected []store.SessionMessage
 	latestContactID := ""
+	hasBusinessMessages := false
 	requested := make(map[string]bool, len(selectedIDs))
 	for _, id := range selectedIDs {
 		requested[id] = true
 	}
 	for _, message := range messages {
 		if message.Author == store.MessageAuthorContact && strings.HasPrefix(message.Source, "telegram-business/") {
-			latestContactID = message.ID
+			hasBusinessMessages = true
+			latestContactID = ""
+			if message.Delivery != store.MessageDeliveryDeleted {
+				latestContactID = message.ID
+			}
 		}
-		if message.Delivery == store.MessageDeliveryDraft || message.Delivery == store.MessageDeliverySending || message.Delivery == store.MessageDeliveryFailed || message.Delivery == store.MessageDeliveryUncertain {
+		if message.Delivery == store.MessageDeliveryDraft || message.Delivery == store.MessageDeliverySending || message.Delivery == store.MessageDeliveryFailed || message.Delivery == store.MessageDeliveryUncertain || message.Delivery == store.MessageDeliveryDeleted {
 			continue
 		}
 		if (len(selectedIDs) == 0 && message.IncludedInContext) || (len(selectedIDs) != 0 && requested[message.ID]) {
@@ -217,6 +222,9 @@ func shadowRunInput(messages []store.SessionMessage, selectedIDs []string) ([]st
 	}
 	if len(requested) != 0 {
 		return nil, "", errors.New("session: выбранное сообщение больше недоступно для контекста")
+	}
+	if hasBusinessMessages && latestContactID == "" {
+		return nil, "", errors.New("session: все входящие сообщения удалены в Telegram")
 	}
 	if len(selectedIDs) != 0 && latestContactID != "" {
 		found := false
@@ -308,8 +316,12 @@ func (r *Registry) executeShadowRun(runContext context.Context, sess store.Sessi
 		Content: strings.Join(parts, "\n\n"), Source: "agent", IncludedInContext: false,
 		Delivery: store.MessageDeliveryDraft, ReplyToID: replyToID, CreatedAt: time.Now(),
 	}
-	if _, err := r.store.AddSessionMessage(ctx, draft); err != nil {
-		failure = err.Error()
+	if err := r.store.AddSessionRunDraft(ctx, run, draft); err != nil {
+		if errors.Is(err, store.ErrSessionHistoryChanged) {
+			failure = "Переписка изменилась, пока агент готовил ответ. Запустите подготовку черновика заново."
+		} else {
+			failure = err.Error()
+		}
 		return
 	}
 	if err := r.store.MarkSessionUnread(ctx, sess.ID); err != nil {
@@ -432,7 +444,7 @@ func (r *Registry) CreateShadowDraft(ctx context.Context, sessionID, userID, con
 	if err != nil {
 		return store.SessionMessage{}, err
 	}
-	if target.Author != store.MessageAuthorContact || !strings.HasPrefix(target.Source, "telegram-business/") || target.ExternalID == "" {
+	if target.Author != store.MessageAuthorContact || target.Delivery == store.MessageDeliveryDeleted || !strings.HasPrefix(target.Source, "telegram-business/") || target.ExternalID == "" {
 		return store.SessionMessage{}, errors.New("session: reply target is not a Telegram Business contact message")
 	}
 	message := store.SessionMessage{
