@@ -81,13 +81,31 @@ func (r *Registry) CreateShadow(ctx context.Context, userID, agentType, authProf
 	return sess, nil
 }
 
+func (r *Registry) editableConversation(ctx context.Context, sessionID, userID string) (store.Session, error) {
+	sess, err := r.Get(ctx, sessionID, userID)
+	if err != nil {
+		return store.Session{}, err
+	}
+	if sess.ExecutionPolicy != store.SessionExecutionOnDemand {
+		return store.Session{}, errors.New("session: not an on-demand session")
+	}
+	business, err := r.store.HasBusinessHistory(ctx, sessionID)
+	if err != nil {
+		return store.Session{}, err
+	}
+	if !business {
+		return store.Session{}, errors.New("session: переписка без Telegram Business доступна только для чтения")
+	}
+	return sess, nil
+}
+
 // StartShadowRun фиксирует снимок переписки и запускает один одноразовый turn.
 func (r *Registry) StartShadowRun(ctx context.Context, sessionID, userID string, selectedIDs []string) (store.SessionRun, error) {
-	sess, err := r.Get(ctx, sessionID, userID)
+	sess, err := r.editableConversation(ctx, sessionID, userID)
 	if err != nil {
 		return store.SessionRun{}, err
 	}
-	if sess.ExecutionPolicy != store.SessionExecutionOnDemand || sess.Mode != store.SessionModeDocker {
+	if sess.Mode != store.SessionModeDocker {
 		return store.SessionRun{}, errors.New("session: on-demand Docker session required")
 	}
 	if r.atContainerLimit(userID, store.SessionKindACP) {
@@ -130,11 +148,11 @@ func (r *Registry) StartShadowRun(ctx context.Context, sessionID, userID string,
 
 // ShadowModels получает поддерживаемые модели из ACP-адаптера по явному запросу пользователя.
 func (r *Registry) ShadowModels(ctx context.Context, sessionID, userID string) ([]acpsdk.SessionConfigOption, error) {
-	sess, err := r.Get(ctx, sessionID, userID)
+	sess, err := r.editableConversation(ctx, sessionID, userID)
 	if err != nil {
 		return nil, err
 	}
-	if sess.ExecutionPolicy != store.SessionExecutionOnDemand || sess.Mode != store.SessionModeDocker {
+	if sess.Mode != store.SessionModeDocker {
 		return nil, errors.New("session: on-demand Docker session required")
 	}
 	if r.atContainerLimit(userID, store.SessionKindACP) {
@@ -156,12 +174,9 @@ func (r *Registry) ShadowModels(ctx context.Context, sessionID, userID string) (
 }
 
 func (r *Registry) SetShadowModel(ctx context.Context, sessionID, userID, modelID string) error {
-	sess, err := r.Get(ctx, sessionID, userID)
+	_, err := r.editableConversation(ctx, sessionID, userID)
 	if err != nil {
 		return err
-	}
-	if sess.ExecutionPolicy != store.SessionExecutionOnDemand {
-		return errors.New("session: not an on-demand session")
 	}
 	modelID = strings.TrimSpace(modelID)
 	if len(modelID) > 128 {
@@ -386,12 +401,9 @@ func (r *Registry) RecoverShadowRuns(ctx context.Context) error {
 // AddShadowMessage сохраняет локальную запись владельца. Источник внешних сообщений
 // задают серверные интеграции, а не клиентский запрос.
 func (r *Registry) AddShadowMessage(ctx context.Context, sessionID, userID, content string) (store.SessionMessage, error) {
-	sess, err := r.Get(ctx, sessionID, userID)
+	_, err := r.editableConversation(ctx, sessionID, userID)
 	if err != nil {
 		return store.SessionMessage{}, err
-	}
-	if sess.ExecutionPolicy != store.SessionExecutionOnDemand {
-		return store.SessionMessage{}, errors.New("session: message history belongs to agent")
 	}
 	content = strings.TrimSpace(content)
 	if content == "" {
@@ -407,12 +419,9 @@ func (r *Registry) AddShadowMessage(ctx context.Context, sessionID, userID, cont
 }
 
 func (r *Registry) EditShadowMessage(ctx context.Context, sessionID, userID, messageID, content string) error {
-	sess, err := r.Get(ctx, sessionID, userID)
+	_, err := r.editableConversation(ctx, sessionID, userID)
 	if err != nil {
 		return err
-	}
-	if sess.ExecutionPolicy != store.SessionExecutionOnDemand {
-		return errors.New("session: message history belongs to agent")
 	}
 	content = strings.TrimSpace(content)
 	if content == "" {
@@ -422,24 +431,18 @@ func (r *Registry) EditShadowMessage(ctx context.Context, sessionID, userID, mes
 }
 
 func (r *Registry) DeleteShadowMessage(ctx context.Context, sessionID, userID, messageID string) error {
-	sess, err := r.Get(ctx, sessionID, userID)
+	_, err := r.editableConversation(ctx, sessionID, userID)
 	if err != nil {
 		return err
-	}
-	if sess.ExecutionPolicy != store.SessionExecutionOnDemand {
-		return errors.New("session: message history belongs to agent")
 	}
 	return r.store.DeleteLocalSessionMessage(ctx, sessionID, messageID)
 }
 
 // CreateShadowDraft сохраняет ручной ответ без отправки в Telegram.
 func (r *Registry) CreateShadowDraft(ctx context.Context, sessionID, userID, content, replyToID string) (store.SessionMessage, error) {
-	sess, err := r.Get(ctx, sessionID, userID)
+	_, err := r.editableConversation(ctx, sessionID, userID)
 	if err != nil {
 		return store.SessionMessage{}, err
-	}
-	if sess.ExecutionPolicy != store.SessionExecutionOnDemand {
-		return store.SessionMessage{}, errors.New("session: not an on-demand session")
 	}
 	content = strings.TrimSpace(content)
 	if content == "" {
@@ -462,12 +465,9 @@ func (r *Registry) CreateShadowDraft(ctx context.Context, sessionID, userID, con
 }
 
 func (r *Registry) SetShadowMessageIncluded(ctx context.Context, sessionID, userID, messageID string, included bool) error {
-	sess, err := r.Get(ctx, sessionID, userID)
+	_, err := r.editableConversation(ctx, sessionID, userID)
 	if err != nil {
 		return err
-	}
-	if sess.ExecutionPolicy != store.SessionExecutionOnDemand {
-		return errors.New("session: message history belongs to agent")
 	}
 	if _, err := r.store.SessionMessage(ctx, sessionID, messageID); err != nil {
 		return err
@@ -491,12 +491,9 @@ func (r *Registry) LatestShadowRun(ctx context.Context, sessionID, userID string
 }
 
 func (r *Registry) EditShadowDraft(ctx context.Context, sessionID, userID, messageID, content string) error {
-	sess, err := r.Get(ctx, sessionID, userID)
+	_, err := r.editableConversation(ctx, sessionID, userID)
 	if err != nil {
 		return err
-	}
-	if sess.ExecutionPolicy != store.SessionExecutionOnDemand {
-		return errors.New("session: not an on-demand session")
 	}
 	content = strings.TrimSpace(content)
 	if content == "" {

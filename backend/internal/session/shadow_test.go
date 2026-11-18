@@ -2,6 +2,7 @@ package session
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -63,6 +64,13 @@ func TestCreateShadowDraftRequiresOwnedBusinessReplyTarget(t *testing.T) {
 	if err := st.CreateSession(ctx, sess); err != nil {
 		t.Fatal(err)
 	}
+	r := &Registry{store: st}
+	if _, err := r.AddShadowMessage(ctx, sess.ID, "owner", "Заметка"); err == nil {
+		t.Fatal("legacy conversation accepted a note")
+	}
+	if _, err := r.StartShadowRun(ctx, sess.ID, "owner", nil); err == nil || !strings.Contains(err.Error(), "только для чтения") {
+		t.Fatalf("expected read-only conversation error, got %v", err)
+	}
 	for _, message := range []store.SessionMessage{
 		{ID: "incoming", SessionID: sess.ID, Author: store.MessageAuthorContact, Content: "Привет", Source: "telegram-business/bot/conn/1", ExternalID: "7", CreatedAt: time.Now()},
 		{ID: "local", SessionID: sess.ID, Author: store.MessageAuthorOwner, Content: "Заметка", Source: "brigade", CreatedAt: time.Now()},
@@ -71,7 +79,9 @@ func TestCreateShadowDraftRequiresOwnedBusinessReplyTarget(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	r := &Registry{store: st}
+	if _, err := r.AddShadowMessage(ctx, sess.ID, "owner", "Заметка"); err != nil {
+		t.Fatal(err)
+	}
 	for _, target := range []string{"local", "missing"} {
 		if _, err := r.CreateShadowDraft(ctx, sess.ID, "owner", "Ответ", target); err == nil {
 			t.Fatalf("target %q must be rejected", target)

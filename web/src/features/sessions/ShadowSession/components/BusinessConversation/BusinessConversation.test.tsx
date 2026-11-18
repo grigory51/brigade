@@ -21,6 +21,15 @@ const incoming = new AcpMessage({
 });
 const perform = async (_name: string, action: () => Promise<unknown>) => { await action(); return true; };
 
+test("expired business reply offers to copy the draft", async () => {
+  const expired = new AcpMessage({ ...incoming, createdAt: incoming.createdAt - 86401n });
+  const draft = new AcpMessage({ id: "draft", author: "agent", content: "Ответ", delivery: "draft", replyToId: expired.id });
+  render(<MemoryRouter><BusinessConversation sessionId="session" messages={[expired, draft]} run={null} busy="" loadError={false} act={perform} /></MemoryRouter>);
+  expect(await screen.findByText(/Скопируйте черновик и отправьте его в Telegram/)).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Скопировать" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Отправить" })).toBeNull();
+});
+
 test("manual reply waits five seconds and cancellation never sends to Telegram", async () => {
   vi.useFakeTimers();
   render(<MemoryRouter><BusinessConversation sessionId="session" messages={[incoming]} run={null} busy="" loadError={false} act={perform} /></MemoryRouter>);

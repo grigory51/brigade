@@ -114,7 +114,7 @@ message CreateSessionRequest {
   string auth_profile = 8;
   string response_profile_id = 9;
   string experience_id = 10;
-  // on_demand создаёт сессию без запущенного агента; только для ACP и Docker.
+  // Create принимает только unspecified или persistent. On-demand переписки создаёт интеграция.
   SessionExecutionPolicy execution_policy = 11;
 }
 

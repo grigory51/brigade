@@ -38,6 +38,14 @@ func (s *SessionService) Create(ctx context.Context, req *connect.Request[v1.Cre
 		return nil, err
 	}
 
+	switch req.Msg.ExecutionPolicy {
+	case v1.SessionExecutionPolicy_SESSION_EXECUTION_POLICY_UNSPECIFIED, v1.SessionExecutionPolicy_SESSION_EXECUTION_POLICY_PERSISTENT:
+	case v1.SessionExecutionPolicy_SESSION_EXECUTION_POLICY_ON_DEMAND:
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("переписку создаёт интеграция Telegram Business при получении сообщения"))
+	default:
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("unknown session execution policy"))
+	}
+
 	// Образ берётся только из списка пользователя: иначе Create поднял бы контейнер на
 	// произвольном образе в обход квоты и проверки совместимости.
 	image, err := s.images.Resolve(ctx, userID, req.Msg.Image)
@@ -45,22 +53,9 @@ func (s *SessionService) Create(ctx context.Context, req *connect.Request[v1.Cre
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
-	var sess store.Session
-	if req.Msg.ExecutionPolicy != v1.SessionExecutionPolicy_SESSION_EXECUTION_POLICY_UNSPECIFIED &&
-		req.Msg.ExecutionPolicy != v1.SessionExecutionPolicy_SESSION_EXECUTION_POLICY_PERSISTENT &&
-		req.Msg.ExecutionPolicy != v1.SessionExecutionPolicy_SESSION_EXECUTION_POLICY_ON_DEMAND {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("unknown session execution policy"))
-	}
-	if req.Msg.ExecutionPolicy == v1.SessionExecutionPolicy_SESSION_EXECUTION_POLICY_ON_DEMAND {
-		if req.Msg.Kind != v1.SessionKind_SESSION_KIND_ACP || req.Msg.Prompt != "" || req.Msg.ExperienceId != "" || len(req.Msg.McpServerIds) != 0 {
-			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("on-demand session supports ACP without initial prompt, MCP or experience"))
-		}
-		sess, err = s.registry.CreateShadow(ctx, userID, req.Msg.AgentType, req.Msg.AuthProfile, image, "", "")
-	} else {
-		sess, err = s.registry.Create(ctx, userID,
-			kindFromProto(req.Msg.Kind),
-			req.Msg.AgentType, req.Msg.AuthProfile, req.Msg.Cwd, req.Msg.Prompt, req.Msg.McpServerIds, image, "", req.Msg.ResponseProfileId, "", req.Msg.ExperienceId)
-	}
+	sess, err := s.registry.Create(ctx, userID,
+		kindFromProto(req.Msg.Kind),
+		req.Msg.AgentType, req.Msg.AuthProfile, req.Msg.Cwd, req.Msg.Prompt, req.Msg.McpServerIds, image, "", req.Msg.ResponseProfileId, "", req.Msg.ExperienceId)
 	if err != nil {
 		if errors.Is(err, session.ErrClaudeTokenRequired) {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, err)

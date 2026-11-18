@@ -49,6 +49,13 @@ func (s *Store) AddSessionMessage(ctx context.Context, message SessionMessage) (
 	return count != 0, nil
 }
 
+// HasBusinessHistory использует источник сообщения, который задаёт Telegram-интеграция.
+func (s *Store) HasBusinessHistory(ctx context.Context, sessionID string) (bool, error) {
+	var found bool
+	err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM session_messages WHERE session_id=? AND source GLOB 'telegram-business/*')`, sessionID).Scan(&found)
+	return found, err
+}
+
 func (s *Store) SessionMessages(ctx context.Context, sessionID string) ([]SessionMessage, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, session_id, author, content, source, external_id,
 		included_in_context, CASE WHEN delivery='draft' AND source='agent' AND EXISTS (

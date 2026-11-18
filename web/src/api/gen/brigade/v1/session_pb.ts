@@ -448,7 +448,7 @@ export class CreateSessionRequest extends Message<CreateSessionRequest> {
   experienceId = "";
 
   /**
-   * on_demand создаёт сессию без запущенного агента; только для ACP и Docker.
+   * Create принимает только unspecified или persistent. On-demand переписки создаёт интеграция.
    *
    * @generated from field: brigade.v1.SessionExecutionPolicy execution_policy = 11;
    */

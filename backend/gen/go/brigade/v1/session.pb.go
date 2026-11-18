@@ -551,7 +551,7 @@ type CreateSessionRequest struct {
 	AuthProfile       string `protobuf:"bytes,8,opt,name=auth_profile,json=authProfile,proto3" json:"auth_profile,omitempty"`
 	ResponseProfileId string `protobuf:"bytes,9,opt,name=response_profile_id,json=responseProfileId,proto3" json:"response_profile_id,omitempty"`
 	ExperienceId      string `protobuf:"bytes,10,opt,name=experience_id,json=experienceId,proto3" json:"experience_id,omitempty"`
-	// on_demand создаёт сессию без запущенного агента; только для ACP и Docker.
+	// Create принимает только unspecified или persistent. On-demand переписки создаёт интеграция.
 	ExecutionPolicy SessionExecutionPolicy `protobuf:"varint,11,opt,name=execution_policy,json=executionPolicy,proto3,enum=brigade.v1.SessionExecutionPolicy" json:"execution_policy,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache

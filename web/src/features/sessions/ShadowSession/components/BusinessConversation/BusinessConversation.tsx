@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { canUseAsContext } from "../../contextSelection";
 
 type Run = { id: string; status: string; error: string } | null;
 type PendingSend = { draftId: string | null; text: string; targetId: string; seconds: number };
@@ -72,7 +71,7 @@ export function BusinessConversation({ sessionId, messages, run, busy, loadError
   const firstTodayIndex = messages.findIndex((message) => new Date(Number(message.createdAt) * 1000).toDateString() === today);
   const defaultBoundary = messages[Math.min(messages.length - 1, lastSentIndex >= 0 ? lastSentIndex + 1 : Math.max(0, firstTodayIndex))]?.id ?? "";
   const boundary = messages.findIndex((message) => message.id === (boundaryId || defaultBoundary));
-  const selected = useMemo(() => messages.slice(Math.max(0, boundary)).filter(canUseAsContext), [messages, boundary]);
+  const selected = useMemo(() => messages.slice(Math.max(0, boundary)).filter((message) => !["draft", "stale", "sending", "failed", "uncertain", "deleted"].includes(message.delivery)), [messages, boundary]);
   const contextIds = useMemo(() => selected.map((message) => message.id), [selected]);
   const selectedCount = selected.filter((message) => message.author !== "owner" || message.source !== "brigade").length;
   const noteCount = selected.length - selectedCount;
@@ -254,7 +253,7 @@ export function BusinessConversation({ sessionId, messages, run, busy, loadError
         {draft && text.trim() && mode === "reply" && !pending && <div className="flex items-center gap-2 rounded-[10px] border bg-card px-3 py-1.5 text-xs text-muted-foreground"><Sparkles className="size-3.5 text-primary" />Черновик свёрнут — вы пишете сами<Button variant="ghost" size="sm" className="ml-auto" onClick={() => { setText(""); setEditingDraftId(""); }}>Вернуть черновик</Button></div>}
         {latestOutgoing?.delivery === "uncertain" && <div className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/5 p-3 text-xs text-warning" role="alert"><TriangleAlert className="size-4 shrink-0" /><div><p className="font-medium">Telegram не подтвердил доставку</p><p className="mt-1 text-muted-foreground">Проверьте чат в Telegram перед новой отправкой. Этот ответ повторно не отправится.</p></div></div>}
         {bot === null && <p className="text-xs text-warning" role="alert">Не удалось проверить права Business-бота. Обновите страницу, чтобы повторить.</p>}
-        {!replyOpen && bot && <div className="flex items-center gap-2 text-xs text-warning"><LockKeyhole className="size-3.5" />{canReply ? "24-часовое окно ответа истекло. Дождитесь нового входящего сообщения." : <>Бот только читает эту переписку. <Link to="/settings/telegram" className="underline underline-offset-2">Разрешить ответы</Link></>}</div>}
+        {!replyOpen && bot && <div className="flex items-center gap-2 text-xs text-warning"><LockKeyhole className="size-3.5" />{canReply ? (draft ? "Через бота ответить уже нельзя. Скопируйте черновик и отправьте его в Telegram." : "Через бота ответить уже нельзя. Ответьте напрямую в Telegram.") : <>Бот только читает эту переписку. <Link to="/settings/telegram" className="underline underline-offset-2">Разрешить ответы</Link></>}</div>}
         <div className="flex min-h-8 items-center gap-2 text-xs text-muted-foreground">
           <DropdownMenu onOpenChange={(open) => { if (open && models === null && !modelsLoading) void loadModels(); }}>
             <DropdownMenuTrigger asChild><Button type="button" size="sm" variant="ghost" disabled={busy !== "" || run?.status === "running"} className="h-7 gap-1.5 px-2 text-xs font-normal text-muted-foreground"><span>Модель:</span><span className="max-w-36 truncate text-foreground">{models?.find((item) => item.value === modelId)?.name ?? (modelId || "По умолчанию")}</span><ChevronDown className="size-3" /></Button></DropdownMenuTrigger>
