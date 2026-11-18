@@ -48,6 +48,8 @@ message AcpMessage {
   string delivery = 11;
   string reply_to_id = 12;
   int64 created_at = 13;
+  // Фото Telegram Business доступно через защищённый TelegramService RPC.
+  bool has_telegram_business_photo = 14;
 }
 
 // AcpCommand — slash-команда агента для автокомплита composer'а.

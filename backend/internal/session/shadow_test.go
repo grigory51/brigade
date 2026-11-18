@@ -1,6 +1,7 @@
 package session
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,18 +17,53 @@ func TestShadowRunInputSelectionDoesNotChangeReplyTarget(t *testing.T) {
 		{ID: "latest", Author: store.MessageAuthorContact, Source: "telegram-business/bot/conn/1", IncludedInContext: false},
 		{ID: "draft", Author: store.MessageAuthorAgent, Delivery: store.MessageDeliveryDraft},
 	}
-	selected, replyTo, err := shadowRunInput(messages, []string{"note", "old", "latest"})
+	selected, replyTo, err := shadowRunInput(messages, []string{"note", "old", "latest"}, "")
 	if err != nil || len(selected) != 3 || selected[0].ID != "old" || selected[1].ID != "note" || selected[2].ID != "latest" || replyTo != "latest" {
 		t.Fatalf("selection=%+v replyTo=%q err=%v", selected, replyTo, err)
 	}
-	if _, _, err := shadowRunInput(messages, []string{"old", "note"}); err == nil {
+	if _, _, err := shadowRunInput(messages, []string{"old", "note"}, ""); err == nil {
 		t.Fatal("latest incoming message must be included in the draft context")
 	}
-	if _, _, err := shadowRunInput(messages, []string{"draft"}); err == nil {
+	if _, _, err := shadowRunInput(messages, []string{"draft"}, ""); err == nil {
 		t.Fatal("draft cannot be selected as context")
 	}
-	if _, _, err := shadowRunInput(messages, []string{"missing"}); err == nil {
+	if _, _, err := shadowRunInput(messages, []string{"missing"}, ""); err == nil {
 		t.Fatal("unknown message cannot be selected as context")
+	}
+}
+
+func TestDraftUsesExplicitTargetAndOwnerInstructions(t *testing.T) {
+	messages := []store.SessionMessage{
+		{ID: "facts", Source: store.ContactNoteSource, Content: "Любит CAD"},
+		{ID: "old", Author: store.MessageAuthorContact, Source: "telegram-business/bot/conn/1", Content: "Первый вопрос"},
+		{ID: "latest", Author: store.MessageAuthorContact, Source: "telegram-business/bot/conn/1", Content: "Последний вопрос"},
+		{ID: "note", Author: store.MessageAuthorOwner, Source: "brigade", Delivery: store.MessageDeliveryReceived, Content: "Ответь кратко"},
+	}
+	selected, target, err := shadowRunInput(messages, []string{"latest", "note"}, "old")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := draftInputJSON(selected, target, "Предложи созвон")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var input struct {
+		ReplyTo     string `json:"reply_to"`
+		Instruction string
+		ContactNote string   `json:"contact_note"`
+		Notes       []string `json:"owner_notes"`
+		Messages    []struct{ ID string }
+	}
+	if err := json.Unmarshal(data, &input); err != nil {
+		t.Fatal(err)
+	}
+	if input.ReplyTo != "old" || input.Instruction != "Предложи созвон" || input.ContactNote != "Любит CAD" || len(input.Notes) != 1 || input.Notes[0] != "Ответь кратко" || len(input.Messages) != 2 || input.Messages[0].ID != "old" {
+		t.Fatalf("unexpected input: %s", data)
+	}
+	for _, invalid := range []string{"note", "missing"} {
+		if _, _, err := shadowRunInput(messages, nil, invalid); err == nil {
+			t.Fatalf("accepted target %q", invalid)
+		}
 	}
 }
 
@@ -36,14 +72,14 @@ func TestShadowRunInputRejectsDeletedBusinessMessage(t *testing.T) {
 		{ID: "old", Author: store.MessageAuthorContact, Source: "telegram-business/bot/conn/1", Delivery: store.MessageDeliveryReceived, IncludedInContext: true},
 		{ID: "deleted", Author: store.MessageAuthorContact, Source: "telegram-business/bot/conn/1", Delivery: store.MessageDeliveryDeleted},
 	}
-	if _, _, err := shadowRunInput(messages, nil); err == nil {
+	if _, _, err := shadowRunInput(messages, nil, ""); err == nil {
 		t.Fatal("a deleted latest incoming message must not produce a reply")
 	}
-	if _, _, err := shadowRunInput(messages, []string{"deleted"}); err == nil {
+	if _, _, err := shadowRunInput(messages, []string{"deleted"}, ""); err == nil {
 		t.Fatal("a deleted message must not be selectable as context")
 	}
 	messages = append(messages, store.SessionMessage{ID: "new", Author: store.MessageAuthorContact, Source: "telegram-business/bot/conn/1", Delivery: store.MessageDeliveryReceived, IncludedInContext: true})
-	selected, replyTo, err := shadowRunInput(messages, nil)
+	selected, replyTo, err := shadowRunInput(messages, nil, "")
 	if err != nil || len(selected) != 2 || replyTo != "new" {
 		t.Fatalf("selection=%+v replyTo=%q err=%v", selected, replyTo, err)
 	}
@@ -68,7 +104,7 @@ func TestCreateShadowDraftRequiresOwnedBusinessReplyTarget(t *testing.T) {
 	if _, err := r.AddShadowMessage(ctx, sess.ID, "owner", "Заметка"); err == nil {
 		t.Fatal("legacy conversation accepted a note")
 	}
-	if _, err := r.StartShadowRun(ctx, sess.ID, "owner", nil); err == nil || !strings.Contains(err.Error(), "только для чтения") {
+	if _, err := r.StartShadowRun(ctx, sess.ID, "owner", nil, "", ""); err == nil || !strings.Contains(err.Error(), "только для чтения") {
 		t.Fatalf("expected read-only conversation error, got %v", err)
 	}
 	for _, message := range []store.SessionMessage{

@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AddSessionMessageRequest, AddSessionMessageResponse, ArchiveSessionRequest, ArchiveSessionResponse, CancelSessionDraftRequest, CreateSessionDraftRequest, CreateSessionDraftResponse, CreateSessionRequest, CreateSessionResponse, DeleteSessionMessageRequest, DeleteSessionRequest, EditSessionDraftRequest, EditSessionMessageRequest, GenerateSessionDraftRequest, GenerateSessionDraftResponse, GetSessionDraftRunRequest, GetSessionDraftRunResponse, GetSessionModelsRequest, GetSessionModelsResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, MarkSessionReadRequest, ReloadAgentRequest, SetSessionMcpServersRequest, SetSessionMessageIncludedRequest, SetSessionModelRequest, SetSessionResponseProfileRequest, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse, UploadFileRequest, UploadFileResponse } from "./session_pb.js";
+import { AddSessionMessageRequest, AddSessionMessageResponse, ArchiveSessionRequest, ArchiveSessionResponse, CancelSessionDraftRequest, CreateSessionDraftRequest, CreateSessionDraftResponse, CreateSessionRequest, CreateSessionResponse, DeleteSessionMessageRequest, DeleteSessionRequest, EditSessionDraftRequest, EditSessionMessageRequest, GenerateSessionDraftRequest, GenerateSessionDraftResponse, GetSessionDraftRunRequest, GetSessionDraftRunResponse, GetSessionModelsRequest, GetSessionModelsResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, MarkSessionReadRequest, ReloadAgentRequest, SetConversationNoteRequest, SetSessionMcpServersRequest, SetSessionMessageIncludedRequest, SetSessionModelRequest, SetSessionResponseProfileRequest, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse, UploadFileRequest, UploadFileResponse } from "./session_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { Empty } from "./auth_pb.js";
 
@@ -121,6 +121,15 @@ export const SessionService = {
       name: "GenerateDraft",
       I: GenerateSessionDraftRequest,
       O: GenerateSessionDraftResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.SessionService.SetConversationNote
+     */
+    setConversationNote: {
+      name: "SetConversationNote",
+      I: SetConversationNoteRequest,
+      O: Empty,
       kind: MethodKind.Unary,
     },
     /**

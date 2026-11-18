@@ -69,6 +69,7 @@ func (h storedHistory) read(ctx context.Context, sess store.Session) (HistorySna
 			Author: string(item.Author), Source: item.Source, ExternalID: item.ExternalID,
 			IncludedInContext: item.IncludedInContext, Delivery: string(item.Delivery),
 			ReplyToID: item.ReplyToID, CreatedAt: item.CreatedAt.Unix(),
+			HasTelegramBusinessPhoto: item.HasTelegramBusinessPhoto,
 		})
 	}
 	return HistorySnapshot{Messages: messages, Revision: sess.HistoryRevision}, nil

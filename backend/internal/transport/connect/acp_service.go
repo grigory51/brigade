@@ -66,6 +66,7 @@ func (s *AcpService) GetHistory(ctx context.Context, req *connect.Request[v1.Get
 			Author: m.Author, Source: m.Source, ExternalId: m.ExternalID,
 			IncludedInContext: m.IncludedInContext, Delivery: m.Delivery,
 			ReplyToId: m.ReplyToID, CreatedAt: m.CreatedAt,
+			HasTelegramBusinessPhoto: m.HasTelegramBusinessPhoto,
 		})
 	}
 	for _, c := range snapshot.Commands {

@@ -248,6 +248,21 @@ func TestDownloadFile(t *testing.T) {
 	}
 }
 
+func TestDownloadFileDoesNotExposeToken(t *testing.T) {
+	const token = "123456:secret"
+	api := newBotAPI()
+	api.http.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if strings.HasSuffix(request.URL.Path, "/getFile") {
+			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"ok":true,"result":{"file_id":"photo","file_path":"photos/photo.jpg"}}`))}, nil
+		}
+		return nil, &url.Error{Op: "Get", URL: request.URL.String(), Err: errors.New("connection refused")}
+	})
+	_, _, err := api.downloadFile(t.Context(), token, "photo", 20<<20)
+	if err == nil || strings.Contains(err.Error(), token) {
+		t.Fatalf("download error leaked token: %v", err)
+	}
+}
+
 func TestRepliesUseRichMarkdown(t *testing.T) {
 	api := newBotAPI()
 	var requests []string

@@ -78,6 +78,18 @@ func (s *TelegramService) SendDraft(ctx context.Context, req *connect.Request[v1
 	return connect.NewResponse(&v1.Empty{}), nil
 }
 
+func (s *TelegramService) GetBusinessPhoto(ctx context.Context, req *connect.Request[v1.GetTelegramBusinessPhotoRequest]) (*connect.Response[v1.GetTelegramBusinessPhotoResponse], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	data, contentType, err := s.telegram.BusinessPhoto(ctx, userID, req.Msg.SessionId, req.Msg.MessageId)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+	return connect.NewResponse(&v1.GetTelegramBusinessPhotoResponse{Data: data, ContentType: contentType}), nil
+}
+
 func (s *TelegramService) DeleteBot(ctx context.Context, req *connect.Request[v1.TelegramBotRequest]) (*connect.Response[v1.Empty], error) {
 	userID, err := requireUser(ctx)
 	if err != nil {

@@ -27,10 +27,10 @@ func (s *Store) AddSessionMessage(ctx context.Context, message SessionMessage) (
 		return false, errors.New("store: session does not own its message history")
 	}
 	result, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO session_messages
-		(id, session_id, author, content, source, external_id, included_in_context, delivery, reply_to_id, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		(id, session_id, author, content, source, external_id, included_in_context, delivery, reply_to_id, created_at, telegram_photo_file_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		message.ID, message.SessionID, message.Author, message.Content, message.Source, message.ExternalID,
-		message.IncludedInContext, message.Delivery, message.ReplyToID, toUnix(message.CreatedAt))
+		message.IncludedInContext, message.Delivery, message.ReplyToID, toUnix(message.CreatedAt), message.TelegramPhotoFileID)
 	if err != nil {
 		return false, fmt.Errorf("store: insert session message: %w", err)
 	}
@@ -56,12 +56,47 @@ func (s *Store) HasBusinessHistory(ctx context.Context, sessionID string) (bool,
 	return found, err
 }
 
+const ContactNoteSource = "brigade:contact-note"
+
+// SetConversationNote хранит одну заметку на чат; её изменение инвалидирует черновики.
+func (s *Store) SetConversationNote(ctx context.Context, sessionID, content string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	id := ContactNoteSource + "/" + sessionID
+	var result sql.Result
+	if content == "" {
+		result, err = tx.ExecContext(ctx, `DELETE FROM session_messages WHERE session_id=? AND id=?`, sessionID, id)
+	} else {
+		result, err = tx.ExecContext(ctx, `INSERT INTO session_messages (id, session_id, author, content, source, created_at)
+			VALUES (?, ?, 'owner', ?, ?, ?) ON CONFLICT(id) DO UPDATE SET content=excluded.content
+			WHERE content<>excluded.content`, id, sessionID, content, ContactNoteSource, time.Now().Unix())
+	}
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count != 0 {
+		if _, err := tx.ExecContext(ctx, `UPDATE sessions SET history_revision=history_revision+1 WHERE id=?`, sessionID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 func (s *Store) SessionMessages(ctx context.Context, sessionID string) ([]SessionMessage, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, session_id, author, content, source, external_id,
 		included_in_context, CASE WHEN delivery='draft' AND source='agent' AND EXISTS (
 			SELECT 1 FROM session_runs r JOIN sessions s ON s.id=session_messages.session_id
 			WHERE r.draft_message_id=session_messages.id AND s.history_revision>r.input_revision+1
-		) THEN 'stale' ELSE delivery END, reply_to_id, created_at FROM session_messages
+		) THEN 'stale' ELSE delivery END, reply_to_id, created_at, telegram_photo_file_id,
+		delivery <> 'deleted' AND telegram_photo_file_id <> ''
+		FROM session_messages
 		WHERE session_id = ? ORDER BY seq`, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("store: list session messages: %w", err)
@@ -73,7 +108,7 @@ func (s *Store) SessionMessages(ctx context.Context, sessionID string) ([]Sessio
 		var createdAt int64
 		if err := rows.Scan(&message.ID, &message.SessionID, &message.Author, &message.Content,
 			&message.Source, &message.ExternalID, &message.IncludedInContext, &message.Delivery,
-			&message.ReplyToID, &createdAt); err != nil {
+			&message.ReplyToID, &createdAt, &message.TelegramPhotoFileID, &message.HasTelegramBusinessPhoto); err != nil {
 			return nil, fmt.Errorf("store: scan session message: %w", err)
 		}
 		message.CreatedAt = fromUnix(createdAt)
@@ -139,7 +174,7 @@ func (s *Store) LastShadowMessages(ctx context.Context, userID string) (map[stri
 		FROM session_messages m
 		JOIN (SELECT candidate.session_id, MAX(candidate.seq) AS seq
 			FROM session_messages candidate JOIN sessions owner ON owner.id=candidate.session_id
-			WHERE NOT (candidate.delivery='draft' AND candidate.source='agent' AND EXISTS (
+			WHERE candidate.source <> 'brigade:contact-note' AND NOT (candidate.delivery='draft' AND candidate.source='agent' AND EXISTS (
 				SELECT 1 FROM session_runs r WHERE r.draft_message_id=candidate.id
 				AND owner.history_revision>r.input_revision+1
 			))
@@ -248,9 +283,9 @@ func (s *Store) SessionMessage(ctx context.Context, sessionID, messageID string)
 		included_in_context, CASE WHEN delivery='draft' AND source='agent' AND EXISTS (
 			SELECT 1 FROM session_runs r JOIN sessions s ON s.id=session_messages.session_id
 			WHERE r.draft_message_id=session_messages.id AND s.history_revision>r.input_revision+1
-		) THEN 'stale' ELSE delivery END, reply_to_id, created_at FROM session_messages WHERE session_id = ? AND id = ?`, sessionID, messageID).
+		) THEN 'stale' ELSE delivery END, reply_to_id, created_at, telegram_photo_file_id FROM session_messages WHERE session_id = ? AND id = ?`, sessionID, messageID).
 		Scan(&message.ID, &message.SessionID, &message.Author, &message.Content, &message.Source,
-			&message.ExternalID, &message.IncludedInContext, &message.Delivery, &message.ReplyToID, &createdAt)
+			&message.ExternalID, &message.IncludedInContext, &message.Delivery, &message.ReplyToID, &createdAt, &message.TelegramPhotoFileID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return SessionMessage{}, ErrNotFound
 	}
@@ -271,6 +306,40 @@ func (s *Store) ExternalSessionMessage(ctx context.Context, sessionID, source, e
 		return SessionMessage{}, err
 	}
 	return s.SessionMessage(ctx, sessionID, id)
+}
+
+// UpdateTelegramBusinessSessionMessage меняет текст и file_id одной транзакцией.
+// Изменение только фото также увеличивает ревизию истории.
+func (s *Store) UpdateTelegramBusinessSessionMessage(ctx context.Context, sessionID, source, externalID, content, photoFileID string) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	var currentContent, currentPhotoFileID string
+	err = tx.QueryRowContext(ctx, `SELECT content, telegram_photo_file_id FROM session_messages
+		WHERE session_id=? AND source=? AND external_id=? AND delivery<>'deleted'`, sessionID, source, externalID).
+		Scan(&currentContent, &currentPhotoFileID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, ErrNotFound
+	}
+	if err != nil {
+		return false, fmt.Errorf("store: get telegram business message: %w", err)
+	}
+	if currentContent == content && currentPhotoFileID == photoFileID {
+		return false, tx.Commit()
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE session_messages SET content=?, telegram_photo_file_id=?
+		WHERE session_id=? AND source=? AND external_id=?`, content, photoFileID, sessionID, source, externalID); err != nil {
+		return false, fmt.Errorf("store: update telegram business message: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE sessions SET history_revision=history_revision+1 WHERE id=?`, sessionID); err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *Store) UpdateExternalSessionMessage(ctx context.Context, sessionID, source, externalID, content string) error {
@@ -303,7 +372,7 @@ func (s *Store) DeleteExternalSessionMessage(ctx context.Context, sessionID, sou
 	}
 	defer tx.Rollback()
 	result, err := tx.ExecContext(ctx, `UPDATE session_messages
-		SET content='[Сообщение удалено в Telegram]', delivery='deleted', included_in_context=0
+		SET content='[Сообщение удалено в Telegram]', delivery='deleted', included_in_context=0, telegram_photo_file_id=''
 		WHERE session_id=? AND source=? AND external_id=? AND delivery<>'deleted'`, sessionID, source, externalID)
 	if err != nil {
 		return fmt.Errorf("store: delete external message: %w", err)

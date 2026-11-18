@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -93,5 +94,112 @@ func TestOneBotHandlesBusinessAndAssistantMessages(t *testing.T) {
 	}})
 	if len(registry.created) != 2 || len(registry.prompts) != 1 {
 		t.Fatalf("normal chat on the same bot: created=%v prompts=%v", registry.created, registry.prompts)
+	}
+}
+
+func TestBusinessPhotoAccessAndLifecycle(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "brigade.db"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	ctx := t.Context()
+	if _, err := st.DB().Exec(`INSERT INTO users (id, username, password_hash, created_at) VALUES ('owner', 'owner', '', 0)`); err != nil {
+		t.Fatal(err)
+	}
+	bot := store.TelegramBot{ID: "bot", UserID: "owner", Token: "secret", TelegramID: 100, OwnerTelegramID: 42,
+		BusinessConnectionID: "connection", BusinessOwnerID: 42, BusinessEnabled: true}
+	if err := st.SaveTelegramBot(ctx, bot); err != nil {
+		t.Fatal(err)
+	}
+	service := New(st, nil, nil, "webhook", "", nil)
+	t.Cleanup(service.Close)
+	registry := &telegramTestRegistry{sessions: make(map[string]store.Session), shadowStore: st}
+	service.registry = registry
+	service.api.http.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if strings.HasSuffix(req.URL.Path, "/getFile") {
+			var in struct {
+				FileID string `json:"file_id"`
+			}
+			if err := json.NewDecoder(req.Body).Decode(&in); err != nil {
+				t.Fatal(err)
+			}
+			body := `{"ok":true,"result":{"file_id":"` + in.FileID + `","file_size":5,"file_path":"photos/` + in.FileID + `.jpg"}}`
+			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}, nil
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(filepath.Base(req.URL.Path)))}, nil
+	})
+	queue := func(update telegramUpdate) {
+		t.Helper()
+		payload, err := json.Marshal(update)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := st.InsertTelegramUpdate(ctx, bot.ID, update.UpdateID, string(payload)); err != nil {
+			t.Fatal(err)
+		}
+		service.process(bot.ID)
+	}
+	message := func(photoID string) *telegramMessage {
+		message := &telegramMessage{MessageID: 7, Date: time.Now().Unix(), BusinessConnectionID: "connection", Chat: telegramChat{ID: 123}, From: &telegramUser{ID: 55}, Text: "Фото"}
+		if photoID != "" {
+			message.Photo = []telegramFile{{FileID: photoID, Width: 100, Height: 100}}
+		}
+		return message
+	}
+	queue(telegramUpdate{UpdateID: 1, BusinessMessage: message("first")})
+	sessionID := registry.created[0]
+	messages, err := st.SessionMessages(ctx, sessionID)
+	if err != nil || len(messages) != 1 || !messages[0].HasTelegramBusinessPhoto {
+		t.Fatalf("initial photo: %+v, %v", messages, err)
+	}
+	data, _, err := service.BusinessPhoto(ctx, "owner", sessionID, messages[0].ID)
+	if err != nil || string(data) != "first.jpg" {
+		t.Fatalf("initial fetch: %q, %v", data, err)
+	}
+	if _, _, err := service.BusinessPhoto(ctx, "other", sessionID, messages[0].ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("foreign owner access: %v", err)
+	}
+	queue(telegramUpdate{UpdateID: 2, EditedBusinessMessage: message("second")})
+	messages, err = st.SessionMessages(ctx, sessionID)
+	if err != nil || !messages[0].HasTelegramBusinessPhoto {
+		t.Fatalf("replaced photo: %+v, %v", messages, err)
+	}
+	data, _, err = service.BusinessPhoto(ctx, "owner", sessionID, messages[0].ID)
+	if err != nil || string(data) != "second.jpg" {
+		t.Fatalf("replaced fetch: %q, %v", data, err)
+	}
+	if sess, err := st.GetSession(ctx, sessionID); err != nil || sess.HistoryRevision != 2 {
+		t.Fatalf("revision after photo replacement: %+v, %v", sess, err)
+	}
+	queue(telegramUpdate{UpdateID: 3, EditedBusinessMessage: message("")})
+	messages, err = st.SessionMessages(ctx, sessionID)
+	if err != nil || messages[0].HasTelegramBusinessPhoto {
+		t.Fatalf("removed photo: %+v, %v", messages, err)
+	}
+	if _, _, err := service.BusinessPhoto(ctx, "owner", sessionID, messages[0].ID); err == nil {
+		t.Fatal("removed photo remains available")
+	}
+	if sess, err := st.GetSession(ctx, sessionID); err != nil || sess.HistoryRevision != 3 {
+		t.Fatalf("revision after photo removal: %+v, %v", sess, err)
+	}
+	unknown := message("unknown")
+	unknown.MessageID = 999
+	queue(telegramUpdate{UpdateID: 4, EditedBusinessMessage: unknown})
+	updates, err := st.ListTelegramUpdates(ctx, bot.ID, "queued")
+	if err != nil || len(updates) != 0 {
+		t.Fatalf("unknown edit remains queued: %+v, %v", updates, err)
+	}
+	queue(telegramUpdate{UpdateID: 5, EditedBusinessMessage: message("third")})
+	queue(telegramUpdate{UpdateID: 6, DeletedBusinessMessages: &telegramBusinessMessagesDeleted{BusinessConnectionID: "connection", Chat: telegramChat{ID: 123}, MessageIDs: []int64{7}}})
+	messages, err = st.SessionMessages(ctx, sessionID)
+	if err != nil || messages[0].HasTelegramBusinessPhoto || messages[0].Delivery != store.MessageDeliveryDeleted {
+		t.Fatalf("deleted photo: %+v, %v", messages, err)
+	}
+	if _, _, err := service.BusinessPhoto(ctx, "owner", sessionID, messages[0].ID); err == nil {
+		t.Fatal("deleted photo remains available")
+	}
+	if sess, err := st.GetSession(ctx, sessionID); err != nil || sess.HistoryRevision != 5 {
+		t.Fatalf("revision after photo deletion: %+v, %v", sess, err)
 	}
 }

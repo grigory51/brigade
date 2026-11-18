@@ -23,6 +23,23 @@ func isBusinessUpdate(update telegramUpdate) bool {
 		update.EditedBusinessMessage != nil || update.DeletedBusinessMessages != nil
 }
 
+func telegramBusinessPhotoFileID(message *telegramMessage) string {
+	if message == nil || len(message.Photo) == 0 {
+		return ""
+	}
+	photo := message.Photo[0]
+	for _, candidate := range message.Photo[1:] {
+		if candidate.FileSize > photo.FileSize ||
+			(candidate.FileSize == photo.FileSize && candidate.Width*candidate.Height > photo.Width*photo.Height) {
+			photo = candidate
+		}
+	}
+	if photo.FileID == "" {
+		return ""
+	}
+	return photo.FileID
+}
+
 func (s *Service) processBusinessQueued(bot store.TelegramBot, stored store.TelegramUpdate, update telegramUpdate) error {
 	if connection := update.BusinessConnection; connection != nil {
 		if bot.OwnerTelegramID != 0 && connection.User.ID == bot.OwnerTelegramID {
@@ -129,8 +146,11 @@ func (s *Service) processBusinessQueued(bot store.TelegramBot, stored store.Tele
 		}
 		if text != "" {
 			id := strconv.FormatInt(message.MessageID, 10)
+			photoFileID := telegramBusinessPhotoFileID(message)
 			if update.EditedBusinessMessage != nil {
-				if err := s.store.UpdateExternalSessionMessage(s.ctx, sess.ID, source, id, text); err != nil {
+				if _, err := s.store.UpdateTelegramBusinessSessionMessage(s.ctx, sess.ID, source, id, text, photoFileID); errors.Is(err, store.ErrNotFound) {
+					return s.store.DeleteTelegramUpdate(s.ctx, bot.ID, stored.UpdateID)
+				} else if err != nil {
 					return err
 				}
 			} else {
@@ -145,10 +165,17 @@ func (s *Service) processBusinessQueued(bot store.TelegramBot, stored store.Tele
 				inserted, err := s.store.AddSessionMessage(s.ctx, store.SessionMessage{
 					ID: uuid.NewString(), SessionID: sess.ID, Author: author, Content: text,
 					Source: source, ExternalID: id, IncludedInContext: true,
-					Delivery: store.MessageDeliveryReceived, CreatedAt: created,
+					Delivery: store.MessageDeliveryReceived, CreatedAt: created, TelegramPhotoFileID: photoFileID,
 				})
 				if err != nil {
 					return err
+				}
+				if !inserted {
+					if _, err := s.store.UpdateTelegramBusinessSessionMessage(s.ctx, sess.ID, source, id, text, photoFileID); errors.Is(err, store.ErrNotFound) {
+						return s.store.DeleteTelegramUpdate(s.ctx, bot.ID, stored.UpdateID)
+					} else if err != nil {
+						return err
+					}
 				}
 				if inserted && author == store.MessageAuthorContact {
 					if err := s.store.MarkSessionUnread(s.ctx, sess.ID); err != nil {
@@ -159,6 +186,60 @@ func (s *Service) processBusinessQueued(bot store.TelegramBot, stored store.Tele
 		}
 	}
 	return s.store.DeleteTelegramUpdate(s.ctx, bot.ID, stored.UpdateID)
+}
+
+// BusinessPhoto загружает фото в память только по явному запросу владельца сессии.
+// File ID и BotFather token не пересекают границу backend.
+func (s *Service) BusinessPhoto(ctx context.Context, userID, sessionID, messageID string) ([]byte, string, error) {
+	sess, err := s.registry.Get(ctx, sessionID, userID)
+	if err != nil {
+		return nil, "", err
+	}
+	if sess.ExecutionPolicy != store.SessionExecutionOnDemand {
+		return nil, "", errors.New("telegram: требуется shadow-сессия")
+	}
+	message, err := s.store.SessionMessage(ctx, sessionID, messageID)
+	if err != nil {
+		return nil, "", err
+	}
+	if message.Delivery == store.MessageDeliveryDeleted {
+		return nil, "", errors.New("telegram: сообщение удалено в Telegram")
+	}
+	parts := strings.Split(message.Source, "/")
+	if len(parts) != 4 || parts[0] != "telegram-business" {
+		return nil, "", errors.New("telegram: сообщение не привязано к Telegram Business")
+	}
+	connectionID, err := url.PathUnescape(parts[2])
+	if err != nil {
+		return nil, "", err
+	}
+	chatID, err := strconv.ParseInt(parts[3], 10, 64)
+	if err != nil || chatID == 0 {
+		return nil, "", errors.New("telegram: у сообщения нет корректного чата")
+	}
+	bot, err := s.store.GetTelegramBot(ctx, parts[1])
+	if err != nil {
+		return nil, "", err
+	}
+	if bot.UserID != userID || !bot.BusinessEnabled || bot.BusinessOwnerID != bot.OwnerTelegramID || bot.BusinessConnectionID != connectionID {
+		return nil, "", errors.New("telegram: этот бот больше не подключён к вашему Telegram Business")
+	}
+	conversation, err := s.store.TelegramConversation(ctx, bot.ID, "business:"+connectionID, chatID, 0)
+	if err != nil || conversation.SessionID != sessionID {
+		return nil, "", errors.New("telegram: привязка чата больше не актуальна")
+	}
+	if message.TelegramPhotoFileID == "" {
+		return nil, "", errors.New("telegram: у сообщения нет фото")
+	}
+	data, _, err := s.api.downloadFile(ctx, bot.Token, message.TelegramPhotoFileID, maxTelegramPhotoSize)
+	if err != nil {
+		return nil, "", err
+	}
+	current, err := s.store.SessionMessage(ctx, sessionID, messageID)
+	if err != nil || current.Delivery == store.MessageDeliveryDeleted || current.TelegramPhotoFileID != message.TelegramPhotoFileID {
+		return nil, "", errors.New("telegram: фото больше недоступно")
+	}
+	return data, "image/jpeg", nil
 }
 
 // SendDraft — единственная точка исходящей Business-доставки: явное действие

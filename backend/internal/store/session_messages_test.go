@@ -6,6 +6,35 @@ import (
 	"time"
 )
 
+func TestConversationNoteIsUniqueAndInvalidatesDraftContext(t *testing.T) {
+	st := openTestStore(t)
+	ctx := t.Context()
+	sess := Session{ID: "chat", UserID: "u1", Kind: SessionKindACP, Mode: SessionModeDocker, Status: SessionStatusIdle, ExecutionPolicy: SessionExecutionOnDemand, CreatedAt: time.Now()}
+	if err := st.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		content  string
+		revision int64
+	}{{"Alice", 1}, {"Anna", 2}, {"Anna", 2}, {"", 3}} {
+		if err := st.SetConversationNote(ctx, sess.ID, tc.content); err != nil {
+			t.Fatal(err)
+		}
+		row, err := st.GetSession(ctx, sess.ID)
+		if err != nil || row.HistoryRevision != tc.revision {
+			t.Fatalf("revision=%d err=%v", row.HistoryRevision, err)
+		}
+		history, err := st.SessionMessages(ctx, sess.ID)
+		if err != nil || (tc.content == "" && len(history) != 0) || (tc.content != "" && (len(history) != 1 || history[0].Content != tc.content)) {
+			t.Fatalf("history=%v err=%v", history, err)
+		}
+		preview, err := st.LastShadowMessages(ctx, sess.UserID)
+		if err != nil || len(preview) != 0 {
+			t.Fatalf("private note visible in preview: %v err=%v", preview, err)
+		}
+	}
+}
+
 func TestShadowMessageRevisionAndRunExclusivity(t *testing.T) {
 	st, err := Open(filepath.Join(t.TempDir(), "brigade.db"), nil)
 	if err != nil {

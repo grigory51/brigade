@@ -207,6 +207,13 @@ message GenerateSessionDraftRequest {
   // Пусто сохраняет прежний режим included_in_context; непустой набор задаёт
   // снимок контекста для этого запуска в порядке сообщений сессии.
   repeated string selected_message_ids = 2;
+  string reply_to_message_id = 3;
+  string instruction = 4;
+}
+
+message SetConversationNoteRequest {
+  string session_id = 1;
+  string content = 2;
 }
 
 message GenerateSessionDraftResponse {
@@ -315,6 +322,7 @@ service SessionService {
   rpc SetModel(SetSessionModelRequest) returns (Empty) {}
   rpc SetMessageIncluded(SetSessionMessageIncludedRequest) returns (Empty) {}
   rpc GenerateDraft(GenerateSessionDraftRequest) returns (GenerateSessionDraftResponse) {}
+  rpc SetConversationNote(SetConversationNoteRequest) returns (Empty) {}
   rpc CancelDraft(CancelSessionDraftRequest) returns (Empty) {}
   rpc CreateDraft(CreateSessionDraftRequest) returns (CreateSessionDraftResponse) {}
   rpc GetDraftRun(GetSessionDraftRunRequest) returns (GetSessionDraftRunResponse) {}

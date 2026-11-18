@@ -47,6 +47,9 @@ const (
 	// TelegramServiceSendDraftProcedure is the fully-qualified name of the TelegramService's SendDraft
 	// RPC.
 	TelegramServiceSendDraftProcedure = "/brigade.v1.TelegramService/SendDraft"
+	// TelegramServiceGetBusinessPhotoProcedure is the fully-qualified name of the TelegramService's
+	// GetBusinessPhoto RPC.
+	TelegramServiceGetBusinessPhotoProcedure = "/brigade.v1.TelegramService/GetBusinessPhoto"
 )
 
 // TelegramServiceClient is a client for the brigade.v1.TelegramService service.
@@ -56,6 +59,7 @@ type TelegramServiceClient interface {
 	DeleteBot(context.Context, *connect.Request[v1.TelegramBotRequest]) (*connect.Response[v1.Empty], error)
 	CreateBindingLink(context.Context, *connect.Request[v1.TelegramBotRequest]) (*connect.Response[v1.TelegramBindingLink], error)
 	SendDraft(context.Context, *connect.Request[v1.SendTelegramDraftRequest]) (*connect.Response[v1.Empty], error)
+	GetBusinessPhoto(context.Context, *connect.Request[v1.GetTelegramBusinessPhotoRequest]) (*connect.Response[v1.GetTelegramBusinessPhotoResponse], error)
 }
 
 // NewTelegramServiceClient constructs a client for the brigade.v1.TelegramService service. By
@@ -99,6 +103,12 @@ func NewTelegramServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(telegramServiceMethods.ByName("SendDraft")),
 			connect.WithClientOptions(opts...),
 		),
+		getBusinessPhoto: connect.NewClient[v1.GetTelegramBusinessPhotoRequest, v1.GetTelegramBusinessPhotoResponse](
+			httpClient,
+			baseURL+TelegramServiceGetBusinessPhotoProcedure,
+			connect.WithSchema(telegramServiceMethods.ByName("GetBusinessPhoto")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -109,6 +119,7 @@ type telegramServiceClient struct {
 	deleteBot         *connect.Client[v1.TelegramBotRequest, v1.Empty]
 	createBindingLink *connect.Client[v1.TelegramBotRequest, v1.TelegramBindingLink]
 	sendDraft         *connect.Client[v1.SendTelegramDraftRequest, v1.Empty]
+	getBusinessPhoto  *connect.Client[v1.GetTelegramBusinessPhotoRequest, v1.GetTelegramBusinessPhotoResponse]
 }
 
 // ListBots calls brigade.v1.TelegramService.ListBots.
@@ -136,6 +147,11 @@ func (c *telegramServiceClient) SendDraft(ctx context.Context, req *connect.Requ
 	return c.sendDraft.CallUnary(ctx, req)
 }
 
+// GetBusinessPhoto calls brigade.v1.TelegramService.GetBusinessPhoto.
+func (c *telegramServiceClient) GetBusinessPhoto(ctx context.Context, req *connect.Request[v1.GetTelegramBusinessPhotoRequest]) (*connect.Response[v1.GetTelegramBusinessPhotoResponse], error) {
+	return c.getBusinessPhoto.CallUnary(ctx, req)
+}
+
 // TelegramServiceHandler is an implementation of the brigade.v1.TelegramService service.
 type TelegramServiceHandler interface {
 	ListBots(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.ListTelegramBotsResponse], error)
@@ -143,6 +159,7 @@ type TelegramServiceHandler interface {
 	DeleteBot(context.Context, *connect.Request[v1.TelegramBotRequest]) (*connect.Response[v1.Empty], error)
 	CreateBindingLink(context.Context, *connect.Request[v1.TelegramBotRequest]) (*connect.Response[v1.TelegramBindingLink], error)
 	SendDraft(context.Context, *connect.Request[v1.SendTelegramDraftRequest]) (*connect.Response[v1.Empty], error)
+	GetBusinessPhoto(context.Context, *connect.Request[v1.GetTelegramBusinessPhotoRequest]) (*connect.Response[v1.GetTelegramBusinessPhotoResponse], error)
 }
 
 // NewTelegramServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -182,6 +199,12 @@ func NewTelegramServiceHandler(svc TelegramServiceHandler, opts ...connect.Handl
 		connect.WithSchema(telegramServiceMethods.ByName("SendDraft")),
 		connect.WithHandlerOptions(opts...),
 	)
+	telegramServiceGetBusinessPhotoHandler := connect.NewUnaryHandler(
+		TelegramServiceGetBusinessPhotoProcedure,
+		svc.GetBusinessPhoto,
+		connect.WithSchema(telegramServiceMethods.ByName("GetBusinessPhoto")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/brigade.v1.TelegramService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TelegramServiceListBotsProcedure:
@@ -194,6 +217,8 @@ func NewTelegramServiceHandler(svc TelegramServiceHandler, opts ...connect.Handl
 			telegramServiceCreateBindingLinkHandler.ServeHTTP(w, r)
 		case TelegramServiceSendDraftProcedure:
 			telegramServiceSendDraftHandler.ServeHTTP(w, r)
+		case TelegramServiceGetBusinessPhotoProcedure:
+			telegramServiceGetBusinessPhotoHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -221,4 +246,8 @@ func (UnimplementedTelegramServiceHandler) CreateBindingLink(context.Context, *c
 
 func (UnimplementedTelegramServiceHandler) SendDraft(context.Context, *connect.Request[v1.SendTelegramDraftRequest]) (*connect.Response[v1.Empty], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.TelegramService.SendDraft is not implemented"))
+}
+
+func (UnimplementedTelegramServiceHandler) GetBusinessPhoto(context.Context, *connect.Request[v1.GetTelegramBusinessPhotoRequest]) (*connect.Response[v1.GetTelegramBusinessPhotoResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.TelegramService.GetBusinessPhoto is not implemented"))
 }

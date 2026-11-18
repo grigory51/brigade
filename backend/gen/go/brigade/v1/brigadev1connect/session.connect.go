@@ -63,6 +63,9 @@ const (
 	// SessionServiceGenerateDraftProcedure is the fully-qualified name of the SessionService's
 	// GenerateDraft RPC.
 	SessionServiceGenerateDraftProcedure = "/brigade.v1.SessionService/GenerateDraft"
+	// SessionServiceSetConversationNoteProcedure is the fully-qualified name of the SessionService's
+	// SetConversationNote RPC.
+	SessionServiceSetConversationNoteProcedure = "/brigade.v1.SessionService/SetConversationNote"
 	// SessionServiceCancelDraftProcedure is the fully-qualified name of the SessionService's
 	// CancelDraft RPC.
 	SessionServiceCancelDraftProcedure = "/brigade.v1.SessionService/CancelDraft"
@@ -115,6 +118,7 @@ type SessionServiceClient interface {
 	SetModel(context.Context, *connect.Request[v1.SetSessionModelRequest]) (*connect.Response[v1.Empty], error)
 	SetMessageIncluded(context.Context, *connect.Request[v1.SetSessionMessageIncludedRequest]) (*connect.Response[v1.Empty], error)
 	GenerateDraft(context.Context, *connect.Request[v1.GenerateSessionDraftRequest]) (*connect.Response[v1.GenerateSessionDraftResponse], error)
+	SetConversationNote(context.Context, *connect.Request[v1.SetConversationNoteRequest]) (*connect.Response[v1.Empty], error)
 	CancelDraft(context.Context, *connect.Request[v1.CancelSessionDraftRequest]) (*connect.Response[v1.Empty], error)
 	CreateDraft(context.Context, *connect.Request[v1.CreateSessionDraftRequest]) (*connect.Response[v1.CreateSessionDraftResponse], error)
 	GetDraftRun(context.Context, *connect.Request[v1.GetSessionDraftRunRequest]) (*connect.Response[v1.GetSessionDraftRunResponse], error)
@@ -223,6 +227,12 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(sessionServiceMethods.ByName("GenerateDraft")),
 			connect.WithClientOptions(opts...),
 		),
+		setConversationNote: connect.NewClient[v1.SetConversationNoteRequest, v1.Empty](
+			httpClient,
+			baseURL+SessionServiceSetConversationNoteProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("SetConversationNote")),
+			connect.WithClientOptions(opts...),
+		),
 		cancelDraft: connect.NewClient[v1.CancelSessionDraftRequest, v1.Empty](
 			httpClient,
 			baseURL+SessionServiceCancelDraftProcedure,
@@ -318,6 +328,7 @@ type sessionServiceClient struct {
 	setModel                  *connect.Client[v1.SetSessionModelRequest, v1.Empty]
 	setMessageIncluded        *connect.Client[v1.SetSessionMessageIncludedRequest, v1.Empty]
 	generateDraft             *connect.Client[v1.GenerateSessionDraftRequest, v1.GenerateSessionDraftResponse]
+	setConversationNote       *connect.Client[v1.SetConversationNoteRequest, v1.Empty]
 	cancelDraft               *connect.Client[v1.CancelSessionDraftRequest, v1.Empty]
 	createDraft               *connect.Client[v1.CreateSessionDraftRequest, v1.CreateSessionDraftResponse]
 	getDraftRun               *connect.Client[v1.GetSessionDraftRunRequest, v1.GetSessionDraftRunResponse]
@@ -391,6 +402,11 @@ func (c *sessionServiceClient) SetMessageIncluded(ctx context.Context, req *conn
 // GenerateDraft calls brigade.v1.SessionService.GenerateDraft.
 func (c *sessionServiceClient) GenerateDraft(ctx context.Context, req *connect.Request[v1.GenerateSessionDraftRequest]) (*connect.Response[v1.GenerateSessionDraftResponse], error) {
 	return c.generateDraft.CallUnary(ctx, req)
+}
+
+// SetConversationNote calls brigade.v1.SessionService.SetConversationNote.
+func (c *sessionServiceClient) SetConversationNote(ctx context.Context, req *connect.Request[v1.SetConversationNoteRequest]) (*connect.Response[v1.Empty], error) {
+	return c.setConversationNote.CallUnary(ctx, req)
 }
 
 // CancelDraft calls brigade.v1.SessionService.CancelDraft.
@@ -472,6 +488,7 @@ type SessionServiceHandler interface {
 	SetModel(context.Context, *connect.Request[v1.SetSessionModelRequest]) (*connect.Response[v1.Empty], error)
 	SetMessageIncluded(context.Context, *connect.Request[v1.SetSessionMessageIncludedRequest]) (*connect.Response[v1.Empty], error)
 	GenerateDraft(context.Context, *connect.Request[v1.GenerateSessionDraftRequest]) (*connect.Response[v1.GenerateSessionDraftResponse], error)
+	SetConversationNote(context.Context, *connect.Request[v1.SetConversationNoteRequest]) (*connect.Response[v1.Empty], error)
 	CancelDraft(context.Context, *connect.Request[v1.CancelSessionDraftRequest]) (*connect.Response[v1.Empty], error)
 	CreateDraft(context.Context, *connect.Request[v1.CreateSessionDraftRequest]) (*connect.Response[v1.CreateSessionDraftResponse], error)
 	GetDraftRun(context.Context, *connect.Request[v1.GetSessionDraftRunRequest]) (*connect.Response[v1.GetSessionDraftRunResponse], error)
@@ -574,6 +591,12 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		SessionServiceGenerateDraftProcedure,
 		svc.GenerateDraft,
 		connect.WithSchema(sessionServiceMethods.ByName("GenerateDraft")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceSetConversationNoteHandler := connect.NewUnaryHandler(
+		SessionServiceSetConversationNoteProcedure,
+		svc.SetConversationNote,
+		connect.WithSchema(sessionServiceMethods.ByName("SetConversationNote")),
 		connect.WithHandlerOptions(opts...),
 	)
 	sessionServiceCancelDraftHandler := connect.NewUnaryHandler(
@@ -680,6 +703,8 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 			sessionServiceSetMessageIncludedHandler.ServeHTTP(w, r)
 		case SessionServiceGenerateDraftProcedure:
 			sessionServiceGenerateDraftHandler.ServeHTTP(w, r)
+		case SessionServiceSetConversationNoteProcedure:
+			sessionServiceSetConversationNoteHandler.ServeHTTP(w, r)
 		case SessionServiceCancelDraftProcedure:
 			sessionServiceCancelDraftHandler.ServeHTTP(w, r)
 		case SessionServiceCreateDraftProcedure:
@@ -761,6 +786,10 @@ func (UnimplementedSessionServiceHandler) SetMessageIncluded(context.Context, *c
 
 func (UnimplementedSessionServiceHandler) GenerateDraft(context.Context, *connect.Request[v1.GenerateSessionDraftRequest]) (*connect.Response[v1.GenerateSessionDraftResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.GenerateDraft is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) SetConversationNote(context.Context, *connect.Request[v1.SetConversationNoteRequest]) (*connect.Response[v1.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.SetConversationNote is not implemented"))
 }
 
 func (UnimplementedSessionServiceHandler) CancelDraft(context.Context, *connect.Request[v1.CancelSessionDraftRequest]) (*connect.Response[v1.Empty], error) {

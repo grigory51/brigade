@@ -4,7 +4,7 @@
 // @ts-nocheck
 
 import { Empty } from "./auth_pb.js";
-import { ListTelegramBotsResponse, SaveTelegramBotRequest, SendTelegramDraftRequest, TelegramBindingLink, TelegramBot, TelegramBotRequest } from "./telegram_pb.js";
+import { GetTelegramBusinessPhotoRequest, GetTelegramBusinessPhotoResponse, ListTelegramBotsResponse, SaveTelegramBotRequest, SendTelegramDraftRequest, TelegramBindingLink, TelegramBot, TelegramBotRequest } from "./telegram_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -56,6 +56,15 @@ export const TelegramService = {
       name: "SendDraft",
       I: SendTelegramDraftRequest,
       O: Empty,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc brigade.v1.TelegramService.GetBusinessPhoto
+     */
+    getBusinessPhoto: {
+      name: "GetBusinessPhoto",
+      I: GetTelegramBusinessPhotoRequest,
+      O: GetTelegramBusinessPhotoResponse,
       kind: MethodKind.Unary,
     },
   }

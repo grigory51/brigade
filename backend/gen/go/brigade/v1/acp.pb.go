@@ -39,8 +39,10 @@ type AcpMessage struct {
 	Delivery          string `protobuf:"bytes,11,opt,name=delivery,proto3" json:"delivery,omitempty"`
 	ReplyToId         string `protobuf:"bytes,12,opt,name=reply_to_id,json=replyToId,proto3" json:"reply_to_id,omitempty"`
 	CreatedAt         int64  `protobuf:"varint,13,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Фото Telegram Business доступно через защищённый TelegramService RPC.
+	HasTelegramBusinessPhoto bool `protobuf:"varint,14,opt,name=has_telegram_business_photo,json=hasTelegramBusinessPhoto,proto3" json:"has_telegram_business_photo,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *AcpMessage) Reset() {
@@ -162,6 +164,13 @@ func (x *AcpMessage) GetCreatedAt() int64 {
 		return x.CreatedAt
 	}
 	return 0
+}
+
+func (x *AcpMessage) GetHasTelegramBusinessPhoto() bool {
+	if x != nil {
+		return x.HasTelegramBusinessPhoto
+	}
+	return false
 }
 
 // AcpCommand — slash-команда агента для автокомплита composer'а.
@@ -969,7 +978,7 @@ var File_brigade_v1_acp_proto protoreflect.FileDescriptor
 const file_brigade_v1_acp_proto_rawDesc = "" +
 	"\n" +
 	"\x14brigade/v1/acp.proto\x12\n" +
-	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\xf8\x02\n" +
+	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\xb7\x03\n" +
 	"\n" +
 	"AcpMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
@@ -987,7 +996,8 @@ const file_brigade_v1_acp_proto_rawDesc = "" +
 	"\bdelivery\x18\v \x01(\tR\bdelivery\x12\x1e\n" +
 	"\vreply_to_id\x18\f \x01(\tR\treplyToId\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\r \x01(\x03R\tcreatedAt\"V\n" +
+	"created_at\x18\r \x01(\x03R\tcreatedAt\x12=\n" +
+	"\x1bhas_telegram_business_photo\x18\x0e \x01(\bR\x18hasTelegramBusinessPhoto\"V\n" +
 	"\n" +
 	"AcpCommand\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +

@@ -199,6 +199,95 @@ export class SendTelegramDraftRequest extends Message<SendTelegramDraftRequest> 
 }
 
 /**
+ * GetTelegramBusinessPhotoRequest адресует фото через Brigade ID сообщения, а не
+ * через Telegram file_id: клиент никогда не получает BotFather token.
+ *
+ * @generated from message brigade.v1.GetTelegramBusinessPhotoRequest
+ */
+export class GetTelegramBusinessPhotoRequest extends Message<GetTelegramBusinessPhotoRequest> {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId = "";
+
+  /**
+   * @generated from field: string message_id = 2;
+   */
+  messageId = "";
+
+  constructor(data?: PartialMessage<GetTelegramBusinessPhotoRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.GetTelegramBusinessPhotoRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "message_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetTelegramBusinessPhotoRequest {
+    return new GetTelegramBusinessPhotoRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetTelegramBusinessPhotoRequest {
+    return new GetTelegramBusinessPhotoRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetTelegramBusinessPhotoRequest {
+    return new GetTelegramBusinessPhotoRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: GetTelegramBusinessPhotoRequest | PlainMessage<GetTelegramBusinessPhotoRequest> | undefined, b: GetTelegramBusinessPhotoRequest | PlainMessage<GetTelegramBusinessPhotoRequest> | undefined): boolean {
+    return proto3.util.equals(GetTelegramBusinessPhotoRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.GetTelegramBusinessPhotoResponse
+ */
+export class GetTelegramBusinessPhotoResponse extends Message<GetTelegramBusinessPhotoResponse> {
+  /**
+   * @generated from field: bytes data = 1;
+   */
+  data = new Uint8Array(0);
+
+  /**
+   * @generated from field: string content_type = 2;
+   */
+  contentType = "";
+
+  constructor(data?: PartialMessage<GetTelegramBusinessPhotoResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.GetTelegramBusinessPhotoResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "data", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
+    { no: 2, name: "content_type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetTelegramBusinessPhotoResponse {
+    return new GetTelegramBusinessPhotoResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetTelegramBusinessPhotoResponse {
+    return new GetTelegramBusinessPhotoResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetTelegramBusinessPhotoResponse {
+    return new GetTelegramBusinessPhotoResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: GetTelegramBusinessPhotoResponse | PlainMessage<GetTelegramBusinessPhotoResponse> | undefined, b: GetTelegramBusinessPhotoResponse | PlainMessage<GetTelegramBusinessPhotoResponse> | undefined): boolean {
+    return proto3.util.equals(GetTelegramBusinessPhotoResponse, a, b);
+  }
+}
+
+/**
  * @generated from message brigade.v1.ListTelegramBotsResponse
  */
 export class ListTelegramBotsResponse extends Message<ListTelegramBotsResponse> {

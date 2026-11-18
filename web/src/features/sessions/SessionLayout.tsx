@@ -367,18 +367,18 @@ export function SessionLayout() {
               <div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:justify-center">
                 <Link
                   to="/sessions"
-                  className="flex shrink-0 items-center gap-2 px-1 font-semibold"
+                  className="flex min-w-0 items-center gap-2 px-1 font-semibold"
                 >
                   <img
                     src="/logo.svg"
                     alt=""
                     className="size-[26px] shrink-0 rounded-[7px]"
                   />
-                  <span className="group-data-[collapsible=icon]:hidden">
+                  <span className="truncate group-data-[collapsible=icon]:hidden">
                     brigade
                   </span>
                 </Link>
-                <SidebarTrigger className="group-data-[collapsible=icon]:hidden" />
+                <SidebarTrigger className="shrink-0 group-data-[collapsible=icon]:hidden" />
               </div>
               {desktop && <EnvironmentSwitcher />}
               <Button
@@ -386,7 +386,7 @@ export function SessionLayout() {
                 className="h-auto justify-start gap-2 rounded-[9px] py-[9px] text-[13px] font-medium group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
               >
                 <Plus className="size-4 shrink-0" />
-                <span className="group-data-[collapsible=icon]:hidden">
+                <span className="truncate group-data-[collapsible=icon]:hidden">
                   Новая сессия
                 </span>
               </Button>
@@ -395,16 +395,16 @@ export function SessionLayout() {
             {/* Колонка не скроллится целиком: прокручивается только список сессий, а
                 «Заметки»/«Архив» и профиль остаются на виду при любой высоте окна. */}
             <SidebarContent className="overflow-hidden">
-              <SidebarGroup className="min-h-0 flex-1 gap-0 pb-0">
+              <SidebarGroup className="min-h-0 flex-1 gap-0 pb-0 group-data-[collapsible=icon]:px-0">
                 {/* Заголовок группы: сам никуда не ведёт, поэтому без hover-подсветки и
                     курсора — иначе выглядел бы кликабельным пунктом меню. Кликается только
                     иконка обновления справа. */}
                 <div className="flex h-8 items-center gap-2 px-2 text-[13px] group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
                   <MessagesSquare className="size-4 shrink-0" />
-                  <span className="flex-1 group-data-[collapsible=icon]:hidden">
+                  <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">
                     Сессии
                   </span>
-                  <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-secondary px-1.5 text-[10.5px] text-muted-foreground group-data-[collapsible=icon]:hidden">
+                  <span className="inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-secondary px-1.5 text-[10.5px] text-muted-foreground group-data-[collapsible=icon]:hidden">
                     {sessions.length}
                   </span>
                   <button
@@ -413,7 +413,7 @@ export function SessionLayout() {
                     disabled={state === "loading"}
                     aria-label="Обновить список сессий"
                     title="Обновить список сессий"
-                    className="flex size-5 items-center justify-center rounded text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground disabled:opacity-50 group-data-[collapsible=icon]:hidden"
+                    className="flex size-5 shrink-0 items-center justify-center rounded text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground disabled:opacity-50 group-data-[collapsible=icon]:hidden"
                   >
                     <RefreshCw
                       className={
@@ -427,8 +427,8 @@ export function SessionLayout() {
                 {/* Список забирает всю свободную высоту и скроллится внутри себя. Жёсткого
                     потолка нет намеренно: с ним при высоком окне оставалась дыра, а при
                     низком нижние разделы выдавливало за край колонки. */}
-                <SidebarGroupContent className="mt-1.5 min-h-0 flex-1 overflow-y-auto">
-                  <SidebarMenu>
+                <SidebarGroupContent className="mt-1.5 min-h-0 min-w-0 flex-1 overflow-y-auto">
+                  <SidebarMenu className="px-1 group-data-[collapsible=icon]:px-0">
                     {state === "loading" &&
                       Array.from({ length: 5 }).map((_, i) => (
                         <SidebarMenuItem key={i}>
@@ -459,10 +459,10 @@ export function SessionLayout() {
                       <Fragment key={group.key}>
                         {group.label && (
                           <SidebarMenuItem>
-                            <button type="button" aria-expanded={!collapsedGroups.has(group.key)} title={group.label} onClick={() => setCollapsedGroups((current) => { const next = new Set(current); if (next.has(group.key)) next.delete(group.key); else next.add(group.key); return next; })} className="mx-1 mt-1 flex h-7 w-[calc(100%-8px)] items-center gap-2 rounded-[8px] bg-sidebar-accent/60 px-2 text-left text-[12px] font-medium text-sidebar-foreground/75 hover:bg-sidebar-accent group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+                            <button type="button" aria-expanded={!collapsedGroups.has(group.key)} title={group.label} onClick={() => setCollapsedGroups((current) => { const next = new Set(current); if (next.has(group.key)) next.delete(group.key); else next.add(group.key); return next; })} className="mt-1 flex h-7 w-full items-center gap-2 rounded-[8px] bg-sidebar-accent/60 px-2 text-left text-[12px] font-medium text-sidebar-foreground/75 hover:bg-sidebar-accent group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
                               <ChevronDown className={cn("size-3.5 shrink-0 transition-transform", collapsedGroups.has(group.key) && "-rotate-90")} />
                               <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">{group.label}</span>
-                              <span className="text-[10px] tabular-nums text-sidebar-foreground/45 group-data-[collapsible=icon]:hidden">{group.sessions.length}</span>
+                              <span className="shrink-0 text-[10px] tabular-nums text-sidebar-foreground/45 group-data-[collapsible=icon]:hidden">{group.sessions.length}</span>
                             </button>
                           </SidebarMenuItem>
                         )}
@@ -674,6 +674,7 @@ function SessionItem({
       ? fullLabel.slice(groupPrefix.length)
       : fullLabel;
   const displayLabel = business ? label.replace(/^Telegram\s*·\s*/, "") : label;
+  const itemClass = cn("min-w-0 group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:self-center", grouped && "ml-2 group-data-[collapsible=icon]:ml-0");
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(fullLabel);
@@ -702,7 +703,7 @@ function SessionItem({
 
   if (editing) {
     return (
-      <SidebarMenuItem className={grouped ? "pl-3" : undefined}>
+      <SidebarMenuItem className={itemClass}>
         <input
           ref={inputRef}
           value={draft}
@@ -725,7 +726,7 @@ function SessionItem({
   }
 
   return (
-    <SidebarMenuItem className={grouped ? "pl-3" : undefined}>
+    <SidebarMenuItem className={itemClass}>
       <SidebarMenuButton
         isActive={active}
         // Сессию в необратимой операции не открываем: её контент уже блокирован оверлеем.
@@ -735,18 +736,12 @@ function SessionItem({
           if (!locked) startEdit();
         }}
         tooltip={displayLabel}
-        // Правый паддинг под ряд hover-иконок применяем ТОЛЬКО при наведении/фокусе (как и
-        // появление самих иконок): иконки абсолютные (вне потока), поэтому ширину имени задаёт
-        // лишь padding — постоянный отступ вечно сжимал бы название. На hover имя ужимается,
-        // освобождая место иконкам (ACP их 4, CLI — 2). important (trailing `!`) перебивает
-        // базовый `group-has-[menu-action]:pr-8` из sidebarMenuButtonVariants.
-        //
-        // Подсветку строки вешаем на group-hover/menu-item (весь <li>), а не на :hover самой
-        // кнопки: иконки-сиблинги (absolute, поверх) перехватывают hover, между ними щели —
-        // из-за этого фон кнопки мигал бы. transition-none: паддинг меняется мгновенно, в такт
-        // мгновенному появлению иконок (иначе имя доанимировалось бы уже после их показа).
-        className={`rounded-[8px] text-[13px] transition-none! group-hover/menu-item:bg-sidebar-accent group-hover/menu-item:text-sidebar-accent-foreground ${business ? "h-auto min-h-[52px] py-1.5 " : ""}${
-          refreshPinned
+        // Действия расположены поверх строки. В двухстрочном режиме место под них
+        // нужно только имени: ширина превью и положение времени не должны меняться.
+        className={`rounded-[8px] text-[13px] transition-none! group-hover/menu-item:bg-sidebar-accent group-hover/menu-item:text-sidebar-accent-foreground ${
+          business
+            ? "grid h-auto min-h-[52px] grid-cols-[auto_minmax(0,1fr)] gap-y-0 py-1.5 pr-2! group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:min-h-0"
+            : refreshPinned
             ? "pr-28! md:pr-8! md:group-hover/menu-item:pr-28! md:group-focus-within/menu-item:pr-28!"
             : session.kind === SessionKind.ACP
             ? "group-hover/menu-item:pr-28! group-focus-within/menu-item:pr-28!"
@@ -757,16 +752,21 @@ function SessionItem({
           {displayLabel[0]}
         </span>
         {business ? <>
-          <span className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-accent text-xs font-medium group-data-[collapsible=icon]:hidden">{displayLabel[0]?.toUpperCase()}</span>
-          <span className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
-            <span className="flex items-center justify-between gap-1">
-              <span className={cn("truncate", session.unread && "font-medium")}>{displayLabel}</span>
-              {session.lastMessageAt > 0n && <time className="shrink-0 text-[11px] text-muted-foreground group-hover/menu-item:hidden" dateTime={new Date(Number(session.lastMessageAt) * 1000).toISOString()}>{new Date(Number(session.lastMessageAt) * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</time>}
-            </span>
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <span className="min-w-0 flex-1 truncate">{session.lastMessageDelivery === "draft" ? "Черновик: " : session.lastMessageDelivery === "uncertain" ? "Не подтверждено · " : session.lastMessageAuthor === "owner" ? "Вы: " : ""}{session.lastMessage || "Переписка"}</span>
-              {!active && session.unreadCount > 0 && <span className="flex min-w-[17px] shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">{session.unreadCount}</span>}
-            </span>
+          <span aria-hidden="true" className="row-span-2 flex size-[30px] items-center justify-center rounded-full bg-accent text-xs font-medium group-data-[collapsible=icon]:hidden">{displayLabel[0]?.toUpperCase()}</span>
+          <span title={displayLabel} className={cn(
+            "min-w-0 truncate group-data-[collapsible=icon]:hidden",
+            session.unread && "font-medium",
+            session.kind === SessionKind.ACP
+              ? "mr-20 md:mr-0 md:group-hover/menu-item:mr-20 md:group-focus-within/menu-item:mr-20"
+              : "mr-14 md:mr-0 md:group-hover/menu-item:mr-14 md:group-focus-within/menu-item:mr-14",
+            archiving && "md:mr-20",
+            deleting && "md:mr-6",
+            session.unread && !active && session.unreadCount === 0 && !locked && "md:mr-3",
+          )}>{displayLabel}</span>
+          <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
+            <span className="min-w-0 flex-1 truncate">{session.lastMessageDelivery === "draft" ? "Черновик: " : session.lastMessageDelivery === "uncertain" ? "Не подтверждено · " : session.lastMessageAuthor === "owner" ? "Вы: " : ""}{session.lastMessage || "Переписка"}</span>
+            {session.lastMessageAt > 0n && <time className="shrink-0 whitespace-nowrap text-[11px] tabular-nums" dateTime={new Date(Number(session.lastMessageAt) * 1000).toISOString()}>{new Date(Number(session.lastMessageAt) * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</time>}
+            {!active && session.unreadCount > 0 && <span className="flex min-w-[17px] shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">{session.unreadCount}</span>}
           </span>
         </> : <span className="truncate group-data-[collapsible=icon]:hidden">{label}</span>}
         {session.unread && !active && (!business || session.unreadCount === 0) && (

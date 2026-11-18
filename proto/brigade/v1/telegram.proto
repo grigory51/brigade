@@ -37,6 +37,18 @@ message SendTelegramDraftRequest {
   string reply_to_message_id = 3;
 }
 
+// GetTelegramBusinessPhotoRequest адресует фото через Brigade ID сообщения, а не
+// через Telegram file_id: клиент никогда не получает BotFather token.
+message GetTelegramBusinessPhotoRequest {
+  string session_id = 1;
+  string message_id = 2;
+}
+
+message GetTelegramBusinessPhotoResponse {
+  bytes data = 1;
+  string content_type = 2;
+}
+
 message ListTelegramBotsResponse {
   repeated TelegramBot bots = 1;
   // poll|webhook — задано конфигурацией инстанса; Desktop всегда poll.
@@ -64,4 +76,5 @@ service TelegramService {
   rpc DeleteBot(TelegramBotRequest) returns (Empty) {}
   rpc CreateBindingLink(TelegramBotRequest) returns (TelegramBindingLink) {}
   rpc SendDraft(SendTelegramDraftRequest) returns (Empty) {}
+  rpc GetBusinessPhoto(GetTelegramBusinessPhotoRequest) returns (GetTelegramBusinessPhotoResponse) {}
 }

@@ -1261,6 +1261,16 @@ export class GenerateSessionDraftRequest extends Message<GenerateSessionDraftReq
    */
   selectedMessageIds: string[] = [];
 
+  /**
+   * @generated from field: string reply_to_message_id = 3;
+   */
+  replyToMessageId = "";
+
+  /**
+   * @generated from field: string instruction = 4;
+   */
+  instruction = "";
+
   constructor(data?: PartialMessage<GenerateSessionDraftRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -1271,6 +1281,8 @@ export class GenerateSessionDraftRequest extends Message<GenerateSessionDraftReq
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "selected_message_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 3, name: "reply_to_message_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "instruction", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GenerateSessionDraftRequest {
@@ -1287,6 +1299,49 @@ export class GenerateSessionDraftRequest extends Message<GenerateSessionDraftReq
 
   static equals(a: GenerateSessionDraftRequest | PlainMessage<GenerateSessionDraftRequest> | undefined, b: GenerateSessionDraftRequest | PlainMessage<GenerateSessionDraftRequest> | undefined): boolean {
     return proto3.util.equals(GenerateSessionDraftRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.SetConversationNoteRequest
+ */
+export class SetConversationNoteRequest extends Message<SetConversationNoteRequest> {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId = "";
+
+  /**
+   * @generated from field: string content = 2;
+   */
+  content = "";
+
+  constructor(data?: PartialMessage<SetConversationNoteRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.SetConversationNoteRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "content", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SetConversationNoteRequest {
+    return new SetConversationNoteRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SetConversationNoteRequest {
+    return new SetConversationNoteRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SetConversationNoteRequest {
+    return new SetConversationNoteRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SetConversationNoteRequest | PlainMessage<SetConversationNoteRequest> | undefined, b: SetConversationNoteRequest | PlainMessage<SetConversationNoteRequest> | undefined): boolean {
+    return proto3.util.equals(SetConversationNoteRequest, a, b);
   }
 }
 

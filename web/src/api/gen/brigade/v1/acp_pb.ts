@@ -80,6 +80,13 @@ export class AcpMessage extends Message<AcpMessage> {
    */
   createdAt = protoInt64.zero;
 
+  /**
+   * Фото Telegram Business доступно через защищённый TelegramService RPC.
+   *
+   * @generated from field: bool has_telegram_business_photo = 14;
+   */
+  hasTelegramBusinessPhoto = false;
+
   constructor(data?: PartialMessage<AcpMessage>) {
     super();
     proto3.util.initPartial(data, this);
@@ -101,6 +108,7 @@ export class AcpMessage extends Message<AcpMessage> {
     { no: 11, name: "delivery", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 12, name: "reply_to_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 13, name: "created_at", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 14, name: "has_telegram_business_photo", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): AcpMessage {

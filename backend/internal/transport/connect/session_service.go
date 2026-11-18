@@ -215,7 +215,7 @@ func (s *SessionService) GenerateDraft(ctx context.Context, req *connect.Request
 	if err != nil {
 		return nil, err
 	}
-	run, err := s.registry.StartShadowRun(ctx, req.Msg.SessionId, userID, req.Msg.SelectedMessageIds)
+	run, err := s.registry.StartShadowRun(ctx, req.Msg.SessionId, userID, req.Msg.SelectedMessageIds, req.Msg.ReplyToMessageId, req.Msg.Instruction)
 	if err != nil {
 		if errors.Is(err, store.ErrSessionRunActive) {
 			return nil, connect.NewError(connect.CodeAlreadyExists, err)
@@ -226,6 +226,17 @@ func (s *SessionService) GenerateDraft(ctx context.Context, req *connect.Request
 		return nil, sessionError(err)
 	}
 	return connect.NewResponse(&v1.GenerateSessionDraftResponse{RunId: run.ID}), nil
+}
+
+func (s *SessionService) SetConversationNote(ctx context.Context, req *connect.Request[v1.SetConversationNoteRequest]) (*connect.Response[v1.Empty], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.registry.SetConversationNote(ctx, req.Msg.SessionId, userID, req.Msg.Content); err != nil {
+		return nil, sessionError(err)
+	}
+	return connect.NewResponse(&v1.Empty{}), nil
 }
 
 func (s *SessionService) CreateDraft(ctx context.Context, req *connect.Request[v1.CreateSessionDraftRequest]) (*connect.Response[v1.CreateSessionDraftResponse], error) {

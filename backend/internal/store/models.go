@@ -208,16 +208,18 @@ type Session struct {
 
 // SessionMessage — сообщение сессии, для которой Brigade владеет историей.
 type SessionMessage struct {
-	ID                string
-	SessionID         string
-	Author            MessageAuthor
-	Content           string
-	Source            string
-	ExternalID        string
-	IncludedInContext bool
-	Delivery          MessageDelivery
-	ReplyToID         string
-	CreatedAt         time.Time
+	ID                       string
+	SessionID                string
+	Author                   MessageAuthor
+	Content                  string
+	Source                   string
+	ExternalID               string
+	IncludedInContext        bool
+	Delivery                 MessageDelivery
+	ReplyToID                string
+	CreatedAt                time.Time
+	TelegramPhotoFileID      string `json:"-"`
+	HasTelegramBusinessPhoto bool
 }
 
 type SessionRun struct {
