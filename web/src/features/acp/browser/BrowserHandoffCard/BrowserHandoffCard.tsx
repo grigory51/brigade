@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useThreadRuntime, useAuiState } from "@assistant-ui/react";
+import { useAui, useAuiState } from "@assistant-ui/react";
 import { Globe, Loader2 } from "lucide-react";
 import { browserClient } from "@/api/client";
 import { BrowserAction } from "@/api/gen/brigade/v1/browser_pb";
@@ -17,7 +17,7 @@ export function BrowserHandoffCard({ sessionId, result, reason }: { sessionId?: 
   const [state, setState] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const thread = useThreadRuntime();
+  const thread = useAui().thread;
   const running = useAuiState(s => s.thread.isRunning);
   const submitted = useRef(false);
 

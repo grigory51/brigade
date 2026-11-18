@@ -1,18 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { HttpAgent } from "@ag-ui/client";
-import { fromAgUiMessages, useAgUiRuntime } from "@assistant-ui/react-ag-ui";
-import {
-  ExportedMessageRepository,
-  type ThreadHistoryAdapter,
-} from "@assistant-ui/react";
+import { useAgUiRuntime } from "@assistant-ui/react-ag-ui";
+import type { ThreadHistoryAdapter } from "@assistant-ui/react";
 import { MessageProcessor } from "@a2ui/web_core/v0_9";
 import type { ReactComponentImplementation } from "@a2ui/react/v0_9";
 import { archiveClient } from "@/api/client";
 import { cardsCatalog, basicCatalog } from "./a2ui/catalog";
 import {
-  assembleHistory,
+  importAcpHistory,
   type A2uiState,
-  type HistoryMessage,
 } from "./useAcpRuntime";
 
 // useArchivedRuntime — рантайм для readonly-просмотра архивной сессии. В отличие от
@@ -62,17 +58,7 @@ export function useArchivedRuntime(sessionId: string): {
         } catch {
           return { messages: [] };
         }
-        const raw: HistoryMessage[] = data.messages.map((m) => ({
-          id: m.id,
-          role: m.role,
-          content: m.content,
-          toolName: m.toolName || undefined,
-          argsText: m.argsText || undefined,
-          result: m.result,
-        }));
-        return ExportedMessageRepository.fromArray(
-          fromAgUiMessages(assembleHistory(raw), { showThinking: true }),
-        );
+        return importAcpHistory(data.messages);
       },
       append: async () => {},
     }),

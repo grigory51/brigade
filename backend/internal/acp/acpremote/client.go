@@ -37,12 +37,7 @@ type Client struct {
 
 	mu        sync.Mutex
 	sessionID string
-	sink      acp.EventSink
-	bindGen   uint64
-	cancel    context.CancelFunc // отменяет текущий StreamEvents-цикл
-	// deliveredSeq — seq последнего события, доставленного текущему sink (streamLoop). По нему
-	// FinishStreams дожидается, что закрывающие потоки события доехали до SSE до RUN_FINISHED.
-	deliveredSeq int64
+	stream    *eventStream
 	// pendingPermissions — последний снимок ожиданий durable-демона из Status.
 	// GetStatus фронта читает его без второго RPC.
 	pendingPermissions [][]byte
@@ -57,7 +52,20 @@ type Client struct {
 	OnTurnEnd      func(stopReason string, err error)
 	OnSessionTitle func(title string)
 	sessionTitle   string
-	daemonVersion  string
+}
+
+// Каждый Bind получает собственный курсор: одинаковый seq разных подписок
+// не означает, что новый sink уже получил свой snapshot.
+type eventStream struct {
+	ctx    context.Context
+	cancel context.CancelCauseFunc
+	sink   acp.EventSink
+	replay bool
+
+	// Поля доставки защищены Client.mu. Канал создаётся только при наличии ожидающего.
+	deliveredSeq int64
+	snapshot     bool
+	updated      chan struct{}
 }
 
 // New создаёт клиент к демону по baseURL (http://<host>:<port>). signToken подписывает токен
@@ -115,11 +123,6 @@ func (c *Client) Configure(ctx context.Context, opts ConfigureOptions) (string, 
 	c.sessionID = resp.Msg.SessionId
 	c.sessionTitle = resp.Msg.SessionTitle
 	c.mu.Unlock()
-	if status, statusErr := c.RPC.Status(ctx, daemonrpc.Req(c.Sign(), &v1.Empty{})); statusErr == nil {
-		c.mu.Lock()
-		c.daemonVersion = status.Msg.Version
-		c.mu.Unlock()
-	}
 	if resp.Msg.SessionTitle != "" && c.OnSessionTitle != nil {
 		c.OnSessionTitle(resp.Msg.SessionTitle)
 	}
@@ -140,10 +143,12 @@ func (c *Client) SessionID() string {
 	return c.sessionID
 }
 
-func (c *Client) DaemonVersion() string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.daemonVersion
+func (c *Client) DaemonVersion(ctx context.Context) (string, error) {
+	status, err := c.RPC.Status(ctx, daemonrpc.Req(c.Sign(), &v1.Empty{}))
+	if err != nil {
+		return "", err
+	}
+	return status.Msg.Version, nil
 }
 
 func (c *Client) SetHooks(onTurnEnd func(string, error), onSessionTitle func(string)) {
@@ -162,72 +167,91 @@ func (c *Client) SetHooks(onTurnEnd func(string, error), onSessionTitle func(str
 // resolver сейчас не используется: permission-запрос прилетает CUSTOM-событием в потоке
 // (демон его журналит), а ответ идёт AcpService.ResolvePermission → демон (Phase 3).
 func (c *Client) Bind(sink acp.EventSink, _ acp.PermissionResolver) (unbind func()) {
-	return c.bind(sink, false)
+	_, unbind = c.bind(sink, false)
+	return unbind
 }
 
 func (c *Client) BindReplay(sink acp.EventSink, _ acp.PermissionResolver) (unbind func()) {
-	return c.bind(sink, true)
+	_, unbind = c.bind(sink, true)
+	return unbind
 }
 
-func (c *Client) bind(sink acp.EventSink, replayState bool) (unbind func()) {
+// BindReplayWithFinish возвращает барьер конкретной подписки. При ошибке finish
+// вызывающий код не должен отправлять RUN_FINISHED.
+func (c *Client) BindReplayWithFinish(sink acp.EventSink, _ acp.PermissionResolver) (unbind func(), finish func(context.Context) error) {
+	stream, unbind := c.bind(sink, true)
+	return unbind, func(ctx context.Context) error { return c.finishStreams(ctx, stream) }
+}
+
+func (c *Client) bind(sink acp.EventSink, replay bool) (*eventStream, func()) {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	sub := &eventStream{ctx: ctx, cancel: cancel, sink: sink, replay: replay}
 	c.mu.Lock()
-	c.bindGen++
-	gen := c.bindGen
-	c.sink = sink
-	if c.cancel != nil {
-		c.cancel()
+	if c.stream != nil {
+		c.stream.cancel(context.Canceled)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	c.cancel = cancel
+	c.stream = sub
 	c.mu.Unlock()
 
 	from := int64(0)
 	if st, err := c.RPC.Status(ctx, daemonrpc.Req(c.Sign(), &v1.Empty{})); err == nil {
 		from = st.Msg.Seq
 	}
-	go c.streamLoop(ctx, gen, from, replayState)
-
-	return func() {
+	if !replay {
+		// Обычный Bind запрашивает только журнал строго после from.
 		c.mu.Lock()
-		if c.bindGen == gen {
-			c.sink = nil
-			if c.cancel != nil {
-				c.cancel()
-				c.cancel = nil
-			}
+		sub.deliveredSeq = from
+		c.mu.Unlock()
+	}
+	go c.streamLoop(sub, from)
+
+	return sub, func() {
+		c.mu.Lock()
+		if c.stream == sub {
+			cancel(context.Canceled)
+			c.stream = nil
 		}
 		c.mu.Unlock()
 	}
 }
 
-// streamLoop читает StreamEvents и доставляет каждое событие текущему sink, пока привязка
-// актуальна (gen не сменился) и ctx не отменён.
-func (c *Client) streamLoop(ctx context.Context, gen uint64, from int64, replayState bool) {
-	stream, err := c.RPC.StreamEvents(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonStreamEventsRequest{FromSeq: from, ReplayState: replayState}))
+func (c *Client) streamLoop(sub *eventStream, from int64) {
+	stream, err := c.RPC.StreamEvents(sub.ctx, daemonrpc.Req(c.Sign(), &v1.DaemonStreamEventsRequest{FromSeq: from, ReplayState: sub.replay}))
 	if err != nil {
+		sub.cancel(err)
 		return
 	}
+	defer stream.Close()
+	defer func() { sub.cancel(err) }()
 	for stream.Receive() {
 		msg := stream.Msg()
 		var evt agui.Event
-		if err := json.Unmarshal(msg.AguiJson, &evt); err != nil {
-			log.Printf("acpremote: unmarshal event seq=%d: %v", msg.Seq, err)
-			continue
+		if err = json.Unmarshal(msg.AguiJson, &evt); err != nil {
+			err = fmt.Errorf("acpremote: decode event seq=%d: %w", msg.Seq, err)
+			return
+		}
+		if err = sub.ctx.Err(); err != nil {
+			return
 		}
 		c.updateSessionTitle(evt)
-		c.mu.Lock()
-		cur := c.sink
-		curGen := c.bindGen
-		c.mu.Unlock()
-		if cur == nil || curGen != gen {
-			continue
-		}
 		for _, event := range normalizeDaemonEvent(evt) {
-			_ = cur(event)
+			if err = sub.sink(event); err != nil {
+				return
+			}
 		}
 		c.mu.Lock()
-		c.deliveredSeq = msg.Seq
+		sub.deliveredSeq = msg.Seq
+		if evt.Type == agui.EventMessagesSnapshot {
+			sub.snapshot = true
+		}
+		if sub.updated != nil {
+			close(sub.updated)
+			sub.updated = nil
+		}
 		c.mu.Unlock()
+	}
+	if err = stream.Err(); err == nil {
+		err = io.EOF
 	}
 }
 
@@ -405,34 +429,59 @@ func (c *Client) Cancel(ctx context.Context) error {
 // журналит END, а он едет на SSE асинхронно через StreamEvents, тогда как RUN_FINISHED run.go
 // шлёт напрямую и обгоняет; клиент @ag-ui отвергает RUN_FINISHED «поверх открытого текста».
 func (c *Client) FinishStreams() {
-	if _, err := c.RPC.FinishStreams(context.Background(), daemonrpc.Req(c.Sign(), &v1.Empty{})); err != nil {
-		log.Printf("acpremote: finish streams: %v", err)
-		return
-	}
-	// Дренируем доставку только при активной привязке: без sink (напр. вызов на onTurnStart
-	// до Bind) seq не двигается — ждать нечего.
 	c.mu.Lock()
-	bound := c.sink != nil
+	sub := c.stream
 	c.mu.Unlock()
-	if !bound {
-		return
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := c.finishStreams(ctx, sub); err != nil {
+		log.Printf("acpremote: finish streams: %v", err)
 	}
-	_, target := c.Status() // журнал демона после закрытия
-	c.waitDelivered(int64(target), 2*time.Second)
 }
 
-// waitDelivered блокируется, пока streamLoop не доставит события до seq target (или таймаут —
-// защита от повисшего/оборванного потока: best-effort, RUN_FINISHED всё равно уйдёт).
-func (c *Client) waitDelivered(target int64, timeout time.Duration) {
-	deadline := time.Now().Add(timeout)
+func (c *Client) finishStreams(ctx context.Context, sub *eventStream) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	if sub != nil {
+		if err := context.Cause(sub.ctx); err != nil {
+			return err
+		}
+		stop := context.AfterFunc(sub.ctx, cancel)
+		defer stop()
+	}
+	if _, err := c.RPC.FinishStreams(ctx, daemonrpc.Req(c.Sign(), &v1.Empty{})); err != nil {
+		return err
+	}
+	if sub == nil {
+		return nil
+	}
+	status, err := c.RPC.Status(ctx, daemonrpc.Req(c.Sign(), &v1.Empty{}))
+	if err != nil {
+		return err
+	}
 	for {
 		c.mu.Lock()
-		got := c.deliveredSeq
-		c.mu.Unlock()
-		if got >= target || time.Now().After(deadline) {
-			return
+		if err := context.Cause(sub.ctx); err != nil {
+			c.mu.Unlock()
+			return err
 		}
-		time.Sleep(5 * time.Millisecond)
+		if sub.deliveredSeq >= status.Msg.Seq && (!sub.replay || sub.snapshot) {
+			c.mu.Unlock()
+			return ctx.Err()
+		}
+		if sub.updated == nil {
+			sub.updated = make(chan struct{})
+		}
+		updated := sub.updated
+		c.mu.Unlock()
+		select {
+		case <-updated:
+		case <-ctx.Done():
+			if err := context.Cause(sub.ctx); err != nil {
+				return err
+			}
+			return ctx.Err()
+		}
 	}
 }
 
@@ -490,7 +539,6 @@ func (c *Client) Status() (generating bool, seq int) {
 	}
 	c.mu.Lock()
 	c.pendingPermissions = resp.Msg.PendingPermissionsJson
-	c.daemonVersion = resp.Msg.Version
 	c.mu.Unlock()
 	return resp.Msg.Generating, int(resp.Msg.Seq)
 }
@@ -608,11 +656,10 @@ func (sh *ShellSession) Terminate(context.Context) error {
 // при явном teardown (registry.terminate → docker remove).
 func (c *Client) Close() error {
 	c.mu.Lock()
-	if c.cancel != nil {
-		c.cancel()
-		c.cancel = nil
+	if c.stream != nil {
+		c.stream.cancel(context.Canceled)
+		c.stream = nil
 	}
-	c.sink = nil
 	c.mu.Unlock()
 	return nil
 }

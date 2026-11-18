@@ -129,6 +129,9 @@ type Client struct {
 	sessionID acpsdk.SessionId
 
 	mu sync.Mutex
+	// deliveryMu охватывает запись в history и доставку в sink. Это позволяет
+	// снять replay и позицию журнала демона на одной границе, не вызывая sink под mu.
+	deliveryMu sync.Mutex
 	// sink/resolver — текущая привязка к WS-сеансу. nil вне сеанса (см. emit/resolve).
 	sink     EventSink
 	resolver PermissionResolver
@@ -440,7 +443,7 @@ func MessagesSnapshot(messages []Message) any {
 		ToolCalls  []snapshotToolCall `json:"toolCalls,omitempty"`
 		ToolCallID string             `json:"toolCallId,omitempty"`
 	}
-	var out []snapshotMessage
+	out := make([]snapshotMessage, 0, len(messages))
 	toolGroup := -1
 	for _, message := range messages {
 		if message.Role != "tool_call" {
@@ -490,8 +493,7 @@ func (c *Client) Commands() []agui.AvailableCommand {
 // корректными ролями, а не SSE-replay'ем (который склеивает весь поток в одно
 // assistant-сообщение).
 //
-// Учитываются только текстовые сообщения (user и assistant); размышления, tool-call'ы и
-// прочие события в историю чата не разворачиваются. Роль берётся из START-события.
+// Сообщения, размышления и вызовы инструментов сохраняют порядок своих START-событий.
 func (c *Client) Messages(_ context.Context) ([]Message, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -500,23 +502,30 @@ func (c *Client) Messages(_ context.Context) ([]Message, error) {
 
 func messagesFromEvents(events []agui.Event) []Message {
 	var out []Message
-	idx := make(map[string]int)     // messageId → позиция в out (текстовые сообщения)
+	textIdx := make(map[string]int)
+	reasoningIdx := make(map[string]int)
 	toolIdx := make(map[string]int) // toolCallId → позиция в out (карточки инструментов)
 	for _, evt := range events {
+		idx := textIdx
+		if evt.Type == agui.EventReasoningMessageStart || evt.Type == agui.EventReasoningMessageContent {
+			idx = reasoningIdx
+		}
 		switch evt.Type {
-		case agui.EventTextMessageStart:
+		case agui.EventTextMessageStart, agui.EventReasoningMessageStart:
 			if evt.MessageID == "" {
 				continue
 			}
 			if _, ok := idx[evt.MessageID]; !ok {
 				idx[evt.MessageID] = len(out)
 				role := evt.Role
-				if role == "" {
+				if evt.Type == agui.EventReasoningMessageStart {
+					role = "reasoning"
+				} else if role == "" {
 					role = "assistant"
 				}
 				out = append(out, Message{ID: evt.MessageID, Role: role})
 			}
-		case agui.EventTextMessageContent:
+		case agui.EventTextMessageContent, agui.EventReasoningMessageContent:
 			if i, ok := idx[evt.MessageID]; ok {
 				out[i].Content += evt.Delta
 			}
@@ -545,17 +554,56 @@ func messagesFromEvents(events []agui.Event) []Message {
 	return out
 }
 
-// ReplayState возвращает завершённую часть ленты и полный поток активного turn.
-func (c *Client) ReplayState() ([]Message, []agui.Event, bool) {
+// ReplayState возвращает replay и позицию, строго после которой нужно читать
+// журнал. Между копированием ленты и lastSeq ни один emit не попадёт в журнал.
+func (c *Client) ReplayState(lastSeq func() int64) ([]agui.Event, int64) {
+	c.deliveryMu.Lock()
+	defer c.deliveryMu.Unlock()
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	start := len(c.history)
+	return c.replayEventsLocked(), lastSeq()
+}
+
+func (c *Client) replayEventsLocked() []agui.Event {
+	limit := len(c.history)
 	if c.promptActive {
-		start = c.turnHistoryStart
+		limit = c.turnHistoryStart
 	}
-	messages := messagesFromEvents(c.history[:start])
-	events := append([]agui.Event(nil), c.history[start:]...)
-	return messages, events, c.promptActive
+	// Только уже записанные события определяют границу: translateUpdate может
+	// изменить stream до того, как emit запишет всю группу START/CONTENT/END.
+	// Снимок заканчивается там, где все открытые потоки уже закрыты.
+	type streamKey struct {
+		end agui.EventType
+		id  string
+	}
+	open := make(map[streamKey]bool)
+	start := 0
+	for i, evt := range c.history[:limit] {
+		switch evt.Type {
+		case agui.EventTextMessageStart:
+			open[streamKey{agui.EventTextMessageEnd, evt.MessageID}] = true
+		case agui.EventReasoningStart:
+			open[streamKey{agui.EventReasoningEnd, evt.MessageID}] = true
+		case agui.EventToolCallStart:
+			open[streamKey{agui.EventToolCallEnd, evt.ToolCallID}] = true
+		case agui.EventTextMessageEnd, agui.EventReasoningEnd:
+			delete(open, streamKey{evt.Type, evt.MessageID})
+		case agui.EventToolCallEnd:
+			delete(open, streamKey{evt.Type, evt.ToolCallID})
+		}
+		if len(open) == 0 {
+			start = i + 1
+		}
+	}
+	events := []agui.Event{{Type: agui.EventMessagesSnapshot, Messages: MessagesSnapshot(messagesFromEvents(c.history[:start]))}}
+	events = append(events, c.history[start:]...)
+	if c.lastCommands != nil {
+		events = append(events, *c.lastCommands)
+	}
+	if c.lastUsage != nil {
+		events = append(events, *c.lastUsage)
+	}
+	return events
 }
 
 // backgroundIdleWindow — окно тишины, после которого фоновый turn считается
@@ -648,26 +696,21 @@ func (c *Client) Bind(sink EventSink, resolver PermissionResolver) (unbind func(
 // BindReplay атомарно отдаёт снимок завершённой истории, активный turn от начала и
 // только затем подключает live-доставку новых событий.
 func (c *Client) BindReplay(sink EventSink, resolver PermissionResolver) (unbind func()) {
+	c.deliveryMu.Lock()
+	defer c.deliveryMu.Unlock()
 	c.mu.Lock()
 	c.bindGen++
 	gen := c.bindGen
-	start := len(c.history)
-	if c.promptActive {
-		start = c.turnHistoryStart
-	}
-	_ = sink(agui.Event{Type: agui.EventMessagesSnapshot, Messages: MessagesSnapshot(messagesFromEvents(c.history[:start]))})
-	for _, event := range c.history[start:] {
-		_ = sink(event)
-	}
-	if c.lastCommands != nil {
-		_ = sink(*c.lastCommands)
-	}
-	if c.lastUsage != nil {
-		_ = sink(*c.lastUsage)
-	}
+	events := c.replayEventsLocked()
 	c.sink = sink
 	c.resolver = resolver
 	c.mu.Unlock()
+
+	// deliveryMu сохраняет порядок replay → live, не блокируя чтение состояния
+	// сессии, пока клиент принимает снимок.
+	for _, event := range events {
+		_ = sink(event)
+	}
 
 	return func() {
 		c.mu.Lock()
@@ -679,30 +722,6 @@ func (c *Client) BindReplay(sink EventSink, resolver PermissionResolver) (unbind
 	}
 }
 
-// ReopenEvents возвращает START-события для открытых сейчас потоковых сообщений и tool
-// call'ов. Нужны новому подписчику, подключившемуся ПОСРЕДИ turn'а (reconnect через демон):
-// без переоткрытия последующие CONTENT/END пришли бы без START и клиент @ag-ui отверг бы их.
-// Зеркалит логику переоткрытия в Bind (для локального acp.Client это делает сам Bind).
-func (c *Client) ReopenEvents() []agui.Event {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	var out []agui.Event
-	if c.stream.textID != "" {
-		out = append(out, agui.Event{Type: agui.EventTextMessageStart, MessageID: c.stream.textID, Role: "assistant"})
-	}
-	if c.stream.thoughtID != "" {
-		out = append(out,
-			agui.Event{Type: agui.EventReasoningStart, MessageID: c.stream.thoughtID},
-			agui.Event{Type: agui.EventReasoningMessageStart, MessageID: c.stream.thoughtID, Role: "reasoning"})
-	}
-	for id, st := range c.toolCalls {
-		if st.open {
-			out = append(out, agui.Event{Type: agui.EventToolCallStart, ToolCallID: id, ToolCallName: st.name})
-		}
-	}
-	return out
-}
-
 // emit доставляет событие текущему привязанному sink и сохраняет его в ленте сессии
 // для воспроизведения при reconnect (см. Bind). Вне WS-сеанса доставка пропускается,
 // но событие всё равно копится в истории: turn агента доходит до конца и сохраняется
@@ -711,6 +730,8 @@ func (c *Client) ReopenEvents() []agui.Event {
 // Permission-запросы в историю не пишутся (повторный показ после ответа некорректен);
 // usage-обновления хранятся отдельным последним значением (см. lastUsage).
 func (c *Client) emit(evt agui.Event) {
+	c.deliveryMu.Lock()
+	defer c.deliveryMu.Unlock()
 	c.mu.Lock()
 	switch {
 	case evt.Type == agui.EventPermissionRequest:

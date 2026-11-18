@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { ConnectError } from "@connectrpc/connect";
 import { Check, Loader2, BrainCircuit } from "lucide-react";
-import { useMessage } from "@assistant-ui/react";
+import { useAuiState } from "@assistant-ui/react";
 
 import { memoryClient } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,7 @@ export function SaveNoteCard({
 }) {
   // isLast — карточка в последнем сообщении треда. После следующего сообщения станет false →
   // черновик устарел (сохранять уже нельзя, чтобы не плодить заметки из старых карточек).
-  const isLast = useMessage((m) => m.isLast);
+  const isLast = useAuiState((state) => state.message.isLast);
 
   const [title, setTitle] = useState(args.title ?? "");
   const [body, setBody] = useState(args.body ?? "");

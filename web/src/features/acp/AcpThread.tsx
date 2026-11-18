@@ -1,10 +1,8 @@
 import {
-  Children,
   createContext,
   useCallback,
   useContext,
   type PropsWithChildren,
-  type ReactNode,
 } from "react";
 import { Activity, Download, Loader2, Wrench, ChevronRight, LockKeyhole, FileText, Search, List } from "lucide-react";
 import { type ToolCallMessagePartComponent, useAuiState } from "@assistant-ui/react";
@@ -42,39 +40,25 @@ function AcpToolGroup({
   group,
 }: PropsWithChildren<{ group: ThreadGroupPart }>) {
   const running = group.status.type === "running";
-  const content = useAuiState((state) => state.message.content);
-  const calls = group.indices.map((index) => content[index] as ThreadToolPart | undefined);
-  const items = Children.toArray(children);
-  const activity = (parts: ReactNode, count: number, lastCall: ThreadToolPart | undefined, active: boolean, key: number) => (
-    <details key={key} className="group/activity rounded-lg border border-border/60 bg-card/30">
+  const count = group.indices.length;
+  const lastCall = useAuiState((state) =>
+    running ? state.message.content[group.indices[count - 1]] : undefined,
+  );
+
+  // GroupedParts уже отделил текст, размышления и самостоятельные карточки.
+  if (count < 3) return <div className="my-2 space-y-2">{children}</div>;
+  return (
+    <details className="group/activity my-2 rounded-lg border border-border/60 bg-card/30">
       <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 px-3 text-sm text-muted-foreground select-none hover:text-foreground">
         <Activity className="size-4 shrink-0" />
         <span className="font-medium">Активность · {count}</span>
-        {active && lastCall?.type === "tool-call" && <span className="min-w-0 truncate text-xs">· {lastCall.toolName.replace(/ File$/i, "")} {toolPath(bareToolArgs(lastCall.args))}</span>}
-        {active ? <Loader2 className="ml-auto size-3.5 animate-spin" /> : <ChevronRight className="ml-auto size-4 transition-transform group-open/activity:rotate-90" />}
+        {lastCall?.type === "tool-call" && <span className="min-w-0 truncate text-xs">· {lastCall.toolName.replace(/ File$/i, "")} {toolPath(bareToolArgs(lastCall.args))}</span>}
+        {running && <Loader2 className="size-3.5 animate-spin" />}
+        <ChevronRight className="ml-auto size-4 transition-transform group-open/activity:rotate-90" />
       </summary>
-      <div className="space-y-2 border-t border-border/50 p-2">{parts}</div>
+      <div className="space-y-2 border-t border-border/50 p-2">{children}</div>
     </details>
   );
-
-  if (items.length !== calls.length) {
-    const lastCall = calls[calls.length - 1];
-    const same = calls.length >= 3 && calls.every((call) => call?.type === "tool-call" && call.toolName === lastCall?.toolName);
-    return <div className="my-2 space-y-2">{same ? activity(children, calls.length, lastCall, running, 0) : children}</div>;
-  }
-
-  const rendered: ReactNode[] = [];
-  for (let start = 0; start < calls.length;) {
-    let end = start + 1;
-    while (end < calls.length && calls[end]?.toolName === calls[start]?.toolName) end++;
-    if (end - start >= 3 && calls[start]?.type === "tool-call") {
-      rendered.push(activity(items.slice(start, end), end - start, calls[end - 1], running && end === calls.length, start));
-    } else {
-      rendered.push(...items.slice(start, end));
-    }
-    start = end;
-  }
-  return <div className="my-2 space-y-2">{rendered}</div>;
 }
 import type {
   AvailableCommand,

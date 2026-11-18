@@ -1,8 +1,7 @@
 import {
   AssistantRuntimeProvider,
+  useAui,
   useAuiState,
-  useComposer,
-  useThreadRuntime,
 } from "@assistant-ui/react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { CheckIcon, Loader2 } from "lucide-react";
@@ -220,8 +219,8 @@ function BackgroundActivity({
   const isRunning = useAuiState((s) => s.thread.isRunning);
   const isLoading = useAuiState((s) => s.thread.isLoading);
   const lastMessageId = useAuiState((s) => s.thread.messages.at(-1)?.id ?? null);
-  const composerText = useComposer((c) => c.text);
-  const thread = useThreadRuntime();
+  const composerText = useAuiState((s) => s.composer.text);
+  const thread = useAui().thread;
 
   // idleSeq — seq ленты, до которого тред синхронизирован. null до первого достоверного
   // полла: маунт уже загрузил полную историю, поэтому первый полл лишь задаёт базу — без

@@ -63,34 +63,23 @@ func (s *service) PluginMCP(ctx context.Context, req *connect.Request[v1.DaemonP
 // StreamEvents отдаёт события журнала с from_seq и далее live-tail, пока brigade подключён.
 // Обрыв brigade (ctx отменён) завершает поток, но turn в демоне продолжается (см. Prompt).
 //
-// На (пере)подписке сначала переоткрываем открытые потоки (reconnect ПОСРЕДИ turn'а: иначе
-// CONTENT/END без START) и переотдаём висящие permission (reconnect посреди ожидания
-// разрешения), затем — журнал с from_seq + live-tail.
+// Обычная подписка получает START нового turn из журнала после from_seq.
+// При reconnect ReplayState восстанавливает префикс на согласованной позиции журнала.
 func (s *service) StreamEvents(ctx context.Context, req *connect.Request[v1.DaemonStreamEventsRequest], stream *connect.ServerStream[v1.DaemonEvent]) error {
 	from := req.Msg.FromSeq
 	seq := s.d.log.LastSeq()
-	if c, err := s.d.getClient(); err == nil {
-		if req.Msg.ReplayState {
-			messages, _, active := c.ReplayState()
-			if err := sendDaemonEvent(stream, seq, agui.Event{Type: agui.EventMessagesSnapshot, Messages: acp.MessagesSnapshot(messages)}); err != nil {
-				return err
-			}
-			if active {
-				s.d.mu.Lock()
-				from = s.d.turnStartSeq
-				s.d.mu.Unlock()
-				for _, entry := range s.d.log.ReadFrom(from) {
-					if err := stream.Send(&v1.DaemonEvent{Seq: entry.Seq, AguiJson: entry.Data}); err != nil {
-						return err
-					}
-					from = entry.Seq
+	if req.Msg.ReplayState {
+		if c, err := s.d.getClient(); err == nil {
+			events, cursor := c.ReplayState(s.d.log.LastSeq)
+			from, seq = cursor, cursor
+			for i, evt := range events {
+				// Только последний кадр подтверждает доставку всего replay
+				// до cursor для ожидающего FinishStreams.
+				var delivered int64
+				if i == len(events)-1 {
+					delivered = cursor
 				}
-			} else {
-				from = seq
-			}
-		} else {
-			for _, evt := range c.ReopenEvents() {
-				if err := sendDaemonEvent(stream, seq, evt); err != nil {
+				if err := sendDaemonEvent(stream, delivered, evt); err != nil {
 					return err
 				}
 			}
@@ -106,7 +95,7 @@ func (s *service) StreamEvents(ctx context.Context, req *connect.Request[v1.Daem
 	})
 }
 
-// sendDaemonEvent сериализует AG-UI событие и шлёт его подписчику (для reopen/pending —
+// sendDaemonEvent сериализует AG-UI событие и шлёт его подписчику (для replay/pending —
 // вне журнала, с текущим seq). Ошибка marshal не роняет поток.
 func sendDaemonEvent(stream *connect.ServerStream[v1.DaemonEvent], seq int64, evt agui.Event) error {
 	data, err := json.Marshal(evt)
@@ -132,9 +121,6 @@ func (s *service) Prompt(ctx context.Context, req *connect.Request[v1.DaemonProm
 		}
 	}
 	var stop string
-	s.d.mu.Lock()
-	s.d.turnStartSeq = s.d.log.LastSeq()
-	s.d.mu.Unlock()
 	if req.Msg.AutoAllowOnce {
 		stop, err = c.PromptAutoApprove(context.WithoutCancel(ctx), req.Msg.Text, nil)
 	} else {

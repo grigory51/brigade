@@ -2,7 +2,7 @@
 import { cleanup, render } from "@testing-library/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { unstable_memoizeMarkdownComponents as memoize } from "@assistant-ui/react-markdown";
+import { memoizeMarkdownComponents as memoize } from "@assistant-ui/react-markdown";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { BufferedTable, rehypeTableBuffer } from "./buffered-table";
 

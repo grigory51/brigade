@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -31,7 +30,9 @@ type run struct {
 	// writeMu сериализует запись в SSE-поток: события доставляются из нескольких горутин
 	// (sink ACP-клиента, резолвер permission), а http.ResponseWriter не допускает
 	// параллельную запись.
-	writeMu sync.Mutex
+	writeMu         sync.Mutex
+	endedTools      []string
+	toolsWithResult map[string]bool
 }
 
 func newRun(ctx context.Context, w http.ResponseWriter, flusher http.Flusher, bindable Bindable, perms *PermissionStore, threadID, runID string) *run {
@@ -53,7 +54,7 @@ func newRun(ctx context.Context, w http.ResponseWriter, flusher http.Flusher, bi
 // закрывает поток RUN_FINISHED либо RUN_ERROR. Если запрос несёт новое пользовательское
 // сообщение — прогоняет turn агента по нему; если нет (replay-прогон при открытии треда) —
 // ограничивается воспроизведением истории, не обращаясь к агенту.
-func (rn *run) serve(in runAgentInput) {
+func (rn *run) serve(text, protocolVersion string) {
 	defer rn.cancel()
 
 	h := rn.w.Header()
@@ -71,21 +72,22 @@ func (rn *run) serve(in runAgentInput) {
 	// Replay-прогон: при открытии треда клиент стартует run без нового пользовательского
 	// сообщения (history-адаптер с unstable_resume), чтобы восстановить ленту. Пустой
 	// prompt агенту не отправляем — иначе он ответил бы на пустой ввод.
-	text := lastUserText(in.Messages)
-	if in.ForwardedProps.RunConfig.BrigadeReplay {
-		text = ""
-	}
-
 	if text == "" {
 		// Reconnect без нового сообщения: привязываем sink немедленно, чтобы Bind переоткрыл
 		// ещё живой поток того же turn'а (иначе последующий CONTENT/END прилетел бы без START
 		// и клиент отверг бы событие).
 		var unbind func()
-		if replay, ok := rn.bindable.(interface {
+		var finishReplay func(context.Context) error
+		switch replay := rn.bindable.(type) {
+		case interface {
+			BindReplayWithFinish(acp.EventSink, acp.PermissionResolver) (func(), func(context.Context) error)
+		}:
+			unbind, finishReplay = replay.BindReplayWithFinish(rn.sink, rn.resolvePermission)
+		case interface {
 			BindReplay(acp.EventSink, acp.PermissionResolver) func()
-		}); ok {
+		}:
 			unbind = replay.BindReplay(rn.sink, rn.resolvePermission)
-		} else {
+		default:
 			unbind = rn.bindable.Bind(rn.sink, rn.resolvePermission)
 		}
 		defer unbind()
@@ -114,13 +116,20 @@ func (rn *run) serve(in runAgentInput) {
 		}
 		// История из session/load может оканчиваться незакрытым сообщением. Закрываем его
 		// только после живого Prompt, иначе reconnect преждевременно оборвал бы его поток.
-		rn.bindable.FinishStreams()
-		rn.send(agui.Event{
-			Type:     agui.EventRunFinished,
-			ThreadId: rn.threadID,
-			RunId:    rn.runID,
-			Result:   map[string]any{"stopReason": "replay"},
-		})
+		if finishReplay != nil {
+			if err := finishReplay(rn.ctx); err != nil {
+				if rn.ctx.Err() == nil {
+					rn.send(agui.Event{Type: agui.EventRunError, Message: "Не удалось восстановить поток сессии: " + err.Error()})
+				}
+				return
+			}
+		} else {
+			rn.bindable.FinishStreams()
+		}
+		if err := rn.completeToolCalls(); err != nil {
+			return
+		}
+		rn.finish("replay", protocolVersion)
 		return
 	}
 
@@ -156,19 +165,36 @@ func (rn *run) serve(in runAgentInput) {
 	// FinishStreams дожидается доставки закрытий на SSE (закрытия идут асинхронно через
 	// StreamEvents, а RUN_FINISHED — напрямую, и без ожидания обгонял бы их).
 	rn.bindable.FinishStreams()
+	completionErr := rn.completeToolCalls()
 	if unbind != nil {
 		unbind()
+	}
+	if completionErr != nil {
+		return
 	}
 	if err != nil {
 		rn.send(agui.Event{Type: agui.EventRunError, Message: err.Error()})
 		return
 	}
-	rn.send(agui.Event{
+	rn.finish(stopReason, protocolVersion)
+}
+
+func (rn *run) finish(stopReason, protocolVersion string) {
+	evt := agui.Event{
 		Type:     agui.EventRunFinished,
 		ThreadId: rn.threadID,
 		RunId:    rn.runID,
 		Result:   map[string]any{"stopReason": stopReason},
-	})
+	}
+	if protocolVersion == "1.0" {
+		// ACP выполняет инструменты сам. Отсутствие результата у завершённого
+		// вызова не означает, что клиент должен выполнить этот инструмент.
+		evt.Outcome = map[string]any{"type": "success", "pendingToolCallIds": []string{}}
+		if stopReason == "cancelled" {
+			evt.Outcome = map[string]any{"type": "cancelled"}
+		}
+	}
+	rn.send(evt)
 }
 
 // sink реализует acp.EventSink: доставляет AG-UI-событие клиенту по SSE. Permission-
@@ -186,18 +212,81 @@ func (rn *run) sink(evt agui.Event) error {
 // send сериализует событие в SSE-кадр `data: {json}\n\n` и сбрасывает буфер. Запись
 // сериализована writeMu; ошибка отменяет ctx прогона (дальнейшая доставка бессмысленна).
 func (rn *run) send(evt agui.Event) error {
-	// Older daemon logs anchor every tool to the first text of the turn. The ACP
-	// stream is ordered; dropping that legacy anchor preserves reasoning/card order on replay.
+	// Якорь из старых журналов привязывает все вызовы к первому тексту turn
+	// и нарушает порядок reasoning и карточек при переподключении.
 	if evt.Type == agui.EventToolCallStart {
 		evt.ParentMessageID = ""
 	}
-	data, err := json.Marshal(evt)
+	rn.writeMu.Lock()
+	defer rn.writeMu.Unlock()
+
+	switch evt.Type {
+	case agui.EventToolCallEnd:
+		rn.endedTools = append(rn.endedTools, evt.ToolCallID)
+	case agui.EventToolCallResult:
+		if rn.toolsWithResult == nil {
+			rn.toolsWithResult = make(map[string]bool)
+		}
+		rn.toolsWithResult[evt.ToolCallID] = true
+	}
+	return rn.sendLocked(evt)
+}
+
+// completeToolCalls закрывает протокольную семантику server-side инструментов. Вызывается
+// только после FinishStreams: настоящий поздний результат успевает попасть в поток и
+// помечает вызов завершённым, поэтому пустой синтетический результат не дублирует его.
+func (rn *run) completeToolCalls() error {
+	rn.writeMu.Lock()
+	defer rn.writeMu.Unlock()
+
+	for _, id := range rn.endedTools {
+		if rn.toolsWithResult[id] {
+			continue
+		}
+		if err := rn.sendLocked(agui.Event{
+			Type:       agui.EventToolCallResult,
+			MessageID:  id,
+			ToolCallID: id,
+			Role:       "tool",
+		}); err != nil {
+			return err
+		}
+	}
+	rn.endedTools = nil
+	return nil
+}
+
+// sendLocked сериализует событие в SSE-кадр. writeMu должен быть удержан вызывающей
+// функцией, чтобы порядок событий и статус tool call оставались едиными.
+func (rn *run) sendLocked(evt agui.Event) error {
+	// Журнал демона и SSE имеют разные требования к пустым значениям:
+	// AG-UI 1.x требует поле даже для пустой дельты или результата, но
+	// посторонние поля на других типах событий отправлять нельзя.
+	wire := struct {
+		agui.Event
+		Delta        *string `json:"delta,omitempty"`
+		ToolCallName *string `json:"toolCallName,omitempty"`
+		Content      *string `json:"content,omitempty"`
+		Value        *any    `json:"value,omitempty"`
+	}{Event: evt}
+	switch evt.Type {
+	case agui.EventTextMessageContent, agui.EventReasoningMessageContent, agui.EventToolCallArgs:
+		wire.Delta = &evt.Delta
+	case agui.EventToolCallStart:
+		wire.ToolCallName = &evt.ToolCallName
+	case agui.EventToolCallResult:
+		wire.Content = &evt.Content
+	case agui.EventCustom:
+		wire.Value = &evt.Value
+	case agui.EventMessagesSnapshot:
+		if wire.Messages == nil {
+			wire.Messages = []any{}
+		}
+	}
+	data, err := json.Marshal(wire)
 	if err != nil {
 		return err
 	}
-
-	rn.writeMu.Lock()
-	defer rn.writeMu.Unlock()
 
 	if _, err := rn.w.Write([]byte("data: ")); err != nil {
 		rn.cancel()
@@ -274,19 +363,4 @@ func (rn *run) resolvePermission(ctx context.Context, req agui.PermissionRequest
 		// (ctx — контекст ACP-запроса, не клиентского соединения).
 		return "", ctx.Err()
 	}
-}
-
-// lastUserText возвращает текст последнего пользовательского сообщения из RunAgentInput —
-// это и есть prompt текущего прогона. Пустая строка, если пользовательских сообщений нет.
-func lastUserText(messages []inputMessage) string {
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == "user" {
-			// Обрезаем окаймляющие пробелы и переводы строки: клиенты (в частности
-			// мобильный ввод) могут добавлять завершающий \n при отправке. Сообщение
-			// из одних пробелов схлопывается в "" и уходит в replay-путь — агенту
-			// пустой ввод не отправляется.
-			return strings.TrimSpace(messages[i].Content)
-		}
-	}
-	return ""
 }

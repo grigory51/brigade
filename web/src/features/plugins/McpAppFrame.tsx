@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useAuiState, useThreadRuntime } from "@assistant-ui/react";
+import { useAui, useAuiState } from "@assistant-ui/react";
 import {
   AppBridge,
   PostMessageTransport,
@@ -37,7 +37,7 @@ export function McpAppFrame({ sessionId, entryTool }: { sessionId: string; entry
   const connectedBridge = useRef<AppBridge | null>(null);
   const [state, setState] = useState<AppState | null>(null);
   const [error, setError] = useState("");
-  const thread = useThreadRuntime();
+  const thread = useAui().thread;
   const generating = useAuiState((current) => current.thread.isRunning);
   const lastMessage = useAuiState((current) => {
     for (let index = current.thread.messages.length - 1; index >= 0; index -= 1) {

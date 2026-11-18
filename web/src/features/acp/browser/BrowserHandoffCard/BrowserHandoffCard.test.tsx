@@ -5,7 +5,7 @@ import { BrowserHandoffCard, browserRequestId } from "./BrowserHandoffCard";
 
 const { interact, append } = vi.hoisted(() => ({ interact: vi.fn(), append: vi.fn() }));
 vi.mock("@/api/client", () => ({ browserClient: { interact } }));
-vi.mock("@assistant-ui/react", () => ({ useThreadRuntime: () => ({ append }), useAuiState: () => false }));
+vi.mock("@assistant-ui/react", () => ({ useAui: () => ({ thread: { append } }), useAuiState: () => false }));
 vi.mock("../BrowserWindow/BrowserWindow", () => ({ BrowserWindow: ({ open, onFinish }: { open: boolean; onFinish: (cancel: boolean) => void }) => open ? <button onClick={() => onFinish(false)}>Продолжить</button> : null }));
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 const id = "3d1f7763-1c63-4407-b1e2-9edb5425c5d5";

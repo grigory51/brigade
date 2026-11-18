@@ -19,7 +19,9 @@ package agui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/grigory51/brigade/backend/internal/auth"
@@ -117,10 +119,11 @@ var _ Bindable = (*acp.Client)(nil)
 // Кастомные инструменты агент получает через MCP-сервер сессии, а не из tools[]. Из
 // forwardedProps читается только внутренний маркер reconnect-run.
 type runAgentInput struct {
-	ThreadID       string         `json:"threadId"`
-	RunID          string         `json:"runId"`
-	Messages       []inputMessage `json:"messages"`
-	ForwardedProps struct {
+	ProtocolVersion string         `json:"protocolVersion"`
+	ThreadID        string         `json:"threadId"`
+	RunID           string         `json:"runId"`
+	Messages        []inputMessage `json:"messages"`
+	ForwardedProps  struct {
 		RunConfig struct {
 			BrigadeReplay bool `json:"brigadeReplay"`
 		} `json:"runConfig"`
@@ -128,11 +131,44 @@ type runAgentInput struct {
 }
 
 // inputMessage — сообщение из RunAgentInput. Для prompt берётся текст последнего
-// пользовательского сообщения (см. lastUserText).
+// пользовательского сообщения. История tool/activity может содержать массив или объект.
 type inputMessage struct {
-	ID      string `json:"id"`
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string          `json:"role"`
+	Content json.RawMessage `json:"content"`
+}
+
+func (in runAgentInput) promptText() (string, error) {
+	if in.ForwardedProps.RunConfig.BrigadeReplay {
+		return "", nil
+	}
+	for i := len(in.Messages) - 1; i >= 0; i-- {
+		msg := in.Messages[i]
+		if msg.Role != "user" {
+			continue
+		}
+		var text string
+		if len(msg.Content) == 0 || json.Unmarshal(msg.Content, &text) == nil {
+			return strings.TrimSpace(text), nil
+		}
+		var parts []struct {
+			Type string  `json:"type"`
+			Text *string `json:"text"`
+		}
+		if err := json.Unmarshal(msg.Content, &parts); err != nil {
+			return "", errors.New("user content must be a string or an array of text parts")
+		}
+		var prompt strings.Builder
+		for _, part := range parts {
+			if part.Type != "text" || part.Text == nil {
+				// Bindable.Prompt принимает только текст. Отправка частичного
+				// запроса потеряла бы вложение, а пустого — запустила бы replay.
+				return "", errors.New("only text parts are supported in the current user prompt")
+			}
+			prompt.WriteString(*part.Text)
+		}
+		return strings.TrimSpace(prompt.String()), nil
+	}
+	return "", nil
 }
 
 // PermissionStore связывает (threadId,id) запроса разрешения с каналом ответа. Общий для
@@ -271,6 +307,11 @@ func runHandler(verifier TokenVerifier, provider ClientProvider, perms *Permissi
 			http.Error(w, "threadId required", http.StatusBadRequest)
 			return
 		}
+		text, err := in.promptText()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
 		bindable, ok := provider.EnsureBindable(r.Context(), in.ThreadID, userID)
 		if !ok {
@@ -289,7 +330,7 @@ func runHandler(verifier TokenVerifier, provider ClientProvider, perms *Permissi
 			runID = uuid.NewString()
 		}
 
-		newRun(r.Context(), w, flusher, bindable, perms, in.ThreadID, runID).serve(in)
+		newRun(r.Context(), w, flusher, bindable, perms, in.ThreadID, runID).serve(text, in.ProtocolVersion)
 	})
 }
 

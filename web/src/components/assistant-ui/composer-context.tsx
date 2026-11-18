@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useComposerRuntime, useThreadRuntime } from "@assistant-ui/react";
+import { useAui } from "@assistant-ui/react";
 import { Quote, Paperclip, X } from "lucide-react";
 
 // PendingContext — «зона контекста» текущего ACP-треда над инпутом: накопленные фрагменты
@@ -69,8 +69,9 @@ export function useComposerContextSend(): {
   sendWithContext: () => void;
 } {
   const ctx = usePendingContext();
-  const thread = useThreadRuntime();
-  const composer = useComposerRuntime();
+  const aui = useAui();
+  const thread = aui.thread;
+  const composer = aui.composer;
   const sendWithContext = useCallback(() => {
     const items = ctx?.items ?? [];
     const text = composer.getState().text;

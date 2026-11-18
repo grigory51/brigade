@@ -106,10 +106,7 @@ type Event struct {
 	// размышлений; также адресует результат tool call (TOOL_CALL_RESULT.messageId).
 	MessageID string `json:"messageId,omitempty"`
 	// Delta — очередной фрагмент текста (TEXT_MESSAGE_CONTENT, REASONING_MESSAGE_CONTENT)
-	// либо фрагмент JSON-аргументов (TOOL_CALL_ARGS). Без omitempty: канонические Zod-схемы
-	// @ag-ui/client объявляют delta обязательным (string), а пустой фрагмент ("") —
-	// легитимный контент; omitempty опустил бы поле и клиент отверг бы событие (delta
-	// Required). Для событий без delta лишнее поле "" клиентом игнорируется.
+	// либо фрагмент JSON-аргументов (TOOL_CALL_ARGS). Пустой фрагмент допустим.
 	Delta string `json:"delta"`
 	// Role — роль автора сообщения ("assistant" для текста, "reasoning" для размышлений,
 	// "tool" для результата tool call).
@@ -132,6 +129,8 @@ type Event struct {
 
 	// Result — произвольный итог прогона для RUN_FINISHED (например, stopReason).
 	Result any `json:"result,omitempty"`
+	// Outcome — семантика завершения для клиентов протокола 1.0.
+	Outcome map[string]any `json:"outcome,omitempty"`
 
 	// Name/Value — полезная нагрузка EventCustom (например, Name="usage", Value=Usage).
 	Name  string `json:"name,omitempty"`

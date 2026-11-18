@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HttpAgent, type HttpAgentFetchFn } from "@ag-ui/client";
 import { ConnectError } from "@connectrpc/connect";
-import { fromAgUiMessages, useAgUiRuntime } from "@assistant-ui/react-ag-ui";
+import { fromAgUiMessages, useAgUiRuntime, type AgUiMessage } from "@assistant-ui/react-ag-ui";
 import {
   ExportedMessageRepository,
   type ThreadHistoryAdapter,
@@ -19,6 +19,9 @@ import { cardsCatalog, basicCatalog } from "./a2ui/catalog";
 // HTTP-ручка. Управляющие вызовы (история/статус/workflow/отмена/опции/permission) —
 // через acpClient (ConnectRPC, brigade.v1.AcpService).
 const RUN_URL = "/api/ag-ui/run";
+// Cancel адресуется сессии, а не runId. Новый POST этой сессии должен дождаться
+// ответа на Stop, даже если пользователь успел переоткрыть страницу в SPA.
+const pendingStops = new Map<string, Promise<unknown>>();
 // WORKFLOWS_POLL_MS — интервал опроса workflow-запусков. Реже статуса: endpoint читает
 // файлы харнесса с диска, а состояние воркфлоу меняется медленно (минуты).
 const WORKFLOWS_POLL_MS = 5000;
@@ -38,51 +41,36 @@ export type HistoryMessage = {
   result?: string;
 };
 
-// toToolCallPart строит tool-call-часть (канонический снапшот-формат @assistant-ui/
-// react-ag-ui) из серверного сообщения истории role="tool_call". result всегда определён
-// (пустая строка): часть без result агрегатор считает ещё выполняющейся и рисовал бы
-// вечный спиннер.
-function toToolCallPart(m: HistoryMessage): unknown {
-  let args: unknown = {};
-  try {
-    args = m.argsText ? JSON.parse(m.argsText) : {};
-  } catch {
-    // Невалидный/обрезанный JSON аргументов — карточка покажет сырой argsText.
+// Формат совпадает с acp.MessagesSnapshot: смежные вызовы принадлежат одному
+// сообщению, а результаты ссылаются на вызов по ID. JSON разбирает адаптер AG-UI.
+export function assembleHistory(messages: readonly HistoryMessage[]) {
+  type Assistant = Extract<AgUiMessage, { role: "assistant" }>;
+  const snapshot: ({ id: string; role: string; content: string } | AgUiMessage)[] = [];
+  let calls: Assistant["toolCalls"];
+  for (const m of messages) {
+    if (m.role !== "tool_call") {
+      calls = undefined;
+      snapshot.push({ id: m.id, role: m.role, content: m.content });
+      continue;
+    }
+    if (!calls) {
+      calls = [];
+      snapshot.push({ id: m.id, role: "assistant", content: "", toolCalls: calls });
+    }
+    calls.push({
+      id: m.id, type: "function",
+      function: { name: m.toolName || "tool", arguments: m.argsText || "{}" },
+    });
+    snapshot.push({ id: m.id + ":tool", role: "tool", toolCallId: m.id, content: m.result ?? "" });
   }
-  return {
-    type: "tool-call",
-    toolCallId: m.id,
-    toolName: m.toolName || "tool",
-    args,
-    argsText: m.argsText ?? "{}",
-    result: m.result ?? "",
-  };
+  return snapshot;
 }
 
-// assembleHistory переводит историю в AG-UI-снапшот, склеивая ПОДРЯД идущие tool_call'ы в
-// одно assistant-сообщение с несколькими tool-call-частями. Иначе каждый вызов стал бы
-// отдельным сообщением и рисовался своим блоком «1 tool call»; собранные в одно сообщение
-// подряд идущие вызовы клиент схлопывает в единый разворачивающийся блок «N tool calls»
-// (MessagePrimitive.GroupedParts группирует смежные tool-call-части). Текст (user/
-// assistant) проходит как есть и разрывает серию — так группа отражает фактическую
-// последовательность turn'а.
-export function assembleHistory(messages: HistoryMessage[]): unknown[] {
-  const out: unknown[] = [];
-  let group: { id: string; role: string; content: unknown[] } | null = null;
-  for (const m of messages) {
-    if (m.role === "tool_call") {
-      if (group) {
-        group.content.push(toToolCallPart(m));
-      } else {
-        group = { id: m.id, role: "assistant", content: [toToolCallPart(m)] };
-        out.push(group);
-      }
-    } else {
-      group = null;
-      out.push(m);
-    }
-  }
-  return out;
+// У активной и архивной сессии одна проекция истории и одна цепочка parentId.
+export function importAcpHistory(messages: readonly HistoryMessage[]) {
+  return ExportedMessageRepository.fromArray(
+    fromAgUiMessages(assembleHistory(messages), { showThinking: true }),
+  );
 }
 
 // formatA2uiAction превращает действие пользователя из A2UI-поверхности (клик Button,
@@ -261,6 +249,11 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
       return fetch(url, { ...init, headers, credentials: "include" });
     };
     const fetchWithAuth: HttpAgentFetchFn = async (url, init) => {
+      const pending = pendingStops.get(sessionId);
+      if (pending) {
+        await pending;
+        init.signal?.throwIfAborted();
+      }
       const res = await send(url, init, true);
       if (res.status !== 401) return res;
       try {
@@ -433,35 +426,36 @@ export function useAcpRuntime(sessionId: string): AcpRuntime {
         // Сообщения приводим к AG-UI-снапшоту (tool_call → assistant с tool-call-частью),
         // fromAgUiMessages переводит в формат assistant-ui, ExportedMessageRepository
         // выстраивает линейную цепочку parentId (см. assistant-ui: ag-ui/runtime-options).
-        const raw: HistoryMessage[] = data.messages.map((m) => ({
-          id: m.id,
-          role: m.role,
-          content: m.content,
-          toolName: m.toolName || undefined,
-          argsText: m.argsText || undefined,
-          result: m.result,
-        }));
-        return ExportedMessageRepository.fromArray(
-          fromAgUiMessages(assembleHistory(raw), {
-            showThinking: true,
-          }),
-        );
+        return importAcpHistory(data.messages);
       },
       append: async () => {},
     }),
     [sessionId],
   );
 
+  // assistant-ui вызывает onCancel и при размонтировании runtime. При уходе
+  // из чата нужно закрыть только SSE, не останавливая серверный turn.
+  const attachedSession = useRef<string | null>(null);
+  useEffect(() => {
+    attachedSession.current = sessionId;
+    return () => { attachedSession.current = null; };
+  }, [sessionId]);
   const runtime = useAgUiRuntime({
     agent,
     showThinking: true,
     adapters: { history },
-    // onCancel вызывается при клике Stop. Закрываем старый AG-UI SSE, чтобы его незавершённый
-    // runAgent не пересёкся в runtime со следующим сообщением. Серверный turn от HTTP-контекста
-    // отвязан и сохранит хвост в history; отдельный session/cancel кооперативно остановит агента.
+    // Адаптер закрывает HttpAgent сам. Явный Stop также останавливает агента.
     onCancel: () => {
-      agent.abortRun();
-      void acpClient.cancel({ threadId: sessionId }).catch(() => {});
+      if (attachedSession.current !== sessionId || pendingStops.has(sessionId)) return;
+      const pending = acpClient.cancel({ threadId: sessionId });
+      pendingStops.set(sessionId, pending);
+      void pending.then(
+        () => { pendingStops.delete(sessionId); },
+        (error: unknown) => {
+          pendingStops.delete(sessionId);
+          toast.error(error instanceof Error ? error.message : "Не удалось остановить агента");
+        },
+      );
     },
   });
 

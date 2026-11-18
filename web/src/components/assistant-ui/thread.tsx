@@ -33,9 +33,8 @@ import {
   MessagePrimitive,
   ThreadPrimitive,
   type ToolCallMessagePartComponent,
+  useAui,
   useAuiState,
-  useComposer,
-  useComposerRuntime,
   useMessagePartText,
 } from "@assistant-ui/react";
 import {
@@ -423,8 +422,8 @@ function slashQuery(text: string): string | null {
 // CUSTOM-событием available_commands (см. useAcpRuntime) через CommandsContext.
 const SlashMenu: FC = () => {
   const commands = useContext(CommandsContext);
-  const composer = useComposerRuntime();
-  const text = useComposer((c) => c.text);
+  const composer = useAui().composer;
+  const text = useAuiState((s) => s.composer.text);
   const [active, setActive] = useState(0);
   const dismissedFor = useRef<string | null>(null);
 

@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+	"reflect"
 	"testing"
 	"time"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	"github.com/grigory51/brigade/backend/internal/agui"
+	"github.com/grigory51/brigade/backend/internal/eventlog"
 )
 
 type summaryTestAgent struct {
@@ -144,6 +146,204 @@ func TestBindReplaySendsBaseSnapshotThenActiveTurn(t *testing.T) {
 	snapshot, err := json.Marshal(events[0].Messages)
 	if err != nil || !bytes.Contains(snapshot, []byte(`"content":"Вопрос"`)) || bytes.Contains(snapshot, []byte("Начало ответа")) {
 		t.Fatalf("snapshot = %s, err=%v", snapshot, err)
+	}
+}
+
+func TestBindReplaySlowSinkAllowsReadsBeforeLiveDelivery(t *testing.T) {
+	c := &Client{}
+	ctx := t.Context()
+	if err := c.SessionUpdate(ctx, acpsdk.SessionNotification{Update: agentMessageChunk("answer", "before")}); err != nil {
+		t.Fatal(err)
+	}
+	blocked, release := context.WithCancel(ctx)
+	defer release()
+	inSnapshot := make(chan struct{})
+	frames := make(chan agui.Event, 8)
+	bound := make(chan func(), 1)
+	go func() {
+		bound <- c.BindReplay(func(evt agui.Event) error {
+			if evt.Type == agui.EventMessagesSnapshot {
+				close(inSnapshot)
+				<-blocked.Done()
+			}
+			frames <- evt
+			return nil
+		}, nil)
+	}()
+	<-inSnapshot
+	live := make(chan error, 1)
+	go func() {
+		live <- c.SessionUpdate(ctx, acpsdk.SessionNotification{Update: agentMessageChunk("answer", "after")})
+	}()
+
+	read := make(chan []Message, 1)
+	go func() {
+		c.Status()
+		messages, _ := c.Messages(ctx)
+		read <- messages
+	}()
+	select {
+	case got := <-read:
+		if !reflect.DeepEqual(got, []Message{{ID: "answer", Role: "assistant", Content: "before"}}) {
+			t.Fatalf("history while replay is blocked: %+v", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Status or Messages blocked on replay delivery")
+	}
+	release()
+	unbind := <-bound
+	defer unbind()
+	if err := <-live; err != nil {
+		t.Fatal(err)
+	}
+	c.FinishStreams()
+	close(frames)
+	var events []agui.Event
+	for evt := range frames {
+		events = append(events, evt)
+	}
+	assertShapes(t, events, []eventShape{
+		{Type: agui.EventMessagesSnapshot},
+		{Type: agui.EventTextMessageStart, MessageID: "answer", Role: "assistant"},
+		{Type: agui.EventTextMessageContent, MessageID: "answer", Delta: "before"},
+		{Type: agui.EventTextMessageContent, MessageID: "answer", Delta: "after"},
+		{Type: agui.EventTextMessageEnd, MessageID: "answer"},
+	})
+}
+
+func TestWakeupReplayPreservesOpenTail(t *testing.T) {
+	for _, transport := range []string{"local", "daemon"} {
+		t.Run(transport, func(t *testing.T) {
+			c := &Client{}
+			update := func(u acpsdk.SessionUpdate) {
+				t.Helper()
+				if err := c.SessionUpdate(t.Context(), acpsdk.SessionNotification{Update: u}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			journal, err := eventlog.Open("")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer journal.Close()
+			if transport == "daemon" {
+				defer c.Bind(func(evt agui.Event) error {
+					data, err := json.Marshal(evt)
+					if err != nil {
+						t.Fatal(err)
+					}
+					_, err = journal.Append(data)
+					if err != nil {
+						t.Fatal(err)
+					}
+					return nil
+				}, nil)()
+			}
+			// Все события приходят обычным путём ACP, без вызова Prompt.
+			update(agentThoughtChunk("why", "раз"))
+			update(agentThoughtChunk("why", "мышление"))
+			update(agentMessageChunk("answer", "до "))
+			var events []agui.Event
+			var cursor int64
+			if transport == "daemon" {
+				events, cursor = c.ReplayState(journal.LastSeq)
+			} else {
+				defer c.BindReplay(func(evt agui.Event) error {
+					events = append(events, evt)
+					return nil
+				}, nil)()
+			}
+			update(agentMessageChunk("answer", "после"))
+			c.FinishStreams()
+			if transport == "daemon" {
+				for _, entry := range journal.ReadFrom(cursor) {
+					var evt agui.Event
+					if err := json.Unmarshal(entry.Data, &evt); err != nil {
+						t.Fatal(err)
+					}
+					events = append(events, evt)
+				}
+			}
+			assertShapes(t, events, []eventShape{
+				{Type: agui.EventMessagesSnapshot},
+				{Type: agui.EventTextMessageStart, Role: "assistant", MessageID: "answer"},
+				{Type: agui.EventTextMessageContent, MessageID: "answer", Delta: "до "},
+				{Type: agui.EventTextMessageContent, MessageID: "answer", Delta: "после"},
+				{Type: agui.EventTextMessageEnd, MessageID: "answer"},
+			})
+			want := []Message{{ID: "why", Role: "reasoning", Content: "размышление"}}
+			if !reflect.DeepEqual(events[0].Messages, MessagesSnapshot(want)) {
+				t.Fatalf("base snapshot = %+v, want reasoning only", events[0].Messages)
+			}
+			want = append(want, Message{ID: "answer", Role: "assistant", Content: "до после"})
+			if got, err := c.Messages(t.Context()); err != nil || !reflect.DeepEqual(got, want) {
+				t.Fatalf("history = %+v, err = %v, want %+v", got, err, want)
+			}
+		})
+	}
+}
+
+func TestWakeupReplayWithOverlappingToolAndReasoning(t *testing.T) {
+	c := &Client{}
+	for _, u := range []acpsdk.SessionUpdate{
+		acpsdk.StartToolCall("tool", "Edit"),
+		agentThoughtChunk("why", "думаю"),
+		acpsdk.UpdateToolCall("tool", acpsdk.WithUpdateStatus(acpsdk.ToolCallStatusCompleted)),
+	} {
+		if err := c.SessionUpdate(t.Context(), acpsdk.SessionNotification{Update: u}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var events []agui.Event
+	defer c.BindReplay(func(evt agui.Event) error {
+		events = append(events, evt)
+		return nil
+	}, nil)()
+	c.FinishStreams()
+	assertShapes(t, events, []eventShape{
+		{Type: agui.EventMessagesSnapshot},
+		{Type: agui.EventToolCallStart, ToolCallID: "tool"},
+		{Type: agui.EventReasoningStart, MessageID: "why"},
+		{Type: agui.EventReasoningMessageStart, MessageID: "why", Role: "reasoning"},
+		{Type: agui.EventReasoningMessageContent, MessageID: "why", Delta: "думаю"},
+		{Type: agui.EventToolCallEnd, ToolCallID: "tool"},
+		{Type: agui.EventReasoningMessageEnd, MessageID: "why"},
+		{Type: agui.EventReasoningEnd, MessageID: "why"},
+	})
+	if !reflect.DeepEqual(events[0].Messages, MessagesSnapshot(nil)) {
+		t.Fatalf("base snapshot overlaps tail: %+v", events[0].Messages)
+	}
+}
+
+func TestDaemonReplayWaitsForJournalDelivery(t *testing.T) {
+	c := &Client{}
+	inSink, commit := make(chan struct{}), make(chan struct{})
+	var seq int64
+	defer c.Bind(func(agui.Event) error {
+		close(inSink)
+		<-commit
+		seq++
+		return nil
+	}, nil)()
+	go c.emit(agui.Event{Type: agui.EventTextMessageStart, MessageID: "open", Role: "assistant"})
+	<-inSink
+	cursor := make(chan int64, 1)
+	started := make(chan struct{})
+	go func() {
+		close(started)
+		_, at := c.ReplayState(func() int64 { return seq })
+		cursor <- at
+	}()
+	<-started
+	select {
+	case at := <-cursor:
+		close(commit)
+		t.Fatalf("observed cursor %d before journal delivery", at)
+	case <-time.After(25 * time.Millisecond):
+	}
+	close(commit)
+	if at := <-cursor; at != 1 {
+		t.Fatalf("cursor = %d, want 1", at)
 	}
 }
 
