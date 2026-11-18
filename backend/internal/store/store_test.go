@@ -79,6 +79,40 @@ func TestPluginsAreScopedAndResolvedByTarget(t *testing.T) {
 	}
 }
 
+func TestSessionAgentVersionSurvivesRestartAndReload(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "brigade.db")
+	st, err := Open(path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB().Exec(`INSERT INTO users (id, username, password_hash, created_at) VALUES ('u1', 'user', '', 0)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateSession(ctx, Session{ID: "s1", UserID: "u1", Mode: SessionModeDocker, Kind: SessionKindACP, Status: SessionStatusRunning, CreatedAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpdateSessionResume(ctx, "s1", "agent-id", "", "v1"); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	st, err = Open(path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	sessions, err := st.ListSessionsByUser(ctx, "u1")
+	if err != nil || len(sessions) != 1 || sessions[0].AgentVersion != "v1" {
+		t.Fatalf("sessions after restart=%+v err=%v", sessions, err)
+	}
+	if err := st.UpdateSessionResume(ctx, "s1", "agent-id", "", "v2"); err != nil {
+		t.Fatal(err)
+	}
+	if sess, err := st.GetSession(ctx, "s1"); err != nil || sess.AgentVersion != "v2" {
+		t.Fatalf("session after reload=%+v err=%v", sess, err)
+	}
+}
+
 func TestUpdateSessionExperienceVersion(t *testing.T) {
 	ctx := context.Background()
 	st, err := Open(filepath.Join(t.TempDir(), "brigade.db"), nil)

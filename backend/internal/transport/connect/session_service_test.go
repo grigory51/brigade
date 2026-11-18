@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
 	"github.com/grigory51/brigade/backend/internal/auth"
+	"github.com/grigory51/brigade/backend/internal/store"
 )
 
 func TestCreateRejectsOnDemand(t *testing.T) {
@@ -36,8 +37,10 @@ func TestAgentOutdated(t *testing.T) {
 		{"v0.54.0", "", false},
 		{"dev", "v0.54.0", false},
 	} {
-		if got := agentOutdated(test.brigade, test.agent); got != test.want {
-			t.Fatalf("agentOutdated(%q, %q) = %v, want %v", test.brigade, test.agent, got, test.want)
+		svc := SessionService{version: test.brigade}
+		got := svc.sessionToProto(store.Session{AgentVersion: test.agent})
+		if got.AgentVersion != test.agent || got.AgentOutdated != test.want {
+			t.Fatalf("brigade=%q, agent=%q: version=%q outdated=%v, want outdated=%v", test.brigade, test.agent, got.AgentVersion, got.AgentOutdated, test.want)
 		}
 	}
 }

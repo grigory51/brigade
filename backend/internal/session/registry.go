@@ -62,12 +62,13 @@ var (
 // mode нужен учёту docker-CLI сессий пользователя (общий контейнер удаляется, когда
 // закрыта последняя — см. releaseUserContainerIfIdle).
 type live struct {
-	owner  string
-	kind   store.SessionKind
-	mode   store.SessionMode
-	handle spawn.Handle // CLI-режим
-	client acpSession   // ACP-режим (локальный *acp.Client или *acpremote.Client к демону)
-	plugin *plugin.Runtime
+	agentVersion string
+	owner        string
+	kind         store.SessionKind
+	mode         store.SessionMode
+	handle       spawn.Handle // CLI-режим
+	client       acpSession   // ACP-режим (локальный *acp.Client или *acpremote.Client к демону)
+	plugin       *plugin.Runtime
 	// teardown — доп. освобождение ресурсов при ЯВНОМ teardown (Stop/Delete/Archive), НЕ при
 	// close() (сворачивание реестра). Для docker-ACP это удаление контейнера демона:
 	// client.Close() (acpremote) лишь отцепляет поток, а контейнер должен пережить рестарт
@@ -733,7 +734,7 @@ func (r *Registry) Create(ctx context.Context, userID string, kind store.Session
 		return store.Session{}, err
 	}
 
-	if err := r.store.UpdateSessionResume(ctx, sess.ID, agentSessionID, containerLabel); err != nil {
+	if err := r.store.UpdateSessionResume(ctx, sess.ID, agentSessionID, containerLabel, lv.agentVersion); err != nil {
 		_ = lv.terminate(context.WithoutCancel(ctx))
 		_ = r.store.UpdateSessionStatus(ctx, sess.ID, store.SessionStatusFailed)
 		unlock()
@@ -741,6 +742,7 @@ func (r *Registry) Create(ctx context.Context, userID string, kind store.Session
 		return store.Session{}, err
 	}
 	sess.AgentSessionID = agentSessionID
+	sess.AgentVersion = lv.agentVersion
 	sess.ContainerLabel = containerLabel
 
 	r.mu.Lock()
@@ -937,6 +939,9 @@ func (r *Registry) spawnACPDaemon(ctx context.Context, sess store.Session, token
 		go func() { _, _ = rc.Prompt(context.WithoutCancel(ctx), prompt, nil) }()
 	}
 	lv := &live{owner: sess.UserID, kind: sess.Kind, mode: sess.Mode, client: rc, teardown: r.acpDaemonTeardown(sess.ID)}
+	if sess.ExecutionPolicy != store.SessionExecutionOnDemand {
+		lv.agentVersion = readDaemonVersion(ctx, sess.ID, rc)
+	}
 	return lv, sid, "", nil
 }
 
@@ -1815,7 +1820,7 @@ func (r *Registry) reviveACP(ctx context.Context, sess store.Session) (*live, er
 		if err != nil {
 			return nil, err
 		}
-		if err := r.store.UpdateSessionResume(ctx, sess.ID, sid, ""); err != nil {
+		if err := r.store.UpdateSessionResume(ctx, sess.ID, sid, "", lv.agentVersion); err != nil {
 			_ = lv.client.Close()
 			return nil, fmt.Errorf("persist acp resume: %w", err)
 		}
@@ -1836,7 +1841,7 @@ func (r *Registry) reviveACP(ctx context.Context, sess store.Session) (*live, er
 		_ = client.Close()
 		return nil, err
 	}
-	if err := r.store.UpdateSessionResume(ctx, sess.ID, client.SessionID(), ""); err != nil {
+	if err := r.store.UpdateSessionResume(ctx, sess.ID, client.SessionID(), "", ""); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("persist acp resume: %w", err)
 	}
@@ -2072,7 +2077,7 @@ func (r *Registry) reinit(ctx context.Context, lv *live, sess store.Session, ref
 	r.mu.Unlock()
 	_ = old.Close()
 	_ = oldPlugin.Close()
-	_ = r.store.UpdateSessionResume(ctx, sess.ID, client.SessionID(), "")
+	_ = r.store.UpdateSessionResume(ctx, sess.ID, client.SessionID(), "", "")
 	return nil
 }
 
@@ -2133,19 +2138,15 @@ func (r *Registry) PluginMCP(ctx context.Context, sessionID, userID, method stri
 	return runtime.Dispatch(ctx, method, params)
 }
 
-func (r *Registry) AgentVersion(sessionID, userID string) string {
-	r.mu.Lock()
-	lv, ok := r.live[sessionID]
-	if !ok || lv.owner != userID {
-		r.mu.Unlock()
-		return ""
+// Ошибка чтения версии не должна прерывать запуск или восстановление рабочего чата.
+func readDaemonVersion(ctx context.Context, sessionID string, client *acpremote.Client) string {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	version, err := client.DaemonVersion(ctx)
+	if err != nil {
+		log.Printf("session %s: read daemon version: %v", sessionID, err)
 	}
-	client := lv.client
-	r.mu.Unlock()
-	if remote, ok := client.(interface{ DaemonVersion() string }); ok {
-		return remote.DaemonVersion()
-	}
-	return ""
+	return version
 }
 
 // Get возвращает сессию пользователя по идентификатору. Чужая сессия трактуется как
@@ -2576,10 +2577,14 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 			// мёртв (перезагрузка хоста) — respawn демона + session/load из durable-volume.
 			var rc acpSession
 			sid := sess.AgentSessionID
+			version := sess.AgentVersion
 			if ds, ok := r.spawner.(*spawn.DockerSpawner); ok {
 				if addr, alive := ds.ACP().DaemonAddr(ctx, sess.ID); alive {
 					c := acpremote.New(addr, sess.AgentSessionID, r.daemonTokenFn(sess.ID))
 					r.setACPHooks(sess, c)
+					if version == "" {
+						version = readDaemonVersion(ctx, sess.ID, c)
+					}
 					rc = c
 				}
 			}
@@ -2588,9 +2593,9 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 				if err != nil {
 					return fmt.Errorf("restore acp daemon: %w", err)
 				}
-				rc, sid = lv.client, newSid
+				rc, sid, version = lv.client, newSid, lv.agentVersion
 			}
-			if err := r.store.UpdateSessionResume(ctx, sess.ID, sid, ""); err != nil {
+			if err := r.store.UpdateSessionResume(ctx, sess.ID, sid, "", version); err != nil {
 				_ = rc.Close()
 				return fmt.Errorf("persist acp resume: %w", err)
 			}
@@ -2618,7 +2623,7 @@ func (r *Registry) restoreOne(ctx context.Context, sess store.Session) error {
 			_ = client.Close()
 			return err
 		}
-		if err := r.store.UpdateSessionResume(ctx, sess.ID, client.SessionID(), ""); err != nil {
+		if err := r.store.UpdateSessionResume(ctx, sess.ID, client.SessionID(), "", ""); err != nil {
 			_ = client.Close()
 			return fmt.Errorf("persist acp resume: %w", err)
 		}

@@ -66,7 +66,7 @@ func executionPolicyToProto(policy store.SessionExecutionPolicy) v1.SessionExecu
 }
 
 // sessionToProto переводит доменную сессию store в proto-сообщение.
-func sessionToProto(s store.Session) *v1.Session {
+func (service *SessionService) sessionToProto(s store.Session) *v1.Session {
 	return &v1.Session{
 		Id:                  s.ID,
 		UserId:              s.UserID,
@@ -74,6 +74,8 @@ func sessionToProto(s store.Session) *v1.Session {
 		Kind:                kindToProto(s.Kind),
 		AgentType:           s.AgentType,
 		AgentSessionId:      s.AgentSessionID,
+		AgentVersion:        s.AgentVersion,
+		AgentOutdated:       agentOutdated(service.version, s.AgentVersion),
 		ContainerLabel:      s.ContainerLabel,
 		Status:              statusToProto(s.Status),
 		ExecutionPolicy:     executionPolicyToProto(s.ExecutionPolicy),

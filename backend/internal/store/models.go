@@ -169,6 +169,7 @@ type Session struct {
 	Kind            SessionKind
 	AgentType       string
 	AgentSessionID  string
+	AgentVersion    string
 	ContainerLabel  string
 	Status          SessionStatus
 	ExecutionPolicy SessionExecutionPolicy

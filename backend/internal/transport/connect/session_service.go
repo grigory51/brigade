@@ -66,7 +66,7 @@ func (s *SessionService) Create(ctx context.Context, req *connect.Request[v1.Cre
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	return connect.NewResponse(&v1.CreateSessionResponse{Session: sessionToProto(sess)}), nil
+	return connect.NewResponse(&v1.CreateSessionResponse{Session: s.sessionToProto(sess)}), nil
 }
 
 // List возвращает сессии текущего пользователя.
@@ -83,10 +83,7 @@ func (s *SessionService) List(ctx context.Context, _ *connect.Request[v1.ListSes
 
 	out := make([]*v1.Session, 0, len(sessions))
 	for _, sess := range sessions {
-		item := sessionToProto(sess)
-		item.AgentVersion = s.registry.AgentVersion(sess.ID, userID)
-		item.AgentOutdated = agentOutdated(s.version, item.AgentVersion)
-		out = append(out, item)
+		out = append(out, s.sessionToProto(sess))
 	}
 	return connect.NewResponse(&v1.ListSessionsResponse{Sessions: out}), nil
 }
@@ -106,7 +103,7 @@ func (s *SessionService) Get(ctx context.Context, req *connect.Request[v1.GetSes
 	if err != nil {
 		return nil, sessionError(err)
 	}
-	return connect.NewResponse(&v1.GetSessionResponse{Session: sessionToProto(sess)}), nil
+	return connect.NewResponse(&v1.GetSessionResponse{Session: s.sessionToProto(sess)}), nil
 }
 
 // Update меняет отображаемое имя сессии пользователя.
@@ -120,7 +117,7 @@ func (s *SessionService) Update(ctx context.Context, req *connect.Request[v1.Upd
 	if err != nil {
 		return nil, sessionError(err)
 	}
-	return connect.NewResponse(&v1.UpdateSessionResponse{Session: sessionToProto(sess)}), nil
+	return connect.NewResponse(&v1.UpdateSessionResponse{Session: s.sessionToProto(sess)}), nil
 }
 
 func (s *SessionService) MarkRead(ctx context.Context, req *connect.Request[v1.MarkSessionReadRequest]) (*connect.Response[v1.Empty], error) {
@@ -336,7 +333,7 @@ func (s *SessionService) SetSessionResponseProfile(ctx context.Context, req *con
 	if err != nil {
 		return nil, sessionError(err)
 	}
-	return connect.NewResponse(&v1.UpdateSessionResponse{Session: sessionToProto(sess)}), nil
+	return connect.NewResponse(&v1.UpdateSessionResponse{Session: s.sessionToProto(sess)}), nil
 }
 
 // Delete останавливает сессию (если жива) и удаляет её запись.

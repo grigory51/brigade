@@ -473,12 +473,12 @@ func (s *Store) CreateSession(ctx context.Context, sess Session) error {
 	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO sessions
-		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name, group_label, unread, mcp_servers, image, auth_profile, model_id, instruction_profile, response_profile_id, response_profile_name, response_instructions, experience_id, experience_version, execution_policy)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name, group_label, unread, mcp_servers, image, auth_profile, model_id, instruction_profile, response_profile_id, response_profile_name, response_instructions, experience_id, experience_version, execution_policy, agent_version)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		sess.ID, sess.UserID, string(sess.Mode), string(sess.Kind), sess.AgentType,
 		sess.AgentSessionID, sess.ContainerLabel, string(sess.Status), sess.Cwd, toUnix(sess.CreatedAt), sess.Name, sess.GroupLabel, sess.Unread,
 		strings.Join(sess.McpServers, ","), sess.Image, sess.AuthProfile, sess.ModelID, sess.InstructionProfile,
-		sess.ResponseProfileID, sess.ResponseProfileName, sess.ResponseInstructions, sess.ExperienceID, sess.ExperienceVersion, sess.ExecutionPolicy,
+		sess.ResponseProfileID, sess.ResponseProfileName, sess.ResponseInstructions, sess.ExperienceID, sess.ExperienceVersion, sess.ExecutionPolicy, sess.AgentVersion,
 	)
 	if err != nil {
 		return fmt.Errorf("store: create session: %w", err)
@@ -564,10 +564,10 @@ func (s *Store) MarkSessionRead(ctx context.Context, id, userID string) error {
 // UpdateSessionResume сохраняет данные для восстановления (agent_session_id для
 // `claude --resume`, container_label для re-attach в docker). Заполняются после
 // фактического спавна агента, когда идентификаторы становятся известны.
-func (s *Store) UpdateSessionResume(ctx context.Context, id, agentSessionID, containerLabel string) error {
+func (s *Store) UpdateSessionResume(ctx context.Context, id, agentSessionID, containerLabel, agentVersion string) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE sessions SET agent_session_id = ?, container_label = ? WHERE id = ?`,
-		agentSessionID, containerLabel, id)
+		`UPDATE sessions SET agent_session_id = ?, container_label = ?, agent_version = ? WHERE id = ?`,
+		agentSessionID, containerLabel, agentVersion, id)
 	if err != nil {
 		return fmt.Errorf("store: update session resume: %w", err)
 	}
@@ -607,7 +607,7 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 
 const sessionSelect = `SELECT id, user_id, mode, kind, agent_type, agent_session_id,
 	container_label, status, cwd, created_at, name, group_label, unread, mcp_servers, image, auth_profile, instruction_profile,
-	response_profile_id, response_profile_name, response_instructions, experience_id, experience_version, execution_policy, history_revision, model_id FROM sessions`
+	response_profile_id, response_profile_name, response_instructions, experience_id, experience_version, execution_policy, history_revision, model_id, agent_version FROM sessions`
 
 func (s *Store) querySessions(ctx context.Context, query string, args ...any) ([]Session, error) {
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -650,7 +650,7 @@ func scanSessionRow(r rowScanner) (Session, error) {
 	var createdAt int64
 	err := r.Scan(&sess.ID, &sess.UserID, &mode, &kind, &sess.AgentType,
 		&sess.AgentSessionID, &sess.ContainerLabel, &status, &sess.Cwd, &createdAt, &sess.Name, &sess.GroupLabel, &sess.Unread, &mcp, &sess.Image, &sess.AuthProfile, &sess.InstructionProfile,
-		&sess.ResponseProfileID, &sess.ResponseProfileName, &sess.ResponseInstructions, &sess.ExperienceID, &sess.ExperienceVersion, &executionPolicy, &sess.HistoryRevision, &sess.ModelID)
+		&sess.ResponseProfileID, &sess.ResponseProfileName, &sess.ResponseInstructions, &sess.ExperienceID, &sess.ExperienceVersion, &executionPolicy, &sess.HistoryRevision, &sess.ModelID, &sess.AgentVersion)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Session{}, err
