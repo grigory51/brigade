@@ -454,11 +454,10 @@ func (s *AuthService) OIDCCallbackHandler(w http.ResponseWriter, r *http.Request
 	pair, returnTo, desktopCallback, err := s.oidc.Complete(r.Context(), r.URL.Query().Get("state"), r.URL.Query().Get("code"))
 	if err != nil {
 		log.Printf("auth: complete OIDC: %v", err)
-		if desktopCallback != "" {
-			redirectWithQuery(w, r, desktopCallback, "error", "oidc")
-			return
+		if desktopCallback == "" {
+			desktopCallback = "/login"
 		}
-		http.Redirect(w, r, "/login?error=oidc", http.StatusFound)
+		s.redirectOIDCError(w, r, desktopCallback, err)
 		return
 	}
 	if desktopCallback != "" {
@@ -473,6 +472,25 @@ func (s *AuthService) OIDCCallbackHandler(w http.ResponseWriter, r *http.Request
 	setAccessCookie(w.Header(), pair.AccessToken, pair.AccessExpiresAt, s.secure)
 	setRefreshCookie(w.Header(), pair.RefreshToken, pair.RefreshExpiresAt, s.secure)
 	http.Redirect(w, r, safeReturnTo(returnTo), http.StatusFound)
+}
+
+func (s *AuthService) redirectOIDCError(w http.ResponseWriter, r *http.Request, destination string, err error) {
+	target, _ := url.Parse(destination)
+	query := target.Query()
+	query.Del("role")
+	switch {
+	case errors.Is(err, auth.ErrRequiredRole):
+		query.Set("error", "oidc_missing_role")
+		query.Set("role", s.oidc.RequiredRole())
+	case r.URL.Query().Get("error") == "access_denied":
+		query.Set("error", "oidc_access_denied")
+	case errors.Is(err, auth.ErrInvalidToken):
+		query.Set("error", "oidc_invalid_request")
+	default:
+		query.Set("error", "oidc")
+	}
+	target.RawQuery = query.Encode()
+	http.Redirect(w, r, target.String(), http.StatusFound)
 }
 
 func safeReturnTo(value string) string {

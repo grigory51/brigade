@@ -2,8 +2,34 @@ package desktopenv
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 )
+
+func TestOIDCMissingRoleReachesDesktop(t *testing.T) {
+	environment := &Environment{ID: "one", Kind: "remote", BaseURL: "https://brigade.example"}
+	m := &Manager{config: config{Environments: []*Environment{environment}}}
+	params := url.Values{"environment_id": {"one"}, "error": {"oidc_missing_role"}, "role": {"team:<user>"}, "return_to": {"/desktop/oidc/done"}}
+	w := httptest.NewRecorder()
+	m.OIDCCallbackHandler(w, httptest.NewRequest(http.MethodGet, "/desktop/oidc/callback?"+params.Encode(), nil))
+	items, _, _ := m.List()
+	if !strings.Contains(items[0].Error, "«team:<user>»") {
+		t.Fatalf("missing role in desktop login error: %q", items[0].Error)
+	}
+	done := httptest.NewRecorder()
+	m.OIDCDoneHandler(done, httptest.NewRequest(http.MethodGet, w.Header().Get("Location"), nil))
+	if !strings.Contains(done.Body.String(), "team:&lt;user&gt;") {
+		t.Fatalf("missing escaped role on completion page: %s", done.Body.String())
+	}
+	m.OIDCStartHandler(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/desktop/oidc/start?environment_id=one", nil))
+	items, _, _ = m.List()
+	if items[0].Error != "" {
+		t.Fatalf("stale error on retry: %q", items[0].Error)
+	}
+}
 
 func TestNormalizeRemoteURL(t *testing.T) {
 	for _, test := range []struct {

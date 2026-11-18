@@ -67,8 +67,21 @@ export function LoginPage() {
         setError("Не удалось получить способы входа.");
       }
     });
-    if (new URLSearchParams(location.search).has("error")) {
-      setError("Не удалось войти через OIDC.");
+    const query = new URLSearchParams(location.search);
+    if (query.has("error")) {
+      switch (query.get("error")) {
+        case "oidc_missing_role":
+          setError(`Для входа нужна роль «${query.get("role") ?? ""}». Попросите администратора назначить её вашей учётной записи у OIDC-провайдера.`);
+          break;
+        case "oidc_access_denied":
+          setError("OIDC-провайдер отклонил запрос на вход.");
+          break;
+        case "oidc_invalid_request":
+          setError("Запрос на вход недействителен или истёк. Начните вход заново.");
+          break;
+        default:
+          setError("Не удалось войти через OIDC.");
+      }
     }
     return () => {
       cancelled = true;
@@ -76,6 +89,7 @@ export function LoginPage() {
   }, [location.search]);
 
   const startOIDC = () => {
+    setError(null);
     const path = remoteEnvironmentId ? "/desktop/oidc/start" : "/auth/oidc/start";
     const external = Boolean(remoteEnvironmentId && window.brigadeOpenExternal);
     const query = new URLSearchParams({ return_to: external ? "/desktop/oidc/done" : from });

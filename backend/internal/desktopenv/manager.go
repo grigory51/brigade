@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"log"
 	"net"
 	"net/http"
@@ -38,6 +39,7 @@ type Environment struct {
 	PortForwards []PortForward    `json:"port_forwards,omitempty"`
 	Mounts       []Mount          `json:"mounts,omitempty"`
 	Error        string           `json:"-"`
+	loginError   string
 }
 
 type config struct {
@@ -124,7 +126,11 @@ func (m *Manager) List() ([]Environment, string, bool) {
 	defer m.mu.Unlock()
 	out := make([]Environment, 0, len(m.config.Environments))
 	for _, environment := range m.config.Environments {
-		out = append(out, *environment)
+		item := *environment
+		if item.loginError != "" {
+			item.Error = item.loginError
+		}
+		out = append(out, item)
 	}
 	return out, m.config.ActiveID, m.config.NeedsSetup
 }
@@ -344,6 +350,7 @@ func (m *Manager) storeLogin(id string, login *v1.LoginResponse) (Environment, e
 		return Environment{}, errors.New("удалённое окружение не найдено")
 	}
 	environment.Username = login.User.GetUsername()
+	environment.loginError = ""
 	environment.Error = ""
 	m.access[id] = tokenState{access: login.AccessToken, expires: tokenExpiry(login.AccessToken)}
 	if err := m.saveLocked(); err != nil {
@@ -361,6 +368,7 @@ func (m *Manager) OIDCStartHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "environment not found", http.StatusNotFound)
 		return
 	}
+	environment.loginError = ""
 	baseURL := environment.BaseURL
 	m.mu.Unlock()
 
@@ -381,16 +389,18 @@ func (m *Manager) OIDCCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("error") != "" {
 		id := r.URL.Query().Get("environment_id")
 		m.mu.Lock()
-		if environment := m.findLocked(id); environment != nil {
-			environment.Error = "Вход через OIDC отменён или завершился ошибкой."
-			_ = m.saveLocked()
+		if environment := m.findLocked(id); environment != nil && environment.Kind == "remote" {
+			environment.loginError = oidcErrorMessage(r.URL.Query())
 		}
 		m.mu.Unlock()
-		if returnTo == "/desktop/oidc/done" {
-			http.Redirect(w, r, returnTo+"?error=oidc", http.StatusFound)
-		} else {
-			http.Redirect(w, r, "/login?error=oidc", http.StatusFound)
+		if returnTo != "/desktop/oidc/done" {
+			returnTo = "/login"
 		}
+		query := url.Values{"error": {r.URL.Query().Get("error")}}
+		if query.Get("error") == "oidc_missing_role" {
+			query.Set("role", r.URL.Query().Get("role"))
+		}
+		http.Redirect(w, r, returnTo+"?"+query.Encode(), http.StatusFound)
 		return
 	}
 	id := r.URL.Query().Get("environment_id")
@@ -422,9 +432,22 @@ func (m *Manager) OIDCDoneHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	message := "Вход выполнен. Вернитесь в Brigade.app."
 	if r.URL.Query().Get("error") != "" {
-		message = "Вход отменён. Вернитесь в Brigade.app."
+		message = oidcErrorMessage(r.URL.Query()) + " Вернитесь в Brigade.app."
 	}
-	_, _ = fmt.Fprintf(w, `<!doctype html><meta charset="utf-8"><title>Brigade</title><style>body{margin:0;display:grid;min-height:100vh;place-items:center;background:#1f1e1d;color:#f1eee8;font:16px system-ui}</style><p>%s</p>`, message)
+	_, _ = fmt.Fprintf(w, `<!doctype html><meta charset="utf-8"><title>Brigade</title><style>body{margin:0;display:grid;min-height:100vh;place-items:center;background:#1f1e1d;color:#f1eee8;font:16px system-ui}</style><p>%s</p>`, html.EscapeString(message))
+}
+
+func oidcErrorMessage(query url.Values) string {
+	switch query.Get("error") {
+	case "oidc_missing_role":
+		return fmt.Sprintf("Для входа нужна роль «%s». Попросите администратора назначить её вашей учётной записи у OIDC-провайдера.", query.Get("role"))
+	case "oidc_access_denied":
+		return "OIDC-провайдер отклонил запрос на вход."
+	case "oidc_invalid_request":
+		return "Запрос на вход недействителен или истёк. Начните вход заново."
+	default:
+		return "Не удалось войти через OIDC."
+	}
 }
 
 func safeLocalReturn(value string) string {

@@ -15,6 +15,8 @@ import (
 
 var ErrRequiredRole = errors.New("auth: required OIDC role is missing")
 
+func (o *OIDC) RequiredRole() string { return o.config.RequiredRole }
+
 type OIDCConfig struct {
 	Issuer        string
 	ClientID      string
