@@ -180,7 +180,8 @@ export function BusinessConversation({ sessionId, messages, run, busy, loadError
     }
   }
 
-  return <div className="flex h-full min-h-0 flex-col bg-background">
+  return <div className="@container/business h-full min-h-0 min-w-0 bg-background">
+    <div className="grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)_fit-content(44%)] @min-[48rem]/business:grid-cols-[minmax(0,1fr)_clamp(20rem,38%,30rem)] @min-[48rem]/business:grid-rows-[auto_minmax(0,1fr)]">
     <header className="shrink-0 border-b px-4 py-2.5 sm:px-5">
       <div className="mx-auto flex max-w-[720px] items-center gap-3">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent text-[13px] font-medium">{person[0]?.toUpperCase()}</span>
@@ -192,7 +193,7 @@ export function BusinessConversation({ sessionId, messages, run, busy, loadError
       </div>
     </header>
 
-    <main ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-5" onScroll={(event) => {
+    <main ref={scroller} aria-label="Переписка" className="min-h-0 min-w-0 overflow-y-auto overscroll-contain px-4 py-5 sm:px-5 @min-[48rem]/business:col-start-1 @min-[48rem]/business:row-start-2" onScroll={(event) => {
       const element = event.currentTarget;
       atBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 100;
     }}>
@@ -238,7 +239,7 @@ export function BusinessConversation({ sessionId, messages, run, busy, loadError
       </div>
     </main>
 
-    <footer className="max-h-[min(65dvh,600px)] shrink-0 overflow-y-auto border-t bg-background px-4 pt-4 pb-5 sm:px-5">
+    <aside aria-label="Подготовка ответа" className="min-h-0 min-w-0 max-h-none overflow-y-auto overscroll-contain border-t bg-background px-4 pt-4 pb-5 sm:px-5 @min-[48rem]/business:col-start-2 @min-[48rem]/business:row-span-2 @min-[48rem]/business:row-start-1 @min-[48rem]/business:border-t-0 @min-[48rem]/business:border-l">
       <div className="mx-auto flex max-w-[720px] flex-col gap-2.5">
         {run?.status === "running" && <div className="rounded-2xl border border-primary/40 bg-card p-3" role="status"><div className="flex items-center gap-2 text-[13px] font-semibold"><Sparkles className="size-3.5 text-primary" />Агент готовит черновик<Button size="sm" variant="outline" className="ml-auto" disabled={busy !== ""} onClick={() => void act("stop", () => sessionClient.cancelDraft({ sessionId }))}>{busy === "stop" && <Loader2 className="size-3.5 animate-spin" />}Остановить</Button></div><div className="mt-3 space-y-2" aria-hidden="true"><div className="h-2.5 w-full animate-pulse rounded-full bg-input" /><div className="h-2.5 w-[92%] animate-pulse rounded-full bg-input" /><div className="h-2.5 w-3/5 animate-pulse rounded-full bg-input" /></div><p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" />Агент читает {contextMessages.length} сообщений…</p></div>}
         {run?.status === "failed" && <div className="rounded-lg border border-destructive/40 p-3 text-sm text-destructive" role="alert">Не удалось подготовить черновик: {run.error}</div>}
@@ -256,25 +257,26 @@ export function BusinessConversation({ sessionId, messages, run, busy, loadError
           <div className="flex items-center gap-2"><StickyNote className="size-3.5 text-warning" /><button type="button" className="min-w-0 flex-1 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setEditingConversationNote((editing) => !editing)}><span className="font-medium">Заметка о собеседнике</span>{conversationNote && !editingConversationNote && <span className="ml-2 text-muted-foreground">{conversationNote}</span>}</button><button type="button" aria-label={editingConversationNote ? "Свернуть заметку о собеседнике" : "Развернуть заметку о собеседнике"} className="rounded p-1 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setEditingConversationNote((editing) => !editing)}><ChevronDown className={cn("size-3.5 transition-transform", editingConversationNote && "rotate-180")} /></button></div>
           {editingConversationNote && <div className="mt-3 space-y-2"><Textarea aria-label="Заметка о собеседнике" value={conversationNote} onChange={(event) => setConversationNote(event.target.value)} placeholder="Например: предпочитает короткие сообщения и общение на «вы»" className="min-h-20 resize-y" /><div className="flex justify-end gap-2"><Button size="sm" variant="ghost" disabled={busy === "conversation-note"} onClick={() => { setConversationNote(conversationNoteMessage?.content ?? ""); setEditingConversationNote(false); }}>Отмена</Button><Button size="sm" disabled={busy !== ""} onClick={() => void saveConversationNote()}>{busy === "conversation-note" && <Loader2 className="size-3.5 animate-spin" />}Сохранить</Button></div></div>}
         </section>
-        <div className="flex min-h-8 items-center gap-2 text-xs text-muted-foreground">
-          <DropdownMenu onOpenChange={(open) => { if (open && models === null && !modelsLoading) void loadModels(); }}>
-            <DropdownMenuTrigger asChild><Button type="button" size="sm" variant="ghost" disabled={busy !== "" || run?.status === "running"} className="h-7 gap-1.5 px-2 text-xs font-normal text-muted-foreground"><span>Модель:</span><span className="max-w-36 truncate text-foreground">{models?.find((item) => item.value === modelId)?.name ?? (modelId || "По умолчанию")}</span><ChevronDown className="size-3" /></Button></DropdownMenuTrigger>
-            <DropdownMenuContent side="top" align="start" className="w-64">
-              {modelsLoading && <div className="flex items-center gap-2 px-2 py-2 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" />Загружаем модели агента…</div>}
-              {modelsError && <DropdownMenuItem onSelect={() => void loadModels()} className="text-xs text-destructive">Не удалось загрузить. Повторить</DropdownMenuItem>}
-              {models && <><DropdownMenuItem onSelect={() => void act("model", () => sessionClient.setModel({ sessionId, modelId: "" })).then((saved) => { if (saved) setModelId(""); })}>По умолчанию{defaultModelId ? ` · ${models.find((item) => item.value === defaultModelId)?.name ?? defaultModelId}` : ""}</DropdownMenuItem>{models.map((item) => <DropdownMenuItem key={item.value} onSelect={() => void act("model", () => sessionClient.setModel({ sessionId, modelId: item.value })).then((saved) => { if (saved) setModelId(item.value); })}>{item.name}{item.value === modelId && <span className="ml-auto text-primary">✓</span>}</DropdownMenuItem>)}{models.length === 0 && <div className="px-2 py-2 text-xs text-muted-foreground">Агент не сообщил список моделей ACP</div>}</>}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
         <section className="rounded-[20px] border border-primary/35 bg-card p-3" aria-label="Инструкция для черновика">
           <div className="flex items-center gap-2"><Sparkles className="size-3.5 text-primary" /><label htmlFor="draft-instruction" className="text-sm font-medium">Инструкция для черновика</label></div>
           <Textarea id="draft-instruction" aria-label="Инструкция для черновика" value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="Необязательно: цель, тон, что уточнить или предложить" className="mt-2 min-h-16 resize-y bg-background" />
-          <div className="mt-2 flex items-center justify-between gap-2"><p className="text-xs text-muted-foreground">Агент учтёт выбранную цель и сообщения начиная с отметки.</p><Button size="sm" disabled={busy !== "" || run?.status === "running" || !target} onClick={() => void generate()}><Sparkles className="size-3.5" />Сгенерировать</Button></div>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <DropdownMenu onOpenChange={(open) => { if (open && models === null && !modelsLoading) void loadModels(); }}>
+              <DropdownMenuTrigger asChild><Button type="button" size="sm" variant="ghost" disabled={busy !== "" || run?.status === "running"} className="h-7 gap-1.5 px-2 text-xs font-normal text-muted-foreground"><span>Модель:</span><span className="max-w-36 truncate text-foreground">{models?.find((item) => item.value === modelId)?.name ?? (modelId || "По умолчанию")}</span><ChevronDown className="size-3" /></Button></DropdownMenuTrigger>
+              <DropdownMenuContent side="top" align="start" className="w-64">
+                {modelsLoading && <div className="flex items-center gap-2 px-2 py-2 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" />Загружаем модели агента…</div>}
+                {modelsError && <DropdownMenuItem onSelect={() => void loadModels()} className="text-xs text-destructive">Не удалось загрузить. Повторить</DropdownMenuItem>}
+                {models && <><DropdownMenuItem onSelect={() => void act("model", () => sessionClient.setModel({ sessionId, modelId: "" })).then((saved) => { if (saved) setModelId(""); })}>По умолчанию{defaultModelId ? ` · ${models.find((item) => item.value === defaultModelId)?.name ?? defaultModelId}` : ""}</DropdownMenuItem>{models.map((item) => <DropdownMenuItem key={item.value} onSelect={() => void act("model", () => sessionClient.setModel({ sessionId, modelId: item.value })).then((saved) => { if (saved) setModelId(item.value); })}>{item.name}{item.value === modelId && <span className="ml-auto text-primary">✓</span>}</DropdownMenuItem>)}{models.length === 0 && <div className="px-2 py-2 text-xs text-muted-foreground">Агент не сообщил список моделей ACP</div>}</>}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button size="sm" className="ml-auto" disabled={busy !== "" || run?.status === "running" || !target} onClick={() => void generate()}><Sparkles className="size-3.5" />Сгенерировать</Button>
+          </div>
         </section>
         {replyOpen && <div>{manualReplyOpen ? <section className="rounded-[20px] border border-input bg-card/60 p-2" aria-label="Ручной ответ"><div className="mb-1.5 flex items-center gap-1.5 px-1 text-xs text-muted-foreground"><Reply className="size-3 shrink-0" /><span className="truncate">Ответ цитатой на «{targetText}»</span></div><Textarea aria-label="Ручной ответ" value={manualReply} onChange={(event) => setManualReply(event.target.value)} placeholder={`Ответить ${person} самому…`} className="min-h-20 max-h-36 resize-y border-0 bg-transparent px-2 text-[15px] shadow-none focus-visible:ring-0" /><div className="mt-2 flex justify-end gap-2"><Button size="sm" variant="ghost" onClick={() => { setManualReply(""); setManualReplyOpen(false); }}>Отмена</Button><Button size="sm" disabled={!manualReply.trim() || busy !== "" || !!pending || [...manualReply].length > 4096} onClick={() => queueSend(manualReply, null)}><Send className="size-3.5" />Отправить</Button></div></section> : <Button type="button" size="sm" variant="ghost" onClick={() => setManualReplyOpen(true)}><Reply className="size-3.5" />Написать вручную</Button>}</div>}
         {manualReplyOpen && [...manualReply].length > 4096 && <p className="text-xs text-warning">Ответ длиннее 4096 символов. Сократите его перед отправкой.</p>}
         {contextBytes > 112 * 1024 && <p className="text-xs text-warning">Контекст занимает около {Math.ceil(contextBytes / 1024)} КБ. Лимит — 128 КБ; перенесите границу ближе.</p>}
       </div>
-    </footer>
+    </aside>
+    </div>
   </div>;
 }
