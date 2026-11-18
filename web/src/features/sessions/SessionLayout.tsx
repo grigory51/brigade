@@ -82,6 +82,21 @@ import {
 } from "./SessionHeaderSlot";
 
 type LoadState = "loading" | "ready" | "error";
+const COLLAPSED_GROUPS_KEY = "brigade.sessions.collapsedGroups";
+
+function loadCollapsedGroups(userId: string): ReadonlySet<string> {
+  try {
+    const raw = localStorage.getItem(`${COLLAPSED_GROUPS_KEY}.${userId}`);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return new Set(
+      Array.isArray(parsed)
+        ? parsed.filter((key): key is string => typeof key === "string")
+        : [],
+    );
+  } catch {
+    return new Set();
+  }
+}
 
 // Контекст оболочки: открытие диалога создания сессии доступно из пустого состояния
 // (index-роут) тем же триггером, что и в шапке sidebar.
@@ -108,7 +123,7 @@ export function useSessionShell() {
  */
 export function SessionLayout() {
   const navigate = useNavigate();
-  const { desktop } = useAuth();
+  const { desktop, user } = useAuth();
   // activeId — сессия, открытая сейчас в области контента (/s/:sessionId). Нужна, чтобы
   // удаление текущей сессии увело с её (теперь несуществующего) маршрута на пустой экран.
   const location = useLocation();
@@ -120,7 +135,9 @@ export function SessionLayout() {
     ? undefined
     : routeSessionId;
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(
+    () => loadCollapsedGroups(user?.id ?? ""),
+  );
   const [state, setState] = useState<LoadState>("loading");
   const [createOpen, setCreateOpen] = useState(false);
   // deletingIds — сессии, удаление которых сейчас выполняется на сервере. Teardown
@@ -137,6 +154,18 @@ export function SessionLayout() {
   const [archivingIds, setArchivingIds] = useState<ReadonlySet<string>>(
     new Set(),
   );
+
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      localStorage.setItem(
+        `${COLLAPSED_GROUPS_KEY}.${user.id}`,
+        JSON.stringify([...collapsedGroups]),
+      );
+    } catch {
+      // Недоступное хранилище не должно мешать работе списка сессий.
+    }
+  }, [collapsedGroups, user?.id]);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setState("loading");
