@@ -53,6 +53,11 @@ func (s *LocalSpawner) Reattach(ctx context.Context, p Persisted) (Handle, error
 
 // startLocal формирует команду агента, запускает её в pty и оборачивает в localHandle.
 func startLocal(ctx context.Context, args []string, cwd string, env []string, sessionID, command string) (Handle, error) {
+	if agentCommand(command) == "codex" {
+		// Brigade владеет процессом сессии; Codex не должен запускать собственный
+		// фоновый daemon с Unix-сокетом внутри потенциально длинного CODEX_HOME.
+		args = append([]string{"--no-daemon"}, args...)
+	}
 	cmd := exec.CommandContext(ctx, agentCommand(command), args...)
 	cmd.Dir = cwd
 	// Наследуем окружение хоста и добавляем переданные переменные (CLAUDE_CODE_OAUTH_TOKEN

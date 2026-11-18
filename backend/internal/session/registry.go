@@ -978,9 +978,11 @@ func (r *Registry) spawnCLIDaemon(ctx context.Context, sess store.Session, token
 		cmd = []string{bin, "--resume", resumeSessionID}
 	}
 	if agent.Get(sess.AgentType).ID == agent.Codex.ID {
-		cmd = []string{bin}
+		// Жизненным циклом CLI управляет Brigade; отдельный Codex daemon создаёт
+		// Unix-сокет внутри CODEX_HOME, путь которого может превышать лимит ОС.
+		cmd = []string{bin, "--no-daemon"}
 		if resumeSessionID != "" {
-			cmd = []string{bin, "resume", "--last"}
+			cmd = []string{bin, "--no-daemon", "resume", "--last"}
 		}
 	}
 	// aud подписи = userID (per-user демон обслуживает все CLI-сессии пользователя); id
