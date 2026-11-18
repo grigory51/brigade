@@ -13,6 +13,7 @@ package acpremote
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"sync"
@@ -436,14 +437,16 @@ func (c *Client) waitDelivered(target int64, timeout time.Duration) {
 }
 
 // Messages → проекция истории из демона.
-func (c *Client) Messages() []acp.Message {
-	resp, err := c.RPC.GetMessages(context.Background(), daemonrpc.Req(c.Sign(), &v1.Empty{}))
+func (c *Client) Messages(ctx context.Context) ([]acp.Message, error) {
+	resp, err := c.RPC.GetMessages(ctx, daemonrpc.Req(c.Sign(), &v1.Empty{}))
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("acpremote: read history: %w", err)
 	}
 	var out []acp.Message
-	_ = json.Unmarshal(resp.Msg.Json, &out)
-	return out
+	if err := json.Unmarshal(resp.Msg.Json, &out); err != nil {
+		return nil, fmt.Errorf("acpremote: decode history: %w", err)
+	}
+	return out, nil
 }
 
 // Commands → последний список slash-команд из демона.

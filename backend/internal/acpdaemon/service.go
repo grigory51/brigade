@@ -202,7 +202,11 @@ func (s *service) GetMessages(ctx context.Context, _ *connect.Request[v1.Empty])
 	if err != nil {
 		return nil, err
 	}
-	return payload(c.Messages())
+	messages, err := c.Messages(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return payload(messages)
 }
 
 func (s *service) GetCommands(ctx context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.DaemonPayloadResponse], error) {

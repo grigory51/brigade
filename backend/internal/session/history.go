@@ -32,8 +32,12 @@ func (h agentHistory) read(ctx context.Context, sess store.Session) (HistorySnap
 		return HistorySnapshot{}, store.ErrNotFound
 	}
 	_, seq := client.Status()
+	messages, err := client.Messages(ctx)
+	if err != nil {
+		return HistorySnapshot{}, err
+	}
 	return HistorySnapshot{
-		Messages: client.Messages(), Revision: int64(seq),
+		Messages: messages, Revision: int64(seq),
 		Commands: client.Commands(), ConfigOptions: client.ConfigOptions(),
 	}, nil
 }

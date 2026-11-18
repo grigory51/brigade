@@ -83,9 +83,9 @@ func (b *fakeBindable) FinishStreams() {
 	b.finishCalled = true
 	b.calls = append(b.calls, "FinishStreams")
 }
-func (b *fakeBindable) Messages() []acp.Message                     { return nil }
-func (b *fakeBindable) Commands() []aguimodel.AvailableCommand      { return nil }
-func (b *fakeBindable) ConfigOptions() []acpsdk.SessionConfigOption { return nil }
+func (b *fakeBindable) Messages(context.Context) ([]acp.Message, error) { return nil, nil }
+func (b *fakeBindable) Commands() []aguimodel.AvailableCommand          { return nil }
+func (b *fakeBindable) ConfigOptions() []acpsdk.SessionConfigOption     { return nil }
 func (b *fakeBindable) SetConfigOption(context.Context, string, string) ([]acpsdk.SessionConfigOption, error) {
 	return nil, nil
 }

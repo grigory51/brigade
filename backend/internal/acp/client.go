@@ -135,6 +135,9 @@ type Client struct {
 	// turnResolver задаёт политику разрешений конкретного автоматического turn'а, не
 	// перехватывая sink/resolver открытого web-чата. Доступ только под mu.
 	turnResolver PermissionResolver
+	// turnSink собирает служебный ответ, сохраняя постоянную привязку транспорта.
+	// Устанавливается и снимается под promptMu, доступ к значению — под mu.
+	turnSink EventSink
 	// history — лента ранее отправленных AG-UI событий сессии. В SSE-поток при Bind
 	// НЕ реплеится (это ломало агрегатор клиента) — служит источником для Messages(),
 	// по которому AcpService.GetHistory восстанавливает ленту массивом сообщений.
@@ -488,10 +491,10 @@ func (c *Client) Commands() []agui.AvailableCommand {
 //
 // Учитываются только текстовые сообщения (user и assistant); размышления, tool-call'ы и
 // прочие события в историю чата не разворачиваются. Роль берётся из START-события.
-func (c *Client) Messages() []Message {
+func (c *Client) Messages(_ context.Context) ([]Message, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return messagesFromEvents(c.history)
+	return messagesFromEvents(c.history), nil
 }
 
 func messagesFromEvents(events []agui.Event) []Message {
@@ -729,6 +732,9 @@ func (c *Client) emit(evt agui.Event) {
 		c.lastActivityAt = time.Now()
 	}
 	sink := c.sink
+	if c.turnSink != nil {
+		sink = c.turnSink
+	}
 	c.mu.Unlock()
 	if sink == nil {
 		return
@@ -792,7 +798,7 @@ func (c *Client) WriteFile(_ context.Context, rel string, content []byte) error 
 // дёргает OnTurnEnd (push-уведомление реестра). Служебные turn'ы (Summarize) идут мимо неё,
 // напрямую через prompt(), чтобы recap-архивации не слал уведомление.
 func (c *Client) Prompt(ctx context.Context, text string, onTurnStart func()) (stopReason string, err error) {
-	stopReason, err = c.prompt(ctx, text, onTurnStart, nil)
+	stopReason, err = c.prompt(ctx, text, onTurnStart, nil, nil)
 	if err == nil {
 		c.publishFallbackTitle(text)
 	}
@@ -839,7 +845,7 @@ func (c *Client) PromptAutoApprove(ctx context.Context, text string, onTurnStart
 		}
 		return "", fmt.Errorf("acp: permission %s has no allow_once option", req.ID)
 	}
-	stopReason, err = c.prompt(ctx, text, onTurnStart, resolver)
+	stopReason, err = c.prompt(ctx, text, onTurnStart, resolver, nil)
 	if err == nil {
 		c.publishFallbackTitle(text)
 	}
@@ -849,7 +855,7 @@ func (c *Client) PromptAutoApprove(ctx context.Context, text string, onTurnStart
 	return stopReason, err
 }
 
-func (c *Client) prompt(ctx context.Context, text string, onTurnStart func(), resolver PermissionResolver) (stopReason string, err error) {
+func (c *Client) prompt(ctx context.Context, text string, onTurnStart func(), resolver PermissionResolver, sink EventSink) (stopReason string, err error) {
 	// Сериализуем turn'ы: пока идёт один Prompt, следующий ждёт. Иначе потоковые события
 	// двух turn'ов смешались бы в общем sink (см. promptMu).
 	c.promptMu.Lock()
@@ -858,6 +864,7 @@ func (c *Client) prompt(ctx context.Context, text string, onTurnStart func(), re
 	c.mu.Lock()
 	c.promptActive = true
 	c.turnResolver = resolver
+	c.turnSink = sink
 	// Записываем пользовательскую реплику в историю (без доставки в живой sink: фронт
 	// уже отрисовал её оптимистично при отправке). Без этого user-сообщения текущего
 	// процесса не попадали бы в AcpService.GetHistory — их эмитит лишь session/load при
@@ -879,6 +886,7 @@ func (c *Client) prompt(ctx context.Context, text string, onTurnStart func(), re
 		c.mu.Lock()
 		c.promptActive = false
 		c.turnResolver = nil
+		c.turnSink = nil
 		c.mu.Unlock()
 	}()
 
@@ -917,11 +925,10 @@ func (c *Client) prompt(ctx context.Context, text string, onTurnStart func(), re
 }
 
 // Summarize запускает служебный turn с промптом prompt и возвращает собранный текст ответа
-// ассистента, не выпуская потоковые события наружу (привязывает собственный sink-сборщик).
+// ассистента, не выпуская потоковые события наружу (использует turnSink-сборщик).
 // Используется для recap сессии при архивации: агент суммирует диалог из своего контекста.
-// Инструменты в этом turn'е недоступны (resolver nil → permission cancelled) — ожидается
-// только текст. Держит turn-барьер через Prompt, поэтому сериализуется с обычными turn'ами;
-// временно перехватывает sink (архивация — намеренное действие, не во время живого turn'а).
+// Интерактивные запросы разрешений отклоняются: ожидается только текст. Сборщик действует под
+// turn-барьером и не меняет постоянную привязку журнала демона или web-чата.
 func (c *Client) Summarize(ctx context.Context, prompt string) (string, error) {
 	var mu sync.Mutex
 	var buf strings.Builder
@@ -933,10 +940,9 @@ func (c *Client) Summarize(ctx context.Context, prompt string) (string, error) {
 		}
 		return nil
 	}
-	unbind := c.Bind(sink, nil)
-	defer unbind()
+	denyPermission := func(context.Context, agui.PermissionRequest) (string, error) { return "", nil }
 	// Через внутренний prompt(), а не Prompt: recap-архивации не должен слать push-уведомление.
-	if _, err := c.prompt(ctx, prompt, nil, nil); err != nil {
+	if _, err := c.prompt(ctx, prompt, nil, denyPermission, sink); err != nil {
 		return "", err
 	}
 	mu.Lock()

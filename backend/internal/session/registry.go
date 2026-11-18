@@ -152,7 +152,7 @@ type acpSession interface {
 	PromptAutoApprove(ctx context.Context, text string, onTurnStart func()) (stopReason string, err error)
 	Cancel(ctx context.Context) error
 	FinishStreams()
-	Messages() []acp.Message
+	Messages(context.Context) ([]acp.Message, error)
 	Commands() []agui.AvailableCommand
 	ConfigOptions() []acpsdk.SessionConfigOption
 	SetConfigOption(ctx context.Context, configID, value string) ([]acpsdk.SessionConfigOption, error)
@@ -1741,7 +1741,10 @@ func (r *Registry) PromptAutoApprove(ctx context.Context, sessionID, userID, tex
 	if _, err := client.PromptAutoApprove(ctx, text, nil); err != nil {
 		return PromptResult{}, err
 	}
-	messages := client.Messages()
+	messages, err := client.Messages(ctx)
+	if err != nil {
+		return PromptResult{}, err
+	}
 	start := len(messages)
 	for start > 0 {
 		start--
@@ -2335,10 +2338,8 @@ func sanitizeUploadName(name string) string {
 const archiveRecapPrompt = "Кратко, в 1–2 предложениях, суммируй эту сессию для архива: " +
 	"что делали и чем закончили. Ответь только самим пересказом, без вступлений и списков."
 
-// Archive переносит сессию в архив: пока агент жив — снимает ленту чата в БД (для
-// readonly-просмотра без агента) и генерирует recap (summary), затем останавливает
-// контейнер как Stop и помечает сессию archived. Идемпотентно для уже архивной. Снимок и
-// recap возможны только для ACP с живым клиентом; для прочих summary остаётся пустым.
+// Archive сохраняет историю и описание в git-памяти до остановки агента и удаления
+// сессии из БД. Ошибка подготовки ACP-архива оставляет исходную сессию доступной.
 func (r *Registry) Archive(ctx context.Context, sessionID, userID string) (memory.ArchivedSession, error) {
 	sess, err := r.Get(ctx, sessionID, userID)
 	if err != nil {
@@ -2347,10 +2348,6 @@ func (r *Registry) Archive(ctx context.Context, sessionID, userID string) (memor
 	if r.archive == nil {
 		return memory.ArchivedSession{}, errors.New("session: архив недоступен — не настроена память")
 	}
-
-	r.mu.Lock()
-	lv := r.live[sessionID]
-	r.mu.Unlock()
 
 	var messages []byte
 	summary := ""
@@ -2368,18 +2365,30 @@ func (r *Registry) Archive(ctx context.Context, sessionID, userID string) (memor
 		if err != nil {
 			return memory.ArchivedSession{}, err
 		}
-	} else if lv != nil && lv.client != nil {
-		// Снимок ленты ДО recap: служебный recap-turn не должен попасть в архивную историю.
-		if data, err := json.Marshal(lv.client.Messages()); err != nil {
-			log.Printf("session: archive %s marshal history: %v", sessionID, err)
-		} else {
-			messages = data
+	} else if sess.Kind == store.SessionKindACP {
+		client, ok := r.EnsureACPClient(ctx, sessionID, userID)
+		if !ok {
+			return memory.ArchivedSession{}, errors.New("session: не удалось получить историю для архива — агент недоступен; перезагрузите сессию и повторите архивацию")
 		}
-		// Recap на неотменяемом контексте: RPC мог вернуться раньше, чем агент ответит.
-		if s, err := lv.client.Summarize(context.WithoutCancel(ctx), archiveRecapPrompt); err != nil {
-			log.Printf("session: archive %s recap: %v", sessionID, err)
-		} else {
-			summary = s
+		if generating, _ := client.Status(); generating {
+			return memory.ArchivedSession{}, errors.New("session: дождитесь ответа агента или остановите его перед архивацией")
+		}
+		// Снимок ленты ДО recap: служебный recap-turn не должен попасть в архивную историю.
+		history, err := client.Messages(ctx)
+		if err != nil {
+			return memory.ArchivedSession{}, fmt.Errorf("session: не удалось прочитать историю для архива: %w", err)
+		}
+		messages, err = json.Marshal(history)
+		if err != nil {
+			return memory.ArchivedSession{}, fmt.Errorf("session: не удалось сохранить историю для архива: %w", err)
+		}
+		summary, err = client.Summarize(ctx, archiveRecapPrompt)
+		if err != nil {
+			return memory.ArchivedSession{}, fmt.Errorf("session: не удалось подготовить описание архива: %w", err)
+		}
+		summary = strings.TrimSpace(summary)
+		if summary == "" {
+			return memory.ArchivedSession{}, errors.New("session: агент вернул пустое описание архива; сессия сохранена, повторите архивацию")
 		}
 	}
 

@@ -2,7 +2,10 @@ package acp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
+	"net"
 	"testing"
 	"time"
 
@@ -10,6 +13,53 @@ import (
 
 	"github.com/grigory51/brigade/backend/internal/agui"
 )
+
+type summaryTestAgent struct {
+	acpsdk.Agent
+	respond func() (acpsdk.PromptResponse, error)
+}
+
+func (a *summaryTestAgent) Prompt(context.Context, acpsdk.PromptRequest) (acpsdk.PromptResponse, error) {
+	return a.respond()
+}
+
+func TestSummarizePreservesTransportBinding(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		t.Run(map[bool]string{false: "success", true: "failure"}[fail], func(t *testing.T) {
+			clientPipe, agentPipe := net.Pipe()
+			defer clientPipe.Close()
+			defer agentPipe.Close()
+			c := &Client{sessionID: "session"}
+			var events []agui.Event
+			sink := func(event agui.Event) error { events = append(events, event); return nil }
+			c.Bind(sink, nil)
+			mock := &summaryTestAgent{respond: func() (acpsdk.PromptResponse, error) {
+				// Переподключение транспорта во время recap не должно перехватить ответ.
+				c.Bind(sink, nil)
+				c.emit(agui.Event{Type: agui.EventTextMessageContent, MessageID: "summary", Delta: "Краткое описание"})
+				if fail {
+					return acpsdk.PromptResponse{}, errors.New("agent failed")
+				}
+				return acpsdk.PromptResponse{StopReason: acpsdk.StopReasonEndTurn}, nil
+			}}
+			acpsdk.NewAgentSideConnection(mock, agentPipe, agentPipe)
+			c.conn = acpsdk.NewClientSideConnection(c, clientPipe, clientPipe)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			text, err := c.Summarize(ctx, "Summarize")
+			if (err != nil) != fail || (!fail && text != "Краткое описание") {
+				t.Fatalf("summary=%q err=%v", text, err)
+			}
+			if len(events) != 0 {
+				t.Fatalf("summary leaked to transport: %+v", events)
+			}
+			c.emit(agui.Event{Type: agui.EventTextMessageContent, MessageID: "next", Delta: "Следующий ответ"})
+			if len(events) != 1 || events[0].MessageID != "next" {
+				t.Fatalf("transport binding lost: %+v", events)
+			}
+		})
+	}
+}
 
 func TestSessionMetaAppendsSystemPrompt(t *testing.T) {
 	meta := sessionMeta([]string{"/plugin"}, "guest instructions")
@@ -179,7 +229,7 @@ func TestLongMessageSurvivesHistory(t *testing.T) {
 		c.emit(agui.Event{Type: agui.EventTextMessageContent, MessageID: "m", Delta: "a"})
 	}
 	c.emit(agui.Event{Type: agui.EventTextMessageEnd, MessageID: "m"})
-	messages := c.Messages()
+	messages, _ := c.Messages(context.Background())
 	if len(messages) != 1 || len(messages[0].Content) != 2500 {
 		t.Fatalf("Messages() = %+v, want one complete long message", messages)
 	}
@@ -246,7 +296,7 @@ func TestRecordUserMessageAndMessages(t *testing.T) {
 	if len(c.history) != 3 {
 		t.Fatalf("в history %d событий, want 3 (START/CONTENT/END)", len(c.history))
 	}
-	msgs := c.Messages()
+	msgs, _ := c.Messages(context.Background())
 	if len(msgs) != 1 {
 		t.Fatalf("Messages вернул %d сообщений, want 1", len(msgs))
 	}
@@ -267,7 +317,7 @@ func TestMessagesOrdering(t *testing.T) {
 	c.emit(agui.Event{Type: agui.EventTextMessageEnd, MessageID: "a1"})
 	c.recordUserMessage("q2")
 
-	msgs := c.Messages()
+	msgs, _ := c.Messages(context.Background())
 	want := []Message{
 		{ID: msgs[0].ID, Role: "user", Content: "q1"},
 		{ID: "a1", Role: "assistant", Content: "answer"},
@@ -403,7 +453,7 @@ func TestMessagesToolCalls(t *testing.T) {
 	c.emit(agui.Event{Type: agui.EventTextMessageContent, MessageID: "a1", Delta: "готово"})
 	c.emit(agui.Event{Type: agui.EventTextMessageEnd, MessageID: "a1"})
 
-	msgs := c.Messages()
+	msgs, _ := c.Messages(context.Background())
 	if len(msgs) != 3 {
 		t.Fatalf("Messages вернул %d сообщений %+v, want 3", len(msgs), msgs)
 	}

@@ -302,7 +302,12 @@ func (r *Registry) executeShadowRun(runContext context.Context, sess store.Sessi
 		return
 	}
 	var parts []string
-	for _, message := range live.client.Messages() {
+	messages, err := live.client.Messages(ctx)
+	if err != nil {
+		failure = fmt.Sprintf("Не удалось получить ответ агента: %v", err)
+		return
+	}
+	for _, message := range messages {
 		if message.Role == "assistant" && strings.TrimSpace(message.Content) != "" {
 			parts = append(parts, strings.TrimSpace(message.Content))
 		}

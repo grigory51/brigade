@@ -1,12 +1,45 @@
 package acpremote
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
+	"connectrpc.com/connect"
+	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
+	"github.com/grigory51/brigade/backend/gen/go/brigade/v1/brigadev1connect"
 	"github.com/grigory51/brigade/backend/internal/agui"
 )
+
+type messagesRPC struct {
+	brigadev1connect.AgentDaemonServiceClient
+	data []byte
+	err  error
+}
+
+func (r *messagesRPC) GetMessages(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.DaemonPayloadResponse], error) {
+	return connect.NewResponse(&v1.DaemonPayloadResponse{Json: r.data}), r.err
+}
+
+func TestMessagesPreservesReadErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		rpc  *messagesRPC
+	}{
+		{name: "RPC", rpc: &messagesRPC{err: errors.New("daemon unavailable")}},
+		{name: "JSON", rpc: &messagesRPC{data: []byte(`{"invalid":true}`)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := New("http://unused", "session", func() (string, error) { return "", nil })
+			c.RPC = tc.rpc
+			if _, err := c.Messages(context.Background()); err == nil {
+				t.Fatal("history failure reported as an empty conversation")
+			}
+		})
+	}
+}
 
 func TestNormalizeLegacyDaemonText(t *testing.T) {
 	events := normalizeDaemonEvent(agui.Event{Type: agui.EventTextMessageContent, Delta: "error"})

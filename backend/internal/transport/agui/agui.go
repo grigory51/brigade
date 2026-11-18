@@ -94,7 +94,7 @@ type Bindable interface {
 	FinishStreams()
 	// Messages возвращает историю чата сессии массивом сообщений (для
 	// ThreadHistoryAdapter фронта).
-	Messages() []acp.Message
+	Messages(context.Context) ([]acp.Message, error)
 	// Commands возвращает последний список slash-команд агента (для автокомплита
 	// composer'а; отдаётся вместе с историей).
 	Commands() []aguimodel.AvailableCommand

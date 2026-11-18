@@ -15,6 +15,7 @@ import (
 
 	"github.com/grigory51/brigade/backend/internal/acp"
 	"github.com/grigory51/brigade/backend/internal/agui"
+	"github.com/grigory51/brigade/backend/internal/memory"
 	"github.com/grigory51/brigade/backend/internal/preview"
 	"github.com/grigory51/brigade/backend/internal/spawn"
 	"github.com/grigory51/brigade/backend/internal/store"
@@ -154,9 +155,12 @@ func newFakeHandle() *fakeHandle {
 }
 
 type fakeACPSession struct {
-	generating bool
-	cancelled  bool
-	messages   []acp.Message
+	generating  bool
+	cancelled   bool
+	messages    []acp.Message
+	messagesErr error
+	summary     string
+	summaryErr  error
 }
 
 func (f *fakeACPSession) SetHooks(func(string, error), func(string)) {}
@@ -166,19 +170,84 @@ func (f *fakeACPSession) Prompt(context.Context, string, func()) (string, error)
 func (f *fakeACPSession) PromptAutoApprove(context.Context, string, func()) (string, error) {
 	return "", nil
 }
-func (f *fakeACPSession) Cancel(context.Context) error                { f.cancelled = true; return nil }
-func (f *fakeACPSession) FinishStreams()                              {}
-func (f *fakeACPSession) Messages() []acp.Message                     { return f.messages }
+func (f *fakeACPSession) Cancel(context.Context) error { f.cancelled = true; return nil }
+func (f *fakeACPSession) FinishStreams()               {}
+func (f *fakeACPSession) Messages(context.Context) ([]acp.Message, error) {
+	return f.messages, f.messagesErr
+}
 func (f *fakeACPSession) Commands() []agui.AvailableCommand           { return nil }
 func (f *fakeACPSession) ConfigOptions() []acpsdk.SessionConfigOption { return nil }
 func (f *fakeACPSession) SetConfigOption(context.Context, string, string) ([]acpsdk.SessionConfigOption, error) {
 	return nil, nil
 }
-func (f *fakeACPSession) Status() (bool, int)                               { return f.generating, 0 }
-func (f *fakeACPSession) SessionID() string                                 { return "agent-session" }
-func (f *fakeACPSession) Summarize(context.Context, string) (string, error) { return "", nil }
-func (f *fakeACPSession) WriteFile(context.Context, string, []byte) error   { return nil }
-func (f *fakeACPSession) Close() error                                      { return nil }
+func (f *fakeACPSession) Status() (bool, int) { return f.generating, 0 }
+func (f *fakeACPSession) SessionID() string   { return "agent-session" }
+func (f *fakeACPSession) Summarize(context.Context, string) (string, error) {
+	return f.summary, f.summaryErr
+}
+func (f *fakeACPSession) WriteFile(context.Context, string, []byte) error { return nil }
+func (f *fakeACPSession) Close() error                                    { return nil }
+
+type recordingArchive struct {
+	SessionArchive
+	saved *memory.ArchivedSession
+}
+
+func (a *recordingArchive) ArchiveSession(_ context.Context, _ string, sess memory.ArchivedSession, _ []byte) error {
+	a.saved = &sess
+	return nil
+}
+
+func TestArchiveRequiresACPDescription(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		client  *fakeACPSession
+		wantErr string
+	}{
+		{name: "unavailable", wantErr: "агент недоступен"},
+		{name: "busy", client: &fakeACPSession{generating: true}, wantErr: "дождитесь ответа"},
+		{name: "failed", client: &fakeACPSession{summaryErr: errors.New("token expired")}, wantErr: "token expired"},
+		{name: "history failed", client: &fakeACPSession{messagesErr: errors.New("history unavailable"), summary: "Summary"}, wantErr: "history unavailable"},
+		{name: "empty", client: &fakeACPSession{summary: " \n"}, wantErr: "пустое описание"},
+		{name: "success", client: &fakeACPSession{summary: " Исправили запуск Codex. \n"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newTestRegistry(t)
+			archive := &recordingArchive{}
+			r.archive = archive
+			ctx := context.Background()
+			sess := store.Session{ID: "archive", UserID: "u1", Kind: store.SessionKindACP, Mode: store.SessionModeLocal, Status: store.SessionStatusRunning, CreatedAt: time.Now()}
+			if err := r.store.CreateSession(ctx, sess); err != nil {
+				t.Fatal(err)
+			}
+			if tc.client != nil {
+				r.live[sess.ID] = &live{owner: sess.UserID, kind: sess.Kind, client: tc.client}
+			}
+			_, err := r.Archive(ctx, sess.ID, sess.UserID)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("error = %v, want %q", err, tc.wantErr)
+				}
+				if archive.saved != nil {
+					t.Fatal("incomplete archive was saved")
+				}
+				if _, err := r.Get(ctx, sess.ID, sess.UserID); err != nil {
+					t.Fatalf("original session lost: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if archive.saved == nil || archive.saved.Summary != "Исправили запуск Codex." {
+				t.Fatalf("archive = %+v", archive.saved)
+			}
+			if _, err := r.Get(ctx, sess.ID, sess.UserID); !errors.Is(err, store.ErrNotFound) {
+				t.Fatalf("archived session remains: %v", err)
+			}
+		})
+	}
+}
 
 func TestReloadableCancelsGeneratingTurnOnlyForExplicitReload(t *testing.T) {
 	r := newTestRegistry(t)
