@@ -5,12 +5,14 @@ import { ConnectError } from "@connectrpc/connect";
 import { Archive, ChevronLeft, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { archiveClient } from "@/api/client";
+import type { AcpMessage } from "@/api/gen/brigade/v1/acp_pb";
 import type { Session } from "@/api/gen/brigade/v1/session_pb";
 import { cn } from "@/lib/utils";
 import { AcpThread } from "@/features/acp/AcpThread";
 import { useArchivedRuntime } from "@/features/acp/useArchivedRuntime";
 import { SessionDock } from "@/features/acp/dock/SessionDock";
 import { EmptyState } from "@/components/empty-state";
+import { ArchivedConversation } from "./ArchivedConversation/ArchivedConversation";
 
 // sessionTitle — подпись сессии для карточки: имя, либо производная (тип агента) для
 // сессий без имени.
@@ -161,17 +163,43 @@ export function ArchiveSessionPage() {
         </span>
       </div>
       <div className="min-h-0 flex-1">
-        <ArchivedAcpSession key={sessionId} sessionId={sessionId} />
+        <ArchiveHistory key={sessionId} sessionId={sessionId} />
       </div>
     </div>
   );
 }
 
+function ArchiveHistory({ sessionId }: { sessionId: string }) {
+  const [messages, setMessages] = useState<AcpMessage[] | null>(null);
+  const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    archiveClient.getHistory({ sessionId }, { signal: controller.signal }).then(
+      (response) => { if (!controller.signal.aborted) setMessages(response.messages); },
+      (cause: unknown) => {
+        if (!controller.signal.aborted) setError(ConnectError.from(cause).rawMessage || "История недоступна");
+      },
+    );
+    return () => controller.abort();
+  }, [sessionId, attempt]);
+
+  if (error) return <div role="alert" className="grid h-full content-center justify-items-center gap-2 text-sm">
+    Не удалось открыть архив: {error}
+    <button className="text-primary underline" onClick={() => { setError(""); setAttempt((n) => n + 1); }}>Повторить</button>
+  </div>;
+  if (!messages) return <div role="status" aria-label="Загрузка переписки" className="grid h-full place-items-center"><Loader2 className="size-5 animate-spin" /></div>;
+  if (!messages.length) return <p className="grid h-full place-items-center text-sm text-muted-foreground">В архиве нет сообщений.</p>;
+  // Снимок переписки Brigade хранит автора независимо от роли ACP.
+  if (messages[0].author) return <ArchivedConversation messages={messages} />;
+  return <ArchivedAcpSession sessionId={sessionId} messages={messages} />;
+}
+
 // ArchivedAcpSession — readonly ACP-лента архивной сессии: рантайм из снимка истории,
 // composer скрыт (AcpThread readonly). Плавающая обвязка та же, что у живой сессии, но в
 // readonly-режиме: лента — обычный чат, и навигация по нему со ссылками нужна здесь так же.
-function ArchivedAcpSession({ sessionId }: { sessionId: string }) {
-  const { runtime, a2ui } = useArchivedRuntime(sessionId);
+function ArchivedAcpSession({ sessionId, messages }: { sessionId: string; messages: AcpMessage[] }) {
+  const { runtime, a2ui } = useArchivedRuntime(sessionId, messages);
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <div className="relative h-full">

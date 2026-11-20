@@ -50,13 +50,7 @@ func (s *ArchiveService) GetHistory(ctx context.Context, req *connect.Request[v1
 	if err != nil {
 		return nil, sessionError(err)
 	}
-	resp := &v1.ArchivedHistoryResponse{}
-	for _, m := range msgs {
-		resp.Messages = append(resp.Messages, &v1.AcpMessage{
-			Id: m.ID, Role: m.Role, Content: m.Content,
-			ToolName: m.ToolName, ArgsText: m.ArgsText, Result: m.Result,
-		})
-	}
+	resp := &v1.ArchivedHistoryResponse{Messages: historyMessagesToProto(msgs)}
 	return connect.NewResponse(resp), nil
 }
 

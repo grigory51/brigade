@@ -59,8 +59,20 @@ func (s *AcpService) GetHistory(ctx context.Context, req *connect.Request[v1.Get
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	resp := &v1.GetHistoryResponse{}
-	for _, m := range snapshot.Messages {
-		resp.Messages = append(resp.Messages, &v1.AcpMessage{
+	resp.Messages = historyMessagesToProto(snapshot.Messages)
+	for _, c := range snapshot.Commands {
+		resp.Commands = append(resp.Commands, &v1.AcpCommand{
+			Name: c.Name, Description: c.Description, Hint: c.Hint,
+		})
+	}
+	resp.ConfigOptions = configOptionsToProto(snapshot.ConfigOptions)
+	return connect.NewResponse(resp), nil
+}
+
+func historyMessagesToProto(messages []acp.Message) []*v1.AcpMessage {
+	result := make([]*v1.AcpMessage, 0, len(messages))
+	for _, m := range messages {
+		result = append(result, &v1.AcpMessage{
 			Id: m.ID, Role: m.Role, Content: m.Content,
 			ToolName: m.ToolName, ArgsText: m.ArgsText, Result: m.Result,
 			Author: m.Author, Source: m.Source, ExternalId: m.ExternalID,
@@ -69,13 +81,7 @@ func (s *AcpService) GetHistory(ctx context.Context, req *connect.Request[v1.Get
 			HasTelegramBusinessPhoto: m.HasTelegramBusinessPhoto,
 		})
 	}
-	for _, c := range snapshot.Commands {
-		resp.Commands = append(resp.Commands, &v1.AcpCommand{
-			Name: c.Name, Description: c.Description, Hint: c.Hint,
-		})
-	}
-	resp.ConfigOptions = configOptionsToProto(snapshot.ConfigOptions)
-	return connect.NewResponse(resp), nil
+	return result
 }
 
 // GetStatus — снимок состояния сессии.

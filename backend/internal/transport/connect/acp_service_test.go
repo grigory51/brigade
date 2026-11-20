@@ -6,9 +6,21 @@ import (
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
+	"github.com/grigory51/brigade/backend/internal/acp"
 	aguimodel "github.com/grigory51/brigade/backend/internal/agui"
 	"github.com/grigory51/brigade/backend/internal/transport/agui"
 )
+
+func TestHistoryMessagesPreserveConversationMetadata(t *testing.T) {
+	got := historyMessagesToProto([]acp.Message{
+		{ID: "incoming", Role: "user", Author: "contact", Source: "telegram-business/bot/conn/chat", CreatedAt: 42},
+		{ID: "reply", Role: "user", Author: "owner", ReplyToID: "incoming", Delivery: "sent"},
+	})
+	if got[0].Author != "contact" || got[0].CreatedAt != 42 || got[0].Source != "telegram-business/bot/conn/chat" ||
+		got[1].Author != "owner" || got[1].ReplyToId != "incoming" || got[1].Delivery != "sent" {
+		t.Fatalf("unexpected conversation metadata: %v", got)
+	}
+}
 
 // TestConfigOptionsToProto проверяет нормализацию опций: Select с ungrouped и grouped
 // значениями сплющивается в единый плоский список (grouped не теряется); Boolean-опции

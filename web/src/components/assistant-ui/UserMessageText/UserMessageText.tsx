@@ -8,7 +8,10 @@ const TRAILING_URL_PUNCTUATION = /[.,!?;:)}\]]+$/;
 
 export const UserMessageText: FC = () => {
   const { text: rawText, status } = useMessagePartText();
-  // Preserve indentation and paragraph breaks, but do not render an empty tail.
+  return <div data-status={status.type}><CollapsibleLinkText text={rawText} /></div>;
+};
+
+export function CollapsibleLinkText({ text: rawText }: { text: string }) {
   const text = rawText.trimEnd();
   const contentRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
@@ -42,7 +45,7 @@ export const UserMessageText: FC = () => {
   parts.push(text.slice(offset));
 
   return (
-    <div data-status={status.type}>
+    <>
       <div
         ref={contentRef}
         className={cn(
@@ -61,6 +64,6 @@ export const UserMessageText: FC = () => {
           {expanded ? "Свернуть" : "Развернуть"}
         </button>
       )}
-    </div>
+    </>
   );
-};
+}

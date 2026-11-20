@@ -4,7 +4,7 @@ import { useAgUiRuntime } from "@assistant-ui/react-ag-ui";
 import type { ThreadHistoryAdapter } from "@assistant-ui/react";
 import { MessageProcessor } from "@a2ui/web_core/v0_9";
 import type { ReactComponentImplementation } from "@a2ui/react/v0_9";
-import { archiveClient } from "@/api/client";
+import type { AcpMessage } from "@/api/gen/brigade/v1/acp_pb";
 import { cardsCatalog, basicCatalog } from "./a2ui/catalog";
 import {
   importAcpHistory,
@@ -17,7 +17,7 @@ import {
 // A2UI-процессор нужен для рендера render_ui-карточек (RenderUiCard строит поверхность из
 // argsText снимка); diff-карточки рисуются из result. Агент (HttpAgent) формально нужен
 // useAgUiRuntime, но не вызывается — composer скрыт (AcpThread readonly).
-export function useArchivedRuntime(sessionId: string): {
+export function useArchivedRuntime(sessionId: string, messages: AcpMessage[]): {
   runtime: ReturnType<typeof useAgUiRuntime>;
   a2ui: A2uiState;
 } {
@@ -51,18 +51,10 @@ export function useArchivedRuntime(sessionId: string): {
 
   const history = useMemo<ThreadHistoryAdapter>(
     () => ({
-      load: async () => {
-        let data;
-        try {
-          data = await archiveClient.getHistory({ sessionId });
-        } catch {
-          return { messages: [] };
-        }
-        return importAcpHistory(data.messages);
-      },
+      load: async () => importAcpHistory(messages),
       append: async () => {},
     }),
-    [sessionId],
+    [messages],
   );
 
   const runtime = useAgUiRuntime({
