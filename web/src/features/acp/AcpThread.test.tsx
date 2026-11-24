@@ -39,11 +39,12 @@ test("keeps a mixed activity group expandable as more tool calls stream in", asy
       result: i < count - 1 ? "ok" : undefined,
     })),
   }];
-  const view = render(<Feed messages={streaming(2)} />);
-  expect((await view.findByText("python")).closest("details")).toBeNull();
-  view.rerender(<Feed messages={streaming(3)} />);
-  const label = await view.findByText("Активность · 3");
-  const group = label.closest("details")!;
+  const view = render(<Feed messages={streaming(1)} />);
+  const group = (await view.findByText("Активность · 1")).closest("details")!;
+  expect(group.open).toBe(false);
+  view.rerender(<Feed messages={streaming(2)} />);
+  const label = await view.findByText("Активность · 2");
+  expect(label.closest("details")).toBe(group);
   expect(group.open).toBe(false);
   fireEvent.click(label);
   expect(group.open).toBe(true);
@@ -73,6 +74,8 @@ test("history groups mixed calls but leaves an interactive card and the answer o
   const group = (await view.findByText("Активность · 4")).closest("details")!;
   expect(group.open).toBe(false);
   expect(view.getByRole("button", { name: "Продолжить" }).closest("details")).toBeNull();
-  expect(view.getAllByText("Find").map((name) => name.closest("details"))).toEqual([group, null]);
+  const single = (await view.findByText("Активность · 1")).closest("details")!;
+  expect(single.open).toBe(false);
+  expect(view.getAllByText("Find").map((name) => name.closest("details"))).toEqual([group, single]);
   expect((await view.findByText("Ответ агента")).closest("details")).toBeNull();
 });

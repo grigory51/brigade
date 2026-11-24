@@ -4,7 +4,7 @@ import {
   useContext,
   type PropsWithChildren,
 } from "react";
-import { Activity, Download, Loader2, Wrench, ChevronRight, LockKeyhole, FileText, Search, List } from "lucide-react";
+import { Download, Loader2, Wrench, ChevronRight, LockKeyhole, FileText, Search, List } from "lucide-react";
 import { type ToolCallMessagePartComponent, useAuiState } from "@assistant-ui/react";
 import { A2uiSurface } from "@a2ui/react/v0_9";
 import { sessionClient } from "@/api/client";
@@ -45,18 +45,15 @@ function AcpToolGroup({
     running ? state.message.content[group.indices[count - 1]] : undefined,
   );
 
-  // GroupedParts уже отделил текст, размышления и самостоятельные карточки.
-  if (count < 3) return <div className="my-2 space-y-2">{children}</div>;
   return (
-    <details className="group/activity my-2 rounded-lg border border-border/60 bg-card/30">
-      <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 px-3 text-sm text-muted-foreground select-none hover:text-foreground">
-        <Activity className="size-4 shrink-0" />
-        <span className="font-medium">Активность · {count}</span>
+    <details className="acp-tool-activity group/activity">
+      <summary className="flex min-h-6 w-fit max-w-full cursor-pointer list-none items-center gap-1.5 rounded-sm text-xs text-muted-foreground select-none hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+        <ChevronRight aria-hidden="true" className="size-3 shrink-0 group-open/activity:rotate-90" />
+        <span className="shrink-0 tabular-nums">Активность · {count}</span>
         {lastCall?.type === "tool-call" && <span className="min-w-0 truncate text-xs">· {lastCall.toolName.replace(/ File$/i, "")} {toolPath(bareToolArgs(lastCall.args))}</span>}
-        {running && <Loader2 className="size-3.5 animate-spin" />}
-        <ChevronRight className="ml-auto size-4 transition-transform group-open/activity:rotate-90" />
+        {running && <Loader2 aria-label="Выполняется" className="size-3 shrink-0 motion-safe:animate-spin" />}
       </summary>
-      <div className="space-y-2 border-t border-border/50 p-2">{children}</div>
+      <div className="my-1 space-y-2 border-s border-border ps-3">{children}</div>
     </details>
   );
 }

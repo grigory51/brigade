@@ -259,7 +259,7 @@ const ThreadRoot: FC<{
 
           <div
             data-slot="aui_message-group"
-            className={cn("flex flex-col empty:hidden", workspace ? "mb-3 gap-y-3" : "mb-14 gap-y-6")}
+            className={cn("flex flex-col gap-y-(--message-gap) empty:hidden", workspace ? "mb-3 [--message-gap:0.75rem]" : "mb-14 [--message-gap:1.5rem]")}
           >
             <ThreadPrimitive.Messages>
               {() => <ThreadMessage />}
