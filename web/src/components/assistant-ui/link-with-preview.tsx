@@ -67,12 +67,12 @@ export function LinkWithPreview({ href, className, children, ...props }: Compone
           )}
           {preview && (
             <div>
-              {preview.imageUrl && (
+              {preview.imageUrl.startsWith("data:image/") && (
                 <img src={preview.imageUrl} alt="" className="h-32 w-full object-cover" />
               )}
               <div className="space-y-1.5 p-3">
                 <div className="text-muted-foreground flex min-w-0 items-center gap-1.5 text-[11px]">
-                  {preview.iconUrl && <img src={preview.iconUrl} alt="" className="size-3.5 rounded-sm" />}
+                  {preview.iconUrl.startsWith("data:image/") && <img src={preview.iconUrl} alt="" className="size-3.5 rounded-sm" />}
                   <span className="truncate">{preview.siteName}</span>
                   <ExternalLink className="ml-auto size-3 shrink-0" />
                 </div>

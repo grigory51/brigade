@@ -2,14 +2,14 @@ package linkpreview
 
 import (
 	"context"
+	"encoding/base64"
 	"io"
 	"net/http"
 	"net/netip"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
-
-	lru "github.com/hashicorp/golang-lru/v2"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -17,25 +17,58 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
 func TestGetParsesOpenGraphAndCaches(t *testing.T) {
-	requests := 0
-	cache, _ := lru.New[string, Preview](1024)
-	svc := &Service{cache: cache, client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		requests++
-		body := `<html><head><title>Fallback</title><meta property="og:title" content="Brigade"><meta property="og:description" content="Coding agents"><meta property="og:image" content="/cover.png"><link rel="icon" href="/favicon.ico"></head></html>`
-		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(body)), Request: req}, nil
-	})}}
+	var requests atomic.Int32
+	const cover = "\x89PNG\r\n\x1a\ncover"
+	const icon = "\x00\x00\x01\x00icon"
+	svc := New()
+	svc.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		requests.Add(1)
+		body := map[string]string{
+			"/page":      `<html><head><title>Fallback</title><meta property="og:title" content="Brigade"><meta property="og:description" content="Coding agents"><meta property="og:image" content="/cover.png"><link rel="icon" href="/favicon.ico"></head></html>`,
+			"/cover.png": cover, "/favicon.ico": icon,
+		}[req.URL.Path]
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Request: req}, nil
+	})
 
 	for range 2 {
 		preview, err := svc.Get(context.Background(), "https://example.com/page")
 		if err != nil {
 			t.Fatal(err)
 		}
-		if preview.Title != "Brigade" || preview.Description != "Coding agents" || preview.ImageURL != "https://example.com/cover.png" || preview.IconURL != "https://example.com/favicon.ico" {
+		if preview.Title != "Brigade" || preview.Description != "Coding agents" || preview.ImageURL != "data:image/png;base64,"+base64.StdEncoding.EncodeToString([]byte(cover)) ||
+			preview.IconURL != "data:"+http.DetectContentType([]byte(icon))+";base64,"+base64.StdEncoding.EncodeToString([]byte(icon)) {
 			t.Fatalf("preview = %+v", preview)
 		}
 	}
-	if requests != 1 {
-		t.Fatalf("requests = %d, want 1", requests)
+	if requests.Load() != 3 {
+		t.Fatalf("requests = %d, want 3", requests.Load())
+	}
+}
+
+func TestUnavailableImagesKeepTextWithoutExternalFallback(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		status     int
+	}{
+		{"missing favicon", "<html>Not found</html>", 404},
+		{"HTML labelled as image", "<html>Not an image</html>", 200},
+		{"SVG", "<svg></svg>", 200},
+		{"oversize", "GIF89a" + strings.Repeat("x", maxImageBytes), 200},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := New()
+			svc.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				body, status := tc.body, tc.status
+				if req.URL.Path == "/page" {
+					body, status = `<title>Страница</title><meta property="og:image" content="/asset"><link rel="icon" href="/asset">`, 200
+				}
+				return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": {"image/png"}}, Body: io.NopCloser(strings.NewReader(body)), Request: req}, nil
+			})
+			p, err := svc.Get(context.Background(), "https://example.com/page")
+			if err != nil || p.Title != "Страница" || p.ImageURL != "" || p.IconURL != "" {
+				t.Fatalf("preview = %+v, err = %v", p, err)
+			}
+		})
 	}
 }
 

@@ -2,6 +2,7 @@ package linkpreview
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2"
@@ -18,6 +20,7 @@ import (
 
 const maxHTMLBytes = 1 << 20
 const maxURLBytes = 4096
+const maxImageBytes = 512 << 10
 
 var ErrInvalidURL = errors.New("invalid link preview URL")
 
@@ -33,10 +36,13 @@ type Preview struct {
 type Service struct {
 	client *http.Client
 	cache  *lru.Cache[string, Preview]
+	images *lru.Cache[string, string]
 }
 
 func New() *Service {
 	cache, _ := lru.New[string, Preview](1024)
+	// Отдельный LRU ограничивает объём base64 примерно 22 МиБ независимо от числа страниц.
+	images, _ := lru.New[string, string](32)
 	dialer := &net.Dialer{Timeout: 5 * time.Second}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
@@ -69,10 +75,70 @@ func New() *Service {
 			}
 			return validateURL(req.URL)
 		},
-	}, cache: cache}
+	}, cache: cache, images: images}
 }
 
 func (s *Service) Get(ctx context.Context, rawURL string) (Preview, error) {
+	preview, err := s.metadata(ctx, rawURL)
+	if err != nil {
+		return Preview{}, err
+	}
+	// Медленный CDN не должен задерживать уже готовый текст на весь таймаут страницы.
+	imageCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if preview.IconURL == preview.ImageURL {
+		preview.ImageURL = s.inlineImage(imageCtx, preview.ImageURL)
+		preview.IconURL = preview.ImageURL
+	} else {
+		var wg sync.WaitGroup
+		wg.Go(func() { preview.ImageURL = s.inlineImage(imageCtx, preview.ImageURL) })
+		preview.IconURL = s.inlineImage(imageCtx, preview.IconURL)
+		wg.Wait()
+	}
+	return preview, ctx.Err()
+}
+
+// rawURL приходит из resolve, а client повторно проверяет сеть при редиректе и соединении.
+func (s *Service) inlineImage(ctx context.Context, rawURL string) string {
+	if rawURL == "" {
+		return ""
+	}
+	if data, ok := s.images.Get(rawURL); ok {
+		return data
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("User-Agent", "Brigade Link Preview/1.0")
+	req.Header.Set("Accept", "image/png,image/jpeg,image/gif,image/webp,image/x-icon")
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {
+		s.images.Add(rawURL, "")
+		return ""
+	}
+	if resp.StatusCode != http.StatusOK || resp.ContentLength > maxImageBytes {
+		return ""
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxImageBytes+1))
+	if err != nil || len(body) > maxImageBytes {
+		return ""
+	}
+	mime := http.DetectContentType(body)
+	var data string
+	switch mime {
+	case "image/png", "image/jpeg", "image/gif", "image/webp", "image/x-icon", "image/vnd.microsoft.icon":
+		data = "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(body)
+	}
+	s.images.Add(rawURL, data)
+	return data
+}
+
+func (s *Service) metadata(ctx context.Context, rawURL string) (Preview, error) {
 	rawURL = strings.TrimSpace(rawURL)
 	if len(rawURL) > maxURLBytes {
 		return Preview{}, ErrInvalidURL
