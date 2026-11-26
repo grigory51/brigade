@@ -15,6 +15,8 @@ import (
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
+
+	"github.com/grigory51/brigade/backend/internal/coding"
 )
 
 // Mode определяет, как инстанс спавнит агентов: local — процесс на хосте в pty;
@@ -78,7 +80,14 @@ type Config struct {
 	Telegram TelegramConfig `koanf:"telegram"`
 	// PluginsDir — кеш установленных MCPB bundles. Содержимое копируется в среду
 	// сессии и версионируется по id/version.
-	PluginsDir string `koanf:"plugins_dir"`
+	PluginsDir string        `koanf:"plugins_dir"`
+	Plugins    PluginsConfig `koanf:"plugins"`
+	Coding     coding.Config `koanf:"coding"`
+}
+
+// PluginsConfig задаёт доступные всем пользователям MCP Apps инстанса.
+type PluginsConfig struct {
+	Bundles []string `koanf:"bundles"`
 }
 
 // ImageBuildConfig задаёт сборщик пользовательских окружений инстанса.
@@ -211,6 +220,9 @@ func Load(path string) (*Config, error) {
 // Validate проверяет согласованность загруженной конфигурации. Цель — поймать
 // заведомо нерабочие значения на старте, а не при первом обращении к ним.
 func (c *Config) Validate() error {
+	if c.Coding.Endpoints == nil {
+		c.Coding = coding.DefaultConfig()
+	}
 	if c.ImageBuild.Backend == "" {
 		c.ImageBuild.Backend = "docker"
 	}
@@ -407,6 +419,21 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("config: resolve plugins_dir %q: %w", c.PluginsDir, err)
 	} else {
 		c.PluginsDir = abs
+	}
+	seenBundles := make(map[string]bool, len(c.Plugins.Bundles))
+	for index, source := range c.Plugins.Bundles {
+		if strings.TrimSpace(source) == "" || strings.Contains(source, "://") || strings.HasPrefix(source, "file:") {
+			return fmt.Errorf("config: plugins.bundles[%d] must be a local file path", index)
+		}
+		path, err := filepath.Abs(source)
+		if err != nil {
+			return fmt.Errorf("config: resolve plugins.bundles[%d]: %w", index, err)
+		}
+		if seenBundles[path] {
+			return fmt.Errorf("config: duplicate plugins.bundles path %q", path)
+		}
+		seenBundles[path] = true
+		c.Plugins.Bundles[index] = path
 	}
 
 	return nil

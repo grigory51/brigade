@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AddSessionMessageRequest, AddSessionMessageResponse, ArchiveSessionRequest, ArchiveSessionResponse, CancelSessionDraftRequest, CreateSessionDraftRequest, CreateSessionDraftResponse, CreateSessionRequest, CreateSessionResponse, DeleteSessionMessageRequest, DeleteSessionRequest, EditSessionDraftRequest, EditSessionMessageRequest, GenerateSessionDraftRequest, GenerateSessionDraftResponse, GetSessionDraftRunRequest, GetSessionDraftRunResponse, GetSessionModelsRequest, GetSessionModelsResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, MarkSessionReadRequest, ReloadAgentRequest, SetConversationNoteRequest, SetSessionMcpServersRequest, SetSessionMessageIncludedRequest, SetSessionModelRequest, SetSessionResponseProfileRequest, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse, UploadFileRequest, UploadFileResponse } from "./session_pb.js";
+import { AddSessionMessageRequest, AddSessionMessageResponse, ArchiveSessionRequest, ArchiveSessionResponse, CancelSessionDraftRequest, CreateSessionDraftRequest, CreateSessionDraftResponse, CreateSessionRequest, CreateSessionResponse, DeleteSessionMessageRequest, DeleteSessionRequest, EditSessionDraftRequest, EditSessionMessageRequest, GenerateSessionDraftRequest, GenerateSessionDraftResponse, GetSessionDraftRunRequest, GetSessionDraftRunResponse, GetSessionModelsRequest, GetSessionModelsResponse, GetSessionRequest, GetSessionResponse, IssueStreamTicketRequest, IssueStreamTicketResponse, ListPreviewsRequest, ListPreviewsResponse, ListSessionsRequest, ListSessionsResponse, MarkSessionReadRequest, ReloadAgentRequest, SetConversationNoteRequest, SetExperienceRequest, SetSessionMcpServersRequest, SetSessionMessageIncludedRequest, SetSessionModelRequest, SetSessionResponseProfileRequest, StopSessionRequest, UpdateSessionRequest, UpdateSessionResponse, UploadFileRequest, UploadFileResponse } from "./session_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { Empty } from "./auth_pb.js";
 
@@ -221,6 +221,18 @@ export const SessionService = {
       kind: MethodKind.Unary,
     },
     /**
+     * Меняет плагин панели и MCP/instructions существующей idle ACP-сессии,
+     * сохраняя native session, историю и workspace. При ошибке сохраняется прежний плагин.
+     *
+     * @generated from rpc brigade.v1.SessionService.SetExperience
+     */
+    setExperience: {
+      name: "SetExperience",
+      I: SetExperienceRequest,
+      O: UpdateSessionResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
      * Archive переносит сессию в архив (recap + снимок истории + остановка контейнера).
      * Чтение архива (список, история) — в отдельном ArchiveService.
      *
@@ -265,3 +277,4 @@ export const SessionService = {
     },
   }
 } as const;
+

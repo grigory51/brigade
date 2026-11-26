@@ -22,8 +22,16 @@ func TestManifestAndSafeExtraction(t *testing.T) {
 	if manifest.Meta.Brigade.Experience.Instructions != "Use CAD tools." {
 		t.Fatal("experience instructions were not parsed")
 	}
+	if manifest.Meta.Brigade.Experience.Layout != "split" {
+		t.Fatalf("missing layout = %q, want split", manifest.Meta.Brigade.Experience.Layout)
+	}
 	if instructions := manifest.ExperienceInstructions(); !strings.Contains(instructions, "cad experience") || !strings.Contains(instructions, "Use CAD tools.") {
 		t.Fatalf("experience instructions = %q", instructions)
+	}
+	for _, text := range []string{"Brigade owns the chat", "companion pane and domain tools", "does not replace the chat"} {
+		if instructions := manifest.ExperienceInstructions(); !strings.Contains(instructions, text) {
+			t.Fatalf("experience instructions missing %q: %s", text, instructions)
+		}
 	}
 	unsafeVersion := []byte(`{"manifest_version":"0.3","name":"cad","version":"..","server":{"type":"binary","entry_point":"server/cad"},"_meta":{"brigade":{"experience":{"entry_tool":"cad.open"}}}}`)
 	if _, err := ParseManifest(unsafeVersion); err == nil {

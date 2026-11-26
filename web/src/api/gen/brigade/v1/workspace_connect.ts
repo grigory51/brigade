@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { WorkspaceChmodRequest, WorkspaceChtimesRequest, WorkspaceListResponse, WorkspaceMkdirRequest, WorkspacePath, WorkspaceReadlinkResponse, WorkspaceReadRequest, WorkspaceReadResponse, WorkspaceRemoveRequest, WorkspaceRenameRequest, WorkspaceStatResponse, WorkspaceSymlinkRequest, WorkspaceTruncateRequest, WorkspaceWriteRequest, WorkspaceWriteResponse } from "./workspace_pb.js";
+import { WorkspaceChmodRequest, WorkspaceChtimesRequest, WorkspaceListRequest, WorkspaceListResponse, WorkspaceMkdirRequest, WorkspacePath, WorkspaceReadlinkResponse, WorkspaceReadRequest, WorkspaceReadResponse, WorkspaceRemoveRequest, WorkspaceRenameRequest, WorkspaceStatResponse, WorkspaceSymlinkRequest, WorkspaceTruncateRequest, WorkspaceWriteRequest, WorkspaceWriteResponse } from "./workspace_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { Empty } from "./auth_pb.js";
 
@@ -27,7 +27,7 @@ export const WorkspaceService = {
      */
     list: {
       name: "List",
-      I: WorkspacePath,
+      I: WorkspaceListRequest,
       O: WorkspaceListResponse,
       kind: MethodKind.Unary,
     },

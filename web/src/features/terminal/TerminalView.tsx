@@ -9,6 +9,18 @@ import { streamUrl } from "@/api/ws";
 // забота вызывающего экрана: TerminalView сообщает только о самом соединении.
 export type TermConnState = "connecting" | "open" | "closed" | "error";
 
+export type TerminalCommand = { argv: string[]; cwd: string };
+
+export function terminalCommandInput(command: TerminalCommand, marker: string): string {
+  const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
+  if (!command.argv[0] || command.cwd.startsWith("/") || [command.cwd, ...command.argv].some((value) => value.includes("\0")) || !/^[a-zA-Z0-9-]+$/.test(marker)) {
+    throw new Error("Некорректная команда терминала");
+  }
+  const onExit = `brigade_status=$?; printf '\\r\\n[exit code %s]\\r\\n\\033]777;${marker};exit;%s\\007' "$brigade_status" "$brigade_status"`;
+  const script = `trap ${quote(onExit)} 0; brigade_workspace=$(pwd -P) || exit; cd -- "$1" || exit; brigade_cwd=$(pwd -P) || exit; case "$brigade_cwd/" in "$brigade_workspace/"*) ;; *) printf '%s\\n' 'Working directory is outside the session workspace' >&2; exit 126;; esac; shift; "$@"`;
+  return `sh -c ${quote(script)} brigade-result ${[command.cwd || ".", ...command.argv].map(quote).join(" ")}\r`;
+}
+
 // Палитра терминала согласована с тёмной темой brigade (см. globals.css): фон —
 // самый тёмный тон тёплой палитры, цвета ANSI остаются github-dark.
 const TERMINAL_THEME = {
@@ -47,17 +59,29 @@ export function TerminalView({
   sessionId,
   attempt = 0,
   onConnChange,
+  command,
+  onCommandExit,
 }: {
   kind: "terminal" | "shell";
   sessionId: string;
   attempt?: number;
   onConnChange?: (conn: TermConnState) => void;
+  // Команда передаётся только после подтверждения; reconnect её не повторяет.
+  command?: TerminalCommand;
+  onCommandExit?: (exitCode: number) => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const wsClosed = useRef(false);
   const [conn, setConnState] = useState<TermConnState>("connecting");
+  const initialCommand = useRef(command);
+  const commandSent = useRef(false);
+  const commandExited = useRef(false);
+  const [commandMarker] = useState(() => crypto.randomUUID());
+  const onCommandExitRef = useRef(onCommandExit);
+  onCommandExitRef.current = onCommandExit;
   // onConnChange не входит в зависимости эффектов: колбэк родителя может меняться
   // каждый рендер, а пересоздание терминала/соединения из-за этого недопустимо.
   const onConnRef = useRef(onConnChange);
@@ -97,6 +121,22 @@ export function TerminalView({
     fit.fit();
     termRef.current = term;
     fitRef.current = fit;
+    const exitSub = term.parser.registerOscHandler(777, (data) => {
+      if (!initialCommand.current) return false;
+      const prefix = `${commandMarker};exit;`;
+      if (!data.startsWith(prefix)) return false;
+      const status = data.slice(prefix.length);
+      const code = Number(status);
+      if (/^\d+$/.test(status) && Number.isInteger(code) && code <= 255 && !commandExited.current) {
+        commandExited.current = true;
+        // Вспомогательный shell живёт ровно до разрыва WS. Обычный terminal не
+        // передаёт command и никогда не получает этот OSC-маркер.
+        wsClosed.current = true;
+        wsRef.current?.close();
+        onCommandExitRef.current?.(code);
+      }
+      return true;
+    });
 
     // Копирование/вставка: xterm выделяет текст мышью (в mouse-режиме приложения — с
     // зажатым Shift), но сам в буфер обмена не кладёт. Копируем выделение автоматически
@@ -162,11 +202,12 @@ export function TerminalView({
       if (rafId !== 0) cancelAnimationFrame(rafId);
       ro.disconnect();
       selSub.dispose();
+      exitSub.dispose();
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
     };
-  }, [sendResize]);
+  }, [sendResize, commandMarker]);
 
   // Подключение к WS: тикет → URL → бинарь в терминал, ввод JSON-ом.
   useEffect(() => {
@@ -181,15 +222,22 @@ export function TerminalView({
       try {
         const url = await streamUrl(kind, sessionId);
         if (closed) return;
+        const commandInput = initialCommand.current ? terminalCommandInput(initialCommand.current, commandMarker) : undefined;
         socket = new WebSocket(url);
         socket.binaryType = "arraybuffer";
         wsRef.current = socket;
+        wsClosed.current = false;
 
         socket.onopen = () => {
+          if (closed) return;
           setConn("open");
           fitRef.current?.fit();
           sendResize();
           term.focus();
+          if (commandInput && !commandSent.current) {
+            commandSent.current = true;
+            socket?.send(JSON.stringify({ type: "input", data: commandInput }));
+          }
         };
         socket.onmessage = (ev) => {
           // Сервер шлёт сырые байты pty; текстовые кадры тоже допустимы.
@@ -221,10 +269,10 @@ export function TerminalView({
     return () => {
       closed = true;
       dataSub.dispose();
-      socket?.close();
+      if (!wsClosed.current) socket?.close();
       if (wsRef.current === socket) wsRef.current = null;
     };
-  }, [kind, sessionId, attempt, sendResize, setConn]);
+  }, [kind, sessionId, attempt, sendResize, setConn, commandMarker]);
 
   return (
     <div className="relative h-full overflow-hidden bg-[#1c1b1a]">

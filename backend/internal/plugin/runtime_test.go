@@ -8,13 +8,18 @@ import (
 	acpsdk "github.com/coder/acp-go-sdk"
 )
 
-func TestStartRuntimeReportsProcessStderr(t *testing.T) {
+func TestRuntimeReportsProcessStderr(t *testing.T) {
 	server := acpsdk.McpServer{Stdio: &acpsdk.McpServerStdio{
 		Command: "sh",
 		Args:    []string{"-c", "echo 'missing runtime dependency' >&2; exit 1"},
 	}}
-	_, err := StartRuntime(context.Background(), server, t.TempDir(), nil)
+	runtime, err := NewRuntime(server, t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+	_, err = runtime.Dispatch(context.Background(), "ping", nil)
 	if err == nil || !strings.Contains(err.Error(), "missing runtime dependency") {
-		t.Fatalf("StartRuntime() error = %v", err)
+		t.Fatalf("Dispatch() error = %v", err)
 	}
 }

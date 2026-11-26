@@ -238,3 +238,4 @@ export class DeleteResponseProfileRequest extends Message<DeleteResponseProfileR
     return proto3.util.equals(DeleteResponseProfileRequest, a, b);
   }
 }
+

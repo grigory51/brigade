@@ -9,8 +9,8 @@ import { toast } from "sonner";
 import { ConnectError } from "@connectrpc/connect";
 import { responseProfileClient, sessionClient } from "@/api/client";
 import { PendingContextProvider } from "@/components/assistant-ui/composer-context";
+import { cn } from "@/lib/utils";
 import { AcpThread } from "./AcpThread";
-import { PermissionComposer } from "./AcpThread";
 import { SelectionMenu } from "./SelectionMenu";
 import { SessionDock } from "./dock/SessionDock";
 import {
@@ -28,12 +28,14 @@ import {
 // время /run. Инкремент ремоунтит AcpSessionInner, и history-адаптер перечитывает ленту.
 export function AcpSession({
   sessionId,
-  workspace = false,
-  experience,
+  pane,
+  controls,
+  title,
 }: {
   sessionId: string;
-  workspace?: boolean;
-  experience?: ReactNode;
+  pane?: ReactNode;
+  controls?: ReactNode;
+  title?: ReactNode;
 }) {
   const [reloadNonce, setReloadNonce] = useState(0);
   // Guard живёт выше remount: иначе каждый status poll с generating=true создаёт
@@ -52,8 +54,9 @@ export function AcpSession({
     <AcpSessionInner
       key={reloadNonce}
       sessionId={sessionId}
-      workspace={workspace}
-      experience={experience}
+      pane={pane}
+      controls={controls}
+      title={title}
       onReload={reload}
       onReloadFinished={finishReload}
     />
@@ -62,14 +65,16 @@ export function AcpSession({
 
 function AcpSessionInner({
   sessionId,
-  workspace,
-  experience,
+  pane,
+  controls,
+  title,
   onReload,
   onReloadFinished,
 }: {
   sessionId: string;
-  workspace: boolean;
-  experience?: ReactNode;
+  pane?: ReactNode;
+  controls?: ReactNode;
+  title?: ReactNode;
   onReload: () => void;
   onReloadFinished: () => void;
 }) {
@@ -126,19 +131,16 @@ function AcpSessionInner({
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <PendingContextProvider>
-      <div className="relative flex h-full flex-col">
-        <div className="min-h-0 flex-1">
-          {experience ? (
-            <ExperienceHost
-              permission={permission}
-              onPermissionDecision={(decision) => permission && resolvePermission(permission.id, decision)}
-            >
-              {experience}
-            </ExperienceHost>
-          ) : (
+      <div className="relative flex h-full min-h-0 flex-col">
+        <SessionDock sessionId={sessionId} title={title} controls={controls} placement="flow" navigation={!pane} />
+        <div className={cn(
+          "min-h-0 flex-1",
+          pane && "grid grid-rows-2 lg:grid-cols-[minmax(20rem,2fr)_minmax(0,3fr)] lg:grid-rows-1",
+        )}>
+          <div className="flex h-full min-h-0 min-w-0 flex-col">
             <AcpThread
               sessionId={sessionId}
-              workspace={workspace}
+              compact={Boolean(pane)}
               commands={commands}
               plan={plan}
               usage={usage}
@@ -148,14 +150,17 @@ function AcpSessionInner({
               onPermissionDecision={(decision) =>
                 permission && resolvePermission(permission.id, decision)
               }
-              onConfigChange={(configId, value) =>
-                void setConfigOption(configId, value)
-              }
+              onConfigChange={setConfigOption}
               responseProfiles={responseProfiles}
               responseProfileId={responseProfileId}
               responseProfileBusy={responseProfileBusy}
               onResponseProfileChange={(id) => void changeResponseProfile(id)}
             />
+          </div>
+          {pane && (
+            <aside aria-label="Панель сессии" className="relative min-h-0 min-w-0 overflow-hidden border-t lg:border-t-0 lg:border-l">
+              {pane}
+            </aside>
           )}
         </div>
         <BackgroundActivity
@@ -165,34 +170,10 @@ function AcpSessionInner({
           refreshStatus={refreshStatus}
         />
         <WorkflowsPanel workflows={workflows} />
-        {/* Плавающая обвязка сессии: чипы окон, шкала навигации по ленте, терминал.
-            Внутри провайдера рантайма — шкале и ссылкам нужна лента сообщений. */}
-        {!workspace && <SessionDock sessionId={sessionId} />}
       </div>
       <SelectionMenu />
       </PendingContextProvider>
     </AssistantRuntimeProvider>
-  );
-}
-
-function ExperienceHost({
-  children,
-  permission,
-  onPermissionDecision,
-}: {
-  children: ReactNode;
-  permission: ReturnType<typeof useAcpRuntime>["permission"];
-  onPermissionDecision: (decision: string) => void;
-}) {
-  return (
-    <div className="relative h-full min-h-0 overflow-hidden">
-      {children}
-      {permission && (
-        <div className="absolute inset-x-4 bottom-4 z-30 mx-auto max-w-2xl">
-          <PermissionComposer permission={permission} onDecide={onPermissionDecision} />
-        </div>
-      )}
-    </div>
   );
 }
 

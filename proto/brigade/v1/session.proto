@@ -79,10 +79,10 @@ message Session {
   string agent_version = 22;
   // agent_outdated — daemon запущен другой версией Brigade и требует reload.
   bool agent_outdated = 23;
-  // experience_id — постоянный клиент сессии. Пусто означает встроенный chat/console,
-  // определяемый по kind; непустое значение ссылается на установленный MCPB-плагин.
+  // experience_id — предметный плагин панели рядом со штатным ACP-чатом.
+  // Пусто — без панели. Поле не меняет тип сессии и не заменяет чат.
   string experience_id = 24;
-  // Версия MCPB фиксируется при создании, чтобы обновление плагина не меняло живую сессию.
+  // Версия MCPB фиксируется при выборе experience, чтобы обновление плагина не меняло живую сессию.
   string experience_version = 25;
   SessionExecutionPolicy execution_policy = 26;
   // Краткое состояние последнего сообщения shadow-сессии для списка.
@@ -265,6 +265,12 @@ message SetSessionResponseProfileRequest {
   string response_profile_id = 2;
 }
 
+message SetExperienceRequest {
+  string session_id = 1;
+  // Пусто — отключить предметный плагин панели; штатный чат сохраняется.
+  string experience_id = 2;
+}
+
 // Archive переносит сессию в архив: агент генерирует recap (summary), brigade сохраняет
 // снимок истории чата, останавливает контейнер и помечает сессию archived.
 message ArchiveSessionRequest {
@@ -337,6 +343,9 @@ service SessionService {
   // переинициализацией агента. Не во время генерации.
   rpc SetSessionMcpServers(SetSessionMcpServersRequest) returns (Empty) {}
   rpc SetSessionResponseProfile(SetSessionResponseProfileRequest) returns (UpdateSessionResponse) {}
+  // Меняет плагин панели и MCP/instructions существующей idle ACP-сессии,
+  // сохраняя native session, историю и workspace. При ошибке сохраняется прежний плагин.
+  rpc SetExperience(SetExperienceRequest) returns (UpdateSessionResponse) {}
   // Archive переносит сессию в архив (recap + снимок истории + остановка контейнера).
   // Чтение архива (список, история) — в отдельном ArchiveService.
   rpc Archive(ArchiveSessionRequest) returns (ArchiveSessionResponse) {}

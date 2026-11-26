@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { Link2, Plug, SquareTerminal } from "lucide-react";
 import { useAuiState } from "@assistant-ui/react";
 import { sessionClient } from "@/api/client";
@@ -10,11 +10,13 @@ import { LinksWindow } from "./LinksWindow";
 import { McpWindow } from "./McpWindow";
 import { MsgNav } from "./MsgNav";
 import { TerminalWindow } from "./TerminalWindow";
+import { DockChip } from "./DockChip";
+import type { TermConnState } from "@/features/terminal/TerminalView";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 /**
- * SessionDock — плавающая обвязка страницы ACP-сессии: чипы управления окнами сверху
- * справа, шкала навигации по ленте у правого края и сами окна (ссылки, терминал).
- * Чат под ними занимает всю ширину и ничего не отдаёт панелям.
+ * Общие инструменты сессии и окна ссылок, MCP и терминала. В живой сессии панель
+ * занимает строку над содержимым; в архиве остаётся поверх ленты.
  *
  * Монтируется внутри AssistantRuntimeProvider: шкале и ссылкам нужна лента сообщений.
  */
@@ -38,14 +40,23 @@ function loadTerminalOpen(): boolean {
 export function SessionDock({
   sessionId,
   readonly = false,
+  controls,
+  placement = "floating",
+  navigation = true,
+  title,
 }: {
   sessionId: string;
   // readonly — архивная сессия: лента та же, но живого агента за ней нет. Шкала и ссылки
   // работают как обычно, терминал и dev-серверы недоступны — их некому обслуживать.
   readonly?: boolean;
+  controls?: ReactNode;
+  placement?: "floating" | "flow";
+  navigation?: boolean;
+  title?: ReactNode;
 }) {
   const [panel, setPanel] = useState<"" | "links" | "mcp">("");
   const [terminal, setTerminal] = useState(loadTerminalOpen);
+  const [terminalConnection, setTerminalConnection] = useState<TermConnState>("connecting");
   const messages = useAuiState((s) => s.thread.messages);
   const previews = usePreviews(readonly ? "" : sessionId);
   // Набор MCP-серверов сессии: нужен чипу для счётчика и окну как исходное состояние.
@@ -85,13 +96,24 @@ export function SessionDock({
   }, [messages, previews]);
 
   const linksCount = links.length + previews.length;
+  const terminalStatus = !terminal ? "Не запущен" : {
+    connecting: "Подключение…", open: "Подключён", closed: "Отключён", error: "Ошибка подключения",
+  }[terminalConnection];
 
   return (
     <>
-      <MsgNav />
+      {navigation && <MsgNav />}
 
       {/* right-[66px] — правее шкалы навигации; там, где её нет, чипы прижимаются к краю. */}
-      <div className="absolute top-3.5 right-3 z-30 flex animate-[chip-in_0.3s_ease] gap-2 lg:right-[66px]">
+      <div aria-label="Инструменты сессии" className={cn(
+        "z-30 flex flex-wrap items-center gap-2",
+        placement === "flow"
+          ? "relative shrink-0 justify-start border-b bg-background py-2 pr-3 pl-[var(--session-toolbar-inset,1rem)]"
+          : "absolute top-3.5 right-3 left-12 justify-end lg:right-[66px]",
+      )}>
+        {title && <div className="min-w-0 max-w-full sm:max-w-64">{title}</div>}
+        <div className={cn("flex min-w-0 flex-wrap items-center gap-2", placement === "flow" ? "justify-start" : "justify-end")}>
+        {controls}
         {!readonly && <SessionDesktopTools sessionId={sessionId} sessionName={sessionName} />}
         <Chip
           icon={Link2}
@@ -99,9 +121,9 @@ export function SessionDock({
           active={panel === "links"}
           onClick={() => setPanel((p) => (p === "links" ? "" : "links"))}
         >
-          <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-lg bg-secondary px-1 text-[10px] text-muted-foreground">
+          {linksCount > 0 && <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-lg bg-secondary px-1 text-[10px] text-muted-foreground">
             {linksCount}
-          </span>
+          </span>}
         </Chip>
         {!readonly && (
           <Chip
@@ -110,26 +132,28 @@ export function SessionDock({
             active={panel === "mcp"}
             onClick={() => setPanel((p) => (p === "mcp" ? "" : "mcp"))}
           >
-            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-lg bg-secondary px-1 text-[10px] text-muted-foreground">
+            {mcpEnabled.length > 0 && <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-lg bg-secondary px-1 text-[10px] text-muted-foreground">
               {mcpEnabled.length}
-            </span>
+            </span>}
           </Chip>
         )}
         {!readonly && (
           <Chip
             icon={SquareTerminal}
             label="Терминал"
+            description={`Терминал: ${terminalStatus}`}
             active={terminal}
-            onClick={() => setTerminal((v) => !v)}
+            onClick={() => { setTerminalConnection("connecting"); setTerminal((v) => !v); }}
           >
             <span
               className={cn(
                 "size-1.5 rounded-full",
-                terminal ? "bg-success" : "bg-muted-foreground/50",
+                !terminal || terminalConnection === "closed" ? "bg-muted-foreground" : terminalConnection === "open" ? "bg-success" : terminalConnection === "error" ? "bg-destructive" : "bg-warning motion-safe:animate-pulse",
               )}
             />
           </Chip>
         )}
+        </div>
       </div>
 
       {panel === "links" && (
@@ -153,6 +177,7 @@ export function SessionDock({
         <TerminalWindow
           sessionId={sessionId}
           onClose={() => setTerminal(false)}
+          onConnChange={setTerminalConnection}
         />
       )}
     </>
@@ -167,30 +192,25 @@ function Chip({
   active,
   onClick,
   children,
+  description,
 }: {
   icon: ComponentType<{ className?: string }>;
   label: string;
   active: boolean;
   onClick: () => void;
   children?: React.ReactNode;
+  description?: string;
 }) {
   return (
-    <button
-      type="button"
+    <Tooltip><TooltipTrigger asChild><DockChip
+      aria-label={label}
+      aria-pressed={active}
+      active={active}
       onClick={onClick}
-      // Метка для окон, закрывающихся по клику мимо: клик по своему чипу — это
-      // переключение, а не «мимо» (см. LinksWindow).
-      data-dock-chip
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border bg-[rgba(31,30,29,0.85)] px-3 py-1.5 text-xs shadow-[0_4px_14px_rgba(0,0,0,0.3)] backdrop-blur-[8px] transition-colors hover:border-[#5a4034] hover:text-foreground",
-        active
-          ? "border-[#5a4034] text-foreground"
-          : "border-[rgba(65,63,59,0.9)] text-muted-foreground",
-      )}
     >
       <Icon className="size-3.5" />
       <span className="hidden sm:inline">{label}</span>
       {children}
-    </button>
+    </DockChip></TooltipTrigger><TooltipContent className="pointer-events-none">{description || label}</TooltipContent></Tooltip>
   );
 }

@@ -160,6 +160,61 @@ export class WorkspaceStatResponse extends Message<WorkspaceStatResponse> {
 }
 
 /**
+ * @generated from message brigade.v1.WorkspaceListRequest
+ */
+export class WorkspaceListRequest extends Message<WorkspaceListRequest> {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId = "";
+
+  /**
+   * @generated from field: string path = 2;
+   */
+  path = "";
+
+  /**
+   * @generated from field: int32 page_size = 3;
+   */
+  pageSize = 0;
+
+  /**
+   * @generated from field: string page_token = 4;
+   */
+  pageToken = "";
+
+  constructor(data?: PartialMessage<WorkspaceListRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.WorkspaceListRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "page_size", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 4, name: "page_token", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): WorkspaceListRequest {
+    return new WorkspaceListRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): WorkspaceListRequest {
+    return new WorkspaceListRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): WorkspaceListRequest {
+    return new WorkspaceListRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: WorkspaceListRequest | PlainMessage<WorkspaceListRequest> | undefined, b: WorkspaceListRequest | PlainMessage<WorkspaceListRequest> | undefined): boolean {
+    return proto3.util.equals(WorkspaceListRequest, a, b);
+  }
+}
+
+/**
  * @generated from message brigade.v1.WorkspaceListResponse
  */
 export class WorkspaceListResponse extends Message<WorkspaceListResponse> {
@@ -167,6 +222,11 @@ export class WorkspaceListResponse extends Message<WorkspaceListResponse> {
    * @generated from field: repeated brigade.v1.WorkspaceEntry entries = 1;
    */
   entries: WorkspaceEntry[] = [];
+
+  /**
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken = "";
 
   constructor(data?: PartialMessage<WorkspaceListResponse>) {
     super();
@@ -177,6 +237,7 @@ export class WorkspaceListResponse extends Message<WorkspaceListResponse> {
   static readonly typeName = "brigade.v1.WorkspaceListResponse";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "entries", kind: "message", T: WorkspaceEntry, repeated: true },
+    { no: 2, name: "next_page_token", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): WorkspaceListResponse {

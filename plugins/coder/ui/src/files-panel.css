@@ -1,0 +1,23 @@
+.coder-files { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.coder-files-header, .coder-files-viewer > header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--brigade-border); background: var(--brigade-surface); }
+.coder-files-header strong, .coder-files-viewer strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.coder-files-header button { margin-left: auto; font-size: 12px; }
+.coder-files-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(180px, 36%) minmax(0, 1fr); }
+.coder-files-tree-pane { min-width: 0; overflow: auto; border-right: 1px solid var(--brigade-border); }
+.coder-files-status, .coder-files-error, .coder-files-tree-pane > [data-retry] { margin: 10px 12px; font-size: 12px; }
+.coder-files-error { color: var(--brigade-accent); white-space: pre-wrap; }
+.coder-files-tree { min-width: max-content; padding: 4px 0; }
+.coder-files-item { width: 100%; min-height: 27px; display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; gap: 4px; border: 0; background: transparent; color: inherit; text-align: left; white-space: nowrap; }
+.coder-files-item:hover, .coder-files-item.is-selected { background: var(--brigade-surface-raised); }
+.coder-files-more { color: var(--brigade-accent); }
+.coder-files-item > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; }
+.coder-files-item small { margin-right: 8px; color: var(--brigade-muted); font-size: 10px; }
+.coder-files-item-error { display: flex; align-items: center; gap: 8px; min-height: 28px; color: var(--brigade-accent); font-size: 11px; }
+.coder-files-item-error button { font-size: 11px; }
+.coder-files-viewer { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.coder-files-viewer > header { flex-shrink: 0; }
+.coder-files-viewer > header strong { flex: 1; }
+.coder-files-viewer > header span { color: var(--brigade-muted); font-size: 11px; text-align: right; }
+.coder-files-placeholder { margin: auto; padding: 20px; color: var(--brigade-muted); text-align: center; }
+.coder-files-editor { flex: 1; min-height: 0; }
+@media (max-width: 560px) { .coder-files-body { grid-template-columns: minmax(130px, 42%) minmax(0, 1fr); } }

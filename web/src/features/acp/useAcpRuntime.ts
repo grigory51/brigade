@@ -39,6 +39,7 @@ export type HistoryMessage = {
   toolName?: string;
   argsText?: string;
   result?: string;
+  createdAt?: bigint | number;
 };
 
 // Формат совпадает с acp.MessagesSnapshot: смежные вызовы принадлежат одному
@@ -68,8 +69,17 @@ export function assembleHistory(messages: readonly HistoryMessage[]) {
 
 // У активной и архивной сессии одна проекция истории и одна цепочка parentId.
 export function importAcpHistory(messages: readonly HistoryMessage[]) {
+  const timestamps = new Map(messages.flatMap((message) => {
+    const seconds = Number(message.createdAt ?? 0);
+    return Number.isFinite(seconds) && seconds > 0 && seconds <= 8.64e12
+      ? [[message.id, new Date(seconds * 1000).toISOString()] as const]
+      : [];
+  }));
   return ExportedMessageRepository.fromArray(
-    fromAgUiMessages(assembleHistory(messages), { showThinking: true }),
+    fromAgUiMessages(assembleHistory(messages), { showThinking: true }).map((message) => {
+      const createdAt = message.id ? timestamps.get(message.id) : undefined;
+      return createdAt ? { ...message, metadata: { ...message.metadata, custom: { ...message.metadata?.custom, createdAt } } } : message;
+    }),
   );
 }
 

@@ -75,8 +75,19 @@ image_build:
   max_concurrent: 2
 
 # Кеш пользовательских MCP Apps и системных MCPB-плагинов.
-# Пусто → ~/.brigade/plugins. Env: BRIGADE_PLUGINS_DIR.
+# Пусто → plugins рядом с sqlite_path. Env: BRIGADE_PLUGINS_DIR.
 plugins_dir: ""
+
+# Managed MCP Apps для всех пользователей, с приоритетом над личными установками.
+# Только локальные MCPB-файлы; относительные пути — от рабочей директории процесса.
+# Весь набор проверяется до регистрации и восстановления сессий.
+# Удаление из списка запрещает новый выбор; существующие сессии сохраняют pin.
+# Исторические версии и файлы остаются в кеше.
+plugins:
+  bundles: []
+  # bundles:
+  #   - /opt/brigade/bundles/cad-linux-amd64.mcpb
+  #   - /opt/brigade/bundles/cad-darwin-arm64.mcpb
 
 # Базовый каталог per-user home на хосте (только docker-режим). brigade создаёт
 # подкаталог <agent_home_dir>/<userID> и bind-mount'ит его в /home/agent целиком во

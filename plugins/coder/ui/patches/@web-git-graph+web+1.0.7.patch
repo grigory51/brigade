@@ -1,0 +1,100 @@
+diff --git a/node_modules/@web-git-graph/web/dist/register.js b/node_modules/@web-git-graph/web/dist/register.js
+index 7cba2d6..2f5c172 100644
+--- a/node_modules/@web-git-graph/web/dist/register.js
++++ b/node_modules/@web-git-graph/web/dist/register.js
+@@ -167,6 +167,22 @@ var STYLES = `
+ button, input, select { font: inherit; color: inherit; }
+ button { cursor: pointer; }
+ .shell { position: relative; min-height: inherit; height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); }
++:host([details-position="bottom"]) .shell { container-type: size; grid-template-rows: auto minmax(0, 1fr) 0 auto; }
++:host([details-position="bottom"][preview-open]) .shell { grid-template-rows: auto minmax(50px, 25%) minmax(60px, 1fr) auto; }
++.file-preview, .details-dock { min-height: 0; overflow: hidden; }
++.details-dock:empty { display: none; }
++:host([details-position="bottom"]) .details-dock > .inline-details {
++  position: relative; top: auto !important; height: min(32cqh, 220px) !important;
++  display: grid; grid-template-columns: minmax(0, 55%) minmax(0, 45%);
++  padding-left: 0; animation: none;
++}
++:host([details-position="bottom"]) .details-files { border-top: 0; border-left: 1px solid var(--wgg-line); }
++@container wgg (max-width: 480px) {
++  :host([details-position="bottom"]) .details-dock > .inline-details { display: block; overflow: auto; }
++  :host([details-position="bottom"]) .details-summary,
++  :host([details-position="bottom"]) .details-files { overflow: visible; }
++  :host([details-position="bottom"]) .details-files { border-left: 0; border-top: 1px solid var(--wgg-line); }
++}
+ .toolbar {
+   min-height: 42px;
+   display: flex;
+@@ -455,7 +471,7 @@ select, .icon-button {
+   .spacer {
+     min-width: max(100%, calc(var(--wgg-graph-width) + 160px + var(--wgg-commit-width)));
+   }
+-  .col-date, .col-author, .date, .author { display: none; }
++  .header > .col-date, .header > .col-author, .date, .author { display: none; }
+   .inline-details { flex-direction: column; padding-left: 12px; }
+   .details-files { border-left: 0; border-top: 1px solid var(--wgg-line); }
+ }
+@@ -852,7 +868,8 @@ var WebGitGraphElement = class extends HTMLElementBase {
+             <div class="spacer"><div class="window"></div></div>
+           </div>
+         </section>
+-      </div>`;
++      </div>
++      ${this.getAttribute("details-position") === "bottom" ? '<div class="file-preview"><slot name="file-preview"></slot></div><div class="details-dock"></div>' : ""}`;
+     const search = shell.querySelector(".search");
+     search.value = this.#search;
+     search.addEventListener("input", () => {
+@@ -1219,6 +1236,7 @@ var WebGitGraphElement = class extends HTMLElementBase {
+     const windowElement = this.#root.querySelector(".window");
+     if (!scroller || !spacer || !windowElement) return;
+     if (this.#page.commits.length === 0) {
++      this.#detailsElement?.remove();
+       this.#detailsElement = void 0;
+       this.#detailsSignature = void 0;
+     }
+@@ -1248,7 +1266,8 @@ var WebGitGraphElement = class extends HTMLElementBase {
+     const graphWidth = Math.max(56, this.#layout.laneCount * 16 + 24);
+     this.#root.querySelector(".shell")?.style.setProperty("--wgg-graph-width", `${graphWidth}px`);
+     const selectedIndex = this.#selectedIndex();
+-    const detailsHeight = selectedIndex >= 0 ? this.#detailsHeight : 0;
++    const dockedDetails = this.getAttribute("details-position") === "bottom";
++    const detailsHeight = selectedIndex >= 0 && !dockedDetails ? this.#detailsHeight : 0;
+     const detailsTop = (selectedIndex + 1) * this.#rowHeight;
+     const contentHeight = this.#page.commits.length * this.#rowHeight + detailsHeight;
+     spacer.style.height = `${contentHeight + (this.#page.hasMore ? 42 : 0)}px`;
+@@ -1380,7 +1399,8 @@ var WebGitGraphElement = class extends HTMLElementBase {
+       details.setAttribute("aria-label", this.#compareOid ? "Commit comparison" : "Commit details");
+       details.style.top = `${detailsTop}px`;
+       details.style.height = `${detailsHeight}px`;
+-      if (details.parentNode !== windowElement) windowElement.append(details);
++      const detailsParent = dockedDetails ? this.#root.querySelector(".details-dock") : windowElement;
++      if (details.parentNode !== detailsParent) detailsParent.append(details);
+       this.#detailsElement = details;
+     } else {
+       reusedDetails?.remove();
+@@ -1738,6 +1758,7 @@ var WebGitGraphElement = class extends HTMLElementBase {
+     return shortOid(revision.oid);
+   }
+   #closeDetails() {
++    this.dispatchEvent(new CustomEvent("gitgraph-details-close", { bubbles: true, composed: true }));
+     this.#selectedOid = void 0;
+     this.#compareOid = void 0;
+     this.#details = void 0;
+@@ -1754,7 +1775,7 @@ var WebGitGraphElement = class extends HTMLElementBase {
+     return this.#page.commits.findIndex((commit) => commit.oid === this.#selectedOid);
+   }
+   #rowTop(index, selectedIndex) {
+-    return index * this.#rowHeight + (selectedIndex >= 0 && index > selectedIndex ? this.#detailsHeight : 0);
++    return index * this.#rowHeight + (this.getAttribute("details-position") !== "bottom" && selectedIndex >= 0 && index > selectedIndex ? this.#detailsHeight : 0);
+   }
+   #revealDetails(oid) {
+     if (this.#selectedOid !== oid) return;
+@@ -1762,7 +1783,7 @@ var WebGitGraphElement = class extends HTMLElementBase {
+     const scroller = this.#root.querySelector(".scroller");
+     if (selectedIndex < 0 || !scroller) return;
+     const rowTop = selectedIndex * this.#rowHeight;
+-    const blockBottom = rowTop + this.#rowHeight + this.#detailsHeight;
++    const blockBottom = rowTop + this.#rowHeight + (this.getAttribute("details-position") === "bottom" ? 0 : this.#detailsHeight);
+     let target = scroller.scrollTop;
+     if (blockBottom > target + scroller.clientHeight) target = blockBottom - scroller.clientHeight;
+     if (rowTop < target) target = rowTop;

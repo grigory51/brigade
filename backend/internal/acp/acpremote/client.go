@@ -13,6 +13,7 @@ package acpremote
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -38,6 +39,10 @@ type Client struct {
 	mu        sync.Mutex
 	sessionID string
 	stream    *eventStream
+	// recoveryCancel принадлежит отдельному observer, а не UI Bind. Непустое
+	// значение также запрещает повторный callback на том же restored-клиенте.
+	recoveryCancel context.CancelFunc
+	closed         bool
 	// pendingPermissions — последний снимок ожиданий durable-демона из Status.
 	// GetStatus фронта читает его без второго RPC.
 	pendingPermissions [][]byte
@@ -90,6 +95,25 @@ type ConfigureOptions struct {
 	CredentialFile      string
 	ExperienceMCP       *acpsdk.McpServer
 	UntrustedTranscript bool
+	Reconfigure         bool
+}
+
+// ReserveIdle защищает весь переход runtime/store от новых turn через этот клиент.
+// Демон дополнительно резервирует собственный ACP-клиент при Configure.
+func (c *Client) ReserveIdle(ctx context.Context) (func(), error) {
+	if !c.promptMu.TryLock() {
+		return nil, acp.ErrSessionBusy
+	}
+	status, err := c.RPC.Status(ctx, daemonrpc.Req(c.Sign(), &v1.Empty{}))
+	if err != nil {
+		c.promptMu.Unlock()
+		return nil, err
+	}
+	if status.Msg.Generating {
+		c.promptMu.Unlock()
+		return nil, acp.ErrSessionBusy
+	}
+	return c.promptMu.Unlock, nil
 }
 
 // Configure просит демон (пере)поднять адаптер (секреты — здесь, не в env контейнера).
@@ -115,9 +139,16 @@ func (c *Client) Configure(ctx context.Context, opts ConfigureOptions) (string, 
 		CredentialFile:      opts.CredentialFile,
 		ExperienceMcpJson:   experienceJSON,
 		UntrustedTranscript: opts.UntrustedTranscript,
+		Reconfigure:         opts.Reconfigure,
 	}))
 	if err != nil {
+		if opts.Reconfigure && connect.CodeOf(err) == connect.CodeAborted {
+			return "", errors.Join(acp.ErrSessionUnrecoverable, err)
+		}
 		return "", err
+	}
+	if opts.Reconfigure && (!resp.Msg.Reconfigured || resp.Msg.SessionId != opts.ResumeSessionID) {
+		return "", connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("acpremote: daemon must support strict reconfigure; reload the agent first"))
 	}
 	c.mu.Lock()
 	c.sessionID = resp.Msg.SessionId
@@ -234,9 +265,11 @@ func (c *Client) streamLoop(sub *eventStream, from int64) {
 			return
 		}
 		c.updateSessionTitle(evt)
-		for _, event := range normalizeDaemonEvent(evt) {
-			if err = sub.sink(event); err != nil {
-				return
+		if evt.Type != agui.EventCustom || evt.Name != agui.CustomTurnCompletedName {
+			for _, event := range normalizeDaemonEvent(evt) {
+				if err = sub.sink(event); err != nil {
+					return
+				}
 			}
 		}
 		c.mu.Lock()
@@ -253,6 +286,83 @@ func (c *Client) streamLoop(sub *eventStream, from int64) {
 	if err = stream.Err(); err == nil {
 		err = io.EOF
 	}
+}
+
+// ObserveRecoveredTurn ждёт завершения turn, оставшегося в durable-демоне после
+// рестарта Brigade. Подписка независима от Bind, не вызывает OnTurnEnd и живёт
+// до одного callback, ошибки, отмены ctx или Close. Вызывается в фоне реестром.
+// Нулевое время callback означает, что демон уже idle: точное время неизвестно.
+func (c *Client) ObserveRecoveredTurn(ctx context.Context, onReady func(context.Context, time.Time)) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	c.mu.Lock()
+	if c.closed || c.recoveryCancel != nil {
+		c.mu.Unlock()
+		return errors.New("acpremote: recovery observer already started or client closed")
+	}
+	c.recoveryCancel = cancel
+	c.mu.Unlock()
+
+	statusCtx, statusCancel := context.WithTimeout(ctx, 5*time.Second)
+	status, err := c.RPC.Status(statusCtx, daemonrpc.Req(c.Sign(), &v1.Empty{}))
+	statusCancel()
+	if err != nil {
+		return fmt.Errorf("acpremote: recovery status: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	lifecycle := status.Header().Get("Brigade-Turn-Events")
+	if lifecycle == "idle" || (lifecycle == "" && !status.Msg.Generating) {
+		onReady(ctx, time.Time{})
+		return nil
+	}
+	if lifecycle != "active" {
+		return errors.New("acpremote: daemon does not support recovered turn completion events; update its runtime")
+	}
+	cursor := status.Msg.Seq
+	stream, err := c.RPC.StreamEvents(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonStreamEventsRequest{FromSeq: cursor}))
+	if err != nil {
+		return fmt.Errorf("acpremote: observe recovered turn: %w", err)
+	}
+	defer stream.Close()
+	for stream.Receive() {
+		frame := stream.Msg()
+		if frame.Seq <= cursor {
+			continue
+		}
+		cursor = frame.Seq
+		var event struct {
+			Type  agui.EventType  `json:"type"`
+			Name  string          `json:"name"`
+			Value json.RawMessage `json:"value"`
+		}
+		if err := json.Unmarshal(frame.AguiJson, &event); err != nil {
+			return fmt.Errorf("acpremote: decode recovery event: %w", err)
+		}
+		if event.Type != agui.EventCustom || event.Name != agui.CustomTurnCompletedName {
+			continue
+		}
+		var completion struct {
+			CompletedAt string `json:"completedAt"`
+		}
+		if err := json.Unmarshal(event.Value, &completion); err != nil {
+			return fmt.Errorf("acpremote: decode turn completion: %w", err)
+		}
+		at, err := time.Parse(time.RFC3339Nano, completion.CompletedAt)
+		if err != nil {
+			return fmt.Errorf("acpremote: decode turn completion time: %w", err)
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		onReady(ctx, at)
+		return nil
+	}
+	if err := stream.Err(); err != nil {
+		return fmt.Errorf("acpremote: recovery stream: %w", err)
+	}
+	return io.ErrUnexpectedEOF
 }
 
 func (c *Client) updateSessionTitle(event agui.Event) {
@@ -391,6 +501,9 @@ func (c *Client) PromptAutoApprove(ctx context.Context, text string, onTurnStart
 func (c *Client) prompt(ctx context.Context, text string, onTurnStart func(), autoAllowOnce bool) (string, error) {
 	c.promptMu.Lock()
 	defer c.promptMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if onTurnStart != nil {
 		onTurnStart()
 	}
@@ -522,6 +635,8 @@ func (c *Client) ConfigOptions() []acpsdk.SessionConfigOption {
 
 // SetConfigOption → изменение опции сессии в демоне.
 func (c *Client) SetConfigOption(ctx context.Context, configID, value string) ([]acpsdk.SessionConfigOption, error) {
+	c.promptMu.Lock()
+	defer c.promptMu.Unlock()
 	resp, err := c.RPC.SetConfigOption(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonSetConfigOptionRequest{ConfigId: configID, Value: value}))
 	if err != nil {
 		return nil, err
@@ -559,6 +674,8 @@ func (c *Client) ResolvePermission(ctx context.Context, id, decision string) err
 
 // Summarize → служебный recap-turn в демоне (архивация).
 func (c *Client) Summarize(ctx context.Context, prompt string) (string, error) {
+	c.promptMu.Lock()
+	defer c.promptMu.Unlock()
 	resp, err := c.RPC.Summarize(ctx, daemonrpc.Req(c.Sign(), &v1.DaemonSummarizeRequest{Prompt: prompt}))
 	if err != nil {
 		return "", err
@@ -656,6 +773,10 @@ func (sh *ShellSession) Terminate(context.Context) error {
 // при явном teardown (registry.terminate → docker remove).
 func (c *Client) Close() error {
 	c.mu.Lock()
+	c.closed = true
+	if c.recoveryCancel != nil {
+		c.recoveryCancel()
+	}
 	if c.stream != nil {
 		c.stream.cancel(context.Canceled)
 		c.stream = nil

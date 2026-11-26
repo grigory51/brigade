@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { GetHistoryResponse, GetStatusResponse } from "@/api/gen/brigade/v1/acp_pb";
-import { useAcpRuntime } from "./useAcpRuntime";
+import { importAcpHistory, useAcpRuntime } from "./useAcpRuntime";
 
 const rpc = vi.hoisted(() => ({
   getHistory: vi.fn<() => Promise<GetHistoryResponse>>(),
@@ -19,6 +19,17 @@ vi.mock("@/api/client", () => ({ acpClient: rpc, refreshSession: auth.refreshSes
 vi.mock("@/features/auth/AuthContext", () => ({ useAuth: () => auth }));
 
 const sessionId = "test-acp-session";
+
+test("history preserves explicit timestamps without inventing dates for legacy messages", () => {
+  const history = importAcpHistory([
+    { id: "dated", role: "user", content: "Вопрос", createdAt: 1700000000n },
+    { id: "legacy", role: "assistant", content: "Ответ" },
+    { id: "invalid", role: "user", content: "Другой", createdAt: Infinity },
+  ]);
+  expect(history.messages.find((entry) => entry.message.id === "dated")?.message.metadata?.custom?.createdAt).toBe("2023-11-14T22:13:20.000Z");
+  expect(history.messages.find((entry) => entry.message.id === "legacy")?.message.metadata?.custom?.createdAt).toBeUndefined();
+  expect(history.messages.find((entry) => entry.message.id === "invalid")?.message.metadata?.custom?.createdAt).toBeUndefined();
+});
 const fetchMock = vi.fn<typeof fetch>();
 type RunInput = {
   threadId: string;

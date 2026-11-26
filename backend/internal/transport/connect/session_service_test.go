@@ -2,14 +2,38 @@ package connectsvc
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
+	"github.com/grigory51/brigade/backend/internal/acp"
 	"github.com/grigory51/brigade/backend/internal/auth"
+	"github.com/grigory51/brigade/backend/internal/session"
 	"github.com/grigory51/brigade/backend/internal/store"
 )
+
+func TestSetExperienceAuthenticationAndErrorCodes(t *testing.T) {
+	if _, err := (&SessionService{}).SetExperience(t.Context(), connect.NewRequest(&v1.SetExperienceRequest{SessionId: "session"})); connect.CodeOf(err) != connect.CodeUnauthenticated {
+		t.Fatalf("unauthenticated: %v", err)
+	}
+	for _, tc := range []struct {
+		err  error
+		code connect.Code
+	}{
+		{store.ErrNotFound, connect.CodeNotFound},
+		{errors.Join(session.ErrExperienceUnavailable, store.ErrNotFound), connect.CodeInvalidArgument},
+		{session.ErrExperienceNotIdleACP, connect.CodeFailedPrecondition},
+		{acp.ErrSessionBusy, connect.CodeFailedPrecondition},
+		{context.Canceled, connect.CodeCanceled},
+		{context.DeadlineExceeded, connect.CodeDeadlineExceeded},
+	} {
+		if got := sessionError(tc.err); connect.CodeOf(got) != tc.code {
+			t.Fatalf("%v: got %v want %v", tc.err, got, tc.code)
+		}
+	}
+}
 
 func TestCreateRejectsOnDemand(t *testing.T) {
 	req := connect.NewRequest(&v1.CreateSessionRequest{Kind: v1.SessionKind_SESSION_KIND_ACP, ExecutionPolicy: v1.SessionExecutionPolicy_SESSION_EXECUTION_POLICY_ON_DEMAND})

@@ -75,6 +75,8 @@ import {
 } from "@/components/ui/sidebar";
 import { ShellPanel } from "@/features/terminal/ShellPanel";
 import { CreateSessionDialog } from "./CreateSessionDialog";
+import { SessionPalette } from "./SessionPalette";
+import { isSessionGroupExpanded, sessionDateLabel, sessionListGroups, sessionListTitle } from "./session-list";
 import { EnvironmentSwitcher } from "@/features/desktop/EnvironmentSwitcher";
 import {
   SessionHeaderProvider,
@@ -102,6 +104,9 @@ function loadCollapsedGroups(userId: string): ReadonlySet<string> {
 // (index-роут) тем же триггером, что и в шапке sidebar.
 type SessionShellValue = {
   openCreate: () => void;
+  activeSession: Session | undefined;
+  renameSession: (id: string, name: string) => Promise<boolean>;
+  renamingIds: ReadonlySet<string>;
 };
 
 const SessionShellContext = createContext<SessionShellValue | null>(null);
@@ -140,6 +145,8 @@ export function SessionLayout() {
   );
   const [state, setState] = useState<LoadState>("loading");
   const [createOpen, setCreateOpen] = useState(false);
+  const renamingIdsRef = useRef(new Set<string>());
+  const [renamingIds, setRenamingIds] = useState<ReadonlySet<string>>(new Set());
   // deletingIds — сессии, удаление которых сейчас выполняется на сервере. Teardown
   // контейнера/процесса занимает до ~15 секунд, и без индикации
   // клик выглядит проигнорированным (а повторные клики порождали параллельные
@@ -171,7 +178,7 @@ export function SessionLayout() {
     if (!silent) setState("loading");
     try {
       const res = await sessionClient.list({});
-      // Новые сверху: бэкенд не гарантирует порядок, сортируем по created_at.
+      // Последняя активность сверху; у пустых сессий используем время создания.
       const sorted = [...res.sessions].sort((a, b) => Number((b.lastMessageAt > 0n ? b.lastMessageAt : b.createdAt) - (a.lastMessageAt > 0n ? a.lastMessageAt : a.createdAt)));
       setSessions(sorted);
       setState("ready");
@@ -222,6 +229,7 @@ export function SessionLayout() {
 
   const onDelete = useCallback(
     async (id: string) => {
+      if (renamingIdsRef.current.has(id)) return;
       setDeletingIds((prev) => new Set(prev).add(id));
       try {
         await sessionClient.delete({ sessionId: id });
@@ -253,11 +261,17 @@ export function SessionLayout() {
 
   const onRename = useCallback(
     async (id: string, name: string) => {
+      // Ref блокирует второй редактор до следующего React-render, включая тот же tick.
+      if (renamingIdsRef.current.has(id)) return false;
+      renamingIdsRef.current.add(id);
+      setRenamingIds(new Set(renamingIdsRef.current));
       // Оптимистично обновляем подпись; при ошибке откатываемся к данным с сервера.
       const prevName = sessions.find((s) => s.id === id)?.name ?? "";
       setSessions((prev) => prev.map((s) => withName(s, id, name)));
       try {
         await sessionClient.update({ sessionId: id, name });
+        setSessions((prev) => prev.map((s) => withName(s, id, name)));
+        return true;
       } catch (err) {
         setSessions((prev) => prev.map((s) => withName(s, id, prevName)));
         toast.error(
@@ -265,6 +279,10 @@ export function SessionLayout() {
             ? err.rawMessage
             : "Не удалось переименовать сессию",
         );
+        return false;
+      } finally {
+        renamingIdsRef.current.delete(id);
+        setRenamingIds(new Set(renamingIdsRef.current));
       }
     },
     [sessions],
@@ -272,6 +290,7 @@ export function SessionLayout() {
 
   const onArchive = useCallback(
     async (id: string) => {
+      if (renamingIdsRef.current.has(id)) return;
       // Архивация зовёт агента за recap (несколько секунд) и останавливает контейнер —
       // как удаление, показываем блокирующий оверлей открытой сессии (archivingIds),
       // иначе recap-turn лишь мигает индикатором «агент в фоне» и сессия молча исчезает.
@@ -304,6 +323,7 @@ export function SessionLayout() {
   // reloadingId — сессия, чей ACP-агент сейчас перезапускается на актуальном окружении.
   const [reloadingId, setReloadingId] = useState<string | null>(null);
   const onReloadAgent = useCallback(async (id: string) => {
+    if (renamingIdsRef.current.has(id)) return;
     setReloadingId(id);
     try {
       await sessionClient.reloadAgent({ sessionId: id });
@@ -325,39 +345,34 @@ export function SessionLayout() {
   }, [load]);
 
   const openCreate = useCallback(() => setCreateOpen(true), []);
+  const createShortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌥N" : "Alt+N";
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat || event.isComposing || !event.altKey || event.shiftKey || event.metaKey || event.ctrlKey) return;
+      if (event.code !== "KeyN") return;
+      event.preventDefault();
+      openCreate();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [openCreate]);
+
+  const activeSession = sessions.find((session) => session.id === activeId);
 
   // acpActive — открытая сессия работает в ACP-режиме: её вспомогательный терминал
   // рисует SessionDock, а не докнутая полоса снизу.
   const acpActive =
     activeId !== undefined &&
-    sessions.find((s) => s.id === activeId)?.kind === SessionKind.ACP;
+    activeSession?.kind === SessionKind.ACP;
 
   // Первая (самая новая) сессия определяет положение группы, внутри порядок тоже остаётся
   // от новых к старым. При наличии именованных групп остальные образуют общую группу.
-  const groups = useMemo(() => {
-    const out: { key: string; label: string; sessions: Session[] }[] = [];
-    const byLabel = new Map<string, Session[]>();
-    const hasNamedGroups = sessions.some((session) => session.groupLabel !== "");
-    for (const s of sessions) {
-      if (!s.groupLabel && !hasNamedGroups) {
-        out.push({ key: s.id, label: "", sessions: [s] });
-        continue;
-      }
-      const key = s.groupLabel || "\0";
-      const existing = byLabel.get(key);
-      if (existing) {
-        existing.push(s);
-        continue;
-      }
-      const grouped = [s];
-      byLabel.set(key, grouped);
-      out.push({ key, label: s.groupLabel || "Без группы", sessions: grouped });
-    }
-    return out;
-  }, [sessions]);
+  const groups = useMemo(() => sessionListGroups(sessions), [sessions]);
+  const now = new Date();
 
   return (
-    <SessionShellContext.Provider value={{ openCreate }}>
+    <SessionShellContext.Provider value={{ openCreate, activeSession, renameSession: onRename, renamingIds }}>
       <SessionHeaderProvider>
         {/* 260px — ширина рейла по макету (дефолт shadcn 16rem/256px). */}
         <SidebarProvider style={{ "--sidebar-width": "260px" } as CSSProperties}>
@@ -383,12 +398,16 @@ export function SessionLayout() {
               {desktop && <EnvironmentSwitcher />}
               <Button
                 onClick={openCreate}
-                className="h-auto justify-start gap-2 rounded-[9px] py-[9px] text-[13px] font-medium group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+                aria-label="Новая сессия"
+                aria-keyshortcuts="Alt+N"
+                title={`Новая сессия · ${createShortcut}`}
+                className="h-8 justify-start gap-2 rounded-[8px] px-2 text-[13px] font-medium group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
               >
                 <Plus className="size-4 shrink-0" />
                 <span className="truncate group-data-[collapsible=icon]:hidden">
                   Новая сессия
                 </span>
+                <kbd className="ml-auto text-[10px] font-normal opacity-70 group-data-[collapsible=icon]:hidden">{createShortcut}</kbd>
               </Button>
             </SidebarHeader>
 
@@ -396,33 +415,12 @@ export function SessionLayout() {
                 «Заметки»/«Архив» и профиль остаются на виду при любой высоте окна. */}
             <SidebarContent className="overflow-hidden">
               <SidebarGroup className="min-h-0 flex-1 gap-0 pb-0 group-data-[collapsible=icon]:px-0">
-                {/* Заголовок группы: сам никуда не ведёт, поэтому без hover-подсветки и
-                    курсора — иначе выглядел бы кликабельным пунктом меню. Кликается только
-                    иконка обновления справа. */}
                 <div className="flex h-8 items-center gap-2 px-2 text-[13px] group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-                  <MessagesSquare className="size-4 shrink-0" />
+                  <MessagesSquare className="size-4 shrink-0 group-data-[collapsible=icon]:hidden" />
                   <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">
                     Сессии
                   </span>
-                  <span className="inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-secondary px-1.5 text-[10.5px] text-muted-foreground group-data-[collapsible=icon]:hidden">
-                    {sessions.length}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => void load()}
-                    disabled={state === "loading"}
-                    aria-label="Обновить список сессий"
-                    title="Обновить список сессий"
-                    className="flex size-5 shrink-0 items-center justify-center rounded text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground disabled:opacity-50 group-data-[collapsible=icon]:hidden"
-                  >
-                    <RefreshCw
-                      className={
-                        state === "loading"
-                          ? "size-3.5 animate-spin"
-                          : "size-3.5"
-                      }
-                    />
-                  </button>
+                  <SessionPalette sessions={sessions} state={state} onSelect={(session) => navigate(sessionRoute(session.id))} onCreate={openCreate} />
                 </div>
                 {/* Список забирает всю свободную высоту и скроллится внутри себя. Жёсткого
                     потолка нет намеренно: с ним при высоком окне оставалась дыра, а при
@@ -455,40 +453,50 @@ export function SessionLayout() {
                       </div>
                     )}
 
-                    {state === "ready" && groups.map((group) => (
-                      <Fragment key={group.key}>
-                        {group.label && (
-                          <SidebarMenuItem>
-                            <button type="button" aria-expanded={!collapsedGroups.has(group.key)} title={group.label} onClick={() => setCollapsedGroups((current) => { const next = new Set(current); if (next.has(group.key)) next.delete(group.key); else next.add(group.key); return next; })} className="mt-1 flex h-7 w-full items-center gap-2 rounded-[8px] bg-sidebar-accent/60 px-2 text-left text-[12px] font-medium text-sidebar-foreground/75 hover:bg-sidebar-accent group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-                              <ChevronDown className={cn("size-3.5 shrink-0 transition-transform", collapsedGroups.has(group.key) && "-rotate-90")} />
-                              <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">{group.label}</span>
-                              <span className="shrink-0 text-[10px] tabular-nums text-sidebar-foreground/45 group-data-[collapsible=icon]:hidden">{group.sessions.length}</span>
-                            </button>
-                          </SidebarMenuItem>
-                        )}
-                        {!collapsedGroups.has(group.key) && group.sessions.map((s) => (
-                          <SessionItem
-                            key={s.id}
-                            session={s}
-                            grouped={Boolean(group.label)}
-                            business={s.executionPolicy === SessionExecutionPolicy.ON_DEMAND}
-                            busy={
-                              deletingIds.has(s.id) ||
-                              archivingIds.has(s.id) ||
-                              reloadingId === s.id
-                            }
-                            deleting={deletingIds.has(s.id)}
-                            archiving={archivingIds.has(s.id)}
-                            reloading={reloadingId === s.id}
-                            onOpen={() => navigate(sessionRoute(s.id))}
-                            onDelete={() => void onDelete(s.id)}
-                            onRename={(name) => void onRename(s.id, name)}
-                            onArchive={() => void onArchive(s.id)}
-                            onReloadAgent={() => void onReloadAgent(s.id)}
-                          />
-                        ))}
-                      </Fragment>
-                    ))}
+                    {state === "ready" && groups.map((group) => {
+                      const expanded = isSessionGroupExpanded(group, collapsedGroups);
+                      return (
+                        <Fragment key={group.key}>
+                          {group.label && (
+                            <SidebarMenuItem>
+                              <button type="button" aria-expanded={expanded} title={group.label} onClick={() => setCollapsedGroups((current) => { const next = new Set(current); if (next.has(group.key)) next.delete(group.key); else next.add(group.key); return next; })} className="mt-1 flex h-7 w-full items-center gap-2 rounded-[8px] bg-sidebar-accent/60 px-2 text-left text-[12px] font-medium text-sidebar-foreground/75 hover:bg-sidebar-accent disabled:cursor-default group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+                                <ChevronDown className={cn("size-3.5 shrink-0 transition-transform", !expanded && "-rotate-90")} />
+                                <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">{group.label}</span>
+                                <span className="shrink-0 text-[10px] tabular-nums text-sidebar-foreground/45 group-data-[collapsible=icon]:hidden">{group.sessions.length}</span>
+                              </button>
+                            </SidebarMenuItem>
+                          )}
+                          {expanded && group.sessions.map((s, index) => (
+                            <Fragment key={s.id}>
+                              {(index === 0 || sessionDateLabel(group.sessions[index - 1], now) !== sessionDateLabel(s, now)) && (
+                                <li className={cn("px-2 pb-1 pt-2 text-[10px] font-medium text-sidebar-foreground/50 group-data-[collapsible=icon]:hidden", group.label && "ml-2")}>
+                                  {sessionDateLabel(s, now)}
+                                </li>
+                              )}
+                              <SessionItem
+                                session={s}
+                                grouped={Boolean(group.label)}
+                                business={s.executionPolicy === SessionExecutionPolicy.ON_DEMAND}
+                                busy={
+                                  deletingIds.has(s.id) ||
+                                  archivingIds.has(s.id) ||
+                                  renamingIds.has(s.id) ||
+                                  reloadingId === s.id
+                                }
+                                deleting={deletingIds.has(s.id)}
+                                archiving={archivingIds.has(s.id)}
+                                reloading={reloadingId === s.id}
+                                onOpen={() => navigate(sessionRoute(s.id))}
+                                onDelete={() => void onDelete(s.id)}
+                                onRename={(name) => onRename(s.id, name)}
+                                onArchive={() => void onArchive(s.id)}
+                                onReloadAgent={() => void onReloadAgent(s.id)}
+                              />
+                            </Fragment>
+                          ))}
+                        </Fragment>
+                      );
+                    })}
                   </SidebarMenu>
                 </SidebarGroupContent>
               </SidebarGroup>
@@ -531,7 +539,7 @@ export function SessionLayout() {
             )}
           </Sidebar>
 
-          <SidebarInset className="h-svh min-h-0">
+          <SidebarInset className="h-svh min-h-0 [--session-toolbar-inset:3rem] md:[--session-toolbar-inset:1rem] md:peer-data-[state=collapsed]:[--session-toolbar-inset:3rem]">
             <SessionTopbar />
             <div className="relative flex min-h-0 flex-1 flex-col">
               <div className="min-h-0 flex-1">
@@ -653,7 +661,7 @@ function SessionItem({
   reloading?: boolean;
   onOpen: () => void;
   onDelete: () => void;
-  onRename: (name: string) => void;
+  onRename: (name: string) => Promise<boolean>;
   onArchive: () => void;
   onReloadAgent: () => void;
 }) {
@@ -664,7 +672,8 @@ function SessionItem({
   const active = sessionId === session.id;
   // Производная подпись, если пользователь не задал имя.
   const fallback = `${session.agentType} · ${kindLabel(session.kind)}`;
-  const fullLabel = session.name || fallback;
+  const fullLabel = sessionListTitle(session);
+  const twoLine = business || session.kind === SessionKind.ACP;
   const groupPrefix = `${session.groupLabel} · `;
   const refreshPinned =
     session.kind === SessionKind.ACP && session.executionPolicy !== SessionExecutionPolicy.ON_DEMAND && (session.agentOutdated || reloading);
@@ -677,13 +686,16 @@ function SessionItem({
   const itemClass = cn("min-w-0 group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:self-center", grouped && "ml-2 group-data-[collapsible=icon]:ml-0");
 
   const [editing, setEditing] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const renamingRef = useRef(false);
   const [draft, setDraft] = useState(fullLabel);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const startEdit = useCallback(() => {
+    if (busy) return;
     setDraft(session.name || "");
     setEditing(true);
-  }, [session.name]);
+  }, [busy, session.name]);
 
   useEffect(() => {
     if (editing) {
@@ -692,13 +704,24 @@ function SessionItem({
     }
   }, [editing]);
 
-  function commit() {
-    setEditing(false);
+  async function commit() {
+    if (renamingRef.current || busy) return;
     const next = draft.trim();
     // Пустой ввод сбрасывает имя на производную подпись (name=""), непустой — задаёт.
     if (next !== (session.name || "")) {
-      onRename(next);
+      renamingRef.current = true;
+      setRenaming(true);
+      try {
+        if (!await onRename(next)) {
+          inputRef.current?.focus();
+          return;
+        }
+      } finally {
+        renamingRef.current = false;
+        setRenaming(false);
+      }
     }
+    setEditing(false);
   }
 
   if (editing) {
@@ -707,20 +730,24 @@ function SessionItem({
         <input
           ref={inputRef}
           value={draft}
+          readOnly={renaming || busy}
+          aria-label="Название сессии"
+          aria-busy={renaming || busy}
           onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
+          onBlur={() => void commit()}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
-              commit();
-            } else if (e.key === "Escape") {
+              void commit();
+            } else if (e.key === "Escape" && !renamingRef.current) {
               e.preventDefault();
               setEditing(false);
             }
           }}
           placeholder={fallback}
-          className="h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-[2px] focus-visible:ring-ring/50"
+          className="h-8 w-full rounded-md border border-input bg-transparent pl-2 pr-7 text-sm outline-none focus-visible:border-ring focus-visible:ring-[2px] focus-visible:ring-ring/50"
         />
+        {renaming && <Loader2 aria-label="Сохранение названия" className="absolute right-2 top-2 size-4 animate-spin text-muted-foreground" />}
       </SidebarMenuItem>
     );
   }
@@ -739,37 +766,37 @@ function SessionItem({
         // Действия расположены поверх строки. В двухстрочном режиме место под них
         // нужно только имени: ширина превью и положение времени не должны меняться.
         className={`rounded-[8px] text-[13px] transition-none! group-hover/menu-item:bg-sidebar-accent group-hover/menu-item:text-sidebar-accent-foreground ${
-          business
+          twoLine
             ? "grid h-auto min-h-[52px] grid-cols-[auto_minmax(0,1fr)] gap-y-0 py-1.5 pr-2! group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:min-h-0"
-            : refreshPinned
-            ? "pr-28! md:pr-8! md:group-hover/menu-item:pr-28! md:group-focus-within/menu-item:pr-28!"
-            : session.kind === SessionKind.ACP
-            ? "group-hover/menu-item:pr-28! group-focus-within/menu-item:pr-28!"
             : "group-hover/menu-item:pr-16! group-focus-within/menu-item:pr-16!"
         }${locked ? " opacity-60" : ""}`}
       >
         <span className="hidden size-4 shrink-0 items-center justify-center text-[10px] font-medium uppercase group-data-[collapsible=icon]:flex">
           {displayLabel[0]}
         </span>
-        {business ? <>
-          <span aria-hidden="true" className="row-span-2 flex size-[30px] items-center justify-center rounded-full bg-accent text-xs font-medium group-data-[collapsible=icon]:hidden">{displayLabel[0]?.toUpperCase()}</span>
+        {twoLine ? <>
+          {business && <span aria-hidden="true" className="row-span-2 flex size-[30px] items-center justify-center rounded-full bg-accent text-xs font-medium group-data-[collapsible=icon]:hidden">{displayLabel[0]?.toUpperCase()}</span>}
           <span title={displayLabel} className={cn(
             "min-w-0 truncate group-data-[collapsible=icon]:hidden",
+            !business && "col-span-2",
             session.unread && "font-medium",
             session.kind === SessionKind.ACP
-              ? "mr-20 md:mr-0 md:group-hover/menu-item:mr-20 md:group-focus-within/menu-item:mr-20"
+              ? business
+                ? "mr-20 md:mr-0 md:group-hover/menu-item:mr-20 md:group-focus-within/menu-item:mr-20"
+                : "mr-28 md:mr-0 md:group-hover/menu-item:mr-28 md:group-focus-within/menu-item:mr-28"
               : "mr-14 md:mr-0 md:group-hover/menu-item:mr-14 md:group-focus-within/menu-item:mr-14",
+            refreshPinned && "md:mr-6",
             archiving && "md:mr-20",
             deleting && "md:mr-6",
             session.unread && !active && session.unreadCount === 0 && !locked && "md:mr-3",
           )}>{displayLabel}</span>
-          <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-            <span className="min-w-0 flex-1 truncate">{session.lastMessageDelivery === "draft" ? "Черновик: " : session.lastMessageDelivery === "uncertain" ? "Не подтверждено · " : session.lastMessageAuthor === "owner" ? "Вы: " : ""}{session.lastMessage || "Переписка"}</span>
+          <span className={cn("flex min-w-0 items-center gap-1 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden", !business && "col-span-2")}>
+            <span className="min-w-0 flex-1 truncate">{session.lastMessageDelivery === "draft" ? "Черновик: " : session.lastMessageDelivery === "uncertain" ? "Не подтверждено · " : session.lastMessageAuthor === "owner" ? "Вы: " : ""}{session.lastMessage || (business ? "Переписка" : "Нет сообщений")}</span>
             {session.lastMessageAt > 0n && <time className="shrink-0 whitespace-nowrap text-[11px] tabular-nums" dateTime={new Date(Number(session.lastMessageAt) * 1000).toISOString()}>{new Date(Number(session.lastMessageAt) * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</time>}
             {!active && session.unreadCount > 0 && <span className="flex min-w-[17px] shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">{session.unreadCount}</span>}
           </span>
         </> : <span className="truncate group-data-[collapsible=icon]:hidden">{label}</span>}
-        {session.unread && !active && (!business || session.unreadCount === 0) && (
+        {session.unread && !active && (!twoLine || session.unreadCount === 0) && (
           <span
             title="Есть непрочитанный ответ"
             className="absolute top-1.5 right-2 size-2 rounded-full bg-primary transition-opacity group-hover/menu-item:opacity-0 group-focus-within/menu-item:opacity-0 group-data-[collapsible=icon]:top-1 group-data-[collapsible=icon]:right-1"
@@ -957,6 +984,7 @@ function UserMenu() {
                 <AvatarFallback className="text-xs">{initial}</AvatarFallback>
               </Avatar>
               <span className="truncate">{user?.username ?? "—"}</span>
+              <ChevronDown aria-hidden="true" className="ml-auto size-3.5 shrink-0 text-muted-foreground group-data-[collapsible=icon]:hidden" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="start" className="w-44">
@@ -1003,7 +1031,7 @@ function SessionTopbar() {
   // контента. Позиционируется относительно SidebarInset (он relative).
   if (!hasContent) {
     return (
-      <SidebarTrigger className="absolute left-2 top-2 z-20 size-8 rounded-md border bg-background/80 shadow-sm backdrop-blur hover:bg-accent" />
+      <SidebarTrigger className="absolute left-2 top-2 z-40 size-8 rounded-md border bg-background/80 shadow-sm backdrop-blur hover:bg-accent" />
     );
   }
 

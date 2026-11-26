@@ -71,6 +71,7 @@ export function MsgNav() {
   // Считаем сами по якорям в DOM: у рантайма нет события «докуда доскроллено», а плавность
   // возможна только на непрерывной величине — индекс видимого сообщения давал бы рывки.
   const [focus, setFocus] = useState(n - 1);
+  const [overflowing, setOverflowing] = useState(false);
   useEffect(() => {
     if (n === 0) return;
     const viewport = document.querySelector<HTMLElement>(
@@ -81,6 +82,7 @@ export function MsgNav() {
     let frame = 0;
     const measure = () => {
       frame = 0;
+      setOverflowing(viewport.scrollHeight > viewport.clientHeight + 2);
       const box = viewport.getBoundingClientRect();
       // Линия фокуса — треть высоты вьюпорта. По верхней кромке текущим оказывалось бы
       // длинное сообщение, уже ушедшее с экрана; по центру фокус запаздывал бы.
@@ -117,6 +119,7 @@ export function MsgNav() {
     // при этом уезжает, поэтому пересчитываем ещё и по изменению размеров содержимого.
     const resize = new ResizeObserver(onScroll);
     resize.observe(viewport);
+    if (viewport.firstElementChild) resize.observe(viewport.firstElementChild);
     return () => {
       viewport.removeEventListener("scroll", onScroll);
       resize.disconnect();
@@ -124,7 +127,7 @@ export function MsgNav() {
     };
   }, [pills, n]);
 
-  if (n === 0) return null;
+  if (n === 0 || !overflowing) return null;
 
   const cur = Math.min(Math.max(focus, 0), n - 1);
   // Пока курсор на шкале, раскладка считается от ЗАМОРОЖЕННОГО фокуса. Иначе клик по
@@ -163,6 +166,7 @@ export function MsgNav() {
 
   return (
     <div
+      aria-label="Навигация по диалогу"
       // На узких экранах шкалу прячем: она встала бы поверх композера, а места для
       // магнификации и тултипа всё равно нет.
       className="pointer-events-none absolute inset-y-0 right-[18px] z-10 hidden w-[46px] animate-[rail-in_0.35s_ease] flex-col justify-center py-4 lg:flex"
@@ -252,7 +256,7 @@ export function MsgNav() {
           );
         })}
       </div>
-      <div className="mt-3 pr-0.5 text-[9px] tracking-[0.1em] text-[#6c695f] uppercase">
+      <div className="mt-3 pr-0.5 text-[10px] tracking-[0.1em] text-muted-foreground uppercase">
         сейчас
       </div>
     </div>

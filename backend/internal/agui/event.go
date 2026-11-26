@@ -92,6 +92,9 @@ const CustomConfigOptionsName = "config_options"
 // CustomSessionTitleName — новое человекочитаемое имя сессии от ACP-агента.
 const CustomSessionTitleName = "session_title"
 
+// CustomTurnCompletedName — внутренний lifecycle durable-демона; UI его не получает.
+const CustomTurnCompletedName = "brigade.turn_completed"
+
 // Event — обобщённое событие AG-UI. Незаполненные поля опускаются при сериализации,
 // поэтому одна структура покрывает все варианты без отдельных типов на каждый. Имена
 // полей в JSON соответствуют каноническим *EventSchema из @ag-ui/core.

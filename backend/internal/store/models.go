@@ -205,6 +205,8 @@ type Session struct {
 	ResponseInstructions string
 	ExperienceID         string
 	ExperienceVersion    string
+	// nil означает legacy pin без разрешённого владельца; пустая строка — system.
+	ExperienceOwnerID *string
 }
 
 // SessionMessage — сообщение сессии, для которой Brigade владеет историей.
@@ -255,9 +257,10 @@ const (
 	MessageDeliveryFailed    MessageDelivery = "failed"
 )
 
-// Plugin — platform-вариант MCPB bundle. Пустой OwnerID означает системную CLI-установку.
+// Plugin — platform-вариант MCPB bundle. Пустой OwnerID означает системную установку.
 type Plugin struct {
 	OwnerID      string
+	Managed      bool
 	ID           string
 	Name         string
 	Version      string

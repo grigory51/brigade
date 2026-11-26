@@ -395,6 +395,14 @@ export class DaemonConfigureRequest extends Message<DaemonConfigureRequest> {
    */
   untrustedTranscript = false;
 
+  /**
+   * Явная замена idle-адаптера: strict session/load того же native ID, без reset журнала.
+   * Обычный Configure без этого флага остаётся идемпотентным reconnect.
+   *
+   * @generated from field: bool reconfigure = 13;
+   */
+  reconfigure = false;
+
   constructor(data?: PartialMessage<DaemonConfigureRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -414,6 +422,7 @@ export class DaemonConfigureRequest extends Message<DaemonConfigureRequest> {
     { no: 10, name: "credential_file", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 11, name: "experience_mcp_json", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
     { no: 12, name: "untrusted_transcript", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 13, name: "reconfigure", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaemonConfigureRequest {
@@ -492,6 +501,13 @@ export class DaemonConfigureResponse extends Message<DaemonConfigureResponse> {
    */
   sessionTitle = "";
 
+  /**
+   * Подтверждение применения reconfigure; старый daemon не должен сообщать ложный успех.
+   *
+   * @generated from field: bool reconfigured = 3;
+   */
+  reconfigured = false;
+
   constructor(data?: PartialMessage<DaemonConfigureResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -502,6 +518,7 @@ export class DaemonConfigureResponse extends Message<DaemonConfigureResponse> {
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "session_title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "reconfigured", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaemonConfigureResponse {

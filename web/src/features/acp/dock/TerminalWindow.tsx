@@ -38,11 +38,14 @@ const clamp = (value: number, min: number, max: number) =>
 export function TerminalWindow({
   sessionId,
   onClose,
+  onConnChange,
 }: {
   sessionId: string;
   onClose: () => void;
+  onConnChange?: (state: TermConnState) => void;
 }) {
   const [conn, setConn] = useState<TermConnState>("connecting");
+  useEffect(() => { onConnChange?.(conn); }, [conn, onConnChange]);
   // Счётчик попыток переподключения: инкремент пересоздаёт WS (и шелл на сервере).
   const [attempt, setAttempt] = useState(0);
   const [geometry, setGeometry] = useState<Geometry | null>(loadGeometry);

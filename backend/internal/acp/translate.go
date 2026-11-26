@@ -416,8 +416,8 @@ func (c *Client) closeReasoning() []agui.Event {
 	}
 }
 
-// closeToolCallEvents формирует закрытие tool call'а: TOOL_CALL_END, при непустом
-// результате — TOOL_CALL_RESULT (messageId результата равен toolCallId — ответ
+// closeToolCallEvents формирует закрытие tool call'а: TOOL_CALL_END и TOOL_CALL_RESULT
+// (messageId результата равен toolCallId — ответ
 // инструмента самостоятельного messageId не имеет), а при накопленных diff-блоках —
 // поставку A2UI-поверхности карточки (CUSTOM a2ui с surfaceId=toolCallId). Клиент с
 // A2UI-каталогом рендерит поверхность; клиент без него игнорирует CUSTOM и падает
@@ -434,26 +434,24 @@ func closeToolCallEvents(id string, st *toolCallState) []agui.Event {
 		})
 	}
 	evts = append(evts, agui.Event{Type: agui.EventToolCallEnd, ToolCallID: id})
-	if st.result != "" || (st.failed && strings.EqualFold(st.name, "terminal")) {
-		result := st.result
-		if st.failed && strings.EqualFold(st.name, "terminal") {
-			var output any = result
-			if result != "" {
-				var decoded any
-				if json.Unmarshal([]byte(result), &decoded) == nil {
-					output = decoded
-				}
+	result := st.result
+	if st.failed && strings.EqualFold(st.name, "terminal") {
+		var output any = result
+		if result != "" {
+			var decoded any
+			if json.Unmarshal([]byte(result), &decoded) == nil {
+				output = decoded
 			}
-			result = rawJSON(map[string]any{"isError": true, "output": output})
 		}
-		evts = append(evts, agui.Event{
-			Type:       agui.EventToolCallResult,
-			ToolCallID: id,
-			MessageID:  id,
-			Role:       "tool",
-			Content:    result,
-		})
+		result = rawJSON(map[string]any{"isError": true, "output": output})
 	}
+	evts = append(evts, agui.Event{
+		Type:       agui.EventToolCallResult,
+		ToolCallID: id,
+		MessageID:  id,
+		Role:       "tool",
+		Content:    result,
+	})
 	if len(st.diffs) > 0 {
 		evts = append(evts, agui.Event{
 			Type:  agui.EventCustom,

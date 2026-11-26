@@ -278,15 +278,15 @@ export class Session extends Message<Session> {
   agentOutdated = false;
 
   /**
-   * experience_id — постоянный клиент сессии. Пусто означает встроенный chat/console,
-   * определяемый по kind; непустое значение ссылается на установленный MCPB-плагин.
+   * experience_id — предметный плагин панели рядом со штатным ACP-чатом.
+   * Пусто — без панели. Поле не меняет тип сессии и не заменяет чат.
    *
    * @generated from field: string experience_id = 24;
    */
   experienceId = "";
 
   /**
-   * Версия MCPB фиксируется при создании, чтобы обновление плагина не меняло живую сессию.
+   * Версия MCPB фиксируется при выборе experience, чтобы обновление плагина не меняло живую сессию.
    *
    * @generated from field: string experience_version = 25;
    */
@@ -1739,6 +1739,51 @@ export class SetSessionResponseProfileRequest extends Message<SetSessionResponse
 
   static equals(a: SetSessionResponseProfileRequest | PlainMessage<SetSessionResponseProfileRequest> | undefined, b: SetSessionResponseProfileRequest | PlainMessage<SetSessionResponseProfileRequest> | undefined): boolean {
     return proto3.util.equals(SetSessionResponseProfileRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message brigade.v1.SetExperienceRequest
+ */
+export class SetExperienceRequest extends Message<SetExperienceRequest> {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId = "";
+
+  /**
+   * Пусто — отключить предметный плагин панели; штатный чат сохраняется.
+   *
+   * @generated from field: string experience_id = 2;
+   */
+  experienceId = "";
+
+  constructor(data?: PartialMessage<SetExperienceRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.SetExperienceRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "experience_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SetExperienceRequest {
+    return new SetExperienceRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SetExperienceRequest {
+    return new SetExperienceRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SetExperienceRequest {
+    return new SetExperienceRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SetExperienceRequest | PlainMessage<SetExperienceRequest> | undefined, b: SetExperienceRequest | PlainMessage<SetExperienceRequest> | undefined): boolean {
+    return proto3.util.equals(SetExperienceRequest, a, b);
   }
 }
 

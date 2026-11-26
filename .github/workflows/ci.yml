@@ -83,7 +83,7 @@ jobs:
 
   push:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: verify
+    needs: [verify, cad-plugin, coder-plugin]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -101,6 +101,21 @@ jobs:
             description: Brigade agent runtime with Claude Code, Codex, ACP adapters, and built-in MCP tools
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        if: matrix.image == 'brigade'
+        with:
+          name: brigade-cad-linux-amd64
+          path: packaging/bundles
+      - uses: actions/download-artifact@v4
+        if: matrix.image == 'brigade'
+        with:
+          name: brigade-coder-linux-amd64
+          path: packaging/bundles
+      - name: prepare bundled apps
+        if: matrix.image == 'brigade'
+        run: |
+          mv packaging/bundles/brigade-cad-linux-amd64.mcpb packaging/bundles/cad.mcpb
+          mv packaging/bundles/brigade-coder-linux-amd64.mcpb packaging/bundles/coder.mcpb
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -127,6 +142,7 @@ jobs:
             index:org.opencontainers.image.documentation=https://github.com/${{ github.repository }}/releases
           build-args: |
             VERSION=${{ github.ref_name }}
+            PLUGIN_SOURCE=prebuilt
       - name: verify browser through MCP in the agent container
         if: matrix.image == 'brigade-agent'
         run: |
@@ -195,8 +211,38 @@ jobs:
           path: brigade-cad-${{ matrix.platform }}.mcpb
           if-no-files-found: error
 
+  coder-plugin:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: verify
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux-amd64
+          - runner: macos-15
+            platform: darwin-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: build Coder plugin
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}" bash plugins/coder/build.sh
+          mv plugins/coder/brigade-coder.mcpb "brigade-coder-${{ matrix.platform }}.mcpb"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: brigade-coder-${{ matrix.platform }}
+          path: brigade-coder-${{ matrix.platform }}.mcpb
+          if-no-files-found: error
+
   release:
-    needs: [push, desktop, cad-plugin]
+    needs: [push, desktop, cad-plugin, coder-plugin]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -212,6 +258,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           pattern: brigade-cad-*
+          path: plugin-artifacts
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: brigade-coder-*
           path: plugin-artifacts
           merge-multiple: true
       - uses: docker/login-action@v3

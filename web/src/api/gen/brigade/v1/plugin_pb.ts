@@ -87,6 +87,16 @@ export class Plugin extends Message<Plugin> {
    */
   configured = false;
 
+  /**
+   * @generated from field: string layout = 16;
+   */
+  layout = "";
+
+  /**
+   * @generated from field: bool managed = 17;
+   */
+  managed = false;
+
   constructor(data?: PartialMessage<Plugin>) {
     super();
     proto3.util.initPartial(data, this);
@@ -110,6 +120,8 @@ export class Plugin extends Message<Plugin> {
     { no: 13, name: "system", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 14, name: "compatible", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 15, name: "configured", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 16, name: "layout", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 17, name: "managed", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Plugin {
@@ -456,6 +468,49 @@ export class GetPluginRequest extends Message<GetPluginRequest> {
 }
 
 /**
+ * @generated from message brigade.v1.PluginReference
+ */
+export class PluginReference extends Message<PluginReference> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  /**
+   * @generated from field: string version = 2;
+   */
+  version = "";
+
+  constructor(data?: PartialMessage<PluginReference>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "brigade.v1.PluginReference";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "version", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): PluginReference {
+    return new PluginReference().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): PluginReference {
+    return new PluginReference().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): PluginReference {
+    return new PluginReference().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: PluginReference | PlainMessage<PluginReference> | undefined, b: PluginReference | PlainMessage<PluginReference> | undefined): boolean {
+    return proto3.util.equals(PluginReference, a, b);
+  }
+}
+
+/**
  * @generated from message brigade.v1.PluginMCPRequest
  */
 export class PluginMCPRequest extends Message<PluginMCPRequest> {
@@ -474,6 +529,13 @@ export class PluginMCPRequest extends Message<PluginMCPRequest> {
    */
   paramsJson = new Uint8Array(0);
 
+  /**
+   * Отсутствует у legacy-клиентов; иначе запрос относится только к этой pane.
+   *
+   * @generated from field: brigade.v1.PluginReference expected_plugin = 4;
+   */
+  expectedPlugin?: PluginReference;
+
   constructor(data?: PartialMessage<PluginMCPRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -485,6 +547,7 @@ export class PluginMCPRequest extends Message<PluginMCPRequest> {
     { no: 1, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "method", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "params_json", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
+    { no: 4, name: "expected_plugin", kind: "message", T: PluginReference },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): PluginMCPRequest {
@@ -540,3 +603,4 @@ export class PluginMCPResponse extends Message<PluginMCPResponse> {
     return proto3.util.equals(PluginMCPResponse, a, b);
   }
 }
+

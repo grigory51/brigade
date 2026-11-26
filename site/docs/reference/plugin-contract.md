@@ -2,7 +2,10 @@
 
 Brigade не вводит собственный transport или формат UI. Плагин — стандартный
 [MCPB](https://github.com/modelcontextprotocol/mcpb) bundle с локальным MCP-сервером;
-интерфейс — стандартный [MCP App](https://github.com/modelcontextprotocol/ext-apps).
+необязательная предметная панель — стандартный
+[MCP App](https://github.com/modelcontextprotocol/ext-apps). Host всегда владеет ACP-чатом,
+историей, композером и запросами разрешений. MCP App не является альтернативным клиентом
+сессии.
 
 ## Manifest
 
@@ -25,6 +28,7 @@ Brigade требует одно расширение manifest:
     "brigade": {
       "experience": {
         "entry_tool": "example.open",
+        "layout": "split",
         "cover": "ui/cover.svg",
         "instructions": "Use example.build for domain tasks."
       }
@@ -35,20 +39,33 @@ Brigade требует одно расширение manifest:
 
 `entry_tool` должен быть MCP tool с `ui://` resource по спецификации MCP Apps. Brigade
 вызывает его без аргументов, читает связанный HTML resource и размещает приложение в
-sandboxed iframe, занимающем рабочую область сессии. Приложение само определяет компоновку
-сцены, панелей и ввода; фиксированного ACP-чата под iframe нет. В iframe доступны стандартные MCP Apps вызовы tools, resources,
-prompts, `openLink` и `downloadFile`; произвольного доступа к родительской странице нет.
-Необязательный `cover` — путь внутри bundle к SVG, PNG, JPEG или WebP до 1 MiB; обложка
-показывается в выборе интерфейса новой сессии.
+sandboxed iframe внутри `aside`. На desktop `aside` находится справа от штатного
+`AcpThread`, на mobile — под ним. Панель не должна реализовывать собственную историю,
+композер или UI разрешений.
 
-Brigade добавляет в system/developer instructions агента название и описание активного
-experience, чтобы тот предпочитал его MCP tools. Необязательный `instructions` уточняет
-предметную роль, основной tool и ожидаемый результат. Этот текст действует только в
-сессиях experience и не добавляется к сообщениям пользователя.
+`layout` сохранён для совместимости manifest. Значения `""`, `"full"` и `"split"`
+нормализуются в `"split"` в `ParseManifest`; другие значения отклоняются. Отдельных
+full-screen и empty-компоновок плагина больше нет.
+
+Необязательный `cover` — путь внутри bundle к SVG, PNG, JPEG или WebP до 1 MiB; обложка
+показывается при выборе панели новой ACP-сессии.
+
+Brigade добавляет в developer instructions агента название и описание выбранной панели,
+чтобы агент использовал её MCP tools. Необязательный `instructions` уточняет предметную
+роль, основной tool и ожидаемый результат. Этот текст не добавляется к сообщениям
+пользователя.
 
 Сервер получает `BRIGADE_SESSION_ID` и `BRIGADE_WORKSPACE`. Агент подключается к одному
 экземпляру MCP-сервера, MCP Apps host — ко второму; общее состояние храните атомарно в
 workspace, а не в памяти процесса.
+
+Выбранный bundle закрепляется за сессией по ID, версии и владельцу. Wire-поля
+`experience_id` и `experience_version`, сохранённый owner bundle и RPC `SetExperience`
+остаются для совместимости, но теперь описывают необязательную pane, а не вид клиента.
+Смена pane разрешена только для живой idle ACP-сессии. Она меняет MCP и developer
+instructions и переинициализирует адаптер с тем же native session ID; история, workspace
+и Docker-контейнер, если он используется, сохраняются. Горячая смена во время генерации
+не поддерживается.
 
 Стандартный `user_config` MCPB поддерживается для типов `string`, `number`, `boolean`,
 `file` и `directory`, включая `multiple` для путей, `required`, `default` и `min/max`.
@@ -81,21 +98,40 @@ app.ontoolresult = (result) => console.log(result.structuredContent);
 void app.connect();
 ```
 
-Host передаёт состояние диалога через `ontoolresult` в
-`structuredContent.brigadeHost`. Эти обновления приходят отдельно от результатов
-инструментов приложения:
+Host объявляет только реализованные интеграции:
 
-| Поле | Значение |
-| --- | --- |
-| `generating` | Выполняется ли сейчас turn агента. |
-| `lastMessage` | Текст последнего сообщения ассистента. |
-| `prompts` | Последние 50 непустых текстов сообщений пользователя. |
-| `submitMode` | `enter` или `modifier-enter` — настройка отправки текущего браузера. |
+```json
+{
+  "content": [],
+  "structuredContent": {
+    "brigadeHost": {
+      "openResult": true,
+      "appendPrompt": true,
+      "coding": { "getCI": true },
+      "workspace": { "list": true, "read": true }
+    }
+  }
+}
+```
 
-`app.sendMessage({ role: "user", content: [{ type: "text", text }] })` отправляет промпт
-в ACP-сессию. `app.callServerTool({ name: "brigade.cancel", arguments: {} })`
-останавливает текущий turn через host. Это служебный вызов Brigade: реализовывать
-`brigade.cancel` в MCP-сервере приложения не нужно.
+`brigadeHost` не передаёт snapshots `generating`, `lastMessage`, `prompts` или
+`submitMode`. Стандартный `app.sendMessage(...)` остаётся доменным действием приложения:
+он отправляет сообщение в штатный ACP-thread, но не передаёт приложению ownership чата.
+
+Для безопасной подготовки запроса приложение вызывает
+`app.callServerTool({ name: "brigade.appendPrompt", arguments: { text } })`. Host добавляет
+текст в штатный композер, сохраняет уже набранный черновик и ничего не отправляет.
+`brigade.cancel` пока поддерживается как совместимое host action для остановки текущего
+turn; реализовывать эти `brigade.*` tools в MCP-сервере приложения не нужно.
+
+Для режима отображения host context объявляет только `displayMode: "inline"` и
+`availableDisplayModes: ["inline"]`. В iframe также доступны стандартные MCP Apps вызовы
+tools, resources, prompts, `openLink` и `downloadFile`; произвольного доступа к
+родительской странице нет.
+
+Каждый новый UI-запрос `PluginService.MCP` передаёт необязательный
+`expected_plugin: { id, version }`. Host отклоняет запрос, если пользователь успел сменить
+панель. Старые клиенты без `expected_plugin` продолжают работать.
 
 Собирайте UI в один self-contained HTML: bundle не должен зависеть от dev server или CDN.
 Проверка перед установкой:

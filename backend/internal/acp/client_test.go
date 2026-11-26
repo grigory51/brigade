@@ -307,6 +307,7 @@ func TestWakeupReplayWithOverlappingToolAndReasoning(t *testing.T) {
 		{Type: agui.EventReasoningMessageStart, MessageID: "why", Role: "reasoning"},
 		{Type: agui.EventReasoningMessageContent, MessageID: "why", Delta: "думаю"},
 		{Type: agui.EventToolCallEnd, ToolCallID: "tool"},
+		{Type: agui.EventToolCallResult, ToolCallID: "tool", MessageID: "tool", Role: "tool"},
 		{Type: agui.EventReasoningMessageEnd, MessageID: "why"},
 		{Type: agui.EventReasoningEnd, MessageID: "why"},
 	})

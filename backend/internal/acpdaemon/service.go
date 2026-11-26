@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -19,6 +20,11 @@ import (
 // service реализует brigadev1connect.AgentDaemonServiceHandler поверх Daemon.
 type service struct {
 	d *Daemon
+	// promptMu включает запись completion в границу сериализации RPC turn.
+	promptMu sync.Mutex
+	// lifecycleMu согласует active и cursor, не удерживаясь во время генерации.
+	lifecycleMu sync.Mutex
+	turnActive  bool
 }
 
 func (s *service) Configure(ctx context.Context, req *connect.Request[v1.DaemonConfigureRequest]) (*connect.Response[v1.DaemonConfigureResponse], error) {
@@ -34,8 +40,15 @@ func (s *service) Configure(ctx context.Context, req *connect.Request[v1.DaemonC
 		CredentialFile:      req.Msg.CredentialFile,
 		ExperienceMcpJson:   req.Msg.ExperienceMcpJson,
 		UntrustedTranscript: req.Msg.UntrustedTranscript,
+		Reconfigure:         req.Msg.Reconfigure,
 	})
 	if err != nil {
+		if errors.Is(err, acp.ErrSessionUnrecoverable) {
+			return nil, connect.NewError(connect.CodeAborted, err)
+		}
+		if errors.Is(err, acp.ErrSessionBusy) {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	c, _ := s.d.getClient()
@@ -43,7 +56,7 @@ func (s *service) Configure(ctx context.Context, req *connect.Request[v1.DaemonC
 	if c != nil {
 		title = c.SessionTitle()
 	}
-	return connect.NewResponse(&v1.DaemonConfigureResponse{SessionId: sid, SessionTitle: title}), nil
+	return connect.NewResponse(&v1.DaemonConfigureResponse{SessionId: sid, SessionTitle: title, Reconfigured: req.Msg.Reconfigure}), nil
 }
 
 func (s *service) PluginMCP(ctx context.Context, req *connect.Request[v1.DaemonPluginMCPRequest]) (*connect.Response[v1.DaemonPayloadResponse], error) {
@@ -108,10 +121,15 @@ func sendDaemonEvent(stream *connect.ServerStream[v1.DaemonEvent], seq int64, ev
 // Prompt гонит turn на context.WithoutCancel: обрыв brigade НЕ отменяет turn — он доходит
 // до конца в демоне, brigade переподключается и дочитывает журнал.
 func (s *service) Prompt(ctx context.Context, req *connect.Request[v1.DaemonPromptRequest]) (*connect.Response[v1.DaemonPromptResponse], error) {
+	s.promptMu.Lock()
+	defer s.promptMu.Unlock()
 	c, err := s.d.getClient()
 	if err != nil {
 		return nil, err
 	}
+	s.lifecycleMu.Lock()
+	s.turnActive = true
+	s.lifecycleMu.Unlock()
 	s.d.mu.Lock()
 	credential := s.d.credential
 	s.d.mu.Unlock()
@@ -126,6 +144,14 @@ func (s *service) Prompt(ctx context.Context, req *connect.Request[v1.DaemonProm
 	} else {
 		stop, err = c.Prompt(context.WithoutCancel(ctx), req.Msg.Text, nil)
 	}
+	// Приватный lifecycle-сигнал переживает обрыв Prompt RPC. Текст ошибки и
+	// содержимое переписки в него не входят; Summarize этот путь не использует.
+	s.lifecycleMu.Lock()
+	s.d.journal(agui.Event{Type: agui.EventCustom, Name: agui.CustomTurnCompletedName, Value: map[string]string{
+		"completedAt": time.Now().UTC().Format(time.RFC3339Nano),
+	}})
+	s.turnActive = false
+	s.lifecycleMu.Unlock()
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -160,10 +186,16 @@ func (s *service) Status(ctx context.Context, _ *connect.Request[v1.Empty]) (*co
 	if err != nil {
 		return nil, err
 	}
+	// Lifecycle-снимок атомарен относительно начала RPC turn и записи completion.
+	// Общий Generating также включает фоновую активность ACP без Prompt RPC.
+	s.lifecycleMu.Lock()
+	seq := s.d.log.LastSeq()
+	turnActive := s.turnActive
 	generating, _ := c.Status()
+	s.lifecycleMu.Unlock()
 	// seq — из durable-журнала (переживает рестарт brigade), а не len(history) в RAM.
 	resp := &v1.DaemonStatusResponse{
-		Generating: generating, Seq: s.d.log.LastSeq(),
+		Generating: generating, Seq: seq,
 		Version: s.d.version, StartedAt: s.d.startedAt.Format(time.RFC3339Nano),
 	}
 	s.d.mu.Lock()
@@ -180,7 +212,12 @@ func (s *service) Status(ctx context.Context, _ *connect.Request[v1.Empty]) (*co
 			resp.PendingPermissionsJson = append(resp.PendingPermissionsJson, data)
 		}
 	}
-	return connect.NewResponse(resp), nil
+	response := connect.NewResponse(resp)
+	response.Header().Set("Brigade-Turn-Events", "idle")
+	if turnActive {
+		response.Header().Set("Brigade-Turn-Events", "active")
+	}
+	return response, nil
 }
 
 func (s *service) GetMessages(ctx context.Context, _ *connect.Request[v1.Empty]) (*connect.Response[v1.DaemonPayloadResponse], error) {

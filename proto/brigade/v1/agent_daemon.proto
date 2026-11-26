@@ -137,6 +137,9 @@ message DaemonConfigureRequest {
   // Одноразовый запуск по недоверенной переписке: не включать Full Access и
   // отклонять любые интерактивные запросы разрешения.
   bool untrusted_transcript = 12;
+  // Явная замена idle-адаптера: strict session/load того же native ID, без reset журнала.
+  // Обычный Configure без этого флага остаётся идемпотентным reconnect.
+  bool reconfigure = 13;
 }
 
 message DaemonPluginMCPRequest {
@@ -148,6 +151,8 @@ message DaemonConfigureResponse {
   // session_id — ACP session id (brigade персистит как resume-поле).
   string session_id = 1;
   string session_title = 2;
+  // Подтверждение применения reconfigure; старый daemon не должен сообщать ложный успех.
+  bool reconfigured = 3;
 }
 
 message DaemonStreamEventsRequest {

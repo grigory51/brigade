@@ -2,6 +2,7 @@ package acp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -53,6 +54,8 @@ type Options struct {
 	// thread нотификациями session/update и история чата восстанавливается. Используется
 	// при восстановлении сессий после рестарта бэкенда.
 	ResumeSessionID string
+	// StrictResume запрещает создавать новый диалог, если session/load недоступен.
+	StrictResume bool
 	// SpawnProc порождает процесс adapter'а. nil — локальный subprocess
 	// claude-agent-acp; docker-режим передаёт сюда фабрику контейнерного процесса
 	// (см. spawn.DockerACPSpawner).
@@ -112,6 +115,7 @@ type Client struct {
 	// watchProc; читает Alive. Реестр по Alive решает, жив ли local-адаптер, и при смерти
 	// вне рестарта brigade пере-поднимает сессию с resume (см. Registry.EnsureACPClient).
 	exited atomic.Bool
+	closed atomic.Bool
 	// promptMu сериализует turn'ы: ACP-сессия обрабатывает ходы строго последовательно,
 	// а brigade допускает параллельные POST /api/ag-ui/run в один тред. Без сериализации
 	// потоковые сообщения двух turn'ов пересеклись бы в общем sink (START одного между
@@ -199,6 +203,9 @@ var _ acpsdk.Client = (*Client)(nil)
 // opts.SpawnProc), устанавливает ACP-соединение, выполняет Initialize и заводит сессию.
 // Возвращает готовый к Prompt клиент. При ошибке процесс завершается.
 func New(ctx context.Context, opts Options) (*Client, error) {
+	if opts.StrictResume && opts.ResumeSessionID == "" {
+		return nil, errors.New("acp: strict resume requires a native session ID")
+	}
 	if opts.Cwd == "" {
 		return nil, fmt.Errorf("acp: cwd не задан")
 	}
@@ -242,6 +249,51 @@ func New(ctx context.Context, opts Options) (*Client, error) {
 // там не используется.
 func (c *Client) Alive() bool { return !c.exited.Load() }
 
+var ErrSessionBusy = errors.New("acp: session is busy")
+
+// ErrSessionUnrecoverable означает, что после неудачной замены не удалось
+// восстановить прежний native writer. Такую сессию нельзя оставлять running.
+var ErrSessionUnrecoverable = errors.New("acp: session runtime rollback failed")
+
+// ReserveIdle удерживает turn-барьер до завершения переконфигурации. Status без
+// барьера недостаточен: Prompt может начаться между проверкой и заменой клиента.
+func (c *Client) ReserveIdle(ctx context.Context) (func(), error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if !c.promptMu.TryLock() {
+		return nil, ErrSessionBusy
+	}
+	if busy, _ := c.Status(); busy || c.closed.Load() {
+		c.promptMu.Unlock()
+		return nil, ErrSessionBusy
+	}
+	return c.promptMu.Unlock, nil
+}
+
+// PreserveHistory сохраняет точный снимок Brigade при strict resume. Вызывающий
+// удерживает ReserveIdle предыдущего клиента; повторный replay не меняет ID сообщений.
+func (c *Client) PreserveHistory(previous *Client) {
+	previous.mu.Lock()
+	history := append([]agui.Event(nil), previous.history...)
+	title, usage := previous.sessionTitle, previous.lastUsage
+	previous.mu.Unlock()
+	c.mu.Lock()
+	c.history = history
+	c.sessionTitle = title
+	c.lastUsage = usage
+	c.lastActivityAt = time.Time{}
+	c.mu.Unlock()
+}
+
+// ResumeOptions сохраняет конфигурацию текущего адаптера для strict rollback,
+// не перечитывая изменённый каталог плагинов или настройки пользователя.
+func (c *Client) ResumeOptions() Options {
+	opts := c.opts
+	opts.ResumeSessionID, opts.StrictResume = c.SessionID(), true
+	return opts
+}
+
 // handshake выполняет Initialize и заводит сессию: при заданном ResumeSessionID и
 // поддержке агентом session/load — загружает существующую (LoadSession), иначе создаёт
 // новую (NewSession). Заявляем поддержку файловых операций, чтобы агент мог запрашивать
@@ -271,6 +323,9 @@ func (c *Client) handshake(ctx context.Context) error {
 			McpServers: mcpServersOrEmpty(c.opts.McpServers),
 			Meta:       sessionMeta(c.opts.PluginDirs, c.opts.SystemPrompt),
 		}); err != nil {
+			if c.opts.StrictResume {
+				return fmt.Errorf("acp: load session %s: %w", c.opts.ResumeSessionID, err)
+			}
 			log.Printf("acp: load session %s failed (%v), starting fresh session", c.opts.ResumeSessionID, err)
 		} else {
 			c.sessionID = acpsdk.SessionId(c.opts.ResumeSessionID)
@@ -283,6 +338,9 @@ func (c *Client) handshake(ctx context.Context) error {
 			return nil
 		}
 	} else if c.opts.ResumeSessionID != "" {
+		if c.opts.StrictResume {
+			return fmt.Errorf("acp: agent does not support loading session %s", c.opts.ResumeSessionID)
+		}
 		// Запрошен resume, но агент не поддерживает session/load. Не падаем — заводим
 		// новую сессию (история не восстановится, но сессия рабочая).
 		log.Printf("acp: agent has no loadSession capability, starting fresh session for %s", c.opts.ResumeSessionID)
@@ -367,6 +425,11 @@ func (c *Client) ConfigOptions() []acpsdk.SessionConfigOption {
 // (session/set_config_option) и возвращает актуальный полный набор опций из ответа
 // агента.
 func (c *Client) SetConfigOption(ctx context.Context, configID, value string) ([]acpsdk.SessionConfigOption, error) {
+	c.promptMu.Lock()
+	defer c.promptMu.Unlock()
+	if c.closed.Load() {
+		return nil, errors.New("acp: client was replaced or closed")
+	}
 	resp, err := c.conn.SetSessionConfigOption(ctx, acpsdk.SetSessionConfigOptionRequest{
 		ValueId: &acpsdk.SetSessionConfigOptionValueId{
 			SessionId: c.sessionID,
@@ -749,9 +812,11 @@ func (c *Client) emit(evt agui.Event) {
 		c.appendHistoryLocked(evt)
 		// Отмечаем содержательную активность агента для Status(): по ней детектируется
 		// фоновый turn без активного Prompt. Служебные снимки (usage/commands) и
-		// permission-запросы сюда не попадают (обработаны выше), поэтому индикатор
-		// «работает» не залипает на высокочастотных usage-обновлениях.
-		c.lastActivityAt = time.Now()
+		// permission-запросы сюда не попадают (обработаны выше). Название сохраняется
+		// в истории, но не означает генерацию: fallback публикуется уже после turn.
+		if evt.Type != agui.EventCustom || evt.Name != agui.CustomSessionTitleName {
+			c.lastActivityAt = time.Now()
+		}
 	}
 	sink := c.sink
 	if c.turnSink != nil {
@@ -882,6 +947,12 @@ func (c *Client) prompt(ctx context.Context, text string, onTurnStart func(), re
 	// двух turn'ов смешались бы в общем sink (см. promptMu).
 	c.promptMu.Lock()
 	defer c.promptMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if c.closed.Load() {
+		return "", errors.New("acp: client was replaced or closed")
+	}
 
 	c.mu.Lock()
 	c.promptActive = true
@@ -1010,16 +1081,25 @@ func (c *Client) FinishStreams() {
 // stdin (adapter получает EOF и выходит сам) → ожидание выхода в пределах бюджета →
 // Signal (SIGTERM/graceful stop) → Kill. В конце обязателен Wait для reap процесса
 // (иначе остаётся зомби) и освобождения ресурсов. Идемпотентна (closeOnce).
-func (c *Client) Close() error {
+func (c *Client) Close() error { return c.close(false) }
+
+// CloseForReload завершает только адаптер: native session и browser принадлежат
+// продолжающейся сессии, поэтому session/close при замене отправлять нельзя.
+func (c *Client) CloseForReload() error { return c.close(true) }
+
+func (c *Client) close(preserveSession bool) error {
+	c.closed.Store(true)
 	if c.proc == nil {
 		return nil
 	}
 
 	c.closeOnce.Do(func() {
-		defer browser.Close(c.opts.BrigadeSessionID)
+		if !preserveSession {
+			defer browser.Close(c.opts.BrigadeSessionID)
+		}
 		// 1. Просим агента штатно закрыть сессию, если он умеет session/close. Короткий
 		//    таймаут: это вежливая попытка, неуспех не критичен (дальше закрываем stdin).
-		if c.agentCaps.SessionCapabilities.Close != nil && c.sessionID != "" {
+		if !preserveSession && c.agentCaps.SessionCapabilities.Close != nil && c.sessionID != "" {
 			ctx, cancel := context.WithTimeout(context.Background(), gracefulCloseTimeout/2)
 			if _, err := c.conn.CloseSession(ctx, acpsdk.CloseSessionRequest{SessionId: c.sessionID}); err != nil {
 				log.Printf("acp: close session %s: %v", c.sessionID, err)

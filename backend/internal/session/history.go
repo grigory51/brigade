@@ -3,6 +3,10 @@ package session
 import (
 	"context"
 	"errors"
+	"log"
+	"strings"
+	"time"
+	"unicode"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
@@ -26,6 +30,60 @@ type historySource interface {
 
 type agentHistory struct{ registry *Registry }
 
+// saveACPPreview использует уже работающий клиент: список и восстановление metadata
+// не должны запускать агента ради чтения истории. Ошибка чтения сохраняет прежнее preview.
+func (r *Registry) saveACPPreview(ctx context.Context, sess store.Session, client acpSession, at time.Time) {
+	if sess.Kind != store.SessionKindACP || sess.ExecutionPolicy == store.SessionExecutionOnDemand {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	messages, err := client.Messages(ctx)
+	if err != nil {
+		log.Printf("session %s: read preview: %v", sess.ID, err)
+		return
+	}
+	r.saveACPMessagePreview(ctx, sess, messages, at)
+}
+
+func (r *Registry) restoreACPPreview(sess store.Session, client acpSession) {
+	if observer, ok := client.(interface {
+		ObserveRecoveredTurn(context.Context, func(context.Context, time.Time)) error
+	}); ok {
+		if err := observer.ObserveRecoveredTurn(context.Background(), func(ctx context.Context, at time.Time) {
+			r.saveACPPreview(ctx, sess, client, at)
+		}); err != nil && !errors.Is(err, context.Canceled) {
+			log.Printf("session %s: restore preview: %v", sess.ID, err)
+		}
+		return
+	}
+	r.saveACPPreview(context.Background(), sess, client, time.Time{})
+}
+
+// saveACPMessagePreview принимает готовую проекцию. Нулевое at сохраняет неизвестное
+// время при backfill и reattach; для завершения turn передаётся время его события.
+func (r *Registry) saveACPMessagePreview(ctx context.Context, sess store.Session, messages []acp.Message, at time.Time) {
+	for i := len(messages) - 1; i >= 0; i-- {
+		message := messages[i]
+		if (message.Role != "user" && message.Role != "assistant") || strings.TrimFunc(message.Content, func(char rune) bool {
+			return unicode.IsSpace(char) || unicode.IsControl(char)
+		}) == "" {
+			continue
+		}
+		author := store.MessageAuthorOwner
+		if message.Role == "assistant" {
+			author = store.MessageAuthorAgent
+		}
+		if message.CreatedAt > 0 {
+			at = time.Unix(message.CreatedAt, 0)
+		}
+		if err := r.store.UpdateSessionPreview(ctx, sess, message.Content, at, author); err != nil {
+			log.Printf("session %s: save preview: %v", sess.ID, err)
+		}
+		return
+	}
+}
+
 func (h agentHistory) read(ctx context.Context, sess store.Session) (HistorySnapshot, error) {
 	client, ok := h.registry.EnsureACPClient(ctx, sess.ID, sess.UserID)
 	if !ok {
@@ -35,6 +93,9 @@ func (h agentHistory) read(ctx context.Context, sess store.Session) (HistorySnap
 	messages, err := client.Messages(ctx)
 	if err != nil {
 		return HistorySnapshot{}, err
+	}
+	if sess.LastMessage == "" {
+		h.registry.saveACPMessagePreview(ctx, sess, messages, time.Time{})
 	}
 	return HistorySnapshot{
 		Messages: messages, Revision: int64(seq),

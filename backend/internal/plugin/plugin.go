@@ -36,6 +36,12 @@ var validConfigKey = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 var configRef = regexp.MustCompile(`\$\{user_config\.([A-Za-z0-9_-]+)\}`)
 var secretRef = regexp.MustCompile(`\$\{secret\.([A-Za-z0-9_]+)\}`)
 
+// Reference идентифицирует закреплённую версию плагина, которой адресован запрос pane.
+type Reference struct {
+	ID      string
+	Version string
+}
+
 type ConfigField struct {
 	Type        string          `json:"type"`
 	Title       string          `json:"title"`
@@ -73,6 +79,7 @@ type Manifest struct {
 		Brigade struct {
 			Experience struct {
 				EntryTool    string `json:"entry_tool"`
+				Layout       string `json:"layout"`
 				Cover        string `json:"cover"`
 				Instructions string `json:"instructions"`
 			} `json:"experience"`
@@ -93,6 +100,7 @@ func (m Manifest) ExperienceInstructions() string {
 		context += " " + description
 	}
 	context += " Treat requests in this domain as tasks for this experience. Use its MCP tools to create or update the persistent workspace and prefer them over unrelated tools unless the user explicitly asks for a different output."
+	context += " Brigade owns the chat. The plugin supplies a companion pane and domain tools; it does not replace the chat."
 	if instructions := strings.TrimSpace(m.Meta.Brigade.Experience.Instructions); instructions != "" {
 		context += "\n\n" + instructions
 	}
@@ -304,6 +312,11 @@ func (m Manifest) Validate() error {
 	if m.Meta.Brigade.Experience.EntryTool == "" {
 		return errors.New("plugin: _meta.brigade.experience.entry_tool is required")
 	}
+	switch m.Meta.Brigade.Experience.Layout {
+	case "", "full", "split":
+	default:
+		return fmt.Errorf("plugin: unsupported _meta.brigade.experience.layout %q", m.Meta.Brigade.Experience.Layout)
+	}
 	if cover := m.Meta.Brigade.Experience.Cover; cover != "" && !safeRelative(cover) {
 		return errors.New("plugin: _meta.brigade.experience.cover must be a safe relative path")
 	}
@@ -375,6 +388,7 @@ func ParseManifest(raw []byte) (Manifest, error) {
 	if err := manifest.Validate(); err != nil {
 		return Manifest{}, err
 	}
+	manifest.Meta.Brigade.Experience.Layout = "split"
 	return manifest, nil
 }
 
@@ -394,65 +408,87 @@ func (m *Manager) InstallFor(ctx context.Context, userID, source string) (store.
 }
 
 func (m *Manager) installFor(ctx context.Context, userID, source, expectedID string) (store.Plugin, error) {
+	bundle, err := m.prepareBundle(ctx, source)
+	if err != nil {
+		return store.Plugin{}, err
+	}
+	defer os.RemoveAll(bundle.staging)
+	if expectedID != "" && bundle.plugin.ID != expectedID {
+		return store.Plugin{}, fmt.Errorf("plugin: bundle id %q does not match installed app %q", bundle.plugin.ID, expectedID)
+	}
+	if err := m.checkUnmanaged(ctx, userID, bundle.plugin.ID); err != nil {
+		return store.Plugin{}, err
+	}
+	installed, err := m.publishBundle(ctx, bundle, userID, false)
+	if err != nil {
+		return store.Plugin{}, err
+	}
+	if err := m.store.PutPlugin(ctx, installed); err != nil {
+		return store.Plugin{}, err
+	}
+	return installed, nil
+}
+
+type preparedBundle struct {
+	plugin   store.Plugin
+	manifest Manifest
+	staging  string
+}
+
+// prepareBundle проверяет весь архив без регистрации и запуска содержимого.
+func (m *Manager) prepareBundle(ctx context.Context, source string) (*preparedBundle, error) {
 	if err := os.MkdirAll(m.dir, 0o700); err != nil {
-		return store.Plugin{}, fmt.Errorf("plugin: create cache: %w", err)
+		return nil, fmt.Errorf("plugin: create cache: %w", err)
 	}
 	tmp, err := os.CreateTemp(m.dir, ".download-*.mcpb")
 	if err != nil {
-		return store.Plugin{}, fmt.Errorf("plugin: temp bundle: %w", err)
+		return nil, fmt.Errorf("plugin: temp bundle: %w", err)
 	}
 	tmpPath := tmp.Name()
 	defer os.Remove(tmpPath)
 	if err := copySource(ctx, tmp, source); err != nil {
 		tmp.Close()
-		return store.Plugin{}, err
+		return nil, err
 	}
 	if err := tmp.Close(); err != nil {
-		return store.Plugin{}, fmt.Errorf("plugin: close bundle: %w", err)
+		return nil, fmt.Errorf("plugin: close bundle: %w", err)
 	}
 
 	zr, err := zip.OpenReader(tmpPath)
 	if err != nil {
-		return store.Plugin{}, fmt.Errorf("plugin: open MCPB: %w", err)
+		return nil, fmt.Errorf("plugin: open MCPB: %w", err)
 	}
 	defer zr.Close()
 	raw, err := manifestFromZip(&zr.Reader)
 	if err != nil {
-		return store.Plugin{}, err
+		return nil, err
 	}
 	manifest, err := ParseManifest(raw)
 	if err != nil {
-		return store.Plugin{}, err
+		return nil, err
 	}
-	if expectedID != "" && manifest.Name != expectedID {
-		return store.Plugin{}, fmt.Errorf("plugin: bundle id %q does not match installed app %q", manifest.Name, expectedID)
-	}
-	ownerDir := "system"
-	if userID != "" {
-		if filepath.Base(userID) != userID {
-			return store.Plugin{}, errors.New("plugin: invalid user id")
-		}
-		ownerDir = filepath.Join("users", userID)
-	}
-	parent := filepath.Join(m.dir, ownerDir, manifest.Name, manifest.Version)
-	if err := os.MkdirAll(parent, 0o700); err != nil {
-		return store.Plugin{}, fmt.Errorf("plugin: create plugin directory: %w", err)
-	}
-	staging, err := os.MkdirTemp(parent, ".install-*")
+	staging, err := os.MkdirTemp(m.dir, ".install-*")
 	if err != nil {
-		return store.Plugin{}, fmt.Errorf("plugin: staging: %w", err)
+		return nil, fmt.Errorf("plugin: staging: %w", err)
 	}
-	defer os.RemoveAll(staging)
+	prepared := false
+	defer func() {
+		if !prepared {
+			os.RemoveAll(staging)
+		}
+	}()
 	if err := extract(&zr.Reader, staging); err != nil {
-		return store.Plugin{}, err
+		return nil, err
 	}
 	entry := filepath.Join(staging, filepath.FromSlash(manifest.Server.EntryPoint))
-	if _, err := os.Stat(entry); err != nil {
-		return store.Plugin{}, fmt.Errorf("plugin: entry point %q: %w", manifest.Server.EntryPoint, err)
+	if info, err := os.Stat(entry); err != nil {
+		return nil, fmt.Errorf("plugin: entry point %q: %w", manifest.Server.EntryPoint, err)
+	} else if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("plugin: entry point %q must be a regular file", manifest.Server.EntryPoint)
 	}
 	target, err := bundleTarget(manifest, entry)
 	if err != nil {
-		return store.Plugin{}, err
+		return nil, err
 	}
 	if len(manifest.Compatibility.Platforms) > 0 && target != "portable" {
 		platform := strings.SplitN(target, "-", 2)[0]
@@ -461,13 +497,48 @@ func (m *Manager) installFor(ctx context.Context, userID, source, expectedID str
 			compatible = compatible || allowed == platform
 		}
 		if !compatible {
-			return store.Plugin{}, fmt.Errorf("plugin: binary is %s but manifest does not allow %s", target, platform)
+			return nil, fmt.Errorf("plugin: binary is %s but manifest does not allow %s", target, platform)
 		}
 	}
-	if installed, err := m.store.GetPlugin(ctx, userID, manifest.Name, manifest.Version, target); err == nil && installed.OwnerID == userID {
-		if _, statErr := os.Stat(filepath.Join(installed.BundlePath, filepath.FromSlash(manifest.Server.EntryPoint))); statErr == nil {
-			if err := m.store.PutPlugin(ctx, installed); err != nil {
-				return store.Plugin{}, err
+	if _, _, err := ReadCover(staging, manifest); err != nil {
+		return nil, err
+	}
+	if manifest.Server.Type == "binary" {
+		if err := os.Chmod(entry, 0o755); err != nil {
+			return nil, fmt.Errorf("plugin: mark entry point executable: %w", err)
+		}
+	}
+	prepared = true
+	return &preparedBundle{
+		plugin: store.Plugin{ID: manifest.Name, Name: manifest.Title(), Version: manifest.Version, Target: target,
+			Source: source, ManifestJSON: string(raw), InstalledAt: time.Now().UTC()},
+		manifest: manifest, staging: staging,
+	}, nil
+}
+
+func (m *Manager) publishBundle(ctx context.Context, bundle *preparedBundle, userID string, managed bool) (store.Plugin, error) {
+	ownerDir := "system"
+	if userID != "" {
+		if filepath.Base(userID) != userID || userID == "." || userID == ".." {
+			return store.Plugin{}, errors.New("plugin: invalid user id")
+		}
+		ownerDir = filepath.Join("users", userID)
+	}
+	manifest := bundle.manifest
+	item := bundle.plugin
+	if installed, err := m.store.GetPluginVariant(ctx, userID, item.ID, item.Version, item.Target); err == nil {
+		if installed.Managed && !managed {
+			return store.Plugin{}, ErrManagedPlugin
+		}
+		item.InstalledAt = installed.InstalledAt
+		installedManifest, err := ParseManifest([]byte(installed.ManifestJSON))
+		if err != nil {
+			return store.Plugin{}, fmt.Errorf("plugin: installed manifest: %w", err)
+		}
+		if _, statErr := os.Stat(filepath.Join(installed.BundlePath, filepath.FromSlash(installedManifest.Server.EntryPoint))); statErr == nil {
+			installed.Managed = managed
+			if managed {
+				installed.Source = item.Source
 			}
 			return installed, nil
 		} else if !errors.Is(statErr, os.ErrNotExist) {
@@ -476,33 +547,27 @@ func (m *Manager) installFor(ctx context.Context, userID, source, expectedID str
 	} else if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return store.Plugin{}, err
 	}
-	destination := filepath.Join(parent, target)
+	parent := filepath.Join(m.dir, ownerDir, item.ID, item.Version)
+	if err := os.MkdirAll(parent, 0o700); err != nil {
+		return store.Plugin{}, fmt.Errorf("plugin: create plugin directory: %w", err)
+	}
+	destination := filepath.Join(parent, item.Target)
 	destinationEntry := filepath.Join(destination, filepath.FromSlash(manifest.Server.EntryPoint))
 	if _, err := os.Stat(destinationEntry); errors.Is(err, os.ErrNotExist) {
 		if err := os.RemoveAll(destination); err != nil {
 			return store.Plugin{}, fmt.Errorf("plugin: replace incomplete bundle: %w", err)
 		}
-		if manifest.Server.Type == "binary" {
-			if err := os.Chmod(entry, 0o755); err != nil {
-				return store.Plugin{}, fmt.Errorf("plugin: mark entry point executable: %w", err)
-			}
-		}
-		if _, _, err := ReadCover(staging, manifest); err != nil {
-			return store.Plugin{}, err
-		}
-		if err := os.Rename(staging, destination); err != nil {
+		if err := os.Rename(bundle.staging, destination); err != nil {
 			return store.Plugin{}, fmt.Errorf("plugin: publish bundle: %w", err)
 		}
 	} else if err != nil {
 		return store.Plugin{}, fmt.Errorf("plugin: inspect destination: %w", err)
 	}
 
-	installed := store.Plugin{OwnerID: userID, ID: manifest.Name, Name: manifest.Title(), Version: manifest.Version, Target: target,
-		BundlePath: destination, Source: source, ManifestJSON: string(raw), InstalledAt: time.Now().UTC()}
-	if err := m.store.PutPlugin(ctx, installed); err != nil {
-		return store.Plugin{}, err
-	}
-	return installed, nil
+	item.OwnerID = userID
+	item.Managed = managed
+	item.BundlePath = destination
+	return item, nil
 }
 
 func (m *Manager) InstallReaderFor(ctx context.Context, userID, filename string, source io.Reader) (store.Plugin, error) {
@@ -543,6 +608,12 @@ func (m *Manager) InstallReaderFor(ctx context.Context, userID, filename string,
 func (m *Manager) Remove(ctx context.Context, id string) error { return m.RemoveFor(ctx, "", id) }
 
 func (m *Manager) RemoveFor(ctx context.Context, userID, id string) error {
+	if !validID.MatchString(id) || (userID != "" && (filepath.Base(userID) != userID || userID == "." || userID == "..")) {
+		return errors.New("plugin: invalid owner or app id")
+	}
+	if err := m.checkUnmanaged(ctx, userID, id); err != nil {
+		return err
+	}
 	count, err := m.store.PluginSessionCount(ctx, userID, id)
 	if err != nil {
 		return err
@@ -576,6 +647,9 @@ func (m *Manager) Update(ctx context.Context, id string) (store.Plugin, error) {
 }
 
 func (m *Manager) UpdateFor(ctx context.Context, userID, id, source string) (store.Plugin, error) {
+	if err := m.checkUnmanaged(ctx, userID, id); err != nil {
+		return store.Plugin{}, err
+	}
 	installed, err := m.store.ListPlugins(ctx, userID)
 	if err != nil {
 		return store.Plugin{}, err

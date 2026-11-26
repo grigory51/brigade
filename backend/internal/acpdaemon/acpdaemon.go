@@ -125,11 +125,26 @@ func (d *Daemon) resolve(ctx context.Context, req agui.PermissionRequest) (strin
 // configure (пере)поднимает адаптер. Идемпотентна: на уже настроенный демон — no-op
 // (адаптер не рестартуется), возвращает текущий session_id. Секреты кладутся в env
 // адаптера здесь, а не в окружение контейнера.
-func (d *Daemon) configure(ctx context.Context, req *v1ConfigureRequest) (string, error) {
+func (d *Daemon) configure(ctx context.Context, req *v1ConfigureRequest) (sessionID string, err error) {
 	d.mu.Lock()
-	defer d.mu.Unlock()
-	if d.client != nil {
+	var oldPlugin *plugin.Runtime
+	defer func() {
+		d.mu.Unlock()
+		_ = oldPlugin.Close()
+	}()
+	previous := d.client
+	if previous != nil && !req.Reconfigure {
 		return d.client.SessionID(), nil // уже настроен — reconnect, адаптер жив
+	}
+	if req.Reconfigure {
+		if previous == nil || req.ResumeSessionId == "" || req.ResumeSessionId != previous.SessionID() {
+			return "", errors.New("acpdaemon: reconfigure requires the current native session ID")
+		}
+		release, err := previous.ReserveIdle(ctx)
+		if err != nil {
+			return "", err
+		}
+		defer release()
 	}
 
 	var mcp []acpsdk.McpServer
@@ -139,17 +154,19 @@ func (d *Daemon) configure(ctx context.Context, req *v1ConfigureRequest) (string
 		}
 	}
 
-	// Respawn после смерти контейнера (resume): агент реплеит переписку через session/load,
-	// поэтому старый журнал из durable-volume надо обнулить, иначе он задвоится.
-	if req.ResumeSessionId != "" {
-		_ = d.log.Reset()
-	}
-
 	// Сначала сверяем credential с Brigade, затем запускаем адаптер. Иначе адаптер мог
 	// использовать устаревший refresh token ещё до первого Prompt.
-	d.credential = newCredentialSync(req.CredentialFile, req.ExtraEnv)
-	if d.credential != nil {
-		if err := d.credential.sync(ctx, true); err != nil {
+	credential := newCredentialSync(req.CredentialFile, req.ExtraEnv)
+	committed := false
+	var runtime *plugin.Runtime
+	defer func() {
+		if !committed {
+			_ = runtime.Close()
+			credential.close()
+		}
+	}()
+	if credential != nil {
+		if err := credential.sync(ctx, true); err != nil {
 			// При старте Brigade listener ещё может не принимать callback (RestoreAll идёт
 			// раньше ListenAndServe). Перед первым Prompt синхронизация повторится.
 			log.Printf("acpdaemon: initial agent credential sync: %v", err)
@@ -160,11 +177,42 @@ func (d *Daemon) configure(ctx context.Context, req *v1ConfigureRequest) (string
 		if err := json.Unmarshal(req.ExperienceMcpJson, &server); err != nil {
 			return "", fmt.Errorf("acpdaemon: experience_mcp_json: %w", err)
 		}
-		runtime, err := plugin.StartRuntime(context.WithoutCancel(ctx), server, req.Cwd, d.sshEnvLocked())
+		var err error
+		runtime, err = plugin.NewRuntime(server, req.Cwd, d.sshEnvLocked())
 		if err != nil {
 			return "", err
 		}
-		d.plugin = runtime
+	}
+	if req.Reconfigure {
+		rollbackOptions := previous.ResumeOptions()
+		// Старый native writer освобождается до session/load. При любой ошибке после
+		// остановки восстанавливаем прежний адаптер, сохраняя plugin, journal и history.
+		defer func() {
+			if committed {
+				return
+			}
+			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+			defer cancel()
+			restored, restoreErr := acp.New(cleanup, rollbackOptions)
+			if restoreErr != nil {
+				if d.unbind != nil {
+					d.unbind()
+					d.unbind = nil
+				}
+				d.client = nil
+				err = errors.Join(err, acp.ErrSessionUnrecoverable, fmt.Errorf("acpdaemon: experience runtime rollback: %w", restoreErr))
+				return
+			}
+			restored.PreserveHistory(previous)
+			if d.unbind != nil {
+				d.unbind()
+			}
+			d.unbind = restored.Bind(d.sink, d.resolve)
+			d.client = restored
+		}()
+		if err := previous.CloseForReload(); err != nil {
+			return "", err
+		}
 	}
 
 	client, err := acp.New(ctx, acp.Options{
@@ -176,6 +224,7 @@ func (d *Daemon) configure(ctx context.Context, req *v1ConfigureRequest) (string
 		ExtraEnv:          append(append([]string{}, req.ExtraEnv...), d.sshEnvLocked()...),
 		AdapterCommand:    req.AdapterCommand,
 		ResumeSessionID:   req.ResumeSessionId,
+		StrictResume:      req.Reconfigure,
 		McpServers:        mcp,
 		PluginDirs:        req.PluginDirs,
 		SystemPrompt:      req.SystemPrompt,
@@ -183,11 +232,20 @@ func (d *Daemon) configure(ctx context.Context, req *v1ConfigureRequest) (string
 		// SpawnProc nil → локальный subprocess адаптера внутри контейнера.
 	})
 	if err != nil {
-		_ = d.plugin.Close()
-		d.plugin = nil
-		d.credential.close()
-		d.credential = nil
 		return "", err
+	}
+	if err := ctx.Err(); err != nil {
+		_ = client.CloseForReload()
+		return "", err
+	}
+	if req.Reconfigure {
+		client.PreserveHistory(previous)
+	} else if req.ResumeSessionId != "" {
+		// Не сбрасываем durable history до успешного session/load.
+		if err := d.log.Reset(); err != nil {
+			_ = client.CloseForReload()
+			return "", err
+		}
 	}
 	// Постоянная привязка: sink журналит, resolver обслуживает permission. В отличие от
 	// brigade↔фронт, здесь привязка одна на всю жизнь демона (не per-WS-сеанс).
@@ -197,8 +255,16 @@ func (d *Daemon) configure(ctx context.Context, req *v1ConfigureRequest) (string
 			return "", errPermissionCancelled
 		}
 	}
+	if d.unbind != nil {
+		d.unbind()
+	}
+	oldPlugin = d.plugin
+	oldCredential := d.credential
 	d.unbind = client.Bind(d.sink, resolver)
 	d.client = client
+	d.plugin, d.credential = runtime, credential
+	committed = true
+	oldCredential.close()
 	return client.SessionID(), nil
 }
 
@@ -318,6 +384,7 @@ type v1ConfigureRequest struct {
 	CredentialFile      string
 	ExperienceMcpJson   []byte
 	UntrustedTranscript bool
+	Reconfigure         bool
 }
 
 // --- entrypoint ---

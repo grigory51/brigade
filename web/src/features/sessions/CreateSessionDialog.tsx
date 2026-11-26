@@ -62,7 +62,8 @@ function PluginCover({ plugin }: { plugin: Plugin }) {
   );
 }
 
-function ExperienceTile({
+function SessionOptionTile({
+  group,
   value,
   selected,
   disabled,
@@ -71,6 +72,7 @@ function ExperienceTile({
   preview,
   onSelect,
 }: {
+  group: string;
   value: string;
   selected: boolean;
   disabled?: boolean;
@@ -87,7 +89,7 @@ function ExperienceTile({
     )}>
       <input
         type="radio"
-        name="experience"
+        name={group}
         value={value}
         checked={selected}
         disabled={disabled}
@@ -252,17 +254,11 @@ export function CreateSessionDialog({
 
   const selectedConnection = connections?.find((connection) => connection.id === connectionId);
   const selectedAgent = agents?.find((agent) => agent.id === selectedConnection?.agentType);
-  const experience = experienceId ? `plugin:${experienceId}` : kind === SessionKind.CLI ? "cli" : "chat";
   const acpDisabled = selectedAgent?.supportedKinds.length ? !selectedAgent.supportedKinds.includes("acp") : false;
 
-  const selectExperience = (value: string) => {
-    if (value === "cli") {
-      setKind(SessionKind.CLI);
-      setExperienceId("");
-    } else {
-      setKind(SessionKind.ACP);
-      setExperienceId(value.startsWith("plugin:") ? value.slice(7) : "");
-    }
+  const selectKind = (value: string) => {
+    setKind(value === "cli" ? SessionKind.CLI : SessionKind.ACP);
+    if (value === "cli") setExperienceId("");
   };
 
   useEffect(() => {
@@ -271,7 +267,7 @@ export function CreateSessionDialog({
   }, [connections, connectionId]);
 
   async function onSubmit() {
-    if (!selectedConnection) return;
+    if (!selectedConnection || (kind === SessionKind.ACP && acpDisabled)) return;
     setBusy(true);
     try {
       saveMcpSelection(mcpSelected);
@@ -344,14 +340,15 @@ export function CreateSessionDialog({
             </div>
 
             <div className="space-y-2">
-              <Label>Интерфейс</Label>
-              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-                <ExperienceTile
+              <Label>Тип сессии</Label>
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                <SessionOptionTile
+                  group="session-kind"
                   value="cli"
-                  selected={experience === "cli"}
+                  selected={kind === SessionKind.CLI}
                   title="Console"
                   description="Полноценный терминал и CLI агента."
-                  onSelect={selectExperience}
+                  onSelect={selectKind}
                   preview={(
                     <div className="flex size-full flex-col justify-center gap-2 bg-[#1f1e1d] px-5 font-mono text-[10px] text-muted-foreground">
                       <div className="flex items-center gap-2 text-[#e38a68]"><Terminal className="size-4" /><span>brigade</span></div>
@@ -360,13 +357,14 @@ export function CreateSessionDialog({
                     </div>
                   )}
                 />
-                <ExperienceTile
+                <SessionOptionTile
+                  group="session-kind"
                   value="chat"
-                  selected={experience === "chat"}
+                  selected={kind === SessionKind.ACP}
                   disabled={acpDisabled}
                   title="Chat"
                   description="Диалог, инструменты и интерактивные карточки."
-                  onSelect={selectExperience}
+                  onSelect={selectKind}
                   preview={(
                     <div className="flex size-full flex-col justify-center gap-2 bg-[#353532] px-5">
                       <div className="flex items-center gap-2 text-xs text-muted-foreground"><MessageCircle className="size-4 text-[#e38a68]" /><span className="h-2 w-20 rounded-full bg-[#4a4843]" /></div>
@@ -375,20 +373,38 @@ export function CreateSessionDialog({
                     </div>
                   )}
                 />
+              </div>
+            </div>
+
+            {kind === SessionKind.ACP && plugins.some((plugin) => plugin.compatible && plugin.configured) && (
+              <div className="space-y-2">
+                <Label>Панель рядом с чатом</Label>
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                  <SessionOptionTile
+                    group="session-pane"
+                    value=""
+                    selected={!experienceId}
+                    title="Без панели"
+                    description="Только чат. Панель можно подключить позже."
+                    onSelect={setExperienceId}
+                    preview={<div className="flex size-full items-center justify-center bg-muted"><MessageCircle className="size-8 text-muted-foreground" /></div>}
+                  />
                 {plugins.filter((plugin) => plugin.compatible && plugin.configured).map((plugin) => (
-                  <ExperienceTile
+                  <SessionOptionTile
+                    group="session-pane"
                     key={plugin.id}
-                    value={`plugin:${plugin.id}`}
-                    selected={experience === `plugin:${plugin.id}`}
+                    value={plugin.id}
+                    selected={experienceId === plugin.id}
                     disabled={acpDisabled}
                     title={plugin.name}
-                    description={plugin.description || "Предметный интерфейс с агентом."}
-                    onSelect={selectExperience}
+                    description={plugin.description || "Инструменты рядом с чатом."}
+                    onSelect={setExperienceId}
                     preview={<PluginCover plugin={plugin} />}
                   />
                 ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {kind === SessionKind.ACP && responseProfiles.length > 0 && (
               <div className="space-y-2">
@@ -477,7 +493,7 @@ export function CreateSessionDialog({
           </Button>
           <Button
             onClick={() => void onSubmit()}
-            disabled={busy || loading || noAgents || !selectedConnection}
+            disabled={busy || loading || noAgents || !selectedConnection || (kind === SessionKind.ACP && acpDisabled)}
           >
             {busy && <Loader2 className="size-4 animate-spin" />}
             Создать

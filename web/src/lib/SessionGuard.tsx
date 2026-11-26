@@ -6,8 +6,7 @@ import { SessionExecutionPolicy, SessionKind, type Session } from "@/api/gen/bri
 import { RouteSpinner } from "@/lib/RouteSpinner";
 import { Button } from "@/components/ui/button";
 import { CliSession } from "@/features/cli/CliPage";
-import { AcpSession } from "@/features/acp/AcpPage";
-import { PluginSession } from "@/features/plugins/PluginSession";
+import { SessionWorkspace } from "@/features/sessions/SessionWorkspace";
 import { ShadowSession } from "@/features/sessions/ShadowSession/ShadowSession";
 
 type Existence = "checking" | "found" | "notfound" | "error";
@@ -80,10 +79,8 @@ export function SessionGuard({ sessionId }: { sessionId: string | undefined }) {
   return session?.kind === SessionKind.ACP ? (
     session.executionPolicy === SessionExecutionPolicy.ON_DEMAND ? (
       <ShadowSession key={sessionId} sessionId={sessionId!} />
-    ) : session.experienceId ? (
-      <PluginSession key={sessionId} session={session} />
     ) : (
-      <AcpSession key={sessionId} sessionId={sessionId!} />
+      <SessionWorkspace key={sessionId} session={session} />
     )
   ) : (
     <CliSession key={sessionId} sessionId={sessionId} />

@@ -375,6 +375,7 @@ func TestTranslateToolCall(t *testing.T) {
 	assertShapes(t, got, []eventShape{
 		{Type: agui.EventToolCallArgs, ToolCallID: "tc-1", Delta: `{"path":"/tmp/x"}`},
 		{Type: agui.EventToolCallEnd, ToolCallID: "tc-1"},
+		{Type: agui.EventToolCallResult, ToolCallID: "tc-1", MessageID: "tc-1", Role: "tool"},
 	})
 }
 
@@ -420,6 +421,7 @@ func TestTranslateToolCallMCPInput(t *testing.T) {
 	assertShapes(t, got, []eventShape{
 		{Type: agui.EventToolCallArgs, ToolCallID: "tc-m", Delta: `{"components":[{"id":"root"}]}`},
 		{Type: agui.EventToolCallEnd, ToolCallID: "tc-m"},
+		{Type: agui.EventToolCallResult, ToolCallID: "tc-m", MessageID: "tc-m", Role: "tool"},
 	})
 }
 
@@ -451,11 +453,13 @@ func TestTranslateToolCallUpdate(t *testing.T) {
 		t.Fatalf("промежуточный update: %d событий, want 0", len(got))
 	}
 
-	// Терминальный статус закрывает вызов; generic output в ленту не передаётся.
+	// Терминальный статус закрывает вызов; generic output в ленту не передаётся,
+	// но пустой результат нужен для завершения tool call в AG-UI.
 	done := acpsdk.ToolCallStatusCompleted
 	got = c.translateUpdate(acpsdk.UpdateToolCall("tc-1", acpsdk.WithUpdateStatus(done)))
 	assertShapes(t, got, []eventShape{
 		{Type: agui.EventToolCallEnd, ToolCallID: "tc-1"},
+		{Type: agui.EventToolCallResult, ToolCallID: "tc-1", MessageID: "tc-1", Role: "tool"},
 	})
 
 	// Повторный терминальный update закрытого вызова — ничего.

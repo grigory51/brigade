@@ -134,7 +134,7 @@ func (n *remoteNode) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.List(ctx, authorized(token, v1.WorkspacePath{SessionId: n.fs.sessionID, Path: n.path}))
+	response, err := client.List(ctx, authorized(token, v1.WorkspaceListRequest{SessionId: n.fs.sessionID, Path: n.path}))
 	if err != nil {
 		return nil, fuseError(err)
 	}

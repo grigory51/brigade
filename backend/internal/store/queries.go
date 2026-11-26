@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -468,17 +469,36 @@ func (s *Store) DeleteTelegramConversation(ctx context.Context, botID, scope str
 
 // CreateSession вставляет новую сессию.
 func (s *Store) CreateSession(ctx context.Context, sess Session) error {
+	if sess.ExperienceID != "" && sess.ExperienceOwnerID == nil {
+		target := runtime.GOOS + "-" + runtime.GOARCH
+		if sess.Mode == SessionModeDocker {
+			target = "linux-amd64"
+		}
+		installed, err := s.GetPlugin(ctx, sess.UserID, sess.ExperienceID, "", target)
+		if err != nil {
+			return fmt.Errorf("store: resolve new session experience: %w", err)
+		}
+		if sess.ExperienceVersion == "" {
+			sess.ExperienceVersion = installed.Version
+		} else if _, err := s.GetPluginForOwner(ctx, installed.OwnerID, sess.ExperienceID, sess.ExperienceVersion, target); err != nil {
+			return fmt.Errorf("store: resolve new session experience version: %w", err)
+		}
+		sess.ExperienceOwnerID = &installed.OwnerID
+	}
+	if sess.ExperienceOwnerID != nil && *sess.ExperienceOwnerID != "" && *sess.ExperienceOwnerID != sess.UserID {
+		return errors.New("store: session experience owner must be system or session user")
+	}
 	if sess.ExecutionPolicy == "" {
 		sess.ExecutionPolicy = SessionExecutionPersistent
 	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO sessions
-		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name, group_label, unread, mcp_servers, image, auth_profile, model_id, instruction_profile, response_profile_id, response_profile_name, response_instructions, experience_id, experience_version, execution_policy, agent_version)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 (id, user_id, mode, kind, agent_type, agent_session_id, container_label, status, cwd, created_at, name, group_label, unread, mcp_servers, image, auth_profile, model_id, instruction_profile, response_profile_id, response_profile_name, response_instructions, experience_id, experience_version, execution_policy, agent_version, experience_owner_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		sess.ID, sess.UserID, string(sess.Mode), string(sess.Kind), sess.AgentType,
 		sess.AgentSessionID, sess.ContainerLabel, string(sess.Status), sess.Cwd, toUnix(sess.CreatedAt), sess.Name, sess.GroupLabel, sess.Unread,
 		strings.Join(sess.McpServers, ","), sess.Image, sess.AuthProfile, sess.ModelID, sess.InstructionProfile,
-		sess.ResponseProfileID, sess.ResponseProfileName, sess.ResponseInstructions, sess.ExperienceID, sess.ExperienceVersion, sess.ExecutionPolicy, sess.AgentVersion,
+		sess.ResponseProfileID, sess.ResponseProfileName, sess.ResponseInstructions, sess.ExperienceID, sess.ExperienceVersion, sess.ExecutionPolicy, sess.AgentVersion, sess.ExperienceOwnerID,
 	)
 	if err != nil {
 		return fmt.Errorf("store: create session: %w", err)
@@ -582,6 +602,15 @@ func (s *Store) UpdateSessionExperienceVersion(ctx context.Context, id, version 
 	return affectedOne(res, "update session experience version")
 }
 
+// UpdateSessionExperience атомарно сохраняет приложение, версию и владельца pin.
+func (s *Store) UpdateSessionExperience(ctx context.Context, sessionID, experienceID, version string, ownerID *string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE sessions SET experience_id = ?, experience_version = ?, experience_owner_id = ? WHERE id = ? AND (? IS NULL OR ? = '' OR user_id = ?)`, experienceID, version, ownerID, sessionID, ownerID, ownerID, ownerID)
+	if err != nil {
+		return fmt.Errorf("store: update session experience: %w", err)
+	}
+	return affectedOne(res, "update session experience")
+}
+
 // DeleteSession удаляет сессию. Возвращает ErrNotFound, если сессии нет.
 func (s *Store) DeleteSession(ctx context.Context, id string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -607,7 +636,8 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 
 const sessionSelect = `SELECT id, user_id, mode, kind, agent_type, agent_session_id,
 	container_label, status, cwd, created_at, name, group_label, unread, mcp_servers, image, auth_profile, instruction_profile,
-	response_profile_id, response_profile_name, response_instructions, experience_id, experience_version, execution_policy, history_revision, model_id, agent_version FROM sessions`
+	response_profile_id, response_profile_name, response_instructions, experience_id, experience_version, execution_policy, history_revision, model_id, agent_version, experience_owner_id,
+	last_message, last_message_at, last_message_author FROM sessions`
 
 func (s *Store) querySessions(ctx context.Context, query string, args ...any) ([]Session, error) {
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -648,9 +678,11 @@ func scanSessionRow(r rowScanner) (Session, error) {
 	var sess Session
 	var mode, kind, status, mcp, executionPolicy string
 	var createdAt int64
+	var lastMessageAt sql.NullInt64
 	err := r.Scan(&sess.ID, &sess.UserID, &mode, &kind, &sess.AgentType,
 		&sess.AgentSessionID, &sess.ContainerLabel, &status, &sess.Cwd, &createdAt, &sess.Name, &sess.GroupLabel, &sess.Unread, &mcp, &sess.Image, &sess.AuthProfile, &sess.InstructionProfile,
-		&sess.ResponseProfileID, &sess.ResponseProfileName, &sess.ResponseInstructions, &sess.ExperienceID, &sess.ExperienceVersion, &executionPolicy, &sess.HistoryRevision, &sess.ModelID, &sess.AgentVersion)
+		&sess.ResponseProfileID, &sess.ResponseProfileName, &sess.ResponseInstructions, &sess.ExperienceID, &sess.ExperienceVersion, &executionPolicy, &sess.HistoryRevision, &sess.ModelID, &sess.AgentVersion, &sess.ExperienceOwnerID,
+		&sess.LastMessage, &lastMessageAt, &sess.LastMessageAuthor)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Session{}, err
@@ -662,16 +694,26 @@ func scanSessionRow(r rowScanner) (Session, error) {
 	sess.Status = SessionStatus(status)
 	sess.ExecutionPolicy = SessionExecutionPolicy(executionPolicy)
 	sess.CreatedAt = fromUnix(createdAt)
+	if lastMessageAt.Valid {
+		sess.LastMessageAt = time.Unix(0, lastMessageAt.Int64).UTC()
+	}
 	if mcp != "" {
 		sess.McpServers = strings.Split(mcp, ",")
 	}
 	return sess, nil
 }
 
-const pluginSelect = `SELECT owner_id, id, name, version, target, bundle_path, source, manifest_json, installed_at FROM plugins`
+const pluginSelect = `SELECT owner_id, id, name, version, target, bundle_path, source, manifest_json, installed_at, managed FROM plugins`
+
+// Наличие активной managed-версии определяет владельца нового выбора независимо
+// от target. Исторические pins разрешаются отдельно, без фильтра доступности.
+const pluginVisibility = ` AND managed = EXISTS (
+	SELECT 1 FROM plugins AS managed_plugins
+	WHERE managed_plugins.id = plugins.id AND managed_plugins.managed = 1 AND managed_plugins.active = 1
+)`
 
 func (s *Store) ListPlugins(ctx context.Context, userID string) ([]Plugin, error) {
-	rows, err := s.db.QueryContext(ctx, pluginSelect+` WHERE active = 1 AND owner_id IN ('', ?) ORDER BY name, owner_id DESC, target`, userID)
+	rows, err := s.db.QueryContext(ctx, pluginSelect+` WHERE active = 1 AND owner_id IN ('', ?)`+pluginVisibility+` ORDER BY name, owner_id DESC, target`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("store: list plugins: %w", err)
 	}
@@ -680,7 +722,7 @@ func (s *Store) ListPlugins(ctx context.Context, userID string) ([]Plugin, error
 	for rows.Next() {
 		var plugin Plugin
 		var installedAt int64
-		if err := rows.Scan(&plugin.OwnerID, &plugin.ID, &plugin.Name, &plugin.Version, &plugin.Target, &plugin.BundlePath, &plugin.Source, &plugin.ManifestJSON, &installedAt); err != nil {
+		if err := rows.Scan(&plugin.OwnerID, &plugin.ID, &plugin.Name, &plugin.Version, &plugin.Target, &plugin.BundlePath, &plugin.Source, &plugin.ManifestJSON, &installedAt, &plugin.Managed); err != nil {
 			return nil, fmt.Errorf("store: scan plugin: %w", err)
 		}
 		plugin.InstalledAt = fromUnix(installedAt)
@@ -694,7 +736,9 @@ func (s *Store) GetPlugin(ctx context.Context, userID, id, version, target strin
 	var installedAt int64
 	where, args := ` WHERE owner_id IN ('', ?) AND id = ? AND active = 1`, []any{userID, id}
 	if version != "" {
-		where, args = ` WHERE owner_id IN ('', ?) AND id = ? AND version = ?`, []any{userID, id, version}
+		where, args = ` WHERE owner_id IN ('', ?) AND id = ? AND version = ? AND managed = 0`, []any{userID, id, version}
+	} else {
+		where += pluginVisibility
 	}
 	if target != "" {
 		osTarget := strings.SplitN(target, "-", 2)[0] + "-any"
@@ -704,7 +748,7 @@ func (s *Store) GetPlugin(ctx context.Context, userID, id, version, target strin
 	where += ` ORDER BY owner_id = ? DESC, target = ? DESC, installed_at DESC LIMIT 1`
 	args = append(args, userID, target)
 	err := s.db.QueryRowContext(ctx, pluginSelect+where, args...).Scan(
-		&plugin.OwnerID, &plugin.ID, &plugin.Name, &plugin.Version, &plugin.Target, &plugin.BundlePath, &plugin.Source, &plugin.ManifestJSON, &installedAt)
+		&plugin.OwnerID, &plugin.ID, &plugin.Name, &plugin.Version, &plugin.Target, &plugin.BundlePath, &plugin.Source, &plugin.ManifestJSON, &installedAt, &plugin.Managed)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Plugin{}, ErrNotFound
 	}
@@ -721,18 +765,25 @@ func (s *Store) PutPlugin(ctx context.Context, plugin Plugin) error {
 		return fmt.Errorf("store: put plugin: %w", err)
 	}
 	defer tx.Rollback()
+	if err := putPlugin(ctx, tx, plugin); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func putPlugin(ctx context.Context, tx *sql.Tx, plugin Plugin) error {
 	if _, err := tx.ExecContext(ctx, `UPDATE plugins SET active = 0 WHERE owner_id = ? AND id = ? AND target = ?`, plugin.OwnerID, plugin.ID, plugin.Target); err != nil {
 		return fmt.Errorf("store: deactivate plugin: %w", err)
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO plugins (owner_id, id, name, version, target, bundle_path, source, manifest_json, installed_at, active)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+	_, err := tx.ExecContext(ctx, `INSERT INTO plugins (owner_id, id, name, version, target, bundle_path, source, manifest_json, installed_at, managed, active)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
 		ON CONFLICT(owner_id, id, version, target) DO UPDATE SET name=excluded.name, bundle_path=excluded.bundle_path, source=excluded.source,
-		manifest_json=excluded.manifest_json, installed_at=excluded.installed_at, active=1`,
-		plugin.OwnerID, plugin.ID, plugin.Name, plugin.Version, plugin.Target, plugin.BundlePath, plugin.Source, plugin.ManifestJSON, toUnix(plugin.InstalledAt))
+		manifest_json=excluded.manifest_json, installed_at=excluded.installed_at, managed=excluded.managed, active=1`,
+		plugin.OwnerID, plugin.ID, plugin.Name, plugin.Version, plugin.Target, plugin.BundlePath, plugin.Source, plugin.ManifestJSON, toUnix(plugin.InstalledAt), plugin.Managed)
 	if err != nil {
 		return fmt.Errorf("store: put plugin: %w", err)
 	}
-	return tx.Commit()
+	return nil
 }
 
 func (s *Store) DeletePlugin(ctx context.Context, userID, id string) error {

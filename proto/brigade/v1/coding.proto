@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package brigade.v1;
+
+// Register with the normal authenticated user interceptor, not AgentBridge auth.
+service CodingService {
+  rpc GetCI(GetCIRequest) returns (GetCIResponse) {}
+}
+
+message GetCIRequest {
+  // The host dispatch supplies the active session; no owner, remote or SHA input.
+  string session_id = 1;
+  // Checkout directory relative to the session workspace; empty means ".".
+  string project_path = 2;
+}
+
+message GetCIResponse {
+  // "github" or "gitlab". Status/conclusion fields retain provider vocabulary.
+  string provider = 1;
+  string repository = 2;
+  string commit_sha = 3;
+  repeated CIRun runs = 4;
+  repeated CIDeployment deployments = 5;
+  // Bounded pagination or failed secondary requests; never means CI succeeded.
+  bool partial = 6;
+  repeated string warnings = 7;
+  int64 fetched_at = 8; // Unix milliseconds.
+  int32 refresh_after_seconds = 9;
+}
+
+message CIRun {
+  string id = 1;
+  string name = 2;
+  string status = 3;
+  string conclusion = 4; // GitHub completion result, empty for GitLab.
+  string url = 5;
+  string ref = 6;
+  repeated CIJob jobs = 7;
+  bool jobs_partial = 8;
+}
+
+message CIJob {
+  string id = 1;
+  string name = 2;
+  string status = 3;
+  string conclusion = 4;
+  string url = 5;
+  string stage = 6;
+  bool allow_failure = 7;
+}
+
+message CIDeployment {
+  string id = 1;
+  string environment = 2;
+  string status = 3;
+  string url = 4; // Provider deployment/job/log link; may be empty.
+  string environment_url = 5; // Untrusted HTTP(S) navigation link; never fetched.
+  string ref = 6;
+  string commit_sha = 7;
+}

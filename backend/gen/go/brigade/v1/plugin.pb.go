@@ -39,6 +39,8 @@ type Plugin struct {
 	System            bool                   `protobuf:"varint,13,opt,name=system,proto3" json:"system,omitempty"`
 	Compatible        bool                   `protobuf:"varint,14,opt,name=compatible,proto3" json:"compatible,omitempty"`
 	Configured        bool                   `protobuf:"varint,15,opt,name=configured,proto3" json:"configured,omitempty"`
+	Layout            string                 `protobuf:"bytes,16,opt,name=layout,proto3" json:"layout,omitempty"`
+	Managed           bool                   `protobuf:"varint,17,opt,name=managed,proto3" json:"managed,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -174,6 +176,20 @@ func (x *Plugin) GetCompatible() bool {
 func (x *Plugin) GetConfigured() bool {
 	if x != nil {
 		return x.Configured
+	}
+	return false
+}
+
+func (x *Plugin) GetLayout() string {
+	if x != nil {
+		return x.Layout
+	}
+	return ""
+}
+
+func (x *Plugin) GetManaged() bool {
+	if x != nil {
+		return x.Managed
 	}
 	return false
 }
@@ -570,18 +586,72 @@ func (x *GetPluginRequest) GetSessionId() string {
 	return ""
 }
 
-type PluginMCPRequest struct {
+type PluginReference struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Method        string                 `protobuf:"bytes,2,opt,name=method,proto3" json:"method,omitempty"`
-	ParamsJson    []byte                 `protobuf:"bytes,3,opt,name=params_json,json=paramsJson,proto3" json:"params_json,omitempty"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
+func (x *PluginReference) Reset() {
+	*x = PluginReference{}
+	mi := &file_brigade_v1_plugin_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PluginReference) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PluginReference) ProtoMessage() {}
+
+func (x *PluginReference) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_plugin_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PluginReference.ProtoReflect.Descriptor instead.
+func (*PluginReference) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_plugin_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *PluginReference) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *PluginReference) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+type PluginMCPRequest struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	SessionId  string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Method     string                 `protobuf:"bytes,2,opt,name=method,proto3" json:"method,omitempty"`
+	ParamsJson []byte                 `protobuf:"bytes,3,opt,name=params_json,json=paramsJson,proto3" json:"params_json,omitempty"`
+	// Отсутствует у legacy-клиентов; иначе запрос относится только к этой pane.
+	ExpectedPlugin *PluginReference `protobuf:"bytes,4,opt,name=expected_plugin,json=expectedPlugin,proto3" json:"expected_plugin,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
 func (x *PluginMCPRequest) Reset() {
 	*x = PluginMCPRequest{}
-	mi := &file_brigade_v1_plugin_proto_msgTypes[9]
+	mi := &file_brigade_v1_plugin_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -593,7 +663,7 @@ func (x *PluginMCPRequest) String() string {
 func (*PluginMCPRequest) ProtoMessage() {}
 
 func (x *PluginMCPRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_plugin_proto_msgTypes[9]
+	mi := &file_brigade_v1_plugin_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -606,7 +676,7 @@ func (x *PluginMCPRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginMCPRequest.ProtoReflect.Descriptor instead.
 func (*PluginMCPRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_plugin_proto_rawDescGZIP(), []int{9}
+	return file_brigade_v1_plugin_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *PluginMCPRequest) GetSessionId() string {
@@ -630,6 +700,13 @@ func (x *PluginMCPRequest) GetParamsJson() []byte {
 	return nil
 }
 
+func (x *PluginMCPRequest) GetExpectedPlugin() *PluginReference {
+	if x != nil {
+		return x.ExpectedPlugin
+	}
+	return nil
+}
+
 type PluginMCPResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ResultJson    []byte                 `protobuf:"bytes,1,opt,name=result_json,json=resultJson,proto3" json:"result_json,omitempty"`
@@ -639,7 +716,7 @@ type PluginMCPResponse struct {
 
 func (x *PluginMCPResponse) Reset() {
 	*x = PluginMCPResponse{}
-	mi := &file_brigade_v1_plugin_proto_msgTypes[10]
+	mi := &file_brigade_v1_plugin_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -651,7 +728,7 @@ func (x *PluginMCPResponse) String() string {
 func (*PluginMCPResponse) ProtoMessage() {}
 
 func (x *PluginMCPResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_plugin_proto_msgTypes[10]
+	mi := &file_brigade_v1_plugin_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -664,7 +741,7 @@ func (x *PluginMCPResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginMCPResponse.ProtoReflect.Descriptor instead.
 func (*PluginMCPResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_plugin_proto_rawDescGZIP(), []int{10}
+	return file_brigade_v1_plugin_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *PluginMCPResponse) GetResultJson() []byte {
@@ -679,7 +756,7 @@ var File_brigade_v1_plugin_proto protoreflect.FileDescriptor
 const file_brigade_v1_plugin_proto_rawDesc = "" +
 	"\n" +
 	"\x17brigade/v1/plugin.proto\x12\n" +
-	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\xf3\x03\n" +
+	"brigade.v1\x1a\x15brigade/v1/auth.proto\"\xa5\x04\n" +
 	"\x06Plugin\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -701,7 +778,9 @@ const file_brigade_v1_plugin_proto_rawDesc = "" +
 	"compatible\x12\x1e\n" +
 	"\n" +
 	"configured\x18\x0f \x01(\bR\n" +
-	"configured\"|\n" +
+	"configured\x12\x16\n" +
+	"\x06layout\x18\x10 \x01(\tR\x06layout\x12\x18\n" +
+	"\amanaged\x18\x11 \x01(\bR\amanaged\"|\n" +
 	"\rPluginVariant\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x16\n" +
 	"\x06target\x18\x02 \x01(\tR\x06target\x12\x16\n" +
@@ -724,13 +803,17 @@ const file_brigade_v1_plugin_proto_rawDesc = "" +
 	"valuesJson\"1\n" +
 	"\x10GetPluginRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"j\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\";\n" +
+	"\x0fPluginReference\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\"\xb0\x01\n" +
 	"\x10PluginMCPRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x16\n" +
 	"\x06method\x18\x02 \x01(\tR\x06method\x12\x1f\n" +
 	"\vparams_json\x18\x03 \x01(\fR\n" +
-	"paramsJson\"4\n" +
+	"paramsJson\x12D\n" +
+	"\x0fexpected_plugin\x18\x04 \x01(\v2\x1b.brigade.v1.PluginReferenceR\x0eexpectedPlugin\"4\n" +
 	"\x11PluginMCPResponse\x12\x1f\n" +
 	"\vresult_json\x18\x01 \x01(\fR\n" +
 	"resultJson2\xe8\x03\n" +
@@ -759,7 +842,7 @@ func file_brigade_v1_plugin_proto_rawDescGZIP() []byte {
 	return file_brigade_v1_plugin_proto_rawDescData
 }
 
-var file_brigade_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_brigade_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_brigade_v1_plugin_proto_goTypes = []any{
 	(*Plugin)(nil),                  // 0: brigade.v1.Plugin
 	(*PluginVariant)(nil),           // 1: brigade.v1.PluginVariant
@@ -770,32 +853,34 @@ var file_brigade_v1_plugin_proto_goTypes = []any{
 	(*DeletePluginRequest)(nil),     // 6: brigade.v1.DeletePluginRequest
 	(*SavePluginConfigRequest)(nil), // 7: brigade.v1.SavePluginConfigRequest
 	(*GetPluginRequest)(nil),        // 8: brigade.v1.GetPluginRequest
-	(*PluginMCPRequest)(nil),        // 9: brigade.v1.PluginMCPRequest
-	(*PluginMCPResponse)(nil),       // 10: brigade.v1.PluginMCPResponse
-	(*Empty)(nil),                   // 11: brigade.v1.Empty
+	(*PluginReference)(nil),         // 9: brigade.v1.PluginReference
+	(*PluginMCPRequest)(nil),        // 10: brigade.v1.PluginMCPRequest
+	(*PluginMCPResponse)(nil),       // 11: brigade.v1.PluginMCPResponse
+	(*Empty)(nil),                   // 12: brigade.v1.Empty
 }
 var file_brigade_v1_plugin_proto_depIdxs = []int32{
 	1,  // 0: brigade.v1.Plugin.variants:type_name -> brigade.v1.PluginVariant
 	0,  // 1: brigade.v1.ListPluginsResponse.plugins:type_name -> brigade.v1.Plugin
-	2,  // 2: brigade.v1.PluginService.List:input_type -> brigade.v1.ListPluginsRequest
-	4,  // 3: brigade.v1.PluginService.Install:input_type -> brigade.v1.InstallPluginRequest
-	5,  // 4: brigade.v1.PluginService.Update:input_type -> brigade.v1.UpdatePluginRequest
-	6,  // 5: brigade.v1.PluginService.Delete:input_type -> brigade.v1.DeletePluginRequest
-	7,  // 6: brigade.v1.PluginService.SaveConfig:input_type -> brigade.v1.SavePluginConfigRequest
-	8,  // 7: brigade.v1.PluginService.Get:input_type -> brigade.v1.GetPluginRequest
-	9,  // 8: brigade.v1.PluginService.MCP:input_type -> brigade.v1.PluginMCPRequest
-	3,  // 9: brigade.v1.PluginService.List:output_type -> brigade.v1.ListPluginsResponse
-	0,  // 10: brigade.v1.PluginService.Install:output_type -> brigade.v1.Plugin
-	0,  // 11: brigade.v1.PluginService.Update:output_type -> brigade.v1.Plugin
-	11, // 12: brigade.v1.PluginService.Delete:output_type -> brigade.v1.Empty
-	0,  // 13: brigade.v1.PluginService.SaveConfig:output_type -> brigade.v1.Plugin
-	0,  // 14: brigade.v1.PluginService.Get:output_type -> brigade.v1.Plugin
-	10, // 15: brigade.v1.PluginService.MCP:output_type -> brigade.v1.PluginMCPResponse
-	9,  // [9:16] is the sub-list for method output_type
-	2,  // [2:9] is the sub-list for method input_type
-	2,  // [2:2] is the sub-list for extension type_name
-	2,  // [2:2] is the sub-list for extension extendee
-	0,  // [0:2] is the sub-list for field type_name
+	9,  // 2: brigade.v1.PluginMCPRequest.expected_plugin:type_name -> brigade.v1.PluginReference
+	2,  // 3: brigade.v1.PluginService.List:input_type -> brigade.v1.ListPluginsRequest
+	4,  // 4: brigade.v1.PluginService.Install:input_type -> brigade.v1.InstallPluginRequest
+	5,  // 5: brigade.v1.PluginService.Update:input_type -> brigade.v1.UpdatePluginRequest
+	6,  // 6: brigade.v1.PluginService.Delete:input_type -> brigade.v1.DeletePluginRequest
+	7,  // 7: brigade.v1.PluginService.SaveConfig:input_type -> brigade.v1.SavePluginConfigRequest
+	8,  // 8: brigade.v1.PluginService.Get:input_type -> brigade.v1.GetPluginRequest
+	10, // 9: brigade.v1.PluginService.MCP:input_type -> brigade.v1.PluginMCPRequest
+	3,  // 10: brigade.v1.PluginService.List:output_type -> brigade.v1.ListPluginsResponse
+	0,  // 11: brigade.v1.PluginService.Install:output_type -> brigade.v1.Plugin
+	0,  // 12: brigade.v1.PluginService.Update:output_type -> brigade.v1.Plugin
+	12, // 13: brigade.v1.PluginService.Delete:output_type -> brigade.v1.Empty
+	0,  // 14: brigade.v1.PluginService.SaveConfig:output_type -> brigade.v1.Plugin
+	0,  // 15: brigade.v1.PluginService.Get:output_type -> brigade.v1.Plugin
+	11, // 16: brigade.v1.PluginService.MCP:output_type -> brigade.v1.PluginMCPResponse
+	10, // [10:17] is the sub-list for method output_type
+	3,  // [3:10] is the sub-list for method input_type
+	3,  // [3:3] is the sub-list for extension type_name
+	3,  // [3:3] is the sub-list for extension extendee
+	0,  // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_brigade_v1_plugin_proto_init() }
@@ -810,7 +895,7 @@ func file_brigade_v1_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_brigade_v1_plugin_proto_rawDesc), len(file_brigade_v1_plugin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

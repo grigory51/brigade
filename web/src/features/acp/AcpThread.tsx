@@ -40,17 +40,19 @@ function AcpToolGroup({
   group,
 }: PropsWithChildren<{ group: ThreadGroupPart }>) {
   const running = group.status.type === "running";
-  const count = group.indices.length;
-  const lastCall = useAuiState((state) =>
-    running ? state.message.content[group.indices[count - 1]] : undefined,
+  const count = useAuiState((state) =>
+    group.indices.filter((index) => state.message.parts[index]?.type === "tool-call").length,
+  );
+  const lastPart = useAuiState((state) =>
+    running ? state.message.parts[group.indices[group.indices.length - 1]] : undefined,
   );
 
   return (
     <details className="acp-tool-activity group/activity">
       <summary className="flex min-h-6 w-fit max-w-full cursor-pointer list-none items-center gap-1.5 rounded-sm text-xs text-muted-foreground select-none hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
         <ChevronRight aria-hidden="true" className="size-3 shrink-0 group-open/activity:rotate-90" />
-        <span className="shrink-0 tabular-nums">Активность · {count}</span>
-        {lastCall?.type === "tool-call" && <span className="min-w-0 truncate text-xs">· {lastCall.toolName.replace(/ File$/i, "")} {toolPath(bareToolArgs(lastCall.args))}</span>}
+        <span className="shrink-0 tabular-nums">{count > 0 ? `Активность · ${count}` : "Рассуждения"}</span>
+        {lastPart?.type === "tool-call" && <span className="min-w-0 truncate text-xs">· {lastPart.toolName.replace(/ File$/i, "")} {toolPath(bareToolArgs(lastPart.args))}</span>}
         {running && <Loader2 aria-label="Выполняется" className="size-3 shrink-0 motion-safe:animate-spin" />}
       </summary>
       <div className="my-1 space-y-2 border-s border-border ps-3">{children}</div>
@@ -90,14 +92,14 @@ export function AcpThread({
   onPermissionDecision,
   readonly = false,
   sessionId,
-  workspace = false,
+  compact = false,
 }: {
   commands: AvailableCommand[];
   plan: PlanEntry[];
   usage?: { used: number; size: number } | null;
   a2ui: A2uiState;
   configOptions: ConfigOption[];
-  onConfigChange: (configId: string, value: string) => void;
+  onConfigChange: (configId: string, value: string) => void | Promise<void>;
   responseProfiles?: { id: string; name: string; deleted?: boolean }[];
   responseProfileId?: string;
   responseProfileBusy?: boolean;
@@ -106,7 +108,7 @@ export function AcpThread({
   onPermissionDecision?: (decision: string) => void;
   readonly?: boolean;
   sessionId?: string;
-  workspace?: boolean;
+  compact?: boolean;
 }) {
   // uploadFile заливает вложение в рабочую директорию агента сессии; путь возвращается для
   // вставки в текст сообщения (агент читает файл сам). В readonly-ленте архива недоступно.
@@ -169,7 +171,7 @@ export function AcpThread({
             responseProfileBusy={responseProfileBusy}
             onResponseProfileChange={onResponseProfileChange}
             readonly={readonly}
-            workspace={workspace}
+            compact={compact}
           />
         </ComposerUploadContext.Provider>
       </AcpSessionContext.Provider>

@@ -123,6 +123,9 @@ func TestUpdateSessionExperienceVersion(t *testing.T) {
 	if _, err := st.DB().Exec(`INSERT INTO users (id, username, password_hash, created_at) VALUES ('u1', 'user', '', 0)`); err != nil {
 		t.Fatal(err)
 	}
+	if err := st.PutPlugin(ctx, Plugin{ID: "cad", Version: "1", Target: "portable", InstalledAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
 	if err := st.CreateSession(ctx, Session{ID: "s1", UserID: "u1", Mode: SessionModeDocker, Kind: SessionKindACP, AgentType: "codex", Status: SessionStatusRunning, ExperienceID: "cad", ExperienceVersion: "1", CreatedAt: time.Now()}); err != nil {
 		t.Fatal(err)
 	}

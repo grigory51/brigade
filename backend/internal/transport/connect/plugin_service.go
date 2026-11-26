@@ -14,11 +14,12 @@ import (
 
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
 	"github.com/grigory51/brigade/backend/internal/plugin"
+	"github.com/grigory51/brigade/backend/internal/session"
 	"github.com/grigory51/brigade/backend/internal/store"
 )
 
 type pluginCaller interface {
-	PluginMCP(context.Context, string, string, string, []byte) ([]byte, error)
+	PluginMCP(context.Context, string, string, string, []byte, *plugin.Reference) ([]byte, error)
 }
 
 type PluginService struct {
@@ -215,7 +216,10 @@ func (s *PluginService) Get(ctx context.Context, req *connect.Request[v1.GetPlug
 	if err != nil || sess.UserID != userID || sess.ExperienceID == "" {
 		return nil, connect.NewError(connect.CodeNotFound, store.ErrNotFound)
 	}
-	installed, err := s.store.GetPlugin(ctx, userID, sess.ExperienceID, sess.ExperienceVersion, plugin.RuntimeTarget(sess.Mode == store.SessionModeDocker))
+	if sess.ExperienceOwnerID == nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("владелец закреплённого приложения не определён; восстановите установленный bundle"))
+	}
+	installed, err := s.manager.ResolveForOwner(ctx, userID, *sess.ExperienceOwnerID, sess.ExperienceID, sess.ExperienceVersion, plugin.RuntimeTarget(sess.Mode == store.SessionModeDocker))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -254,6 +258,8 @@ func (s *PluginService) mapPlugin(ctx context.Context, userID string, variants [
 	}
 	result := &v1.Plugin{Id: item.ID, Name: item.Name, Description: manifest.Description, Version: item.Version,
 		Icon: manifest.Icon, EntryTool: manifest.Meta.Brigade.Experience.EntryTool, System: item.OwnerID == "", Compatible: compatible, Configured: true}
+	result.Layout = manifest.Meta.Brigade.Experience.Layout
+	result.Managed = item.Managed
 	for _, variant := range variants {
 		result.Variants = append(result.Variants, &v1.PluginVariant{Version: variant.Version, Target: variant.Target, Source: variant.Source, InstalledAt: variant.InstalledAt.Unix()})
 	}
@@ -297,8 +303,15 @@ func (s *PluginService) MCP(ctx context.Context, req *connect.Request[v1.PluginM
 	if err != nil {
 		return nil, err
 	}
-	result, err := s.session.PluginMCP(ctx, req.Msg.SessionId, userID, req.Msg.Method, req.Msg.ParamsJson)
+	var expected *plugin.Reference
+	if ref := req.Msg.ExpectedPlugin; ref != nil {
+		expected = &plugin.Reference{ID: ref.Id, Version: ref.Version}
+	}
+	result, err := s.session.PluginMCP(ctx, req.Msg.SessionId, userID, req.Msg.Method, req.Msg.ParamsJson, expected)
 	if err != nil {
+		if errors.Is(err, session.ErrPluginSelectionChanged) {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		}
 		return nil, sessionError(err)
 	}
 	return connect.NewResponse(&v1.PluginMCPResponse{ResultJson: result}), nil

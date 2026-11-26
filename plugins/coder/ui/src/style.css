@@ -1,0 +1,53 @@
+html, body, #app { height: 100%; min-width: 0; }
+[hidden] { display: none !important; }
+button, input, select { font: inherit; }
+button { touch-action: manipulation; }
+.coder { height: 100%; display: flex; flex-direction: column; min-width: 0; }
+.coder-muted, .coder-card > small { color: var(--brigade-muted); }
+input, select { min-width: 0; padding: 7px 9px; border: 1px solid var(--brigade-border); border-radius: 7px; background: var(--brigade-surface); color: inherit; }
+.coder-tabs { display: flex; flex-shrink: 0; align-items: center; gap: 4px; padding: 8px 16px; border-bottom: 1px solid var(--brigade-border); overflow-x: auto; }
+.coder-tabs .brigade-plugin-button { height: 32px; padding: 0 12px; flex-shrink: 0; font-size: 14px; background: transparent; border-radius: 7px; }
+.coder-tabs [aria-current] { background: var(--brigade-surface-raised); color: var(--brigade-accent); }
+.coder-panel { flex: 1; min-height: 0; overflow: auto; padding: 16px 20px; scrollbar-gutter: stable; }
+.coder-controls { min-height: 36px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: flex-end; margin-bottom: 12px; }
+.coder-controls > :first-child { margin-right: auto; }
+.coder-controls label { display: flex; align-items: center; gap: 8px; }
+.coder-card { padding: 16px; border: 1px solid var(--brigade-border); border-radius: 10px; background: var(--brigade-surface); margin-bottom: 12px; }
+h2, h3 { font-size: 15px; font-weight: 600; margin: 8px 0 12px; overflow-wrap: anywhere; }
+p { line-height: 1.5; overflow-wrap: anywhere; }
+.coder-card > small { font-size: 10px; letter-spacing: 0.08em; }
+.coder-result-value { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.coder-empty { padding: 36px 12px; text-align: center; color: var(--brigade-muted); }
+.coder-empty strong { color: var(--brigade-text, #f1eee8); }
+.coder-git { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.coder-git-status { padding: 0 16px; font-size: 12px; }
+.coder-git-graph { flex: 1; min-height: 0; }
+.coder-git web-git-graph {
+  height: 100%; min-height: 0; border: 0;
+  --vscode-editor-background: var(--brigade-bg, #1f1e1d);
+  --vscode-sideBar-background: var(--brigade-surface);
+  --vscode-editorWidget-background: var(--brigade-surface-raised);
+  --vscode-foreground: var(--brigade-text, #f1eee8);
+  --vscode-descriptionForeground: var(--brigade-muted);
+  --vscode-panel-border: var(--brigade-border);
+  --vscode-focusBorder: var(--brigade-accent);
+}
+.coder-git-file { height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border-top: 1px solid var(--brigade-border); }
+.coder-git-file > header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--brigade-surface); }
+.coder-git-file > header strong { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
+.coder-git-file > header button { flex-shrink: 0; font-size: 12px; }
+.coder-git-file > p { margin: 8px 12px; font-size: 12px; }
+.coder-git-diff { flex: 1; min-height: 0; overflow: auto; }
+.coder-git-diff .d2h-wrapper { text-align: left; }
+.coder-git-diff .d2h-file-wrapper { margin: 0; border: 0; }
+.coder-git-diff .d2h-file-header { display: none; }
+.coder-job { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--brigade-border); overflow-wrap: anywhere; }
+.coder-warning, [role="alert"] { color: var(--brigade-accent); white-space: pre-wrap; }
+[role="status"] { color: var(--brigade-muted); }
+.brigade-plugin-button:disabled { opacity: 0.5; cursor: not-allowed; }
+.brigade-plugin-button:active:not(:disabled) { transform: scale(0.98); }
+:focus-visible { outline: 2px solid var(--brigade-accent); outline-offset: 3px; }
+@media (max-width: 420px) {
+  .coder-panel { padding-inline: 12px; }
+  .coder-controls label { flex-wrap: wrap; }
+}

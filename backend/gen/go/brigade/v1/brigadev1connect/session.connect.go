@@ -91,6 +91,9 @@ const (
 	// SessionServiceSetSessionResponseProfileProcedure is the fully-qualified name of the
 	// SessionService's SetSessionResponseProfile RPC.
 	SessionServiceSetSessionResponseProfileProcedure = "/brigade.v1.SessionService/SetSessionResponseProfile"
+	// SessionServiceSetExperienceProcedure is the fully-qualified name of the SessionService's
+	// SetExperience RPC.
+	SessionServiceSetExperienceProcedure = "/brigade.v1.SessionService/SetExperience"
 	// SessionServiceArchiveProcedure is the fully-qualified name of the SessionService's Archive RPC.
 	SessionServiceArchiveProcedure = "/brigade.v1.SessionService/Archive"
 	// SessionServiceIssueStreamTicketProcedure is the fully-qualified name of the SessionService's
@@ -133,6 +136,9 @@ type SessionServiceClient interface {
 	// переинициализацией агента. Не во время генерации.
 	SetSessionMcpServers(context.Context, *connect.Request[v1.SetSessionMcpServersRequest]) (*connect.Response[v1.Empty], error)
 	SetSessionResponseProfile(context.Context, *connect.Request[v1.SetSessionResponseProfileRequest]) (*connect.Response[v1.UpdateSessionResponse], error)
+	// Меняет плагин панели и MCP/instructions существующей idle ACP-сессии,
+	// сохраняя native session, историю и workspace. При ошибке сохраняется прежний плагин.
+	SetExperience(context.Context, *connect.Request[v1.SetExperienceRequest]) (*connect.Response[v1.UpdateSessionResponse], error)
 	// Archive переносит сессию в архив (recap + снимок истории + остановка контейнера).
 	// Чтение архива (список, история) — в отдельном ArchiveService.
 	Archive(context.Context, *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error)
@@ -287,6 +293,12 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(sessionServiceMethods.ByName("SetSessionResponseProfile")),
 			connect.WithClientOptions(opts...),
 		),
+		setExperience: connect.NewClient[v1.SetExperienceRequest, v1.UpdateSessionResponse](
+			httpClient,
+			baseURL+SessionServiceSetExperienceProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("SetExperience")),
+			connect.WithClientOptions(opts...),
+		),
 		archive: connect.NewClient[v1.ArchiveSessionRequest, v1.ArchiveSessionResponse](
 			httpClient,
 			baseURL+SessionServiceArchiveProcedure,
@@ -338,6 +350,7 @@ type sessionServiceClient struct {
 	reloadAgent               *connect.Client[v1.ReloadAgentRequest, v1.Empty]
 	setSessionMcpServers      *connect.Client[v1.SetSessionMcpServersRequest, v1.Empty]
 	setSessionResponseProfile *connect.Client[v1.SetSessionResponseProfileRequest, v1.UpdateSessionResponse]
+	setExperience             *connect.Client[v1.SetExperienceRequest, v1.UpdateSessionResponse]
 	archive                   *connect.Client[v1.ArchiveSessionRequest, v1.ArchiveSessionResponse]
 	issueStreamTicket         *connect.Client[v1.IssueStreamTicketRequest, v1.IssueStreamTicketResponse]
 	listPreviews              *connect.Client[v1.ListPreviewsRequest, v1.ListPreviewsResponse]
@@ -454,6 +467,11 @@ func (c *sessionServiceClient) SetSessionResponseProfile(ctx context.Context, re
 	return c.setSessionResponseProfile.CallUnary(ctx, req)
 }
 
+// SetExperience calls brigade.v1.SessionService.SetExperience.
+func (c *sessionServiceClient) SetExperience(ctx context.Context, req *connect.Request[v1.SetExperienceRequest]) (*connect.Response[v1.UpdateSessionResponse], error) {
+	return c.setExperience.CallUnary(ctx, req)
+}
+
 // Archive calls brigade.v1.SessionService.Archive.
 func (c *sessionServiceClient) Archive(ctx context.Context, req *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error) {
 	return c.archive.CallUnary(ctx, req)
@@ -503,6 +521,9 @@ type SessionServiceHandler interface {
 	// переинициализацией агента. Не во время генерации.
 	SetSessionMcpServers(context.Context, *connect.Request[v1.SetSessionMcpServersRequest]) (*connect.Response[v1.Empty], error)
 	SetSessionResponseProfile(context.Context, *connect.Request[v1.SetSessionResponseProfileRequest]) (*connect.Response[v1.UpdateSessionResponse], error)
+	// Меняет плагин панели и MCP/instructions существующей idle ACP-сессии,
+	// сохраняя native session, историю и workspace. При ошибке сохраняется прежний плагин.
+	SetExperience(context.Context, *connect.Request[v1.SetExperienceRequest]) (*connect.Response[v1.UpdateSessionResponse], error)
 	// Archive переносит сессию в архив (recap + снимок истории + остановка контейнера).
 	// Чтение архива (список, история) — в отдельном ArchiveService.
 	Archive(context.Context, *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error)
@@ -653,6 +674,12 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		connect.WithSchema(sessionServiceMethods.ByName("SetSessionResponseProfile")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sessionServiceSetExperienceHandler := connect.NewUnaryHandler(
+		SessionServiceSetExperienceProcedure,
+		svc.SetExperience,
+		connect.WithSchema(sessionServiceMethods.ByName("SetExperience")),
+		connect.WithHandlerOptions(opts...),
+	)
 	sessionServiceArchiveHandler := connect.NewUnaryHandler(
 		SessionServiceArchiveProcedure,
 		svc.Archive,
@@ -723,6 +750,8 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 			sessionServiceSetSessionMcpServersHandler.ServeHTTP(w, r)
 		case SessionServiceSetSessionResponseProfileProcedure:
 			sessionServiceSetSessionResponseProfileHandler.ServeHTTP(w, r)
+		case SessionServiceSetExperienceProcedure:
+			sessionServiceSetExperienceHandler.ServeHTTP(w, r)
 		case SessionServiceArchiveProcedure:
 			sessionServiceArchiveHandler.ServeHTTP(w, r)
 		case SessionServiceIssueStreamTicketProcedure:
@@ -826,6 +855,10 @@ func (UnimplementedSessionServiceHandler) SetSessionMcpServers(context.Context, 
 
 func (UnimplementedSessionServiceHandler) SetSessionResponseProfile(context.Context, *connect.Request[v1.SetSessionResponseProfileRequest]) (*connect.Response[v1.UpdateSessionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.SetSessionResponseProfile is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) SetExperience(context.Context, *connect.Request[v1.SetExperienceRequest]) (*connect.Response[v1.UpdateSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.SessionService.SetExperience is not implemented"))
 }
 
 func (UnimplementedSessionServiceHandler) Archive(context.Context, *connect.Request[v1.ArchiveSessionRequest]) (*connect.Response[v1.ArchiveSessionResponse], error) {

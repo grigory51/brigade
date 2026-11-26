@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"time"
 
 	"connectrpc.com/connect"
@@ -17,7 +18,11 @@ import (
 	"github.com/grigory51/brigade/backend/internal/store"
 )
 
-const maxWorkspaceChunk = 1 << 20
+const (
+	maxWorkspaceChunk          = 1 << 20
+	maxWorkspaceListPageSize   = 500
+	maxWorkspaceListPageOffset = 1_000_000
+)
 
 type WorkspaceService struct{ registry *session.Registry }
 
@@ -80,7 +85,11 @@ func (s *WorkspaceService) Stat(ctx context.Context, req *connect.Request[v1.Wor
 	return connect.NewResponse(&v1.WorkspaceStatResponse{Entry: entry}), nil
 }
 
-func (s *WorkspaceService) List(ctx context.Context, req *connect.Request[v1.WorkspacePath]) (*connect.Response[v1.WorkspaceListResponse], error) {
+func (s *WorkspaceService) List(ctx context.Context, req *connect.Request[v1.WorkspaceListRequest]) (*connect.Response[v1.WorkspaceListResponse], error) {
+	pageSize, offset, paginated, err := workspaceListPage(req.Msg.PageSize, req.Msg.PageToken)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
 	root, err := s.root(ctx, req.Msg.SessionId)
 	if err != nil {
 		return nil, err
@@ -95,27 +104,119 @@ func (s *WorkspaceService) List(ctx context.Context, req *connect.Request[v1.Wor
 		return nil, workspaceError(err)
 	}
 	defer dir.Close()
-	entries, err := dir.ReadDir(-1)
+	response, err := listWorkspaceDirectory(ctx, dir, name, pageSize, offset, paginated)
 	if err != nil {
 		return nil, workspaceError(err)
+	}
+	return connect.NewResponse(response), nil
+}
+
+func listWorkspaceDirectory(ctx context.Context, dir *os.File, name string, pageSize, offset int, paginated bool) (*v1.WorkspaceListResponse, error) {
+	if paginated {
+		for remaining := offset; remaining > 0; {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			skipped, err := dir.ReadDir(min(remaining, maxWorkspaceListPageSize))
+			if err != nil && !errors.Is(err, io.EOF) {
+				return nil, err
+			}
+			remaining -= len(skipped)
+			if remaining > 0 && (errors.Is(err, io.EOF) || len(skipped) == 0) {
+				return &v1.WorkspaceListResponse{}, nil
+			}
+		}
+		entries, err := dir.ReadDir(pageSize + 1)
+		if err != nil && !errors.Is(err, io.EOF) {
+			return nil, err
+		}
+		hasNextPage := len(entries) > pageSize
+		if hasNextPage {
+			entries = entries[:pageSize]
+		}
+		sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+		response := &v1.WorkspaceListResponse{Entries: make([]*v1.WorkspaceEntry, 0, len(entries))}
+		for _, entry := range entries {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			info, err := entry.Info()
+			if err != nil {
+				return nil, err
+			}
+			item, err := workspaceEntry(entry.Name(), filepath.Join(name, entry.Name()), info)
+			if errors.Is(err, fs.ErrPermission) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			response.Entries = append(response.Entries, item)
+		}
+		if hasNextPage && offset+len(entries) < maxWorkspaceListPageOffset {
+			response.NextPageToken = strconv.Itoa(offset + len(entries))
+		}
+		return response, nil
+	}
+	entries := make([]fs.DirEntry, 0, maxWorkspaceListPageSize)
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		chunk, err := dir.ReadDir(maxWorkspaceListPageSize)
+		entries = append(entries, chunk...)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 	response := &v1.WorkspaceListResponse{Entries: make([]*v1.WorkspaceEntry, 0, len(entries))}
 	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		info, err := entry.Info()
 		if err != nil {
-			return nil, workspaceError(err)
+			return nil, err
 		}
 		item, err := workspaceEntry(entry.Name(), filepath.Join(name, entry.Name()), info)
 		if errors.Is(err, fs.ErrPermission) {
 			continue
 		}
 		if err != nil {
-			return nil, workspaceError(err)
+			return nil, err
 		}
 		response.Entries = append(response.Entries, item)
 	}
-	return connect.NewResponse(response), nil
+	return response, nil
+}
+
+func workspaceListPage(pageSize int32, token string) (int, int, bool, error) {
+	if pageSize == 0 {
+		if token != "" {
+			return 0, 0, false, errors.New("page_token requires page_size")
+		}
+		return 0, 0, false, nil
+	}
+	if pageSize < 1 || pageSize > maxWorkspaceListPageSize {
+		return 0, 0, false, errors.New("invalid page_size")
+	}
+	if token == "" {
+		return int(pageSize), 0, true, nil
+	}
+	for _, char := range token {
+		if char < '0' || char > '9' {
+			return 0, 0, false, errors.New("invalid page_token")
+		}
+	}
+	offset, err := strconv.Atoi(token)
+	if err != nil || offset > maxWorkspaceListPageOffset {
+		return 0, 0, false, errors.New("invalid page_token")
+	}
+	return int(pageSize), offset, true, nil
 }
 
 func (s *WorkspaceService) Read(ctx context.Context, req *connect.Request[v1.WorkspaceReadRequest]) (*connect.Response[v1.WorkspaceReadResponse], error) {
@@ -338,6 +439,10 @@ func workspaceError(err error) error {
 		return connectErr
 	}
 	switch {
+	case errors.Is(err, context.Canceled):
+		return connect.NewError(connect.CodeCanceled, err)
+	case errors.Is(err, context.DeadlineExceeded):
+		return connect.NewError(connect.CodeDeadlineExceeded, err)
 	case errors.Is(err, store.ErrNotFound), errors.Is(err, fs.ErrNotExist):
 		return connect.NewError(connect.CodeNotFound, err)
 	case errors.Is(err, fs.ErrExist):

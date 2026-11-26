@@ -209,16 +209,85 @@ func (x *WorkspaceStatResponse) GetEntry() *WorkspaceEntry {
 	return nil
 }
 
+type WorkspaceListRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	PageSize      int32                  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string                 `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkspaceListRequest) Reset() {
+	*x = WorkspaceListRequest{}
+	mi := &file_brigade_v1_workspace_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkspaceListRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkspaceListRequest) ProtoMessage() {}
+
+func (x *WorkspaceListRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_brigade_v1_workspace_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkspaceListRequest.ProtoReflect.Descriptor instead.
+func (*WorkspaceListRequest) Descriptor() ([]byte, []int) {
+	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *WorkspaceListRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *WorkspaceListRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *WorkspaceListRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *WorkspaceListRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
 type WorkspaceListResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Entries       []*WorkspaceEntry      `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WorkspaceListResponse) Reset() {
 	*x = WorkspaceListResponse{}
-	mi := &file_brigade_v1_workspace_proto_msgTypes[3]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -230,7 +299,7 @@ func (x *WorkspaceListResponse) String() string {
 func (*WorkspaceListResponse) ProtoMessage() {}
 
 func (x *WorkspaceListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_workspace_proto_msgTypes[3]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -243,7 +312,7 @@ func (x *WorkspaceListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkspaceListResponse.ProtoReflect.Descriptor instead.
 func (*WorkspaceListResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{3}
+	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *WorkspaceListResponse) GetEntries() []*WorkspaceEntry {
@@ -251,6 +320,13 @@ func (x *WorkspaceListResponse) GetEntries() []*WorkspaceEntry {
 		return x.Entries
 	}
 	return nil
+}
+
+func (x *WorkspaceListResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
 }
 
 type WorkspaceReadRequest struct {
@@ -265,7 +341,7 @@ type WorkspaceReadRequest struct {
 
 func (x *WorkspaceReadRequest) Reset() {
 	*x = WorkspaceReadRequest{}
-	mi := &file_brigade_v1_workspace_proto_msgTypes[4]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -277,7 +353,7 @@ func (x *WorkspaceReadRequest) String() string {
 func (*WorkspaceReadRequest) ProtoMessage() {}
 
 func (x *WorkspaceReadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_workspace_proto_msgTypes[4]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -290,7 +366,7 @@ func (x *WorkspaceReadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkspaceReadRequest.ProtoReflect.Descriptor instead.
 func (*WorkspaceReadRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{4}
+	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *WorkspaceReadRequest) GetSessionId() string {
@@ -330,7 +406,7 @@ type WorkspaceReadResponse struct {
 
 func (x *WorkspaceReadResponse) Reset() {
 	*x = WorkspaceReadResponse{}
-	mi := &file_brigade_v1_workspace_proto_msgTypes[5]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -342,7 +418,7 @@ func (x *WorkspaceReadResponse) String() string {
 func (*WorkspaceReadResponse) ProtoMessage() {}
 
 func (x *WorkspaceReadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_workspace_proto_msgTypes[5]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -355,7 +431,7 @@ func (x *WorkspaceReadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkspaceReadResponse.ProtoReflect.Descriptor instead.
 func (*WorkspaceReadResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{5}
+	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *WorkspaceReadResponse) GetContent() []byte {
@@ -377,7 +453,7 @@ type WorkspaceWriteRequest struct {
 
 func (x *WorkspaceWriteRequest) Reset() {
 	*x = WorkspaceWriteRequest{}
-	mi := &file_brigade_v1_workspace_proto_msgTypes[6]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -389,7 +465,7 @@ func (x *WorkspaceWriteRequest) String() string {
 func (*WorkspaceWriteRequest) ProtoMessage() {}
 
 func (x *WorkspaceWriteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_workspace_proto_msgTypes[6]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -402,7 +478,7 @@ func (x *WorkspaceWriteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkspaceWriteRequest.ProtoReflect.Descriptor instead.
 func (*WorkspaceWriteRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{6}
+	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *WorkspaceWriteRequest) GetSessionId() string {
@@ -442,7 +518,7 @@ type WorkspaceWriteResponse struct {
 
 func (x *WorkspaceWriteResponse) Reset() {
 	*x = WorkspaceWriteResponse{}
-	mi := &file_brigade_v1_workspace_proto_msgTypes[7]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -454,7 +530,7 @@ func (x *WorkspaceWriteResponse) String() string {
 func (*WorkspaceWriteResponse) ProtoMessage() {}
 
 func (x *WorkspaceWriteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_workspace_proto_msgTypes[7]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -467,7 +543,7 @@ func (x *WorkspaceWriteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkspaceWriteResponse.ProtoReflect.Descriptor instead.
 func (*WorkspaceWriteResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{7}
+	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *WorkspaceWriteResponse) GetWritten() int32 {
@@ -488,7 +564,7 @@ type WorkspaceMkdirRequest struct {
 
 func (x *WorkspaceMkdirRequest) Reset() {
 	*x = WorkspaceMkdirRequest{}
-	mi := &file_brigade_v1_workspace_proto_msgTypes[8]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -500,7 +576,7 @@ func (x *WorkspaceMkdirRequest) String() string {
 func (*WorkspaceMkdirRequest) ProtoMessage() {}
 
 func (x *WorkspaceMkdirRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_workspace_proto_msgTypes[8]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -513,7 +589,7 @@ func (x *WorkspaceMkdirRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkspaceMkdirRequest.ProtoReflect.Descriptor instead.
 func (*WorkspaceMkdirRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{8}
+	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *WorkspaceMkdirRequest) GetSessionId() string {
@@ -548,7 +624,7 @@ type WorkspaceRemoveRequest struct {
 
 func (x *WorkspaceRemoveRequest) Reset() {
 	*x = WorkspaceRemoveRequest{}
-	mi := &file_brigade_v1_workspace_proto_msgTypes[9]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -560,7 +636,7 @@ func (x *WorkspaceRemoveRequest) String() string {
 func (*WorkspaceRemoveRequest) ProtoMessage() {}
 
 func (x *WorkspaceRemoveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_workspace_proto_msgTypes[9]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -573,7 +649,7 @@ func (x *WorkspaceRemoveRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkspaceRemoveRequest.ProtoReflect.Descriptor instead.
 func (*WorkspaceRemoveRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{9}
+	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *WorkspaceRemoveRequest) GetSessionId() string {
@@ -608,7 +684,7 @@ type WorkspaceRenameRequest struct {
 
 func (x *WorkspaceRenameRequest) Reset() {
 	*x = WorkspaceRenameRequest{}
-	mi := &file_brigade_v1_workspace_proto_msgTypes[10]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -620,7 +696,7 @@ func (x *WorkspaceRenameRequest) String() string {
 func (*WorkspaceRenameRequest) ProtoMessage() {}
 
 func (x *WorkspaceRenameRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_workspace_proto_msgTypes[10]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -633,7 +709,7 @@ func (x *WorkspaceRenameRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkspaceRenameRequest.ProtoReflect.Descriptor instead.
 func (*WorkspaceRenameRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{10}
+	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *WorkspaceRenameRequest) GetSessionId() string {
@@ -668,7 +744,7 @@ type WorkspaceTruncateRequest struct {
 
 func (x *WorkspaceTruncateRequest) Reset() {
 	*x = WorkspaceTruncateRequest{}
-	mi := &file_brigade_v1_workspace_proto_msgTypes[11]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -680,7 +756,7 @@ func (x *WorkspaceTruncateRequest) String() string {
 func (*WorkspaceTruncateRequest) ProtoMessage() {}
 
 func (x *WorkspaceTruncateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_workspace_proto_msgTypes[11]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -693,7 +769,7 @@ func (x *WorkspaceTruncateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkspaceTruncateRequest.ProtoReflect.Descriptor instead.
 func (*WorkspaceTruncateRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{11}
+	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *WorkspaceTruncateRequest) GetSessionId() string {
@@ -728,7 +804,7 @@ type WorkspaceChmodRequest struct {
 
 func (x *WorkspaceChmodRequest) Reset() {
 	*x = WorkspaceChmodRequest{}
-	mi := &file_brigade_v1_workspace_proto_msgTypes[12]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -740,7 +816,7 @@ func (x *WorkspaceChmodRequest) String() string {
 func (*WorkspaceChmodRequest) ProtoMessage() {}
 
 func (x *WorkspaceChmodRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_workspace_proto_msgTypes[12]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -753,7 +829,7 @@ func (x *WorkspaceChmodRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkspaceChmodRequest.ProtoReflect.Descriptor instead.
 func (*WorkspaceChmodRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{12}
+	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *WorkspaceChmodRequest) GetSessionId() string {
@@ -789,7 +865,7 @@ type WorkspaceChtimesRequest struct {
 
 func (x *WorkspaceChtimesRequest) Reset() {
 	*x = WorkspaceChtimesRequest{}
-	mi := &file_brigade_v1_workspace_proto_msgTypes[13]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -801,7 +877,7 @@ func (x *WorkspaceChtimesRequest) String() string {
 func (*WorkspaceChtimesRequest) ProtoMessage() {}
 
 func (x *WorkspaceChtimesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_workspace_proto_msgTypes[13]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -814,7 +890,7 @@ func (x *WorkspaceChtimesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkspaceChtimesRequest.ProtoReflect.Descriptor instead.
 func (*WorkspaceChtimesRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{13}
+	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *WorkspaceChtimesRequest) GetSessionId() string {
@@ -856,7 +932,7 @@ type WorkspaceSymlinkRequest struct {
 
 func (x *WorkspaceSymlinkRequest) Reset() {
 	*x = WorkspaceSymlinkRequest{}
-	mi := &file_brigade_v1_workspace_proto_msgTypes[14]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -868,7 +944,7 @@ func (x *WorkspaceSymlinkRequest) String() string {
 func (*WorkspaceSymlinkRequest) ProtoMessage() {}
 
 func (x *WorkspaceSymlinkRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_workspace_proto_msgTypes[14]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -881,7 +957,7 @@ func (x *WorkspaceSymlinkRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkspaceSymlinkRequest.ProtoReflect.Descriptor instead.
 func (*WorkspaceSymlinkRequest) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{14}
+	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *WorkspaceSymlinkRequest) GetSessionId() string {
@@ -914,7 +990,7 @@ type WorkspaceReadlinkResponse struct {
 
 func (x *WorkspaceReadlinkResponse) Reset() {
 	*x = WorkspaceReadlinkResponse{}
-	mi := &file_brigade_v1_workspace_proto_msgTypes[15]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -926,7 +1002,7 @@ func (x *WorkspaceReadlinkResponse) String() string {
 func (*WorkspaceReadlinkResponse) ProtoMessage() {}
 
 func (x *WorkspaceReadlinkResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_brigade_v1_workspace_proto_msgTypes[15]
+	mi := &file_brigade_v1_workspace_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -939,7 +1015,7 @@ func (x *WorkspaceReadlinkResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkspaceReadlinkResponse.ProtoReflect.Descriptor instead.
 func (*WorkspaceReadlinkResponse) Descriptor() ([]byte, []int) {
-	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{15}
+	return file_brigade_v1_workspace_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *WorkspaceReadlinkResponse) GetTarget() string {
@@ -969,9 +1045,17 @@ const file_brigade_v1_workspace_proto_rawDesc = "" +
 	"\tdirectory\x18\x06 \x01(\bR\tdirectory\x12\x18\n" +
 	"\asymlink\x18\a \x01(\bR\asymlink\"I\n" +
 	"\x15WorkspaceStatResponse\x120\n" +
-	"\x05entry\x18\x01 \x01(\v2\x1a.brigade.v1.WorkspaceEntryR\x05entry\"M\n" +
+	"\x05entry\x18\x01 \x01(\v2\x1a.brigade.v1.WorkspaceEntryR\x05entry\"\x85\x01\n" +
+	"\x14WorkspaceListRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12\x1b\n" +
+	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x04 \x01(\tR\tpageToken\"u\n" +
 	"\x15WorkspaceListResponse\x124\n" +
-	"\aentries\x18\x01 \x03(\v2\x1a.brigade.v1.WorkspaceEntryR\aentries\"u\n" +
+	"\aentries\x18\x01 \x03(\v2\x1a.brigade.v1.WorkspaceEntryR\aentries\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"u\n" +
 	"\x14WorkspaceReadRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x12\n" +
@@ -1027,10 +1111,10 @@ const file_brigade_v1_workspace_proto_rawDesc = "" +
 	"\x06target\x18\x02 \x01(\tR\x06target\x12\x12\n" +
 	"\x04path\x18\x03 \x01(\tR\x04path\"3\n" +
 	"\x19WorkspaceReadlinkResponse\x12\x16\n" +
-	"\x06target\x18\x01 \x01(\tR\x06target2\xec\x06\n" +
+	"\x06target\x18\x01 \x01(\tR\x06target2\xf3\x06\n" +
 	"\x10WorkspaceService\x12F\n" +
-	"\x04Stat\x12\x19.brigade.v1.WorkspacePath\x1a!.brigade.v1.WorkspaceStatResponse\"\x00\x12F\n" +
-	"\x04List\x12\x19.brigade.v1.WorkspacePath\x1a!.brigade.v1.WorkspaceListResponse\"\x00\x12M\n" +
+	"\x04Stat\x12\x19.brigade.v1.WorkspacePath\x1a!.brigade.v1.WorkspaceStatResponse\"\x00\x12M\n" +
+	"\x04List\x12 .brigade.v1.WorkspaceListRequest\x1a!.brigade.v1.WorkspaceListResponse\"\x00\x12M\n" +
 	"\x04Read\x12 .brigade.v1.WorkspaceReadRequest\x1a!.brigade.v1.WorkspaceReadResponse\"\x00\x12P\n" +
 	"\x05Write\x12!.brigade.v1.WorkspaceWriteRequest\x1a\".brigade.v1.WorkspaceWriteResponse\"\x00\x12?\n" +
 	"\x05Mkdir\x12!.brigade.v1.WorkspaceMkdirRequest\x1a\x11.brigade.v1.Empty\"\x00\x12A\n" +
@@ -1057,53 +1141,54 @@ func file_brigade_v1_workspace_proto_rawDescGZIP() []byte {
 	return file_brigade_v1_workspace_proto_rawDescData
 }
 
-var file_brigade_v1_workspace_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_brigade_v1_workspace_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_brigade_v1_workspace_proto_goTypes = []any{
 	(*WorkspacePath)(nil),             // 0: brigade.v1.WorkspacePath
 	(*WorkspaceEntry)(nil),            // 1: brigade.v1.WorkspaceEntry
 	(*WorkspaceStatResponse)(nil),     // 2: brigade.v1.WorkspaceStatResponse
-	(*WorkspaceListResponse)(nil),     // 3: brigade.v1.WorkspaceListResponse
-	(*WorkspaceReadRequest)(nil),      // 4: brigade.v1.WorkspaceReadRequest
-	(*WorkspaceReadResponse)(nil),     // 5: brigade.v1.WorkspaceReadResponse
-	(*WorkspaceWriteRequest)(nil),     // 6: brigade.v1.WorkspaceWriteRequest
-	(*WorkspaceWriteResponse)(nil),    // 7: brigade.v1.WorkspaceWriteResponse
-	(*WorkspaceMkdirRequest)(nil),     // 8: brigade.v1.WorkspaceMkdirRequest
-	(*WorkspaceRemoveRequest)(nil),    // 9: brigade.v1.WorkspaceRemoveRequest
-	(*WorkspaceRenameRequest)(nil),    // 10: brigade.v1.WorkspaceRenameRequest
-	(*WorkspaceTruncateRequest)(nil),  // 11: brigade.v1.WorkspaceTruncateRequest
-	(*WorkspaceChmodRequest)(nil),     // 12: brigade.v1.WorkspaceChmodRequest
-	(*WorkspaceChtimesRequest)(nil),   // 13: brigade.v1.WorkspaceChtimesRequest
-	(*WorkspaceSymlinkRequest)(nil),   // 14: brigade.v1.WorkspaceSymlinkRequest
-	(*WorkspaceReadlinkResponse)(nil), // 15: brigade.v1.WorkspaceReadlinkResponse
-	(*Empty)(nil),                     // 16: brigade.v1.Empty
+	(*WorkspaceListRequest)(nil),      // 3: brigade.v1.WorkspaceListRequest
+	(*WorkspaceListResponse)(nil),     // 4: brigade.v1.WorkspaceListResponse
+	(*WorkspaceReadRequest)(nil),      // 5: brigade.v1.WorkspaceReadRequest
+	(*WorkspaceReadResponse)(nil),     // 6: brigade.v1.WorkspaceReadResponse
+	(*WorkspaceWriteRequest)(nil),     // 7: brigade.v1.WorkspaceWriteRequest
+	(*WorkspaceWriteResponse)(nil),    // 8: brigade.v1.WorkspaceWriteResponse
+	(*WorkspaceMkdirRequest)(nil),     // 9: brigade.v1.WorkspaceMkdirRequest
+	(*WorkspaceRemoveRequest)(nil),    // 10: brigade.v1.WorkspaceRemoveRequest
+	(*WorkspaceRenameRequest)(nil),    // 11: brigade.v1.WorkspaceRenameRequest
+	(*WorkspaceTruncateRequest)(nil),  // 12: brigade.v1.WorkspaceTruncateRequest
+	(*WorkspaceChmodRequest)(nil),     // 13: brigade.v1.WorkspaceChmodRequest
+	(*WorkspaceChtimesRequest)(nil),   // 14: brigade.v1.WorkspaceChtimesRequest
+	(*WorkspaceSymlinkRequest)(nil),   // 15: brigade.v1.WorkspaceSymlinkRequest
+	(*WorkspaceReadlinkResponse)(nil), // 16: brigade.v1.WorkspaceReadlinkResponse
+	(*Empty)(nil),                     // 17: brigade.v1.Empty
 }
 var file_brigade_v1_workspace_proto_depIdxs = []int32{
 	1,  // 0: brigade.v1.WorkspaceStatResponse.entry:type_name -> brigade.v1.WorkspaceEntry
 	1,  // 1: brigade.v1.WorkspaceListResponse.entries:type_name -> brigade.v1.WorkspaceEntry
 	0,  // 2: brigade.v1.WorkspaceService.Stat:input_type -> brigade.v1.WorkspacePath
-	0,  // 3: brigade.v1.WorkspaceService.List:input_type -> brigade.v1.WorkspacePath
-	4,  // 4: brigade.v1.WorkspaceService.Read:input_type -> brigade.v1.WorkspaceReadRequest
-	6,  // 5: brigade.v1.WorkspaceService.Write:input_type -> brigade.v1.WorkspaceWriteRequest
-	8,  // 6: brigade.v1.WorkspaceService.Mkdir:input_type -> brigade.v1.WorkspaceMkdirRequest
-	9,  // 7: brigade.v1.WorkspaceService.Remove:input_type -> brigade.v1.WorkspaceRemoveRequest
-	10, // 8: brigade.v1.WorkspaceService.Rename:input_type -> brigade.v1.WorkspaceRenameRequest
-	11, // 9: brigade.v1.WorkspaceService.Truncate:input_type -> brigade.v1.WorkspaceTruncateRequest
-	12, // 10: brigade.v1.WorkspaceService.Chmod:input_type -> brigade.v1.WorkspaceChmodRequest
-	13, // 11: brigade.v1.WorkspaceService.Chtimes:input_type -> brigade.v1.WorkspaceChtimesRequest
-	14, // 12: brigade.v1.WorkspaceService.Symlink:input_type -> brigade.v1.WorkspaceSymlinkRequest
+	3,  // 3: brigade.v1.WorkspaceService.List:input_type -> brigade.v1.WorkspaceListRequest
+	5,  // 4: brigade.v1.WorkspaceService.Read:input_type -> brigade.v1.WorkspaceReadRequest
+	7,  // 5: brigade.v1.WorkspaceService.Write:input_type -> brigade.v1.WorkspaceWriteRequest
+	9,  // 6: brigade.v1.WorkspaceService.Mkdir:input_type -> brigade.v1.WorkspaceMkdirRequest
+	10, // 7: brigade.v1.WorkspaceService.Remove:input_type -> brigade.v1.WorkspaceRemoveRequest
+	11, // 8: brigade.v1.WorkspaceService.Rename:input_type -> brigade.v1.WorkspaceRenameRequest
+	12, // 9: brigade.v1.WorkspaceService.Truncate:input_type -> brigade.v1.WorkspaceTruncateRequest
+	13, // 10: brigade.v1.WorkspaceService.Chmod:input_type -> brigade.v1.WorkspaceChmodRequest
+	14, // 11: brigade.v1.WorkspaceService.Chtimes:input_type -> brigade.v1.WorkspaceChtimesRequest
+	15, // 12: brigade.v1.WorkspaceService.Symlink:input_type -> brigade.v1.WorkspaceSymlinkRequest
 	0,  // 13: brigade.v1.WorkspaceService.Readlink:input_type -> brigade.v1.WorkspacePath
 	2,  // 14: brigade.v1.WorkspaceService.Stat:output_type -> brigade.v1.WorkspaceStatResponse
-	3,  // 15: brigade.v1.WorkspaceService.List:output_type -> brigade.v1.WorkspaceListResponse
-	5,  // 16: brigade.v1.WorkspaceService.Read:output_type -> brigade.v1.WorkspaceReadResponse
-	7,  // 17: brigade.v1.WorkspaceService.Write:output_type -> brigade.v1.WorkspaceWriteResponse
-	16, // 18: brigade.v1.WorkspaceService.Mkdir:output_type -> brigade.v1.Empty
-	16, // 19: brigade.v1.WorkspaceService.Remove:output_type -> brigade.v1.Empty
-	16, // 20: brigade.v1.WorkspaceService.Rename:output_type -> brigade.v1.Empty
-	16, // 21: brigade.v1.WorkspaceService.Truncate:output_type -> brigade.v1.Empty
-	16, // 22: brigade.v1.WorkspaceService.Chmod:output_type -> brigade.v1.Empty
-	16, // 23: brigade.v1.WorkspaceService.Chtimes:output_type -> brigade.v1.Empty
-	16, // 24: brigade.v1.WorkspaceService.Symlink:output_type -> brigade.v1.Empty
-	15, // 25: brigade.v1.WorkspaceService.Readlink:output_type -> brigade.v1.WorkspaceReadlinkResponse
+	4,  // 15: brigade.v1.WorkspaceService.List:output_type -> brigade.v1.WorkspaceListResponse
+	6,  // 16: brigade.v1.WorkspaceService.Read:output_type -> brigade.v1.WorkspaceReadResponse
+	8,  // 17: brigade.v1.WorkspaceService.Write:output_type -> brigade.v1.WorkspaceWriteResponse
+	17, // 18: brigade.v1.WorkspaceService.Mkdir:output_type -> brigade.v1.Empty
+	17, // 19: brigade.v1.WorkspaceService.Remove:output_type -> brigade.v1.Empty
+	17, // 20: brigade.v1.WorkspaceService.Rename:output_type -> brigade.v1.Empty
+	17, // 21: brigade.v1.WorkspaceService.Truncate:output_type -> brigade.v1.Empty
+	17, // 22: brigade.v1.WorkspaceService.Chmod:output_type -> brigade.v1.Empty
+	17, // 23: brigade.v1.WorkspaceService.Chtimes:output_type -> brigade.v1.Empty
+	17, // 24: brigade.v1.WorkspaceService.Symlink:output_type -> brigade.v1.Empty
+	16, // 25: brigade.v1.WorkspaceService.Readlink:output_type -> brigade.v1.WorkspaceReadlinkResponse
 	14, // [14:26] is the sub-list for method output_type
 	2,  // [2:14] is the sub-list for method input_type
 	2,  // [2:2] is the sub-list for extension type_name
@@ -1123,7 +1208,7 @@ func file_brigade_v1_workspace_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_brigade_v1_workspace_proto_rawDesc), len(file_brigade_v1_workspace_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

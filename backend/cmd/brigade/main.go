@@ -21,6 +21,7 @@ import (
 	"github.com/grigory51/brigade/backend/internal/agentimage"
 	"github.com/grigory51/brigade/backend/internal/auth"
 	"github.com/grigory51/brigade/backend/internal/codexlogin"
+	"github.com/grigory51/brigade/backend/internal/coding"
 	"github.com/grigory51/brigade/backend/internal/config"
 	"github.com/grigory51/brigade/backend/internal/httpaccess"
 	"github.com/grigory51/brigade/backend/internal/imagebuild"
@@ -201,6 +202,9 @@ func runServer(configPath string) {
 	registry := session.NewRegistry(st, spawner, store.SessionMode(cfg.Mode), cfg.WorkDir, cfg.AgentHomeDir, cfg.MaxContainers, previewSvc, notifySvc, authSvc, memorySvc)
 	defer registry.Close()
 	pluginManager := plugin.New(cfg.PluginsDir, st)
+	if err := pluginManager.RegisterBundles(ctx, cfg.Plugins.Bundles); err != nil {
+		log.Fatalf("brigade: managed plugins: %v", err)
+	}
 
 	// Восстановление живых сессий после рестарта: упавшие помечаются failed и не
 	// прерывают старт.
@@ -278,6 +282,11 @@ func runServer(configPath string) {
 	mux.Handle(brigadev1connect.NewMcpServiceHandler(connectsvc.NewMcpService(st), interceptors))
 	pluginTarget := plugin.RuntimeTarget(cfg.Mode == config.ModeDocker)
 	mux.Handle(brigadev1connect.NewPluginServiceHandler(connectsvc.NewPluginService(st, pluginManager, registry, pluginTarget), interceptors))
+	codingService, err := coding.New(registry, st, cfg.Coding)
+	if err != nil {
+		log.Fatalf("brigade: coding: %v", err)
+	}
+	mux.Handle(brigadev1connect.NewCodingServiceHandler(connectsvc.NewCodingService(codingService), interceptors))
 	mux.Handle("POST /api/plugins/upload", connectsvc.PluginUploadHandler(jwtVerifier{jwt: authSvc.JWT()}, pluginManager))
 	mux.Handle(brigadev1connect.NewLinkPreviewServiceHandler(
 		connectsvc.NewLinkPreviewService(linkpreview.New()), interceptors))

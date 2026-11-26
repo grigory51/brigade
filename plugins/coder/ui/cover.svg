@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400">
+  <rect width="640" height="400" rx="20" fill="#1f1e1d"/>
+  <rect x="36" y="36" width="568" height="328" rx="12" fill="#262624" stroke="#4a4843"/>
+  <path d="M36 88h568M210 88v276" stroke="#4a4843"/>
+  <g fill="#918d85"><rect x="60" y="120" width="120" height="9" rx="4"/><rect x="60" y="146" width="94" height="9" rx="4"/><rect x="60" y="172" width="110" height="9" rx="4"/></g>
+  <g fill="none" stroke="#c96442" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><path d="m323 168-40 40 40 40m150-80 40 40-40 40m-55-100-29 120"/></g>
+  <text x="60" y="69" fill="#f1eee8" font-family="system-ui,sans-serif" font-size="22" font-weight="600">Coder</text>
+</svg>

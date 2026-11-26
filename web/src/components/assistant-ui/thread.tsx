@@ -2,19 +2,13 @@
 
 import { UserMessageAttachments } from "@/components/assistant-ui/attachment";
 import { ComposerUploadButton } from "@/components/assistant-ui/composer-upload";
+import { ConfigOptionSelect } from "@/components/assistant-ui/config-option";
 import {
   ComposerContextZone,
   useComposerContextSend,
 } from "@/components/assistant-ui/composer-context";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { UserMessageText } from "@/components/assistant-ui/UserMessageText/UserMessageText";
-import {
-  Reasoning,
-  ReasoningContent,
-  ReasoningRoot,
-  ReasoningText,
-  ReasoningTrigger,
-} from "@/components/assistant-ui/reasoning/Reasoning";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,7 +17,6 @@ import {
 } from "@/lib/composer-submit";
 import { cn } from "@/lib/utils";
 import {
-  ActionBarMorePrimitive,
   ActionBarPrimitive,
   AuiIf,
   type AssistantState,
@@ -47,7 +40,9 @@ import {
   InfoIcon,
   Loader2Icon,
   MicIcon,
-  MoreHorizontalIcon,
+  PencilIcon,
+  RotateCcwIcon,
+  SlidersHorizontalIcon,
   SquareIcon,
 } from "lucide-react";
 import {
@@ -64,6 +59,7 @@ import {
   type PropsWithChildren,
   type ReactNode,
 } from "react";
+import { Popover } from "radix-ui";
 import type {
   AvailableCommand,
   ConfigOption,
@@ -79,7 +75,7 @@ export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 
 const defaultMessageGroupBy = groupPartByType({
   reasoning: ["group-chainOfThought", "group-reasoning"],
-  "tool-call": ["group-chainOfThought", "group-tool"],
+  "tool-call": ["group-chainOfThought"],
   "standalone-tool-call": [],
 });
 
@@ -111,7 +107,7 @@ export type ThreadProps = {
   // configOptions — конфигурационные опции сессии (модель, усилие) для селекторов
   // в composer'е; onConfigChange отправляет новое значение бэкенду.
   configOptions?: ConfigOption[] | undefined;
-  onConfigChange?: ((configId: string, value: string) => void) | undefined;
+  onConfigChange?: ((configId: string, value: string) => void | Promise<void>) | undefined;
   responseProfiles?: { id: string; name: string; deleted?: boolean }[] | undefined;
   responseProfileId?: string | undefined;
   responseProfileBusy?: boolean | undefined;
@@ -119,8 +115,8 @@ export type ThreadProps = {
   // readonly — режим только для чтения (архивная сессия): скрывает composer и
   // suggestions, лента остаётся. Ввод недоступен — живого агента нет.
   readonly?: boolean | undefined;
-  // workspace — компактная лента под постоянным предметным интерфейсом плагина.
-  workspace?: boolean | undefined;
+  // Компактная компоновка для узкой колонки рядом с панелью сессии.
+  compact?: boolean | undefined;
 };
 
 const ThreadComponentsContext = createContext<ThreadComponents | null>(null);
@@ -141,7 +137,7 @@ const UsageContext = createContext<{ used: number; size: number } | null>(null);
 // Контекст конфигурационных опций сессии для селекторов composer'а (см. ConfigSelectors).
 type ConfigContextValue = {
   options: ConfigOption[];
-  onChange: (configId: string, value: string) => void;
+  onChange: (configId: string, value: string) => void | Promise<void>;
 };
 const ConfigContext = createContext<ConfigContextValue>({
   options: [],
@@ -180,7 +176,7 @@ export const Thread: FC<ThreadProps> = ({
   responseProfileBusy = false,
   onResponseProfileChange,
   readonly = false,
-  workspace = false,
+  compact = false,
 }) => {
   const isEmpty = useAuiState(isNewChatView);
   const configValue = useMemo<ConfigContextValue>(
@@ -208,7 +204,7 @@ export const Thread: FC<ThreadProps> = ({
                 footer={footer}
                 composer={composer}
                 readonly={readonly}
-                workspace={workspace}
+                compact={compact}
               />
             </ResponseProfileContext.Provider>
           </ConfigContext.Provider>
@@ -223,11 +219,11 @@ const ThreadRoot: FC<{
   footer?: ReactNode;
   composer?: ReactNode;
   readonly?: boolean;
-  workspace?: boolean;
-}> = ({ isEmpty, footer, composer, readonly = false, workspace = false }) => {
+  compact?: boolean;
+}> = ({ isEmpty, footer, composer, readonly = false, compact = false }) => {
   return (
     <ThreadPrimitive.Root
-      className="aui-root aui-thread-root bg-background @container flex h-full flex-col"
+      className="aui-root aui-thread-root bg-background @container flex h-full min-h-0 min-w-0 flex-col"
       style={{
         ["--thread-max-width" as string]: "45rem",
         ["--composer-bg" as string]:
@@ -241,17 +237,17 @@ const ThreadRoot: FC<{
           Обычное поведение — прилипание к низу, как в терминале. */}
       <ThreadPrimitive.Viewport
         data-slot="aui_thread-viewport"
-        className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth"
+        className="relative flex min-h-0 flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth"
       >
         <div
           className={cn(
-            // pt-14 — запас под плавающие чипы управления окнами (см. features/acp/dock).
+            // В архиве инструменты остаются поверх ленты; у живой сессии они занимают отдельную строку.
             "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4",
-            workspace ? "pt-3" : "pt-14",
-            isEmpty && !workspace && "justify-center",
+            readonly ? "pt-14" : "pt-8",
+            isEmpty && !compact && "justify-center",
           )}
         >
-          {!workspace && (
+          {!compact && !readonly && (
             <AuiIf condition={isNewChatView}>
               <ThreadWelcome />
             </AuiIf>
@@ -259,7 +255,7 @@ const ThreadRoot: FC<{
 
           <div
             data-slot="aui_message-group"
-            className={cn("flex flex-col gap-y-(--message-gap) empty:hidden", workspace ? "mb-3 [--message-gap:0.75rem]" : "mb-14 [--message-gap:1.5rem]")}
+            className={cn("flex flex-col gap-y-(--message-gap) empty:hidden", compact ? "mb-16 [--message-gap:0.75rem]" : "mb-14 [--message-gap:1.5rem]")}
           >
             <ThreadPrimitive.Messages>
               {() => <ThreadMessage />}
@@ -268,9 +264,9 @@ const ThreadRoot: FC<{
 
           <ThreadPrimitive.ViewportFooter
             className={cn(
-              "aui-thread-viewport-footer bg-background flex flex-col overflow-visible",
-              workspace ? "gap-2 pb-3" : "gap-4 pb-4 md:pb-6",
-              !isEmpty &&
+              "aui-thread-viewport-footer bg-background z-10 flex flex-col overflow-visible",
+              compact ? "gap-2 pb-3" : "gap-4 pb-4 md:pb-6",
+              (!isEmpty || compact) &&
                 "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",
             )}
           >
@@ -315,7 +311,7 @@ const ThreadScrollToBottom: FC = () => {
   return (
     <ThreadPrimitive.ScrollToBottom asChild>
       <TooltipIconButton
-        tooltip="Scroll to bottom"
+        tooltip="К последнему сообщению"
         variant="outline"
         className="aui-thread-scroll-to-bottom dark:border-border dark:bg-background dark:hover:bg-accent absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
       >
@@ -326,11 +322,21 @@ const ThreadScrollToBottom: FC = () => {
 };
 
 const ThreadWelcome: FC = () => {
+  const composer = useAui().composer;
+  const historyLoading = useAuiState((s) => s.thread.isLoading);
   return (
     <div className="aui-thread-welcome-root mb-6 flex flex-col items-center px-4 text-center">
-      <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-semibold duration-200">
-        How can I help you today?
+      <h1 className="aui-thread-welcome-message-inner text-2xl font-semibold">
+        С чего начнём?
       </h1>
+      <p className="text-muted-foreground mt-2 text-sm">Опишите задачу или введите / для выбора команды.</p>
+      <div className="mt-4 flex flex-wrap justify-center gap-2">
+        {["Объясни, как устроен проект", "Помоги найти причину ошибки"].map((prompt) => (
+          <Button key={prompt} type="button" variant="outline" size="sm" disabled={historyLoading} className="h-auto whitespace-normal rounded-full text-sm" onClick={() => composer.setText(prompt)}>
+            {prompt}
+          </Button>
+        ))}
+      </div>
     </div>
   );
 };
@@ -350,8 +356,8 @@ const Composer: FC = () => {
         <ComposerContextZone />
         <SlashMenu />
         <ComposerInput historyLoading={historyLoading} />
-          <ComposerAction />
-        </div>
+        <ComposerAction />
+      </div>
     </ComposerPrimitive.Root>
   );
 };
@@ -394,14 +400,14 @@ const ComposerInput: FC<{ historyLoading: boolean }> = ({ historyLoading }) => {
         historyLoading ? "Загрузка истории…" : "Сообщение агенту…  (/ — команды)"
       }
       disabled={historyLoading}
-      className="aui-composer-input placeholder:text-muted-foreground/80 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none disabled:opacity-60"
+      className="aui-composer-input text-foreground placeholder:text-foreground/70 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none disabled:opacity-60"
       rows={1}
       autoFocus
       // На тач-устройствах (мобильный браузер) нет Shift → Shift+Enter недоступен. Проп
       // заставляет plain Enter вставлять \n на touch-primary устройствах; отправка — кнопкой.
       // На десктопе Enter отправляет.
       unstable_insertNewlineOnTouchEnter
-      aria-label="Message input"
+      aria-label="Сообщение агенту"
       onKeyDownCapture={onKeyDownCapture}
     />
   );
@@ -510,73 +516,57 @@ const SlashMenu: FC = () => {
   );
 };
 
-// configSelectorCategories — какие опции сессии показываются селекторами в composer'е
-// и в каком порядке. Категория "mode" — режим прав/агента (напр. auto-approve): даёт
-// выбрать авто-одобрение инструментов вместо ручного подтверждения каждого запроса.
-const configSelectorCategories = ["model", "mode", "thought_level"];
-
-// ConfigSelectors — компактные выпадающие селекторы опций сессии (модель, усилие)
-// слева в строке действий composer'а. Текущее значение — подписью на кнопке; выбор
-// уходит бэкенду (session/set_config_option) через onConfigChange.
 const ConfigSelectors: FC = () => {
   const { options, onChange } = useContext(ConfigContext);
-  const shown = configSelectorCategories
-    .map((cat) => options.find((o) => o.category === cat))
-    .filter((o): o is ConfigOption => o !== undefined && o.options.length > 0);
-  if (shown.length === 0) return null;
+  const unavailable = useAuiState((s) => s.thread.isLoading || s.thread.isDisabled);
+  const running = useAuiState((s) => s.thread.isRunning);
+  return options.filter((option) => (option.category === "model" || option.category === "mode") && option.options.length > 0)
+    .map((option) => <ConfigOptionSelect key={option.id} option={option} onChange={onChange} disabled={unavailable || (running && option.category !== "mode")} />);
+};
+
+const ResponseSettings: FC = () => {
+  const { options, onChange } = useContext(ConfigContext);
+  const { profiles } = useContext(ResponseProfileContext);
+  const disabled = useAuiState((s) => s.thread.isLoading || s.thread.isRunning || s.thread.isDisabled);
+  const thoughtLevel = options.find((option) => option.category === "thought_level" && option.options.length > 0);
+  if (profiles.length === 0 && !thoughtLevel) return null;
 
   return (
-    <div className="flex items-center gap-0.5">
-      {shown.map((opt) => {
-        const current = opt.options.find((v) => v.value === opt.currentValue);
-        return (
-          <DropdownMenu key={opt.id}>
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground hover:text-foreground h-7 shrink-0 gap-1 px-2 text-xs font-normal"
-              >
-                {/* Префикс названием опции: несколько селекторов могут иметь
-                    одинаковое текущее значение (напр. Mode=Default и Effort=Default),
-                    без подписи их не различить. */}
-                <span className="opacity-60">{opt.name}:</span>
-                {current?.name ?? opt.currentValue}
-                <ChevronDownIcon className="size-3 opacity-60" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent side="top" align="start" className="w-64">
-              {opt.options.map((v) => (
-                <DropdownMenuItem
-                  key={v.value}
-                  onSelect={() => onChange(opt.id, v.value)}
-                  className="flex-col items-start gap-0.5"
-                >
-                  <span className="flex w-full items-center justify-between text-sm">
-                    {v.name}
-                    {v.value === opt.currentValue && (
-                      <CheckIcon className="size-3.5" />
-                    )}
-                  </span>
-                  {v.description && (
-                    <span className="text-muted-foreground text-xs">
-                      {v.description}
-                    </span>
-                  )}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        );
-      })}
-    </div>
+    <Popover.Root>
+      <Popover.Trigger asChild>
+        <TooltipIconButton tooltip="Настройки ответа" aria-label="Настройки ответа" className="size-7 shrink-0 rounded-full">
+          <SlidersHorizontalIcon className="size-4" />
+        </TooltipIconButton>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          side="top"
+          align="start"
+          sideOffset={8}
+          aria-label="Настройки ответа"
+          className="bg-popover text-popover-foreground z-50 w-72 max-w-[calc(100vw-2rem)] origin-(--radix-popover-content-transform-origin) space-y-3 rounded-xl border p-3 shadow-md"
+        >
+          {profiles.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-sm font-medium">Стиль ответа</div>
+              <ResponseProfileSelector />
+            </div>
+          )}
+          {thoughtLevel && (
+            <div className="space-y-1">
+              <div className="text-sm font-medium">Глубина рассуждений</div>
+              <ConfigOptionSelect option={thoughtLevel} onChange={onChange} disabled={disabled} className="w-full justify-between border" />
+            </div>
+          )}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 };
 
 const ResponseProfileSelector: FC = () => {
   const { profiles, selected, busy, onChange } = useContext(ResponseProfileContext);
-  const running = useAuiState((s) => s.thread.isRunning);
+  const disabled = useAuiState((s) => s.thread.isRunning || s.thread.isLoading || s.thread.isDisabled);
   if (profiles.length === 0) return null;
   const current = profiles.find((profile) => profile.id === selected);
 
@@ -587,10 +577,11 @@ const ResponseProfileSelector: FC = () => {
           type="button"
           variant="ghost"
           size="sm"
-          disabled={busy || running}
-          className="text-muted-foreground hover:text-foreground h-7 shrink-0 gap-1 px-2 text-xs font-normal"
+          disabled={busy || disabled}
+          aria-label={`Стиль ответа: ${current?.name ?? "Обычно"}`}
+          aria-busy={busy}
+          className="text-foreground h-7 w-full justify-between gap-1 border px-2 text-xs font-normal"
         >
-          <span className="opacity-60">Ответы:</span>
           {current?.name ?? "Обычно"}
           {busy ? <Loader2Icon className="size-3 animate-spin" /> : <ChevronDownIcon className="size-3 opacity-60" />}
         </Button>
@@ -618,18 +609,20 @@ const ResponseProfileSelector: FC = () => {
 // логикой на пустой ввод). AuiIf в ComposerAction рендерит её только когда не идёт генерация.
 const SendButton: FC = () => {
   const { hasItems, sendWithContext } = useComposerContextSend();
+  const unavailable = useAuiState((s) => s.thread.isLoading || s.thread.isDisabled || s.thread.isRunning);
+  const isEmpty = useAuiState((s) => s.composer.isEmpty);
   const icon = <ArrowUpIcon className="aui-composer-send-icon size-4.5" />;
   if (!hasItems) {
     return (
-      <ComposerPrimitive.Send asChild>
+      <ComposerPrimitive.Send asChild disabled={unavailable || isEmpty}>
         <TooltipIconButton
-          tooltip="Send message"
+          tooltip="Отправить сообщение"
           side="bottom"
           type="button"
           variant="default"
           size="icon"
           className="aui-composer-send size-7 rounded-full"
-          aria-label="Send message"
+          aria-label="Отправить сообщение"
         >
           {icon}
         </TooltipIconButton>
@@ -638,13 +631,14 @@ const SendButton: FC = () => {
   }
   return (
     <TooltipIconButton
-      tooltip="Send message"
+      tooltip="Отправить сообщение"
       side="bottom"
       type="button"
       variant="default"
       size="icon"
       className="aui-composer-send size-7 rounded-full"
-      aria-label="Send message"
+      aria-label="Отправить сообщение"
+      disabled={unavailable}
       onClick={sendWithContext}
     >
       {icon}
@@ -661,8 +655,8 @@ const ComposerAction: FC = () => {
           кнопку отправки за край экрана (горизонтальный скролл страницы). */}
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         <ComposerUploadButton />
-        <ResponseProfileSelector />
         <ConfigSelectors />
+        <ResponseSettings />
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         {usage && <span className="font-mono text-[11px] text-muted-foreground" title="Использовано токенов контекста">{`${new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(usage.used).toLowerCase()} · ${usage.size > 0 ? Math.round(usage.used / usage.size * 100) : 0}%`}</span>}
@@ -670,13 +664,13 @@ const ComposerAction: FC = () => {
           <AuiIf condition={(s) => s.composer.dictation == null}>
             <ComposerPrimitive.Dictate asChild>
               <TooltipIconButton
-                tooltip="Voice input"
+                tooltip="Голосовой ввод"
                 side="bottom"
                 type="button"
                 variant="ghost"
                 size="icon"
                 className="aui-composer-dictate size-7 rounded-full"
-                aria-label="Start voice input"
+                aria-label="Голосовой ввод"
               >
                 <MicIcon className="aui-composer-dictate-icon size-4" />
               </TooltipIconButton>
@@ -685,13 +679,13 @@ const ComposerAction: FC = () => {
           <AuiIf condition={(s) => s.composer.dictation != null}>
             <ComposerPrimitive.StopDictation asChild>
               <TooltipIconButton
-                tooltip="Stop dictation"
+                tooltip="Остановить диктовку"
                 side="bottom"
                 type="button"
                 variant="ghost"
                 size="icon"
                 className="aui-composer-stop-dictation text-destructive size-7 rounded-full"
-                aria-label="Stop voice input"
+                aria-label="Остановить диктовку"
               >
                 <SquareIcon className="aui-composer-stop-dictation-icon size-3.5 animate-pulse fill-current" />
               </TooltipIconButton>
@@ -703,15 +697,16 @@ const ComposerAction: FC = () => {
         </AuiIf>
         <AuiIf condition={(s) => s.thread.isRunning}>
           <ComposerPrimitive.Cancel asChild>
-            <Button
+            <TooltipIconButton
+              tooltip="Остановить ответ"
               type="button"
               variant="default"
               size="icon"
               className="aui-composer-cancel size-7 rounded-full"
-              aria-label="Stop generating"
+              aria-label="Остановить ответ"
             >
               <SquareIcon className="aui-composer-cancel-icon size-3.5 fill-current" />
-            </Button>
+            </TooltipIconButton>
           </ComposerPrimitive.Cancel>
         </AuiIf>
       </div>
@@ -744,18 +739,12 @@ const AssistantMessage: FC = () => {
   // navId — якорь для прыжка по шкале навигации и панели ссылок (см. dock/jumpToMessage).
   const navId = useAuiState((s) => s.message.id);
 
-  // reserves space for action bar and compensates with `-mb` for consistent msg spacing
-  // keeps hovered action bar from shifting layout (autohide doesn't support absolute positioning well)
-  // for pt-[n] use -mb-[n + 6] & min-h-[n + 6] to preserve compensation
-  const ACTION_BAR_PT = "pt-1.5";
-  const ACTION_BAR_HEIGHT = `-mb-7.5 min-h-7.5 ${ACTION_BAR_PT}`;
-
   return (
     <MessagePrimitive.Root
       data-slot="aui_assistant-message-root"
       data-role="assistant"
       data-nav-id={navId}
-      className="fade-in slide-in-from-bottom-1 animate-in relative scroll-mt-5 duration-150"
+      className="group/message fade-in slide-in-from-bottom-1 animate-in relative scroll-mt-5 duration-150"
     >
       <div
         data-slot="aui_assistant-message-content"
@@ -768,27 +757,21 @@ const AssistantMessage: FC = () => {
           {({ part, children }) => {
             switch (part.type) {
               case "group-chainOfThought":
-                return <div data-slot="aui_chain-of-thought">{children}</div>;
-              case "group-tool":
                 return <ToolGroup group={part}>{children}</ToolGroup>;
-              case "group-reasoning": {
-                const running = part.status.type === "running";
+              case "group-reasoning":
                 return (
-                  <ReasoningRoot streaming={running}>
-                    <ReasoningTrigger active={running} />
-                    <ReasoningContent aria-busy={running}>
-                      <ReasoningText>{children}</ReasoningText>
-                    </ReasoningContent>
-                  </ReasoningRoot>
+                  <div className="space-y-1 text-sm text-muted-foreground">
+                    <div className="text-xs font-medium">Рассуждения</div>
+                    {children}
+                  </div>
                 );
-              }
               case "text":
                 // Ответ агента набран серифом — фирменная черта Claude. Серифом идёт
                 // только сам текст: карточки инструментов, размышления и action-bar
                 // остаются в UI-шрифте, код внутри markdown — моноширинным.
                 return <AssistantMessageText />;
               case "reasoning":
-                return <Reasoning {...part} />;
+                return <div className="whitespace-pre-wrap">{part.text}</div>;
               case "tool-call":
                 return part.toolUI ?? <ToolFallback {...part} />;
               case "data":
@@ -798,7 +781,7 @@ const AssistantMessage: FC = () => {
                   <span
                     data-slot="aui_assistant-message-indicator"
                     className="animate-pulse font-sans"
-                    aria-label="Assistant is working"
+                    aria-label="Агент работает"
                   >
                     {"●"}
                   </span>
@@ -813,9 +796,10 @@ const AssistantMessage: FC = () => {
 
       <div
         data-slot="aui_assistant-message-footer"
-        className={cn("ms-2 flex items-center", ACTION_BAR_HEIGHT)}
+        className="ms-2 flex min-h-8 items-center pt-1.5"
       >
         <AssistantActionBar />
+        <MessageTime />
       </div>
     </MessagePrimitive.Root>
   );
@@ -867,11 +851,10 @@ const AssistantActionBar: FC = () => {
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
-      autohide="not-last"
       className="aui-assistant-action-bar-root text-muted-foreground animate-in fade-in col-start-3 row-start-2 -ms-1 flex gap-1 duration-200"
     >
       <ActionBarPrimitive.Copy asChild>
-        <TooltipIconButton tooltip="Copy">
+        <TooltipIconButton tooltip="Копировать ответ">
           <AuiIf condition={(s) => s.message.isCopied}>
             <CheckIcon className="animate-in zoom-in-50 fade-in duration-200 ease-out" />
           </AuiIf>
@@ -880,30 +863,39 @@ const AssistantActionBar: FC = () => {
           </AuiIf>
         </TooltipIconButton>
       </ActionBarPrimitive.Copy>
-      <ActionBarMorePrimitive.Root>
-        <ActionBarMorePrimitive.Trigger asChild>
-          <TooltipIconButton
-            tooltip="More"
-            className="data-[state=open]:bg-accent"
-          >
-            <MoreHorizontalIcon />
+      <AuiIf condition={(s) => s.thread.capabilities.reload}>
+        <ActionBarPrimitive.Reload asChild>
+          <TooltipIconButton tooltip="Повторить ответ">
+            <RotateCcwIcon />
           </TooltipIconButton>
-        </ActionBarMorePrimitive.Trigger>
-        <ActionBarMorePrimitive.Content
-          side="bottom"
-          align="start"
-          sideOffset={6}
-          className="aui-action-bar-more-content bg-popover/95 text-popover-foreground data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:animate-out data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 min-w-[8rem] overflow-hidden rounded-xl border p-1.5 shadow-lg backdrop-blur-sm"
-        >
-          <ActionBarPrimitive.ExportMarkdown asChild>
-            <ActionBarMorePrimitive.Item className="aui-action-bar-more-item hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm outline-none select-none">
-              <DownloadIcon className="size-4" />
-              Export as Markdown
-            </ActionBarMorePrimitive.Item>
-          </ActionBarPrimitive.ExportMarkdown>
-        </ActionBarMorePrimitive.Content>
-      </ActionBarMorePrimitive.Root>
+        </ActionBarPrimitive.Reload>
+      </AuiIf>
+      <AuiIf condition={(s) => s.thread.capabilities.edit}>
+        <ActionBarPrimitive.Edit asChild>
+          <TooltipIconButton tooltip="Редактировать ответ">
+            <PencilIcon />
+          </TooltipIconButton>
+        </ActionBarPrimitive.Edit>
+      </AuiIf>
+      <ActionBarPrimitive.ExportMarkdown asChild>
+        <TooltipIconButton tooltip="Скачать Markdown">
+          <DownloadIcon />
+        </TooltipIconButton>
+      </ActionBarPrimitive.ExportMarkdown>
     </ActionBarPrimitive.Root>
+  );
+};
+
+const MessageTime: FC = () => {
+  const createdAt = useAuiState((s) => s.message.metadata.custom.createdAt);
+  // Runtime подставляет message.createdAt сам; достоверное время приходит только в metadata транспорта.
+  if (typeof createdAt !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(createdAt)) return null;
+  const date = new Date(createdAt);
+  if (!Number.isFinite(date.getTime())) return null;
+  return (
+    <time dateTime={createdAt} title={date.toLocaleString("ru-RU")} className="text-muted-foreground mx-1 text-xs tabular-nums [@media(hover:hover)]:opacity-0 group-hover/message:opacity-100 group-focus-within/message:opacity-100">
+      {date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
+    </time>
   );
 };
 
@@ -914,7 +906,7 @@ const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
-      className="fade-in slide-in-from-bottom-1 animate-in grid auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] content-start gap-y-2 scroll-mt-5 px-2 duration-150 [contain-intrinsic-size:auto_60px] [content-visibility:auto] [&:where(>*)]:col-start-2"
+      className="group/user group/message fade-in slide-in-from-bottom-1 animate-in grid auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] content-start gap-y-2 scroll-mt-5 px-2 duration-150 [contain-intrinsic-size:auto_60px] [content-visibility:auto] [&:where(>*)]:col-start-2"
       data-role="user"
       data-nav-id={navId}
     >
@@ -924,6 +916,24 @@ const UserMessage: FC = () => {
         <div className="aui-user-message-content peer bg-secondary text-foreground border-border rounded-[16px_16px_4px_16px] border px-4 py-3 text-[14px] leading-[1.55] wrap-break-word empty:hidden">
           <MessagePrimitive.Parts components={{ Text: UserMessageText }} />
         </div>
+      </div>
+      <div className="-mb-7 flex h-7 items-center justify-end gap-1">
+        <MessageTime />
+        <ActionBarPrimitive.Root hideWhenRunning className="aui-user-action-bar-root text-muted-foreground flex gap-1 [@media(hover:hover)]:opacity-0 group-hover/user:opacity-100 group-focus-within/user:opacity-100">
+          <AuiIf condition={(s) => s.thread.capabilities.edit}>
+            <ActionBarPrimitive.Edit asChild>
+              <TooltipIconButton tooltip="Редактировать сообщение">
+                <PencilIcon />
+              </TooltipIconButton>
+            </ActionBarPrimitive.Edit>
+          </AuiIf>
+          <ActionBarPrimitive.Copy asChild>
+            <TooltipIconButton tooltip="Копировать сообщение">
+              <AuiIf condition={(s) => s.message.isCopied}><CheckIcon /></AuiIf>
+              <AuiIf condition={(s) => !s.message.isCopied}><CopyIcon /></AuiIf>
+            </TooltipIconButton>
+          </ActionBarPrimitive.Copy>
+        </ActionBarPrimitive.Root>
       </div>
     </MessagePrimitive.Root>
   );
@@ -937,6 +947,7 @@ const EditComposer: FC = () => {
     >
       <ComposerPrimitive.Root className="aui-edit-composer-root border-border/60 dark:border-muted-foreground/15 ms-auto flex w-full max-w-[85%] flex-col rounded-(--composer-radius) border bg-(--composer-bg) shadow-[0_4px_16px_-8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] dark:shadow-none">
         <ComposerPrimitive.Input
+          aria-label="Редактирование сообщения"
           className="aui-edit-composer-input text-foreground min-h-14 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-base outline-none"
           autoFocus
         />
@@ -947,12 +958,12 @@ const EditComposer: FC = () => {
               size="sm"
               className="h-8 rounded-full px-3.5"
             >
-              Cancel
+              Отмена
             </Button>
           </ComposerPrimitive.Cancel>
           <ComposerPrimitive.Send asChild>
             <Button size="sm" className="h-8 rounded-full px-3.5">
-              Update
+              Сохранить
             </Button>
           </ComposerPrimitive.Send>
         </div>

@@ -66,7 +66,7 @@ const (
 // WorkspaceServiceClient is a client for the brigade.v1.WorkspaceService service.
 type WorkspaceServiceClient interface {
 	Stat(context.Context, *connect.Request[v1.WorkspacePath]) (*connect.Response[v1.WorkspaceStatResponse], error)
-	List(context.Context, *connect.Request[v1.WorkspacePath]) (*connect.Response[v1.WorkspaceListResponse], error)
+	List(context.Context, *connect.Request[v1.WorkspaceListRequest]) (*connect.Response[v1.WorkspaceListResponse], error)
 	Read(context.Context, *connect.Request[v1.WorkspaceReadRequest]) (*connect.Response[v1.WorkspaceReadResponse], error)
 	Write(context.Context, *connect.Request[v1.WorkspaceWriteRequest]) (*connect.Response[v1.WorkspaceWriteResponse], error)
 	Mkdir(context.Context, *connect.Request[v1.WorkspaceMkdirRequest]) (*connect.Response[v1.Empty], error)
@@ -96,7 +96,7 @@ func NewWorkspaceServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(workspaceServiceMethods.ByName("Stat")),
 			connect.WithClientOptions(opts...),
 		),
-		list: connect.NewClient[v1.WorkspacePath, v1.WorkspaceListResponse](
+		list: connect.NewClient[v1.WorkspaceListRequest, v1.WorkspaceListResponse](
 			httpClient,
 			baseURL+WorkspaceServiceListProcedure,
 			connect.WithSchema(workspaceServiceMethods.ByName("List")),
@@ -168,7 +168,7 @@ func NewWorkspaceServiceClient(httpClient connect.HTTPClient, baseURL string, op
 // workspaceServiceClient implements WorkspaceServiceClient.
 type workspaceServiceClient struct {
 	stat     *connect.Client[v1.WorkspacePath, v1.WorkspaceStatResponse]
-	list     *connect.Client[v1.WorkspacePath, v1.WorkspaceListResponse]
+	list     *connect.Client[v1.WorkspaceListRequest, v1.WorkspaceListResponse]
 	read     *connect.Client[v1.WorkspaceReadRequest, v1.WorkspaceReadResponse]
 	write    *connect.Client[v1.WorkspaceWriteRequest, v1.WorkspaceWriteResponse]
 	mkdir    *connect.Client[v1.WorkspaceMkdirRequest, v1.Empty]
@@ -187,7 +187,7 @@ func (c *workspaceServiceClient) Stat(ctx context.Context, req *connect.Request[
 }
 
 // List calls brigade.v1.WorkspaceService.List.
-func (c *workspaceServiceClient) List(ctx context.Context, req *connect.Request[v1.WorkspacePath]) (*connect.Response[v1.WorkspaceListResponse], error) {
+func (c *workspaceServiceClient) List(ctx context.Context, req *connect.Request[v1.WorkspaceListRequest]) (*connect.Response[v1.WorkspaceListResponse], error) {
 	return c.list.CallUnary(ctx, req)
 }
 
@@ -244,7 +244,7 @@ func (c *workspaceServiceClient) Readlink(ctx context.Context, req *connect.Requ
 // WorkspaceServiceHandler is an implementation of the brigade.v1.WorkspaceService service.
 type WorkspaceServiceHandler interface {
 	Stat(context.Context, *connect.Request[v1.WorkspacePath]) (*connect.Response[v1.WorkspaceStatResponse], error)
-	List(context.Context, *connect.Request[v1.WorkspacePath]) (*connect.Response[v1.WorkspaceListResponse], error)
+	List(context.Context, *connect.Request[v1.WorkspaceListRequest]) (*connect.Response[v1.WorkspaceListResponse], error)
 	Read(context.Context, *connect.Request[v1.WorkspaceReadRequest]) (*connect.Response[v1.WorkspaceReadResponse], error)
 	Write(context.Context, *connect.Request[v1.WorkspaceWriteRequest]) (*connect.Response[v1.WorkspaceWriteResponse], error)
 	Mkdir(context.Context, *connect.Request[v1.WorkspaceMkdirRequest]) (*connect.Response[v1.Empty], error)
@@ -375,7 +375,7 @@ func (UnimplementedWorkspaceServiceHandler) Stat(context.Context, *connect.Reque
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.WorkspaceService.Stat is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) List(context.Context, *connect.Request[v1.WorkspacePath]) (*connect.Response[v1.WorkspaceListResponse], error) {
+func (UnimplementedWorkspaceServiceHandler) List(context.Context, *connect.Request[v1.WorkspaceListRequest]) (*connect.Response[v1.WorkspaceListResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("brigade.v1.WorkspaceService.List is not implemented"))
 }
 

@@ -1,0 +1,23 @@
+{
+  "manifest_version": "0.3",
+  "name": "coder",
+  "display_name": "Coder",
+  "description": "Project files with Monaco, runnable web and terminal results, read-only Git history and diffs, and host-backed CI/CD.",
+  "version": "__VERSION__",
+  "server": {
+    "type": "binary",
+    "entry_point": "server/brigade-coder",
+    "mcp_config": { "args": [], "env": {} }
+  },
+  "compatibility": { "platforms": ["darwin", "linux"] },
+  "_meta": {
+    "brigade": {
+      "experience": {
+        "entry_tool": "coder.open",
+        "layout": "split",
+        "cover": "ui/cover.svg",
+        "instructions": "You are working in the Coder workspace, which may initially be empty. The user can ask you to create a project from scratch or clone a Git repository; do not ask the user to select a project manually or navigate from another session. After creating or cloning a project, call coder.select_project with its workspace-relative directory (or . for the workspace root). This updates Files, Git and CI/CD automatically. Never scan outside the workspace to find projects. Use normal coding tools to implement the user's task. The Files tab already provides a project tree and a read-only Monaco viewer: generated source, README and documents need no result registration. Never register cat, head, tail or similar terminal commands just to display files. The Git panel and coder.git_history, coder.git_details, coder.git_compare, and coder.git_diff are read-only: they show history, refs, working-tree changes, commit selection, comparisons, and per-file diffs. They do not checkout, stage, commit, or push. Use coder.register_result only for runnable deliverables: a named web application preview or an interactive/long-running terminal program with argv and workspace-relative cwd. First register web previews through Brigade RegisterPreview, then use its returned URL. Reuse a name to update the same result. Registration does not execute commands or start servers. When the command exits, its shell and WebSocket close, but the result tab, terminal output and exit code remain until the user closes the tab. Do not put tokens, credentials or other secrets in results; preview URLs allow only the Brigade id routing query and no credentials or fragments. Do not claim a preview is running without checking it. Chat is rendered by the host, outside the result panel. Coder does not switch sessions. CI/CD comes only from the authenticated host/backend; never manufacture CI statuses."
+      }
+    }
+  }
+}

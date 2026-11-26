@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 
 	v1 "github.com/grigory51/brigade/backend/gen/go/brigade/v1"
+	"github.com/grigory51/brigade/backend/internal/acp"
 	"github.com/grigory51/brigade/backend/internal/agentimage"
 	"github.com/grigory51/brigade/backend/internal/auth"
 	"github.com/grigory51/brigade/backend/internal/preview"
@@ -114,6 +115,21 @@ func (s *SessionService) Update(ctx context.Context, req *connect.Request[v1.Upd
 	}
 
 	sess, err := s.registry.Rename(ctx, req.Msg.SessionId, userID, req.Msg.Name)
+	if err != nil {
+		return nil, sessionError(err)
+	}
+	return connect.NewResponse(&v1.UpdateSessionResponse{Session: s.sessionToProto(sess)}), nil
+}
+
+func (s *SessionService) SetExperience(ctx context.Context, req *connect.Request[v1.SetExperienceRequest]) (*connect.Response[v1.UpdateSessionResponse], error) {
+	userID, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Msg.SessionId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("session_id is required"))
+	}
+	sess, err := s.registry.SetExperience(ctx, req.Msg.SessionId, userID, req.Msg.ExperienceId)
 	if err != nil {
 		return nil, sessionError(err)
 	}
@@ -440,13 +456,28 @@ func requireUser(ctx context.Context) (string, error) {
 
 // sessionError транслирует доменные ошибки реестра/store в connect-коды.
 func sessionError(err error) error {
+	if errors.Is(err, session.ErrExperienceUnavailable) {
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	}
 	if errors.Is(err, store.ErrNotFound) {
 		return connect.NewError(connect.CodeNotFound, err)
 	}
 	if errors.Is(err, session.ErrTeardownInProgress) ||
+		errors.Is(err, session.ErrExperienceNotIdleACP) ||
+		errors.Is(err, acp.ErrSessionBusy) ||
 		errors.Is(err, session.ErrReloadWhileGenerating) ||
 		errors.Is(err, store.ErrSessionHistoryChanged) {
 		return connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+	var rpcErr *connect.Error
+	if errors.As(err, &rpcErr) {
+		return connect.NewError(rpcErr.Code(), err)
+	}
+	if errors.Is(err, context.Canceled) {
+		return connect.NewError(connect.CodeCanceled, err)
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return connect.NewError(connect.CodeDeadlineExceeded, err)
 	}
 	return connect.NewError(connect.CodeInternal, err)
 }

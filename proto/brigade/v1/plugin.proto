@@ -21,6 +21,8 @@ message Plugin {
   bool system = 13;
   bool compatible = 14;
   bool configured = 15;
+  string layout = 16;
+  bool managed = 17;
 }
 
 message PluginVariant {
@@ -50,10 +52,17 @@ message SavePluginConfigRequest {
 
 message GetPluginRequest { string session_id = 1; }
 
+message PluginReference {
+  string id = 1;
+  string version = 2;
+}
+
 message PluginMCPRequest {
   string session_id = 1;
   string method = 2;
   bytes params_json = 3;
+  // Отсутствует у legacy-клиентов; иначе запрос относится только к этой pane.
+  PluginReference expected_plugin = 4;
 }
 
 message PluginMCPResponse {
