@@ -15,6 +15,8 @@ import (
 // Ключ живёт только в памяти процесса, поэтому единственная проверка его пригодности —
 // что через сокет отдаётся публичная часть и рабочая подпись.
 func TestSSHAgentSignsWithKeyFromMemory(t *testing.T) {
+	// Стандартный TMPDIR macOS вместе с именем теста превышает лимит Unix socket path.
+	t.Setenv("TMPDIR", "/tmp")
 	privPEM, pub := testKey(t)
 
 	a, err := Start(filepath.Join(t.TempDir(), "a.sock"), privPEM)
@@ -54,6 +56,7 @@ func TestSSHAgentSignsWithKeyFromMemory(t *testing.T) {
 // Перевыпуск ключа пользователя не должен требовать перезапуска хозяина: связка
 // заменяется на месте.
 func TestSSHAgentReplaceKey(t *testing.T) {
+	t.Setenv("TMPDIR", "/tmp")
 	firstPEM, firstPub := testKey(t)
 	secondPEM, secondPub := testKey(t)
 

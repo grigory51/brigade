@@ -84,6 +84,13 @@ func (c *Client) start(parent context.Context, cmd []string, cwd string, env []s
 		cancel()
 		return err
 	}
+	// Ответ с заголовками может завершиться одновременно с отменой запроса.
+	// Такой stream не должен превращаться в успешно запущенный handle.
+	if err := ctx.Err(); err != nil {
+		cancel()
+		_ = stream.Close()
+		return err
+	}
 	c.cancel = cancel
 	c.pr, c.pw = io.Pipe()
 	go c.pump(stream)
